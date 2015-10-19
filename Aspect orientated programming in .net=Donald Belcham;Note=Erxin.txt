@@ -1,0 +1,447 @@
+﻿Aspect orientated programming in .net=Donald Belcham;Note=Erxin
+
+# introduction
+- increase modularity
+- managing cross cutting concerns
+- infrastructure composition
+- AOP definition
+    + repetitive code 
+    adhering to DRY (Don't repeat yourself)
+    
+    public void CreateNew(CustomerToSaveDto customerToSave)
+    {
+        Log.Debug("CustomerService.Createnew has started");
+        try
+        {
+            _customerRepository.CreateNew(CreateCustomerFrom(customerToSave));
+        }
+        catch(Exception ex)
+        {
+            Log.Error(ex, "CustomerService.CreateNew has raised an exception");
+            throw;
+        }
+        finally
+        {
+            Log.Debug("Customer.Service.CreateNew has ended");
+        }
+    }
+    
+    + aspects
+        * Wrapper
+        * Single Responsibility Principle
+        * Decorator Pattern
+        * Open close principle 
+
+# Aspect hook locations
+- On Start, executed immediately prior to method call
+- On Success, executed immediately after the method call runs without throwing an exception, interject the specify code
+public void CreateProduct(ProductToCreateDto productToCreate)
+{
+    var errored = false;
+    UnitOfWork.Start();
+    try
+    {
+        //process and save the product 
+    }
+    catch(Exception)
+    {
+        errored = true;
+        throw;
+    }
+    finally
+    {
+        if(!errored)
+        {
+            UnitOfWork.Commit();
+        }
+        else
+        {
+            UnitOfWork.close();
+        }
+    }
+}
+- On Error, executed when a method throws an expception
+
+- Types of AOP  
+    + interceptors calls to class methods/properties 
+        * usually involves an inversion of control(IoC) container 
+        * no post compilation changes to assemblies
+    + IL code weaving  
+        * run after application compilation
+        * post process assemblies 
+        Visual Studio, compile application into a dll/executed
+        run the dll/exe through the AOP post processor 
+        
+    output is original dll/exe plus aspect plugin 
+    
+
+# AOP Using interceptors
+- dynamic decorators
+    + Ioc containers
+    Castle Windsor
+    Ninject
+    Unity
+    + Dynamic proxies in memory decorators 
+- managed by external components
+- configurable 
+- interception 
+calling code --IMyInterface --> Inversion of Control Container 
+            <--MyClass:IMyInterface
+
+interception, dynamic proxy will generate a ProxyInterceptor:IMyInterface 
+calling code --IMyInterface --> inversion control --> proxy 
+
+- create an interceptor 
+    + implement an interface 
+    + attaching
+    + demo with castle windsor 
+    
+    Resolve.Initialize();
+    var myType = Resolve.For<IMyType>();
+    myType.DoSomething("testString", 1);
+    Console.Readkey();
+    
+    //create the interceptor
+    public class LoggingInterceptor:IInterceptor
+    {
+        public void Intercept(Invocation invocation)
+        {
+            try
+            {
+                Console.WriteLine("Logging on start");
+                invocation.Proceed(); //execute the code which is wrapped
+                Console.WriteLine("Logging on success");
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine("Logging an exception has occurred");
+                throw;
+            }
+            finally 
+            {
+                Console.WriteLine("Logging on Exit");
+            }
+        }
+    }
+    
+- demo attaching interceptors, castle windsor support xml configuration 
+- register the interceptor into IoC
+
+Kernel.Registrer(Component.For<LoggingInterceptor>().ImplementedBy<LoggingInterceptor>());
+kernel.Register(Component.For<IMyType>()
+                         .ImplementedBy<MyType>()
+                         .Interceptors(InterceptorReference.ForType<LoggingInterceptor>()).Anywhere());
+also support attach to a whole namespace
+
+
+# AOP code weaving
+- introduction
+    + post compilation 
+    + modifies code execution 
+    
+- tooling
+    + PostSharp
+    + loom.net
+    + wicca
+    
+- weaving
+visual studio ----compile application into dll/exe ---> run the dll/exe throw the AOP post processor ---> AOP post processor output is original dll/exe plus attached aspects 
+
+- creating aspects 
+    + implement an base class 
+    + attaching 
+    
+- demo: creating aspects, the postsharp demo
+[Serializable]
+public class LoggingAspect:OnMethodBoundaryAspect
+{
+    public override void OnEntry(MethodExecutionArgs args)
+    {
+        Console.WriteLine("On Entry");
+    }
+    
+    public override void OnExit(MethodExecutionArgs args)
+    {
+        ...
+    }
+    
+    public override void OnSuccess(MethodExecutionArgs args)
+    {
+        ...
+    }
+    
+    public override void OnException(MethodExecutionArgs args)
+    {
+        ...
+    }
+}
+    
+attach the aspect to the, open a built dll/exe to check the AOP is attached or not 
+[LoggingAspect]
+public void DoSomething(string string Variable, int i)
+{
+}
+    
+then the during the build process, postsharp will run and process the dll/exe 
+
+there is other way to attach aspect by add attribute to the assembly info attribute 
+[assembly:LoggingAspect(AttributeTargetTypes = "PlugralSight.Aop.ILWeaving.DomainModel.*")]
+    
+add other attribute to limit the aspect can only be add 
+[Serializable]
+[MulticastAttributeusage(MulticastTargets.Method, TargetMemeberAttributes = MulticastAttributes.Instance)]
+public class LoggingAspect:OnMethodboudnaryAspect
+{...}
+
+
+# AOP beyond decorators 
+- introduction 
+    + decorator pattern
+    + repetition comfort
+    
+- code imposed by the development team
+    + lines for logging
+    + managing unit of work implementations 
+    + caching 
+    
+- code imposed by third parties, postsharp
+    + data contract, data member attributing 
+    + OnPropertyChanged, auto generate the on property changed 
+    + Invoke
+    + virtualizedProperties, working with entity  
+    
+- demo wcf attribute 
+[ServiceContrat]
+public interface ICustomerService
+{
+    [OperationContract]
+    public Customer GetCustomer(int id);
+}
+    
+[DataContract]
+public class Customer
+{
+    [DataMember]
+    public string Name {get;set;} 
+}
+
+with postsharp can apply the datamember attribute 
+    
+[Serializable]
+//this can be apply to multple kinds of property 
+[MulticastAttributeUsage(MulticastTarget.Class)]
+public sealed class DataContractAspect:TypeLevelAspect, InAspectProvider
+{
+    public IEnumerable<AspectInstance> ProvideAspects(object targetElement)
+    {
+        var targetType = (Type) targetElement;
+        var introduceDataContractAspect = new CustomerAttributeIntroductionAspect(new ObjectConstruction(typeof(DatacontractAttribute).GetConstructor(Type.Empty.Types));
+        
+        var introduceDataMemberAspect = new CustomerAttributeIntroductionAspect(new ObjectConstruction(typeof(DatamemeberAttribute).GetConstructor(Type.Empty.Types)));
+        
+        yield return new AspectInstance(targetType, introduceDataContractAspect);
+        
+        foreach(var property in targetType.GetProperties(BindingFlags.Public|BindingFlags.Declaredonly|BindingFlags.Instance))
+        {
+            if(property.CanWrite && !property.IsDefined(typeof(NotADatamemeberAttribute), false))
+            {
+                yield return new AspectInstance(property, introduceDataMemberAspect);
+            }
+        }
+    }
+}
+    
+add into assembly info cs file
+[assembly: DataCotnractAspect(AttributeTargetType = "Pluragsight.Demo.WcfAspect.DataContracts.*")]
+
+- demo validation aspect 
+    + create aspect to validation custom entity meet the specify code standard
+        * must have default constructor
+        * the Hibernate property must be virtual
+        * the Hibernate method must be virtual
+        
+    + demo 
+    
+    public sealed class NHibernateEntityValidatingAspect:TypeLevelAspect, IValidableAnnotation
+    {
+        override bool CompileTimeValidate(Type type)
+        {
+            var error = true;
+            var processedNames = new List<string>(0;
+            
+            var methods = type.GetMethods();
+            foreach(var method in methods.Where(x => !x.IsVirtual && string.Compare(x.name, "GetType")))
+            {
+                //check method mark with virtual 
+            }
+            
+            if(type.GetConstructors().Where(x => x.GetParameters().Count() == 0).Count != 1)
+            {
+                Message.Write(ServerityType.Error, "Erro Code", string.Formate("{0} needs a zero paramter constructor", type.Names));
+                error = false;
+            }
+            return error;
+        }
+    }
+    
+- code generating aspect 
+[TestFixture]
+public class EqualityTests
+{
+    [Test]
+    public void ShouldBeEqual()
+    {
+    }
+}
+
+automatic generate equal and gethashCode method for the entity 
+publc class NHibernateEqualityAspect:InstanceLevelAspect, INHibernateEquality
+{
+    private Type _baseType;
+    [ImportMember("id", isRequired = true, Order = ImportMemberOrder.BeforeIntroductions)]
+    public Property<Guid> BaseId;
+    {
+    }
+    
+    public override void CompileTimeInitialize(Type type, AspectInfo aspectInfo)
+    {
+        _baseType = type;
+    }
+    
+    [IntroduceMemeber(IsVirtual = true, OverrideAction = memberOverrrideAction.OverrideOrFail)]
+    public override int GetHashCode(object obj)
+    {
+        return BaseId.Get.Invoke().GetHashCode();
+    }
+    
+    [IntroduceMemeber(IsVirtual = true, OverrideAction = memberOverrrideAction.OverrideOrFail)]
+    public override bool Equals(object obj)
+    {
+        if(obj.GetType() != _baseType) return false;
+        
+        var incomingObj = obj as Entity;
+        if(incommingObj == null) return false;
+        
+        return this.BaseId.Get.Invoke().Equals(incomingObj.Id);
+    }
+}
+attach the aspect by the assembly info 
+
+- non-AOP framework 
+    + only need a hook locations
+        * wcf, hook send message and recode it to database, will reduce reputation 
+        * NHibernate 
+        
+    
+# postsharp installation
+- download installer
+- modifies and/or creates customer.After.Microsoft.Commons.targets
+- visual studio gets
+    + postsharp extension
+    + aspect browser window
+    + learn postsharp window 
+- postsharp HQ, application under the postsharp install folder, lots of small application 
+    + aspect browser will display which point the code is attached after compile 
+    + learn postsharp window 
+
+- nuget
+    + run-time library(postsharp.dll)
+    + postsharp extension
+    + requires vs restart
+    + adds a reference to the postsharp.target to include p# in the build process
+    removes references to past version of p#
+    helps to uninstall past version of the extension
+    after vs restart
+
+- from source control
+    + files to include in VCS
+    + modify cs/vbproj
+    + add postsharp reference using "browser"
+    + install p# extensions from exe/msi, still need to run the exe installer 
+    
+- licensing
+    + manual
+    + license server 
+    + open source allowed free license 
+    
+# out of the box aspect 
+- existing aspect built into postsharp
+- majority use overrides to provide advices to the target code
+- decorator pattern is everywhere 
+- method level aspect
+    + OnEntry
+    + OnExit
+    + OnException
+    + OnSuccess
+- map to a full decorator pattern implementation when all four override are used 
+
+OnMethodBoundaryAspect
+{
+    OnEntry();
+    try
+    {
+        TargetCode();
+        OnSuccess();
+    }
+    catch(Exception e)
+    {
+        OnException();
+    }
+    finally
+    {
+        OnExit();
+    }
+}
+    
+MethodExecutionArgs
+    + list of objects
+    + meta-data information about the target 
+    + return value 
+    
+- OnExceptionAspect, method level aspect
+    + OnException
+    + GetExceptionType
+    + wraps the entire method in a try...catch block 
+    + used to trap exceptions that are thrown by target code 
+
+OnExceptionAspectStructure
+try
+{
+}
+catch(Exception e)
+{
+    OnException();
+}
+MethodExceptionArgs
+    + arguments, list of objects
+    + method, meta-data information about the target
+    + exception, the exception that was thrown by the target
+
+demo 
+[Serializable]
+public class ApplicationExceptionHandlerAspect:OnExceptionAspect
+{
+    public override void OnException(MethodExecutionArgs args)
+    {
+        Console.WriteLine(string.Format("Exception type {0} raise {1}\n", args.Exception.GetType().Name, args.Exception.StackTrace)); 
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+
+
+

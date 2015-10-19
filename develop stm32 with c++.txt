@@ -1,0 +1,143 @@
+﻿develop stm32 with c++
+
+Hello guys,
+
+I having trouble in using C++ for STM32 devices using Kiel UVision4 compiler. It seems the codes are compiled and the compiled codes main() thread is working because it can turn on a LED in the trainer board.
+
+The test program is quite simple, it will light up the LED in the main thread and it will blink the another led every 1 second in the RTC interrupt.
+
+However the interrupt routines are not working.
+
+Its even more weird that when i shift to purely C codes the interrupt routines are working fine. The serial port is even working properly.
+
+However due to the complexity of project, we are left with no choice but to use mixed C/C++.
+
+Any idea how to fixed this issue?
+
+Thanks,
+Jack
+
+// sample main_test.cpp
+// the result is the LEDs do light up
+
+#define __cplusplus
+
+#include "stm32f10x.h"
+
+#include "header_global_compile_test.h"
+
+#include "stm32f10x_it.c"
+
+int main(void){
+char *str;
+
+// No interrupts yet can be serviced from this point until
+// global interrupts are explicitly enabled.
+
+// System Clocks Configuration
+RCC_Configuration();
+
+// Initialize chip peripherals
+init_stm32();
+
+// Interrupts Configuation
+NVIC_Configuration();
+
+// Sample turn ON LED
+control_led(LED1, Bit_SET);
+
+// Sample turn ON LED
+control_led(LED2, Bit_SET);
+
+main_loop:
+
+goto main_loop;
+}
+
+// Interrupt code section
+/************************************************** *****************************
+* Function Name : RTC_IRQHandler
+* Description : This function handles RTC global interrupt request.
+* Input : None
+* Output : None
+* Return : None
+************************************************** *****************************/
+void RTC_IRQHandler(void)
+{ static uint8 led_state;
+
+// Toggle LED4
+if (led_state > 0){
+control_led(LED4, Bit_SET);
+led_state = 0;
+} else {
+control_led(LED4, Bit_RESET);
+led_state = 1;
+}
+
+if (RTC_GetITStatus(RTC_IT_SEC) != RESET){
+// Clear the RTC Second interrupt
+RTC_ClearITPendingBit(RTC_IT_SEC);
+
+#if (gcomc_ENABLE_INTERRUPTS)
+// increment system time
+sys_time_increment();
+#endif
+
+// Wait until last write operation on RTC registers has finished
+RTC_WaitForLastTask();
+} }
+
+// NVIC
+/************************************************** *****************************
+* Function Name : NVIC_Configuration
+* Description : Configures Vector Table base location.
+* Input : None
+* Output : None
+* Return : None
+************************************************** *****************************/
+void NVIC_Configuration(void){
+NVIC_InitTypeDef NVIC_InitStructure;
+
+#ifdef VECT_TAB_RAM
+/* Set the Vector Table base location at 0x20000000 */
+NVIC_SetVectorTable(NVIC_VectTab_RAM, 0x0);
+#else /* VECT_TAB_FLASH */
+/* Set the Vector Table base location at 0x08000000 */
+NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x0);
+#endif
+
+/* Configure one bit for preemption priority */
+NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+
+// Enable the RTC Interrupt
+NVIC_InitStructure.NVIC_IRQChannel = RTC_IRQn;
+NVIC_InitStructure.NVIC_IRQChannelPreemptionPriori ty = 1;
+NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+NVIC_Init(&NVIC_InitStructure);
+
+// Enable the USART2 Interrupt
+NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
+NVIC_InitStructure.NVIC_IRQChannelPreemptionPriori ty = 1;
+NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+NVIC_Init(&NVIC_InitStructure);
+
+}
+
+// The purely C codes only seemed to work.
+
+IDE-Version:
+µVision V4.03
+Copyright (c) Keil Elektronik GmbH / Keil Software, Inc. 1995 - 2009
+
+Tool Version Numbers:
+Toolchain: RealView MDK-ARM Version: 4.10
+Toolchain Path: BIN40\
+C Compiler: Armcc.Exe V4.0.0.728
+Assembler: Armasm.Exe V4.0.0.728
+Linker/Locator: ArmLink.Exe V4.0.0.728
+Librarian: ArmAr.Exe V4.0.0.728
+Hex Converter: FromElf.Exe V4.0.0.728
+CPU DLL: SARMCM3.DLL V4.10
+Dialog DLL: DARMSTM.DLL V1.45b

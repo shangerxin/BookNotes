@@ -1,0 +1,1022 @@
+Introduction to PRISM=Brian Lagunas;Note=Erxin
+
+# Introduction
+- What is Prism
+    + composite application framework
+    + targets, WPF, silverlight and windows phone 7
+    + design patterns
+    such as ioc, version control, command, mvvm
+- Benefits
+    + reuse
+    build component and use the same component in other framework
+    + extensibility
+    + flexibility
+    + team development
+    + quality of code
+- Get Prism
+    + download the library
+    http://compositewpf.codeplex.com/
+    + prerequest
+    window7, vista, or server 2008, will work in xp
+    .net 4.0
+    microsoft visual studio 2010 +
+    silverlight 4 tools for visual studio 2010
+    blend 4
+    window phone developer tools sdk
+    + extract the files
+    run the RegisterPrismBinaries to register the Prism
+    there are also documentation and user manual
+    check the quick start folder to see the demo project there are also quick start demo
+    stock trader ri, it's stargeting wpf and silverlight 4
+    the source code also share it's source code
+- The Building Blocks
+    + shell, it's just the template of UI
+    + regions, shell will contain regions what you uses to specify certain region of shell
+    + modules, the major function of your application, ideally it should independent to other module
+    + views, construct with MVVM pattern
+    + bootstrapper, is used to initialize your application
+- Application Design
+    + typpical application design
+    Main project contains several view turn the traditional module to
+    application contain shell, shell define region and contain several module project. each module will be injected into the region at run time
+- Demo, Prism walkthrough
+    + shell define the region
+    + module define the view
+    + bootstrapper combine the module and the shell
+    + the detail
+    App.xaml is th entry point, create a instance of bootstrapper
+    ConfigureModuleCatalog() is called, CreateShell(), Shell is initialized()
+    Module is initialized
+    In the module initialized method will register which region will the module to be placed
+
+    
+# Bootstrapper and the shell
+- What is the Bootstrapper
+    + initializes application
+    + core services
+    are none application specify services 
+    IModuleManager, IModuleCatalog, IModuleInitializer, IRegionManager, IEventAggregator, ILoggerFacade (Enterprise library logging is better), IServiceLocator
+    + Application specific services, are common in applications
+    such as build rss service will initialize the rss feed service
+- Bootstrapper Process, may be not all of the steps need to be implemented
+    + create a loggerFacade
+    + module catalog
+    + container, you could use any container you want to use such as unity, ninject
+    + region adapter mappings
+    + region behaviors
+    + exception types
+    + create shell
+    + initialize shell
+    + initialize modules
+- Create a Bootstrapper 
+    + create a empty solution
+    + create a libs folder
+    + create a src folder to contain source code
+    + create prism folder in the libs
+    + create a business folder in src to contain business with logic with domain
+    + create a module folder in the src to contain prism modules
+    + create a WPF application, and put it into src folder
+    + create a WPF user control library to share all the codes between the solution projects and put it into src folder
+    and delete the user control
+    because class library will not add WPF control when add item so WPF user control library is better
+    + add folder in the solution to match the physical directory tree such as modules for projects and Business
+    + add reference from prism into the main project
+    microsoft.practices.prism.dll
+    microsoft.practices.prism.unityextensions.dll
+    microsoft.practices.unity.dll
+    + add class called bootstrapper class and inherit from BootStrapper unity bootstrapper
+    + delete the main window
+    + remove the start up uri from the app.xaml
+    + overwrite the OnStartup method in the app.xaml.cs, create a instance of bootstrapper and run
+    public overwrite void OnStartup()
+    {
+        base.OnStartup();
+        var bs = new bootstrapper();
+        bs.run();
+    }
+    + create a MEF of bootstrapper, inherit from MefBootStrapper
+    add reference prism.dll 
+    and MefExtensions.dll, 
+    add reference to System.ComponentModel.Composition module
+    follow the same step to init boostrapper in app.xaml and remove main.xaml
+    + override the ConfigureAggregateCatalog() method in the bootstrapper
+    protected override void ConfigureAggregateCatalog()
+    {
+        base.ConfigureAggregateCatalog();
+        AggregateCatalog.Catalogs.Add(new AssemblyCatalog(typeof(Bootstrapper).Assembly));
+    }
+    + create your shell in the next step
+- What the shell is
+    + concept of the shell
+    the main window in wpf/page in silverlight
+    it's like "master page" in asp.net
+    will contain regions 
+    view will injected into regions at runtime
+- Create a unity shell
+    + make sure there is not start up uri define in the app.xaml
+    + check the make sure the onstartup is overwriten
+    + add window called shell into main project
+    + add content and remove the design heigh and width
+    + add using statement of Microsoft.Practices.Unity at the bootstrapper cs. overwrite the create shell window
+    protected override System.Windows.DependencyObject CreateShell()
+    {
+        return Container.Resolve<Shell>();
+    }
+    
+    overwrte initializeShell() method
+    public override void InitializeShell()
+    {
+        base.InitializeShell();
+        App.Current.MainWindow = (Window)Shell;
+        App.Current.MainWindow.Show();
+    }
+    + next will be add regions to used by modules
+- Create a MEF shell
+    + create window named as shell
+    + add content for the shell
+    + add Export attribute to the shell class and name space System.ComponentModel.Composition in to the shell class definition
+    [Export]
+    public partial class Shell:Window
+    {
+        public Shell()
+        {
+            InitializeComponent();
+        }
+    }
+    + go to the bootstrapper class, overwrite the createshell method
+    using Microsoft.Practices.Prism.MefExtenson;
+    using SystemComponentModel.Composition.Hosting;
+    using System.Window;
+    protected override System.Windows.DependencyObject CreateShell()
+    {
+        return Container.GetExportedValue<Shell>();
+    }
+    
+    protected override void InitializeShell()
+    {
+        base.InitializeShell();
+        App.Current.MainWindow = (Window)Shell();
+        App.Current.MainWIndow.Show();
+    }
+
+# Regions
+- What are regions
+it's a "place hoder" for dynamic content, just like the content place holder in the asp.net
+    + example in shell
+    shell contain
+        toolbar region
+        content region
+        
+    module will contain
+        toolbar view
+        content view
+        
+    the view will be inject into the region
+    + regions don't know the detail of the view
+    + region create in code or in xaml 
+    + implements IRegion for all the region object
+- region manager
+    + maintains collection of regions, by create new region for controls
+    + provides a RegionName attached property
+    + maps RegionAdapter to controls
+    + To expose a UI control to UI need a specific RegionAdapter
+- region adapter
+    + ContentControlRegionAdapter
+    + ItemsControlRegionAdapter
+    + SelectorRegionAdaptor
+    + TabConrolRegionAdapter(Silverlight only), due to silverlight don't support the selector class
+    + Provides a RegionContext attached property
+    + also region adapter could set to code or xaml
+- create a region
+    + remove the grid item from the shell xaml
+    + add doctpanel for the toolbar region
+    xmlns:prism="http:///www.codeplex.com/prism"
+    <DockPanel LastChildFill="True">
+        <ContentControl DockPanel.Dock="Top" prism:RegionManager.RegionName="ToolbarRegion"/>
+        <ContentControl prism:RegionManager.RegionName="ContentRegion"/>
+    </DockPanel>
+    
+    + go to module project and add regist method to the Initialize() method
+    public class TestModule:IModule
+    {
+        IUnityContainer _container;
+        IRegionManager _regionManager;
+        public TestModule(IUnityContainer container, IRegionManager regionManager)
+        {
+            _container = container;
+            _regionManager = regionManager;
+        }
+        
+        public void Initialize()
+        {
+            _regionManager.RegisterViewWithRegion("ToolbarRegion", typeof(ToolbarView));
+            _regionManager.RegisterViewWithRegion("ContentRegion", typeof(ToolbarView));
+            
+        }
+    }
+    
+    + Go to the Infrastructure class which will share all the data all over the solution
+    add a class for name of the region instead of magic string
+    public class RegionNames
+    {
+        public static string Toolbar = "ToolbarRegion";
+        public static string Content = "ContentRegion";
+    }
+    
+    + Go back to the shell xaml and add reference for the infrastructure
+    xmlns:inf="SolutionName.Infrastructure"
+    
+    change the region string to region property name
+    <ContentControl DockPanel.Dock="Top" prism:RegionManager.RegionName="{x:Static inf:RegionName.Toolbar}"/>
+    <ContentControl DockPanel.Dock="Top" prism:RegionManager.RegionName="{x:Static inf:RegionName.Content}"/>
+
+    change the region reference in the module cs initialize class
+    + change the contentcontrol to ItemsControl at the shell xaml which will support inject multiple region
+    <ItemsControl .../>
+    
+    change the Initialize class of the Module class to add multiple control
+    
+    IRegion region = _regionManager.Regions(RegionNames.Toolbar);
+    region.Add(_container.Resolve<ToolbarView>());
+    region.Add(_container.Resolve<ToolbarView>());
+
+- Custom Regions
+    + create a class derive from RegionAdapterBase<T>
+    + Implement CreateRegion method
+    SingleActiveRegion
+    AllActiveRegion
+    Region
+    + Implement Adapt method
+    + Register your adapter with bootstrapper
+    + For example prism don't support stackpanel by default for regions
+    
+    create a stackpanel adapter class in the infrastructure project
+        
+    public class StackPanelRegionManager : RegionAdapterBase<StackPanel>
+    {
+        public StackPanelRegionAdapter(IRegionBehaviorFactory regionBehaviorFactory):base(regionBehaviorFactory)
+        {
+        }
+        
+        protected override void Adapt(IRegion region, StackPanel regionTarget)
+        {
+            region.Views.CollectionChange += (s, e) =>
+            {
+                if(e.Action == System.Collection.Specialized.NotifiyCollectionChange)
+                {
+                    foreach(FrameworkElement element in e.NewItems)
+                    {
+                        regionTarget.Children.Add(element);
+                    }
+                }
+                //handle remove
+            };
+        }
+        
+        protected override IRegions CreateRegion()
+        {
+            return new AllActiveRegion();
+        }
+    }
+    
+    register the new created region adapter in the bootstrapper class override the method RegionAdapterMappings method
+    
+    protected override Microsoft.Practices.Prism.Regions.RegionAdatperMappings ConfigureRegionAdapterMapping()
+    {
+        RegionAdapterMappings mappings = base.ConfigureRegionAdapterMappings();
+        mappings.RegisterMapping(typeof(StackPanel), Container.Resolve<StackPanelRegionAdapter>);
+        return mappings;
+    }
+    
+
+# Modules
+- What is a Module
+    + a building block of application, main function is separated into modules
+    + class library / XAP
+    + each module have one class that implements IModule
+- Creating a Module
+    + add new project into the module folder, suggest to use WPF user control library
+    + delete the automatic added user control
+    + add reference Prism.dll contain the IModule interface
+    + add a class, called *Module.cs and implement the IModule interface
+    + module lifetime
+- registering/discover module
+    + use module catalog to record all added module
+        * from code
+        * xaml
+        * configuration file(WPF)
+        * disk(WPF)
+- loading module
+    + from disk(WPF)
+    + download from the web(silverlight)
+    + control when to load
+        * when available
+        * on-demand
+    + guidelines for loading modules
+        * required to run?
+        with application
+        * always use?
+        with application
+        * rarely use?
+        on-demand
+- how to  Register/load module
+    + open the bootstrapper class, overwrite the ConfigureModuleCatalog() method, and reference the customed module project
+    protecteed override void ConfigureModuleCatalog()
+    {
+        Type mt = typeof(CustomModule);
+        ModuleCatalog.AddModule(new ModuleInfo(){
+            ModuleName = mt.Name,
+            ModuleType = mt.AssemblyQualifiedName,
+            InitializationMode = InitializationMode.WhenAvailabled
+        });
+    }
+    
+    + load module from directory
+    override the CreateModuleCatalog() method for the bootstrapper 
+    protected override IModuleCatalog CreateModuleCatalog()
+    {
+        return new DirectoryModuleCatalog(){ModulePath=@".\Modules"};
+    }
+    
+    make sure the specify directory is exists, and copy the specify module to the module folder
+    
+    + In the Custom Module project to specify the module name by add an attribute to the initialize method, and set the OnDemand to true to make the module load on demand
+    Use the module dependency attribute to specify the dependency to the other module
+    [Module(ModuleName="ModuleName", OneDemand=tue)]
+    [ModuleDependency("")] 
+    public void Initialize()
+    {
+    }
+
+    + Load modules from XAML file
+    Add a resource dictionary into project, called XamlCatalog, check the property build action to resource
+    add namespace xmlns:Modularity="clr-namespace:Microsoft.Practices.Prim.Modularity;..."
+    change the tag <ResourceDictionary> to <Modularity:ModuleCatalog>
+    
+    add <Modularity:ModuleInfo Ref="file://*.dll" ModuleName="Name" MOduleType="ModuleName.ModuleCalse, Name, Version=1.0.0.0" InitilizationMode="whenAvailable"/>
+
+    Open bootstrapper and overwrite CreateModuleCatalog method
+    protected override IModuleCatalog CreateModuleCatalog()
+    {
+        return Micrisoft.Practices.Prism.Modularity.ModuleCatalog.CreateFromXaml(new Url("/ProjectName;component/*.xaml", UriKind.Relative));
+    }
+    
+    make sure copy the module *.dll to the root of the application directory
+    
+    suggest to add build action to copy the module to the destination module directory
+    
+    + load module from app.config file
+    Override CreateModuleCatalog() method in the bootstrapper
+    protected override IModuleCatalog CreateModuleCatalog()
+    {
+        retun new ConfigurationModuleCatalog();
+    }
+    
+    add a new configuration file into the main project
+    
+    add a configSection tag
+    <configSection>
+        <section name="modules" type="Microsoft.Pratices.Prism.Mularity.ModulesConfiguration"/>
+    </configSection>
+    <modules>
+        <module assemblyFile="Modules/CustomModule.dll" moduleType="ModuleNamespace.ModuleClassName, ModuleClassName, Version = 1.0.0.0, Culture=neutrual, PublickKeyToken=null" moduleName="ModuleName" startupLoaded="true"/>
+    </modules>
+    
+    Open the custom module class add require code in the Initialized() method
+    
+    CATUTION
+    configuration file don't have spell check
+
+    add post build command to the custom module project to automatic copy the built module to the main project bin directory
+    xcopy "$(TargetDir)*.*" "$(SolutionDir)Src\ProjectName\bin\$(ConfigurationName)\Modules\" /Y
+    
+    + load module in code with MEF
+    add reference to the .net System.ComponentModel.Composition in the main project
+    add reference to the dll Microsoft.Practices.Prism.MefExtensions.dll
+    
+    add [ModuleExport] attribute to the Module class  
+    [ModuleExport(typeof(CutomModule), InitializationMode=InitializationMode.WhenAvaliable)]
+    public class CustomModule:IModule
+    {
+        public void Initialize()
+        {
+        }
+    }
+
+    add to the shell project
+    add reference to the custom module project
+    
+    add new catalog into the ConfigureAgregateCatalog() method in the bootstrapper
+    AggregateCatalog.Catalogs.Add(new AssemblyCatalog(typeof(CustomModule).Assembly));
+- Initializing Modules
+IModule.Initialize() method you could
+    + register types
+    + subscribe to services or events
+    + register share services
+    + compose views into shell
+
+
+# Views
+- What is a view?
+    + Portion of the user interface, it's the small interface of user interface
+    + can be made of multiple views (composite view)
+    + view can be create with usercontrol, page, datatemplate, etc
+    + multiple instances
+    + patterns not required to create view, suggest use several UI design pattern when implement a view
+- Create a view
+    + create a toolbar user control as the toolbar view in module
+    + create a content user control as the content view
+    + register views into container
+    Open the Custom Module Initialize Method 
+    Add reference to the microsoft.practice.prism.unity.dll
+    Add contaier as the custom module initial parameter
+    IUnityContainer _container;
+    public CustomModule(IUnityContainer container)
+    {
+        _container = container;
+    }
+    public void Initialize()
+    {
+        _container.RegisterType<Toolbar>();
+        _container.RegisterType<Content>();
+    }
+- Create a view with MVVM
+    + Start create interfaces for the view into the infrastructure project
+    public interface IView
+    {
+        IModule module{get;set;}
+    }
+    + create a interface view model into the infrastructure project
+    public interface IModule
+    {
+        IView view {get;set;}
+    }
+    + create a interface for the content view and interface for the content view model
+    add reference to the infrastructure project
+    public interface IContentView:IView
+    {
+    }
+    
+    public interface IConentViewModel:IViewModel
+    {
+    
+    }
+    
+    make the content view implement the IContentView Interface
+    public partial class Content:UserControl, IContentView
+    {
+        public Content()
+        {
+            InitializeComponent();
+        }
+        
+        public Project.Infrastructure.IViewModule ViewModule
+        {
+            get { return (IContentViewViewModel)DataContext;}
+            set { DataConext = value; }
+        }
+    }
+    
+    register our type for the container in the module initialize method
+    public void Initialize()
+    {
+        _container.RegisterType<IContentView, Content>();
+        _container.RegisterType<IContentViewModel, ContentViewModel>();
+    }
+    
+    do the same sequence for the toolbar view to add mvvm view model
+- Create a view, view first
+    + create new interfaces at the infrastructure project called
+    IViewModel and IView
+    public interface IViewModel
+    {
+    }
+    
+    public interface IView
+    {
+        IViewModel model{get;set;}
+    }
+    
+    create interface at custom module project called IContentViewModel interface
+    add reference to the infrastructure project
+    add content view model class 
+    public class ContentViewModel:IContentViewModel
+    {
+        public class ContentViewModel()
+        {
+        }
+    }
+    
+    return to the Content class and implement the IView class, add the view model property
+    public Project.Infrastructure.IViewModule ViewModule
+    {
+        get { return (IContentViewViewModel)DataContext;}
+        set { DataConext = value; }
+    }
+    
+    add initial view parameter at the creator method of view
+    public Content(IContentViewModel mode);
+    {
+        InitializeComponents();
+        this.ViewModel = mode;
+    }
+    
+    change the initialization method of the model project, register the viewmodle and we don't need to register the View 
+    public void Initialize()
+    {
+        _container.RegisterType<Content>();
+        _container.RegisterType<IContentViewModel, ContentViewModel>();
+    }
+- View Composition
+    + Construction of a view
+    + made up of many visual elements
+    + displayed in regions
+    + view discovery
+    + view injection
+- View Discovery
+    + views added automatically into regions
+    separate the view and region and with region name and view type
+    use RegionManger.RegisterViewWithRegion(name, type);
+    Region looks for view types
+    
+    + example
+    Add RegionManager as a parameter for the module's constructor
+    IRegionManager = _manager;
+    public CustomModel(IUnityContainer c, IRegionManager m)
+    {
+        _container = c;
+        _manager = m;
+    }
+    
+    register the view and the region
+    public view Initialize()
+    {
+        _container.RegisterType<Toolbar>();
+        _container.RegisterType<IContainView, Content>();
+        _container.RegisterType<IContentViewModel, ContentViewModel>();
+        
+        _manger.RegisterViewWithRegion(RegionNames.ToobarRegion, typeof(Toolbar));
+    }
+    The RegionNames is a class define in the infrastructure class to contain the const variable names
+- View injection
+    + view added programmatically, this could be done in many ways
+        * RegionManager.Region["Name"].Add(view, name)
+        * IRegion.Add(view, name);
+    + don't forget to Activate/Deactivate view before inject a view, Deactivate the preview and activate the new added view
+    + RegionManager give more control about how and when to show a view
+    + You can't add view to Region that hasn't been created, on the opposite the view discovery the region and view are created together
+- Create a view injection
+    + open the CustomModule class
+    + the content view may contain more complex views
+    create a instance of view module
+    
+    var vm = _container.Resolve<IContentViewModel>();
+    _manager.Regions[RegionsNames.ContentRegion].Add(vm.View);
+    
+    get more control by get the instance of region
+    IRegion region = _manger.Regions[RegionNames.ContentName];
+    region.Add(vm.View);
+    
+    region instance could active and deactivate region and give more control
+    
+    region.Deactive(PreviewInstance);
+    region.Add(NewViewInstance);
+- Create a view injection with MEF
+    + add a export attribute to the top of the Content and Toolbar view
+    [Export]
+    public void class Content:UserControl
+    {}
+
+    Open the Custom Module class and add RegionManager to the constructor of the Custom Module class
+    IRegionManager _manager;
+    
+    [ImportingConstructor]
+    public CustomModule(IRegionManager rm)
+    {
+    }
+    
+    add reference to the Microsoft.Practice.ServiceLocation.dll
+    public void Initialize()
+    {
+        _manager.Regions[RegionNames.Content].Add(ServiceLocator.Current.GetInstance<Content>());
+    }
+    
+    if you need more control could get the region from the manager same as non MEF injection
+
+
+# Communication
+- Commanding
+    + binds a UI gesture to action
+    + Execute
+    + CanExcute
+    + RoutedCommand, deliver the command to the UI element in the visual tree, if any element outside the tree will not accept the command. also require threat the event in the code behind
+    + custom command, invokes more works
+    + prism provide two kinds of command to simple the command
+        * delegate command
+        * composite command
+- Delegate Command
+    + use delegates
+    + doesn't require a handler
+    + usually local
+    + DelegateCommand or DelegateCommand<T>, Difference is at the CanExecute method will need type parameter for the generic version
+- Creating a DelegateCommand
+    + Business class such as people implement the INotification and IDataErrorInfo(for data validation) interface 
+    + bind a command in the view such as SaveCommand
+    + add SaveCommand into the view model
+    public DelegateCommand SaveCommand {get; set;}
+    
+    + initial the SaveCommand at the constructor method of view model
+    
+    SaveCommand = new DelegateCommand(Save, CanSave);
+    
+    and create the Save and CanSave method delegate method
+    private void Save()
+    {
+    }
+    
+    private bool CanSave()
+    {
+        return true;
+    }
+    
+    add OnProperty Changes event handler to update the save command button base on the CanSave validation
+    _person.PropertyChanged+= (s, e)=> {SaveCommand.RaiseCanExecuteChanged();}
+    
+    + if you want to pass a parameter into the delegate save you need the generic type of Delegate
+    
+    bind the command in the view and add parameter
+    <Button ... Command="{Binding SaveCommand}" CommandParameter="2"/>
+    
+    public DelegateCommand<object> SaveCommand {get;set;}
+    
+    delegate command don't accept none null able type so if you want to pass int you also need to use object, you could also add parameter as person object
+    
+    SaveCommand = new DelegateCommand<object>(Save, CanSave);
+    
+    private void Save(object p)
+    {
+    }
+- Composite Command
+    + usually global
+    + multiple child commands, to trigger child view command in one command
+    + local commands are registered with command
+    + when invoked, all child commands are invoked
+    + supports enable/disable
+- Create a Composite Command
+    + TIP add tab region
+    <TabControl prism:RegionManger.RegionName="{x:Static inf:RegionName.ContentRegion}" Width="Auto" Height="Auto" HorizontalAligment="true">
+        <TabControl.ItemContainerStyle>
+            <Style TargetType="TabItem">
+                <Setter Property="Header" Value="{Binding Content.DataContext.ViewName, RelativeSource={RelativeSource self}}"/>
+            </Style>
+        </TabControl.ItemContainerStyle>
+    </TabControl>
+    
+    then the content region will inject multiple view
+    + Create an new class in the infrastructure project called GlobalCommands
+    using Microsoft.Practices.Prism.Commands;
+    
+    public static class GlobalCommands
+    {
+        public static CompositeCommand SaveAllCommand = new CompositeCommand();
+    }
+    + open the toobar module xaml and add namespance infrastructure project
+    xmlns:inf="clr-namespace:SolutionName.Infrastructure;assembly"
+    and add save all command into the xaml
+    <Button Command="{x:Static inf:GlobalCommands.SaveAllCommand}">Save All</Button>
+    
+    need to register the view command to the composite command to enable the composite command
+    
+    Open the view model, which will be inject multiple times into the content region, and register the previous DelegateCommand SaveCommand into the CompositeCommand SaveAll, then this will link each view's save command with Composite Command
+    public DelegateCommand SaveCommand {get;set;}
+    
+    public PersonViewModel(IPerson view):base(view)
+    {
+        SaveCommand = new DelegateCommand(Save, CanSave);
+        GlobalCommand.SaveAllCommand.RegisterCommand(SaveCommand);
+    }
+- Event Aggregation
+    + loosely coupled event based communication
+    + publisher and subscribers not need to strong reference publisher
+    + mange memory relative to eventing
+    + PRISM built-in event aggregation by EventAggregator, both publisher and subscriber all need IEventAggregator
+    + Multicast Pub/Sub
+    + Event are typed events deriving from EventBase
+    + CompsitePresentationEvent<T>, Only class used to create event supply by PRISM, this class handles a list of subscribers and send the event to she subscribers
+    This class is generic and required Payload, the payload is what you need to send when the event is published
+    + Publish events 
+    + Subscribe to events
+    + Subscribe using a strong reference - to do this by use a keepSubscriberReferenceAlive parameter on the subscriber method, when use this you need to manually unsubscribe event when exposing subscriber
+    + Event filtering
+    + unsubscribe from events by 
+        * use subscriber handler 
+        * use subscribe token
+- using event aggregator
+    + example requirement whenever a person save we need to send it to the status bar to display what have the user done
+    + add a new class into the infrastructure project, called Events
+    using Microsoft.Practicies.Prism.Events;
+    
+    public class PersonUpdatedEvent:CompositePresentationEvent<string>{}
+    
+    open the view model cs file as the PersonViewModel, add field
+    IEventAggregator _eventAggregator;
+    
+    also add event aggregator into the constructor
+    public PersonViewModule(IPersonView view, IEventAggregator eventaggregator):base(View)
+    {
+        _eventAggregator = eventaggregator;
+        SaveCommand = new DelegateCommand(Save, CanSave);
+        
+        GlobalCommands.SaveAllCommand.RegisterCommand(SaveCommand);
+    }
+    
+    private void Save()
+    {
+        Person.LastUpdated = DateTime.Now;
+        _eventAggergator.GetEvent<PersonUpdateEvent>().Publish(stringMessage);
+    }
+    
+    add subscriber into the Status bar view model and a event aggregator field
+    
+    IEventAggregator _eventAggregator;
+    public statusBarViewModel(IStatusBar view, IeventAggregatr eventAggregator):base(view)
+    {
+        _eventAggregator = eventAggregator;
+        _eventAggregator.GetEvent<PersonUpdatedEvent>().Subscribe(PersonUpdated);
+    }
+    
+    private string _message="Ready";
+    public string Message
+    {
+        get{return _message;}
+        set{
+            _message = value;
+            OnPropertyChanged("Message");
+        }
+    }
+    
+    private void PersonUpdated(string obj)
+    {
+        Message = obj;
+    }
+- Shared Services
+    + Custom service that provide functionality to other modules, often done with a interface and a singleton instance
+    + When the module load you can Registered the service with service locator
+    + When you register your service you need to use a common interface
+    + Your concrete implementation doesn't have to be shared
+    + Register service just like specify a ContainerControlledLifetimeManager
+- Create a Shared Service
+    + Create a Service Project into the Module
+    + Create a interface into the infrastructure project and called IPersonRepository
+    using SolutionName.Business;
+    
+    public interface IPersonRepositry
+    {
+        int SavePerson(Person person );
+    }
+    
+    the concrete implementation will save in the service module project this will 
+    
+    + Add class into the service project
+    public class PersonRepository:IPersonRepository
+    {
+        int count = 0;
+        
+        public int SavePerson(Bussiness.Person person)
+        {
+            count++;
+            person.LastUpdated = DateTime.Now;
+            return count;
+        }
+    }
+    
+    register the class in the service project's initialize method
+    public void Initialize()
+    {
+        _container.RegisterType<IPersonRepository, PersonRepository>(new ContainerControlledLifetimeManager);
+    }
+    
+    go to the PersonViewModel, replace the Save logic and add the repository into the view model's constructor
+    IPersonRepository _repository;
+    public PersonViewModel(IPersonView view, IPersonRepositry repository)
+    {
+        _repository = repository;
+        SaveCommand = new DelegateCommand(Save, CanSave);
+    }
+    
+    private void Save()
+    {
+        int count = _repository.SavePerson(Person);
+    }
+- Region Context
+    + share an object between the region host and views inside the region
+    + expose in xaml
+    + expose in code
+    + only supports DependencyObjects, if your view is not, such as data template, you may create a custom region behavior to make your region view de context
+    + don't use DataContext as a communication context because it's used for view model
+- using the RegionContext
+    + example requirement, People view contain a list and a sub region to display the detail of the person
+    <ListBox x:Name="_listofPeople" ItemSource="{Binding People}"/>
+    <ContentControl Grid.Row="1" Margin="10" prism:RegionManager.RegionName="PersonDetailRegion" prism:RegionManager.RegionContext="{Binding SelectItem, ElementName=_listofPeople}"/>
+    
+    each time select a item , the region context will bind to the selectItem
+    + a PersonDetail view will inject into the sub region to display the detail of the selected people
+
+    make person detail view get the binded RegionContext
+    public PersonDetailsView(IPersonDetailsViewModel viewModel)
+    {
+        InitializeComponent();
+        ViewModel = viewModel;
+        //we use the view first pattern to show flexible 
+        ViewModel.View = this; 
+        RegonContext.GetObservableContext(this).PropertyChanged += (s, e)=>
+        {
+            var context = (ObservableObject<object>)s;
+            var selectPerson = (Person)context.Value;
+            ((ViewModel) as IPersonDetailsViewModel).SelectedPerson = selectPerson;
+        }
+    }
+    
+    In real world project don't mix in the concrete model with the view such as the Person
+    Could use repository pass id or name from the model
+
+# State-Based Navigation
+- What is State based navigation
+    + State changes to existing controls
+    + Doesn't replace a View
+    + View is updated
+        * State change in ViewModel
+        * user interaction
+    + Easiest to implement
+    behavior, style
+    + When to use it
+        * Same data, different style
+        * change layout based on state or property of view model
+        * perform related tasks
+    + Don't use it
+        * different data
+        * different task
+        * state change is complex, instead of use create a new view for complex state changes
+- Reflecting application state
+    + example, detail, a project have a simple view just display a list of people in a list box
+    <DataTemplate x:Key"PersonItemTemplate>
+        <TextBlock FontWeight="Bold" fontsize="18">
+            <TextBlock.Text>
+                <MultiBinding StringFormat="{}{0},{1}">
+                    <Binding Path="LastName"/>
+                    <Binding Pat="FirstName"/>
+                </MultiBinding>
+            </TextBlock.Text>
+        </TextBlock>
+    </DataTemplate>
+    <ListBox ItemSource="{Binding People}" Grid.Row=1  DateTemplate="PersonItemTemplate"/>
+    
+    Load the Person model into the PersonViewModel by the PersonService which implement the IPersonServcie at the infrastructure class
+    
+    PersonVIewModule have a IPersonService parameter for the constructor and a observable collection type of People property which will be updated by de IPersonService
+    
+    the concrete implementation PersonService is located at the Service folder and called PersonService Project
+    contain two kinds of method getpeople and getpeopleasync
+    + domain object is in the Business folder contain the Person class
+    + Update the view any state what is doing. Show the current state. 
+    WPToolkit, download from complex.com and add reference from the Toolkit, add it into View and Shell project
+    
+    add namespace into the view
+    xmlns:extToolkit="http://schemas.microsoft.com/winfx/2006/xaml/presentation/..."
+    
+    + use the BusyIndicator to info current state is loading people
+    use BusyIndicator wrapper the content of the view
+    <extToolkit:BusiyIndicator Grid.Row="1" BusyContent="Loading People..." IsBusy="{Binding IsBusy}">
+    </extToolkit:BusiyIndicator>
+    
+    Set IsBusy to True to show the indicator
+    Add IsBusy property into the view model and binding the IsBusy to this property
+- Displaying data
+    + display same data with different layout
+    + don't need to code behind just use triggers, styles and datatemplate
+    + use triggers update the style and datatemplate for the target control, use trigger binding to specify property
+- User interaction with a view
+    + add delegate command into the view model called
+    public DelegateCommand EditCommand;
+    
+    add event handler
+    public void Edit()
+    {}
+    
+    public bool CanEdit()
+    {}
+    
+    add property SelectPerson and binding the ListBox's SelectedItem to SelectPerson
+    
+    add raise CanEdit method into the Set Person method
+    
+    use the wpftoolkit to add a childWindow and bind the datacontext to the selected person
+
+
+# View-Based Navigation
+- Basic Region Navigation
+    + View replaces view
+    + INavigateAsync.RequestNavigate, async it sequence show the view not mean Async operation
+    + Region navigate
+    IRegion = ...;
+    region.RequestNavigate(new Uri("MyVIew"), UriKind.Relative));
+    
+    + Region Manager
+    IRegionManager regionManager = ...;
+    regionManager.RequestNavigate(RegionNames.ContentRegion, 
+                                  new Uri("MyVIew", UriKind.Relative));
+                                  
+    + Based on URIS, use the full qualify type name and the view to make sure each view have a unique name
+    + type must register as object
+        * standard registration
+        Container.RegisterType<HomeView>("HomeView");
+        * navigation registration
+        Container.RegisterType<object, HomeView>("HomeView");
+        
+    + View or ViewModel first   
+        * view first uri refer to the name of the view name
+        * view mode first uri refer to the name of the view mode
+    + Navigation Callback
+    private void Navigate(string navigatePath)
+    {
+        RegionManager.RequestNavigate(RegionNames.ContentRegion, 
+                                      navigatePath,
+                                      NavigationComplete);
+    }
+    
+    private void NavigationCompleted(NavigationResult result)
+    {
+        ...
+    }
+    the result contain all info such as result, error and navigation service reference
+- View and ViewModel participation 
+    + INavigationAware interface, use to make view and view mode participate in the Navigation process
+    public interface INavigationAware
+    {
+        bool IsNavigationTarget(NavigationContent nc);
+        void OnNavigationFrom(NavigationContext nc);
+        void OnNavigationTo(NavigationContext nc);
+    }
+    
+    + Navigation Process
+    RequestNavigate=> OnNavigatedFrom on the current view before navigate => Each instance of view is checked if it is implement the INavigationInterface, the method IsNavigationTarget is called. if it's return true, the view will be activated => Resolve the view and display the view => OnNavigatedTo is called in the displayed view, NavigationComplete. If the view model is also implement the INavigate interface the relative method is called
+    
+    + IRegionMemberLifetime, by default the deactive view is not removed from the memory, if want to remove it from the memory, implement the IRegionMemberLifetime
+    bool KeepAlive();
+    
+    + example
+        * implement the INavigate interface for the view mode
+        * and make the IsNavigateTarget method return true to set the view on the navigate chain. If view and view model are all implement the INavigate Interface, the view methods will called first
+        * IRegionMemberLifetime, to control the view's life time
+- Passing Parameters, from the view to the target view
+    + Append to navigation URI
+    + UriQuery class to help retrieve parameters, Uri are name value paires
+    + Accessed from INavigationAware methods
+    + use the NavigationContext parameter to get the parameters
+    + example to pass parameter, in the source view
+    var uriQuery = new UriQuery();
+    uriQuery.Add("To", person.Email)
+    
+    var uri = new Uri(typeof(EmailView).FullName+uriQuery, Urikind.Relative);
+    _regionManager.RequestNavigate(RegionNames.ContentRegion, uri);
+    
+    to the target view/view model implement the INavigationAware interface
+    public void OnNavigatedTo(NavigationContext nc)
+    {
+        var toAddress = navigationContext.Parametes["To"];
+        if(!string.IsNullOrWhiteSpace(toAddress))
+            To=toAddress;
+        else
+            To="Email not provided";
+    }
+- Navigating to Existing Views  
+    + INavigationAware interface
+    + Parameters, the parameters will help compare states or data 
+    + Add multiple views into a regions and make them all implement the INavigationAware interface, IsNavigationTarget method is called, if any return true, the view will activated and if none the request type of view will be created
+- confirming or Cancelling Navigation
+    + IConfirmNavigationRequest interface, the interface is derived from INavigationAware
+    public interface IConfirmNavigationReques:INavigationAware
+    {
+        void ConfirmNavigationRequest(NavigationContext nc, Action<bool> continuationCallback);
+    }
+- Custom go back or go forward Navigation
+    + Navigation Journal, Stack-based
+    + works only with region navigation services, if you use view injection or view discovery the journal will not be updated
+    + accessed from navigationService.Journal property
+    + navigationService accessed from navigationContext, probably you will call the navigation service at the OnNavigationTo method
+    + example get the journal
+    _journal = navigationContext.NavigationSerivce.Journal;
+    
+    _journal.Goback();
+
+
+
+
+
+
+
+
+
+
+
+    

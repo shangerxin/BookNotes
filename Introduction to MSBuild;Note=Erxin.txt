@@ -1,0 +1,317 @@
+Introduction to MSBuild=David Starr;Note=Erxin
+
+# Introduction
+- overview
+- msbuild project files
+- msbuild in a nutshell
+	+ xml file
+	+ it's doesn't require a specify file extension
+- msbuild is installed with .net framework
+- commandline, visual studio, tfs are all use msbuild
+- history
+	+ 2005, release with vs2005
+	+ 2008, multi-processor, multi-targeting, language enhancements
+	+ 2010, support cpp project, refreshed object model, language enhancement
+- msbuild file structure
+	+ toplevel element
+	target
+	+ output message
+	message
+	+ ex.
+	<?xml version="1.0" encoding="utf-8"?>
+	<Project DefaultTargets="HelloWorld" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+		<Target Name="HelloWorld">
+			<Message Text="Hello world"/>
+		</Target>
+	</Project>
+	+ start build
+	msbuild *.msbuild
+- msbuild live at, C:\Windows\Microsoft.NET\Framework64\v4.0.30319, for each .net version
+the msbuild folder contain the *.xsd file to define the msbuild file structure
+- one msbuild file could have multiple target
+	+ by default only the first one will be executed
+	+ specify which target to execute
+	msbuild *.msbuild /target:targetName
+	+ specify default project target for the project elements
+- the build file is case insensitive
+- response file, *.rsp, pass response file for command line arguments for msbuild command
+	+ content
+	/target:HelloWorld, ...
+	+ use *.rsp
+	msbuild *.msbuild @*.rsp
+	+ response file could have multiple arguments
+- tasks
+	+ use object browser to check the msobjects such as message element
+	<Message Text="Hello, World" Importance="high"/>
+	+ all msbuild action is implement the itask interface, implement the Execute() function
+- msbuild switches
+	+ /verbosity, minimal, normal, diagnostic; have three display log level
+	+ property, property will define in property group
+		* ex.
+		<PropertyGroup>
+			<Name>Homer</Name>
+		</PropertyGroup>
+		<Message Text="Hello $(Name)!"/>   //$(PropertyName) is use to reference the defined property
+		* the properties could wrap reference each other
+		* Set the property in the arguments
+		msbuild *.msbuild @*.rsp /p:Name=Lisa
+	+ reserved property, it's define in the msbuild fine and set by the product environment, such as
+	MSBuildProjectDirectory,... could get the list by msdn search with msbuild reserved properties
+- items, define a resource or data collection
+	+ define in itemgroup
+	<PropertyGroup>
+		<PicPath>c:\pictures\*.jpg</PicPath>
+	<PropertyGroup>
+	<ItemGroup>
+		<ItemName Include="$(PicPath)"/>
+		<CustomItem Include="ItemKeyName">
+			<CustomMetaData>...</CustomMetaData>
+		</CustomItem>
+		<CustomItem Include="ItemKeyName">
+			<CustomMetaData>...</CustomMetaData>
+		</CustomItem>
+	</ItemGroup>
+	<Message Text="@(Pic)"/>   //Reference the defined item
+	<Message Text="@(ItemKeyName->%(CustomMetaData))"/>
+	+ common msbuild project items, could search from the msdn.microsoft.com
+
+# MSBuild Execution Lifecycle
+- Multiple target build
+	+ /t:Target0;Target1,...
+	+ <Project DefaultTarget="TargetA;TargetB"> ... </Project>
+- Explicit Target Invocation
+	+ Call other targets in current build target
+	<Target Name="TargetA">
+		<CallTarget Targets="TargetA;TargetB"/>
+	</Target>
+- Target Dependency Model
+	+ Add dependency target
+	<Target Name="TargetA" DependsOnTargets="TargetC">
+	+ After Target, this is set when the targetC execute then targeta will execute
+	<Target Name="TargetA" AfterTargets="TargetC"/>
+- Add condition, set a property and reference the property with the condition property of target
+<PropertyGroup>
+	<PropertyTestValue>true</PropertyTestValue>
+</PropertyGroup>
+<Target Condition="$(PropertyTestValue)"/>
+<Target Condition="$(PropertyTestValue) == 'StringValue'">
+- Multiple Build Files, split property, target and argument file into split files
+	+ common.targets, contain different target
+	<Project>
+		<Targets/>
+	</Project>
+	+ common.props, contains property group
+	<Project>
+		<ProjectGroup/>
+	</Project>
+	+ projectName.proj, define the targets relationship and mix the targets into isolate target to generate the product
+	<Project>
+		<Targets/>
+	</Project>
+	+ import other project files
+	<Import Project="FileName"/>
+	+ Current project file could overwrite any other elements define in other file use the same name
+- msbuild with visual studio solution
+	+ msbuild *.sln
+	+ msbuild will parse *.sln into in memory *.msbuild file
+	+ visual studio project file(*.csproj) is msbuild script, the build-in microsoft csharp targets file is define in the msbuildToolFolder
+- customizing a *.CSPROJ file
+	+ there is commoned  before and after build target define in the *.csproj file. These two is called before and after build the current project. It's difference to set the before build event and after build event in the visual studio
+	
+# Custom tasks
+- msbuild task reference, from the msdn
+copy task, csc task, exec task, error task
+- msbuild extension pack, http://msbuildextensionpack.codeplex.com
+	+ download the package and install the extension package such as zip task
+	+ it's installed at c:/program files/msbuild/extensionPack/4.0
+	+ there is a extension help file 
+	+ use the DNZip extension to package the files
+	+ ex.
+	<Target Name="PackageStuff">
+		<ItemGroup>
+			<FilesToZip Include="c:/resource/*.*">
+		</ItemGroup>
+		<MSBuild.ExtensionPack.Compression.DNZip
+			TaskAction="Create"
+			CompressFiles="@(FilesToZip)"
+			ZipFileName="c:/temp/zipUpStuff.zip"
+		/>
+		<Import Project="c:\program files\msbuild\extensionPack\4.0\msbuild.extensionPack.tasks"/>
+	</Target>
+	+ <UsingTask/> tag will reference .net dll as tasks and the class need to implement ITask interface
+- Create custom task
+	+ create c# library 
+	+ reference microsoft.build.framework
+	+ class implement itask
+	public Add2Number:ITask
+	{
+		[Required]
+		public double Num1 {get;set;}
+		[Required]
+		public double Num2 {get;set;}
+		[output]
+		public double Result {get;set;}
+		
+		public bool Execute()
+		{
+			Result = Num1 + Num2;
+			var args = new BuildMessageEventArgs("Add 2 numbers", "Add", "Add2Number", MessageImportance.Hight);
+			BuildEngine.LogMessageEvent(args);
+			return True;
+		}
+		public IBuildEngine BuildEngine {get;set;}
+		public ITaskHost HostObject {get;set;}
+	}
+	+ reference custom task, add usingTask tag to reference custom dll
+		* add into CustomTarget.task file
+		<UsingTask AssembliyFile=".../*.dll" TaskName="Add2Number"/>  //taskName is the defined class name
+		* add into *.msbuild file
+		<Target Name="Math">
+			<Add2Number Num1="3" Num2="10">   //Reference the task name in the task file
+				<Output TaskParameter="Result" PropertyName="Sum"/>
+			</Add2Number>
+			<Message Text="The sum is $(Sum)"/>   //Reference the output property name
+		</Target>
+		<Import Project="CustomTarget.task">
+- Implement the task base class
+	+ reference microsoft.build.utilities
+	+ inherit task class
+	public Multiple2Numbers:Task
+	{
+		[Required]
+		public double Num1 {get;set;}
+		[Required]
+		public double Num2 {get;set;}
+		[output]
+		public double Result {get;set;}
+		
+		public overwrite bool Execute()
+		{
+			Result = Num1 * Num2;
+			Log.LogMessage(MessageImportance.High, "Multiplied 2 numbers", null);
+			return True;
+		}
+	}
+	+ use resharper vs extension 
+- Create in-line custom tasks, it's support from .net 4.0
+	<UsingTask TaskName="Divide2Numbers"
+						TaskFactory="CodeTaskFactory"
+						AssemblyFile="$(MSBuildToolPath)\Microsoft.Build.Tasks.v4.0.dll"
+	>
+		<ParameterGroup>
+			<Num1 ParameterType="System.Double" Required="true"/>
+			<Num2 ParameterType="System.Double" Required="true"/>
+			<Num3 ParameterType="System.Double" Required="true"/>
+		</ParameterGroup>
+		<Task>
+			<Code Type="Fragment" Language="cs">
+				//Write c# code in the msbuild file and it will be transferred into cs file
+			</Code>
+		</Task>
+	</UsingTask>
+	+ Set the default msbuild version by the project toolVersion property
+	<Project xmlns="..." ToolsVersion="4.0">
+
+# Common Scenarios
+- building visual studio 	or project
+- running unit test
+- deploy a web application
+- custom assembly version numbers
+- clear output dir
+	<Task Name="ClearDir">
+		<RemoveDir Directories="$(outputPath)" Condition="Exists($(outputPath))"/>
+	</Task>
+	<Target Name="BuildSolution" DependsOnTargets="CleanDir">
+		<MSBuild Projects="$(SolutionFile)" Properties="Configuration=Release;OutputPath=$(outputPath)"/>
+	</Target>
+- automatic do the test , use the mstest of unit test framework
+	+ command line 
+	mstest /testcontainer:Automobiles.Test.dll
+	+ add into msbuild 
+	<Target Name="RunTests">
+		<ItemGroup>
+			<TestDlls Includes="$(outputDir)\*Test.dll"/>
+		</ItemGroup>
+		//only if there is one test group items could specify the test container directly
+		<Exec Command="MSTest.exe /testcontainer:@(TestDlls)"  
+				IgnoreExitCode="false" 
+				WorkingDirectory="$(outputPath)"/>
+				
+	</Target>
+	+ multiple test dlls, use tranform syntax to convert multiple test dll to /testcontainer:1.dll /testcontainer:2.dll
+		<Exec Command="MSTest.exe @(TestDlls->'/testcontainer:%(FullPath)', ' ')"  
+				IgnoreExitCode="false" 
+				WorkingDirectory="$(outputPath)"/>	
+	+ this syntax fit for any other command script in windows
+- putting all together
+clean directory -> build solution -> run test
+- coordinate version numbers, get the assemblyInfo.cs for each .net library
+<Target Name="SetVersion">
+	<ItemGroup>
+		<AssemblyInfoFiles Include="$(Project\**\AssemblyInfo.cs)"/>
+	</ItemGroup>
+	<Message Text="Changing version numbers for:" Importance="high"/>
+	<Message Text="%(AssemblyInfoFiles.FullPath)" Importance="high"/>
+	
+	<MSBuild.ExtensionPack.Framework.AssemblyInfo AssemblyInfoFiles="@(AssemblyInfoFiles)"
+																					AssemblyFileMajorVersion="$(majorVersion)" 
+																					AssemblyFileMinorVersion="$(minorVersion)"
+	>
+</Target>
+put the version properteis into common properties define files
+- deploy web application
+	+ define web relative properties
+	<PropertyGroup>
+		<OutputPathWebFiles>$(outputPath)\web</OutputPathWebFiles>
+		<DeployDir>c:\deploy</Deploy>
+		<WebSiteName>Default</WebSiteName>
+		<AppPoolName>ASP.NET v4.0</AppPoolName>
+		<AppName>AutoWebDemo</AppName>
+	</PropertyGroup>
+	<!--make the physical dir if it isn't there-->
+	<MakeDir Directories="$(DeployDir)" Condition="!Exists('$(DeployDir)')"/>
+	
+	<!--if need, create the application-->
+	<ItemGroup>
+		<Application Include="/$(AppName)">
+			<PhysicalPath>$(DeployDir)</PhysicalPath>
+			<AppPool>$(AppPoolName)</AppPool>
+		</Application>
+	</ItemGroup>
+	<MSBuild.ExtensionPack.Web.IIs7Website TaskAction="AddApplication"
+																		Name="Default web site"
+																		Application="@(Application)"
+																		ContinueOnError="true"
+	/>
+	
+	<!--stop iis-->
+	<MSBuild.ExtensionPack.Web.IIs7Website TaskAction="Stop" Name="$(WebsiteName)"/>
+	
+	<!--copy physical files-->
+	<MSBuild.ExtensionPack.FileSystem.RoboCopy 
+		Source="$(OutputPathWebFiles)"
+		Destination="$(DeployDir)"
+		Files="*.*"
+		Options="/E /PUREGE" /> //means only update the file actually changed
+	
+	<!--start iis-->
+	<MSBuild.ExtensionPack.Web.IIs7Website TaskAction="Start" Name="$(WebsiteName)"/>
+	
+# MSBuild and Team Foundation Server
+- Shared Team Build Foundation Server 2010
+- 2008 build model
+- simple migration build
+- TFB 2008
+	+ TFS Version Control
+	TFSBuild.proj -> MySolution.sln ->(*.csproj, ...)
+	+ Build Agent get the code from TFS version control system, use msbuild
+	+ Build Artifacts
+- TFB 2008
+replace the msbuild with WF runtime, window workflow runtime
+	
+	
+	
+	
+	
+	
+	

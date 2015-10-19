@@ -1,0 +1,211 @@
+﻿Windows Workflow 3.5 Fundamentals=Mat Milner;Note=Erxin
+
+# introducing workflow
+- reactive programs
+    + much of the software built today is reactive in native
+    responsive to stimulus from external entities
+    + reactive programs spend most of their time waiting for input
+    presents numerous challenges
+    
+- the challenge of "waiting"
+    + reactive programs that spend most of their time waiting can't tie-up valuable resources during that time
+        * threads
+        * memory
+- so how are reactive programs written?
+    + today reactive programs are often built with server tech's
+        * asp.net
+        * simply called when stimulus occus
+    + doesn't require resources(threads/memory) until needed
+    
+- challenges w/traditional server tech's
+    + a new set of challenges appear when using tranditional server
+        * how do you model control flow (order of execution)
+        * how do you manage state?
+    + the logical business process typically get 
+    + scalability 
+    + run reactive programs in a scalable & robust manner
+- introducing workflow
+    + system.workflow
+    + runtime takes care of heavy-lifting for you
+    + wf accomplishes this by providing an architecture for 
+        * program passivation and resumption
+        * thread and progress agility
+        * declarative flow control and state management
+- what is a workflow
+    + a tree of a activity objects
+    + an activity is like a program statement in a traditional language
+        * must derive from built-in activity base class
+        * activities are called by the runtime to do some work
+    + the are two types of activities
+        * basic, do some work
+        * composite, provides flow control ( if/else, while, do until, etc)
+- workflow = tree of activites
+- activity library & custom activities
+    + wf comes with some built-in control flow activites
+    sequence {...}
+    parallel
+    state machine
+    if/else
+    while etc.
+    
+    + but  it doesn't come with any predefined "leaf" activities
+    provide delegate code activity, there is no send mail or database activity
+    
+    + you are meant to write custom activities
+    meaning you define the grammar for your program
+    in that sense, wf is really a meta framework
+- demo introducing workflows and activities
+    + use sequential workflow 
+    + code activity is not fit for product activity
+    this is just a kind of delegate called by the workflow instance
+    after add into the designer and double click will add the event handler
+    + add custom activity
+        * make class derive from Activity class
+        * define necessary proeprties
+        * over write the ActivityExecutionState method
+        
+    + use custom activity will make reusable components
+
+    + use the work flow
+    WorkflowInstance ins = workflowRuntime.Create()
+- what kinds of application can I build
+    + a workflow definition describes the tree of activites 
+    you can think of it as the program definition
+    
+    + a workflow instance is the tree of .net objects used at runtime
+    
+- key component is workflow runtime
+    + the wf runtime is modeled by the WorkflowRuntime class
+    you host an instance of WorkflowRuntime in a CLR application
+    referred as the WF host application
+    
+    + what the workflow runtime does for you
+    creates new workflow instances
+    manage the execution of workflow 
+    manage bookmarks queues
+    manage runtime services such as persistence & tracking
+
+- workflow instances
+    + you creata a workflow instance by calling CreateWorkflow
+        * initialize the new instance by supplying dictionary
+        * each name value paire mapped to proeprty on root activity
+        * when workflow completes you also get output from properties
+
+    + each instance has an unique instance id property (a guid)
+
+- starting a workflow intance
+using(WorkflowRuntime rt = new WorkflowRuntime())
+{
+    Dicionary<string, object> inputs = new Dictionary<string, object>();
+    inputs.Add("text", "some value");
+    
+    WorkflowInstance ins = runtime.CreateWorkflow(typeof(WorkflowType), inputs);
+    instance.Start();
+    //use instance to control the workflow
+}
+- runtime scheduler queue
+    + a key aspect of the runtime is the sceduler
+    it's the piece that maanges workflow instance execution
+    you never invoke activities directly
+    
+    + you schedule activities for execution on the scheduler queue
+        * starting a workflow root activity for execution
+        * you can manually schedule other activites
+        * the scheduler processes items on the queue one at a time
+        * control flow is ultimately realized through scheduling
+
+- scheduler queue in action call start        
+such as parallel activity and activity need to wait the parallel activity finished
+- when a workflow must wait
+    + some activities may have to wait for external input
+    may take minutes, hours days for input to arrive
+    so how does wf deal with this
+        
+    + whenever the scheduler queue becomes empty, the workflow instance enters an idel state
+    this is your chance to free up resources(threads&memory)
+        
+    + when an activity waits for input
+    Activity sequence -> waits 1 hr -> Activity 6
+        
+    + when a workflow idels you can passive it to disk
+        * first you must provide the runtime with a persistence service
+        * a default persistence service is provided for SQL server
+        * all activities are serializable (runtime ensures this)
+        * hence, workflow instances can be serialized to bytes
+        * later(when stimulu arrives) the instance can be resumed
+        
+    + allows runtime to free up valuable os resources
+        * memory holding activity tree & instance state can be release
+        * threads can be used to process other instances
+        
+    + WF's scheduling architecture enables thread agility
+    a workflow instance can be executed on any scheduler thread
+    instance will only be accessed by one thread at a time
+    
+    + WF's passivation model enables process agility
+    the lifetime of a workflow instance can span physical processes
+    run in one process, passivates and resumes in a new process
+    lays the foundation for an episodic execution environment
+    changes the way you think about workflow lifetime
+        
+    + declarative program definitions
+    since activities are serializable the program is really just data
+    hence we can represent the program in a number of ways
+    a workflowLoaderService loads definition into an activity tree
+    xaml is a common format used by WF and supports tools
+        
+- additional features
+    + declarative, business rules
+        * manage flow control
+        * decouple rules from code
+        
+    + tracking services
+        * gain visibility into process
+        * provide feedback to users
+        * monitor running workingflows
+    * designers 
+        * custom and oob design sureface
+        * create dsl for your business
+        
+- demo declarative workflow modeling
+    + define the workflow activity tree in xml
+    + add default namespaces
+    <?xml version="1.0" encoding="uft-8" ?>
+    <SequentialWorkflowActivity
+        xmlns="http://schemas.microsoft.com/winfx..."
+        xmlns:x="http://..."
+        xmlns:ca="clr-namespace:CustomActivities;Assembly=CustomActivities">
+        <ca:WriteLineActivity x:Name="writeLine" OutputText="From XAML" OutputColor="Cyan"/>
+        <ca:WriteLineActivity x:Name="writeLine" OutputText="From XAML" OutputColor="Red"/>
+    </SequentialWorkflowActivity>
+    
+    
+    + add code behind logic to parse the xml file to workflow instance
+    XmlReader wfreader = XmlReader.Create("*.xml");
+    workflowInstance instance = workflowRuntime.CreateWorkflow(wfreader);
+    
+    instance.Start();
+    waitHandle.WaitOne();
+    
+    + microsoft sharepoint designer tool, add new content and select workflow, use workflow designer to add workflow
+        
+    + use the workflow designer to create workflow, the file of the designer realtive is *.xoml, just change the previous xml file to xoml the the file will be opened by the workflow designer
+
+- what kinds of applications can be built?
+    + help desk ticket manager
+    * loan application
+    * wizard-based user interface
+    * server configuration management system
+    * online retail shopping cart check out
+    * any application you can build today, but easier
+   
+
+# Programming WF with VS
+- programming WF with visual studio .net
+
+
+
+
+
+
+   

@@ -1,0 +1,124 @@
+﻿ccr and join library notes=eshang
+
+:ccr
+>ccr, concurrency and coordination runtime, dynamically linked library for .net
+>areas
+    - asynchrony
+    - subysystem
+    - concurrency
+    - coordination and failure handling
+>application model
+separate components into pieces that can interact only through messages.
+>using ccr in silverlight
+RDS(remote data service) 4, a ccr for silverlight 4.0 dll has been introduced, called SL.Microsoft.Ccr.Core.dll. It's at RDS installation. 
+
+:ccr api overview
+>three main categories
+    - port and portSet queueing, port class is first in first out queue of items
+    - Arbiter, coordination primitives
+    - Dispatcher, DispatcherQueue and Task, ccr isolate the scheduling and load balancing logic
+        * dispatcherQueue is the only way to interact with the Dispatcher class
+        * Dispatcher, software components can share just a single Dispatcher resource
+        * ccr thread pools are fixed in size at the time of creation
+
+:ccr ports and portSets
+>Port, most common primitive and is used as the point of interaction between any two components.
+    - is implemented as the combination of two interfaces
+        * IPortReceive
+        * IPort
+    - The default implementation is Port<>, has one generic type argument
+    - Posting Item
+    Add a item to the port is an asynchronous operation. If no arbiters attached to the port then added to a queue. If there are arbiters present, each one will be called to evaluate the item and decide if a task should be created and scheduled for execution.
+    - Example
+    Port<int> p = new Port<int>();
+    p.Post(10);
+    - Retrieving items from a port
+        * As a passive queque, no tasks are schedueled when items are posted. Just as a FIFO queque.
+        Call the test method to check if there is a item. If no item is present it will return false and set the out parameter to null or just use '='
+        var p = new Port<int>();
+        p.Post(10);
+        int item;
+        var isHasItem = p.Test(out item);
+        //equal to
+        var item = p;
+        if(item != null){...}
+        * As a active queque, tasks are scheduled for execution when item are posted. 
+        var p = new Port<int>();
+        p.Post(10);
+        Dispatcher dispatcher = new Dispatcher();
+        DispatcherQueue taskQueue = new DispatcherQueue("sample queue", dispatcher);
+        //retrieve the item by attaching a one item receiver
+        Arbiter.Activate // register a simple receiver arbiter to the port
+        (
+            taskQueque,
+            Arbiter.Receive
+            (
+                delegate(int item)
+                {
+                    //handle the item
+                }
+            )
+        );
+        //any code below runs in paralle with delegate
+        After the delegate runs the receiver is automatically removed from the port
+    - Inspecting Port State
+        * ToString, output human readable form, the number of items and hierarchy of the receivers associated with the port.
+        *ItemCount, Number of items currently queued. If one or more persisted arbiters, this count will be zero as most arbiters cause items to be immediately converted to tasks.
+>Port Sets
+Contain strong type Port class
+    - constructing a portSet instance
+        * use the generic type arguments to define at compile time, limited by JIT. The max type number is twenty generic type
+        var ps = new PortSet<int, string, double>();
+        ps.Post(10);
+        ps.Post("hello");
+        ps.Post(3.14);
+        * use the initialization constructor that takes a parameter list of type arguments. Can supply an arbitrary number of types and will be created at runtime. Some methods is not available and a minor performance hit
+        PortSet runtimePortSet = new PortSet(
+                                typeof(int),
+                                typeof(double),
+                                typeof(string)
+                                );
+    
+:ccr coordination primitives
+>Spawn(Handler), which is defined in CcrServiceBase. At the most primitive level, you can run a method on spawn
+>Two main scenarios
+    * coordination of inbound requests
+    * coordination of response from one or more outstanding request, with multiple possible return types per response.
+>Arbiter, static class
+    - for create instances of all ccr arbiter classes, in a discoverable, type-safe manner
+    - not a exhaustive list for arbiter constructor
+        * Arbiter.FromTask, create instance of task
+        * Arbiter.Choice, create instance of choice
+        * Arbiter.Receive, creates instance of Receiver
+        * Arbiter.Interleave
+        * Arbiter.JoinedReceive
+        * Arbiter.MultipleItemReceive
+>Port extension methods, have choice method to get the result from different ports
+>single item receiver, if the persist option is true, the receiver will keep alive or will only handle one item from the asso
+var port = new Port<int>();
+Arbiter.Activate(_taskQueue,
+   Arbiter.Receive(
+       persist:true,
+       port,
+       item => Console.WriteLine(item)
+   )
+);
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

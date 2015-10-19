@@ -1,0 +1,191 @@
+Enterprise library Exception Handling Application Block=John Sonmez;Note=Erxin
+
+- What is the Exception Handling Block?
+    + Exception Handling Policies
+    + Your App
+    + You define a polices and if any exception happening and match the polices then something could be done
+    + the polices are configurable
+- What can you do with an exception
+    + wrap
+    + replace
+    + log and rethrow
+- Don't always catch
+    + if you can't do something such as wrap, replace or log then don't catch it
+- What the block provides
+    + get rid of tr and catc blocks
+    + define policies for handling exceptions, you could also define more specific policies for handling exception
+    + make them configurable without recompilation
+    + custom policies
+- When to use it
+    + Common set of ways of dealing with exceptions
+    + Exception handling frameworks or rules, rewrap the exception and change it to application level exception
+    + known need to change how exceptions are handled
+    + logging exceptions
+- Configuration    
+    + use nuget get exception handling and exception logging block
+    + add app configuration file
+    + setup new block, exception handling settings
+    policies, exception types, handlers
+        * policies
+        add database exception
+        * exception types
+        add webexception type 
+        add all exception
+        
+        post handler contain three types
+        None, ThrowNewException, NotifyRethrows this is used to manually handle exception
+        
+        * handlers
+        right click exception type to add exception handler
+        custom exception
+        logging exception handler
+        replace handler
+        wrap handler
+        
+        use wrap exception
+        specify the wrap exception will wrap the previous exception and rethrow the new exception and message
+        
+    
+# Simple Exception Handling
+- Base setup
+    + add exception policy
+    + add exception handling block into unity container
+    var container = new UnityContainer()
+                        .AddNewExtetion<EnterpriseLibraryCoreExtensions>();
+    var exceptionManager = container.Resolve<ExceptionManager>();
+    exceptionManager.Process(MyExceptionalCode, "Policy");
+    
+    private static void MyExceptionalCode()
+    {
+        Console.WriteLine("Throwing an exception");
+        
+        //this exception will be catch by the exception library
+        threw new Exception("My basic exception"); 
+    }
+    
+    process is going to do passing a policy name and exception callback
+- Wrapping 
+only need to change the configuration
+- Replacing
+- Logging
+only need to change the configuration, add logging exception handler, by default hook up Error & warning, add a flat file trace listener
+by default the general listen should have a logging listener
+We could also use the logging and wrap exception together, we could logging basic exception and wrapper it to application exception
+- Handling Exception Process
+    + We could catch the exception by ourself and pass it to the exception manager manually, this let us more control how to handle the exception
+    try
+    {
+        ...
+    }
+    catch(Exception exceptionObj)
+    {
+        // this new exception will be the wrapped exception
+        Exception newException;
+        bool isRethrew = exceptionManager.HandleException(exceptionObj, "Policy", out newException);
+    }
+- Handling Instance ID
+    + Associate Exception together, by deal with handing instance ID
+    + there is a HandingInstanceID have a guid tag in the exception message
+    + use this ID in the message
+    Wrapped Instance ID {HandingInstanceID}
+    then the user could pass this ID to developer
+    
+    
+# WCF and Custom Exception Handlers
+- Introduction, Save exception detail for the user to make it easy to understand the exception
+- WCF Client <=> WCF Service, there will be a faultContract use to send the message
+    + by default the service exception will only display in the server, add fault contract to display the exception to the client
+    + if any exception throw from the service, map the exception to the client
+- Server Setup
+    + create a new wcf service application
+    + add wcf client and refernce the service
+    + add nuget package enterprise library application block
+    + add nuget package wcf exception handler provider 
+    + create a fault contract
+    public interface IService
+    {
+        [OperationContract]
+        [FaultContract(typeofWeGoofedFault)]
+        string GetData(int value);
+    }
+    
+    [DataContract]
+    public class WeGoofedFault
+    {
+        [DataMember]
+        public string Message;
+        
+        [DataMember]
+        public GUI ErrorID;
+    }
+    
+    add concoret implement wcf service method
+    [ExceptionShielding("Policy")]
+    publci class Service:IService
+    {
+        public string GetData(int value)
+        {
+            throw new Exception("I broken");
+        }
+    }
+    
+    edit web configure to add Policy, ExceptionType add CustomExceptionHandler and choose the FaultContract, and select the service dell and find the Custom FaultContract, Rebuild the wcf project before select the FaultContract
+    
+    update the service reference before make any change on the service client
+
+    then the client could catch the FaultException from the server
+    try
+    {
+        var service = new ServiceClient();
+        var output = service.GetData(5);
+        Console.Write(output);
+        Console.Readline();
+    }
+    catch(FaultException<WeGoofedFault> exception)
+    {
+        Console.WriteLine("Caught Exception");
+    }
+- Mapping Values
+    + the property of datacontract could be set to automatic update
+    change the data contract to property
+    [DataMember]
+    public string Message {get; set;}
+    [DataMember]
+    public Guid ErrorId {get; set;}
+    
+    + add web configure add exception handling configure
+    Select the Property in the Exception Handler and add GUI map to the ErrorId property
+    
+    + by default the client don't receive the detail of the exception by setting the service configuration 
+    <serviceDebug ShowExceptionDetail = false/>
+- Creating a Custom Handler
+    + for example to replace the exception message with other content
+    + add class to implement the IExceptionHandler interface
+    [ConfigurationElementType(typeof(CustomHandlerData))]
+    public class ScrubberHandler:IExceptionHandler
+    {
+        public ScrubberHandler(NameValueCollection collection)
+        {
+        }
+        
+        public Exception HandleException(Exception exception, Guid handlingInstanceId)
+        {
+            var newException = new Exception(exception.Replace("XZY Cop", "Customer"));
+            return newException;
+        }
+    }
+    
+    + then the custom exception handler could be added in the configuration
+    the Attributes is the constructor parameter, current exception handler don't contain parameters
+- References
+developer's guide, http://msdn.microsoft.com/en-us/library/ff953192(v=pandp.50).aspx
+customer exception handler
+http://msdn.microsoft.com/en-us/library/ff664570(v=pandp.50).aspx
+
+
+
+
+
+
+    
+    

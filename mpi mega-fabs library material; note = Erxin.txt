@@ -1,0 +1,402 @@
+﻿mpi mega-fabs library material; note = Erxin
+
+:Overview
+>communication with RS232/USB/CAN...
+>mfc based
+>support multitasking
+>error handling
+>support data collection, record
+>internet connection  between 2 or more application that use mpi
+>library files(mpi.lib, mpi.dll, canlib32.dll, mpiint.h)
+
+:Function Categories
+:initialization
+
+:References
+:initialization
+>functions
+MDCE* openDCE(char* pwdin, char* cnfname);
+	- pwdin, path to the configuration file
+	- cnfname, configuration file name
+	- return, a pointer of communication object
+	- Note: 
+		* multiple MDCE object could be open with different ports by using setComPar function
+		* if only one session, the return could be ignore and all the other function use MDCE object with NULL
+		* set pwdin, cnfname to null to use the environment variable DCE_DB, cfg file name will be "system.dce"
+		
+void deleteDCE(MOCE* pcom, int closeMFC=FALSE);
+	- pcom, pointer to the communication object
+	- closeMFC, if TRUE cleanup the MFC internal thread
+	
+char* ver(int print);
+	- print, if none zero then pop up a message box
+	- return, the dll version
+	
+void disErrMsgBox(int dis);
+	- dis equal to 1 will be no message box. it's not disable the compare version window in case of version conflict found.
+	
+void disAllErrMsgbox(int dis);
+
+int getFwErr(MDCE *pcom=NULL);
+	- return none zero if dectect PC library with firmware
+	
+unsigned int getVerErrCodeSl(int slave=0, MDCE *pcom=NULL);
+	- slave number
+	- return details version error code per slave
+	- note: each 2 bit represent an error of one file database; 0 no error, 1 fail to compare, 2 mismatch version file-controller.
+	bit 0,1, boot firmware file *.edb
+	bit 2,3, boot altera firmware file *.etf
+	bit 4,5, mdp firmware file <appl name>.edb
+	bit 6,7, mdp variable list file <appl name>.vrs
+	bit 8,9, pdl firmware file <name>.edb
+	bit 10,11, pdl mdp variable list file <user_$>.vrs
+	bit 12,13, pdl mdp funciton list file <user_$>.lbl
+	bit 14,15, pdl mdp message list file <user_$>.msg
+	bit 16,17, core alter firmware file *.etf
+	bit 17,19, application alter firmware file *.etf
+
+int compareFw(int show=0, MDCE *pcom=NULL);
+	- show, if 1 show the message window when all firmwares are match
+	- note, version compare is done always after communication first setup
+	
+void setMFCmode();
+this function need be called when the these funcitons are called not from the main trhead "RunKmi, KillKmi, showcomstatus, OpenRecord".
+
+void resetController(int slave=0, MDCE *pcom=NULL);
+reset the controller, is similar to make hardware reset to controller, it will go to boot mode and back to normal mode.
+
+:Communication
+>functions
+int setComPar(int port, 
+			  int baudrate,
+			  int trid,
+			  int rcid,
+			  int canbaudrate,
+			  int msgStand,
+			  int canpipelevel, 
+			  int timeout, 
+			  int locktime,
+			  int iternum,
+			  MDCE *pcom=NULL);
+	- port number, 1, 2, 3,...
+	- baudrate – code of boadrate in RS485/RS232/USB mode (0,1) . 0=>1200,    1=>2400,2=>4800, 3=>9600, 4=>19200, 5=>38400, 6=>56000, 7=>57600,    8=>115200, 9=>128000, 11=>230400, 12=>460800, 13=>921600
+	- mode, 0 RS485, 1 RS232/USB, 2 CAN, 3 Ethrenet, 4 Ethercat 
+	- trid, transmit relevant in can mode(=2) id
+	- rcid, receive releveant in can mode(=2) id
+	- canbaudrate, relevant in CAN mode(=2) CAN baud rate 0=>50K, 1=>62K, 2=>83K, 3=>100K, 4=>125K, 5=>250K, 6=>500K, 7=>1M 
+	- msgStand, relevant in CAN mode (=2) 0 message extended , 1 message standard 
+	- canpipelevel, relevant in CAN mode (=2)    pipe level (1…10)
+	- timeout, msec, (recommended 100)
+	- locktime, msec, communication is lock due to error(Recommended 200)
+	- iternum, retry times, (recommended 6)
+	- return, success to open port return 0
+			  fail then return operating system error code
+			  port not exist 2
+			  port is busy 5
+	- Note, this function mast call after openDCE in the first time and then can be call any time to change communication setting
+
+:Connect to ethercat
+>SetComPar with mode = 4, must call setMFCmode
+ex.
+setMFCmode(); 
+MDCE * pcom=openDCE( "c:\\mega_fabs\\dce\\", NULL); 
+setComPar(0,0,4, 0,0,0,0,0,50,0,8,pcom); 
+the filename para is NULL because in Ethercat mode it always use “ethercat.dce” file which is update dynamically according to slave detected on the network. 
+>setComParEx, similar to setComPar but have 3 more parameters to support ethernet setting.
+int setComParEx(int port,   
+				int baudrate,   
+				int mode,   
+				int trid,   
+				int rcid,   
+				int canbaudrate,   
+				int msgStand,   
+				int canpipelevel,     
+				int timeout,   
+				int locktime,   
+				int iternum,   
+				char *ipstr,         
+				int ipport,             
+				int nodelay,         
+				MDCE *pcom=NULL); 
+	- ipstr, ip address
+	- ipport, port number
+	- nodelay, if TRUE then disable the Nagle algorithm for send coalescing
+	- return, 0 success, 157 fail to connect eithernet
+	- ex. setComParEx(0,0,3,0,0,0,0,0,150,200,10, "192.168.100.180", 10001, 0,NULL); 
+	
+int ConnectEthernet( char *ipstr,   
+					 int ipport,   
+					 int flag,   
+					 int showMsgW
+					 int timeout,   
+					 int locktime,   
+					 int iternum,   
+					 MDCE *pcom=NULL); 
+	- flag, relevant in controllers use MEGA-F ethernet driver. If 0 then connection will fail if the controller socket is already connected to other application. if 1 then wait for controller socket is ready and try to connect.
+	- showMsgW, 1 open message window
+	- timeout, msec
+	- locktime, msec
+	- iternum
+	- return, 0 success, 157 fail
+	
+int getComPar(int *pport, 
+			  int *pbaudrate, 
+			  int *pmode,   
+			  int *ptrid,   
+			  int *prcid,   
+			  int *pcanbaudra
+			  int *pmsgStand,
+			  int *pcanpipelev
+			  int *ptimeout,   
+			  int *plocktime,   
+			  int *piternum,
+			  MDCE *pcom=NULL);   
+	- this function retrive the parameters set by setComPar
+	- return, 0 success, -1 no communication object
+	
+int getComPar   (int *pport, 
+				int *pbaudrate, 
+				int *pmode,   
+				int *ptrid,   
+				int *prcid,   
+				int *pcanbaudrate,   
+				int *pmsgStand,   
+				int *pcanpipelevel,   
+				int *ptimeout,   
+				int *plocktime,   
+				int *piternum,   
+				char *ipstr,           
+				int *pipport,         
+				int *pnodelay,       
+				MDCE *pcom=NULL);   
+	
+int getDceCnfFname(char *str, MDCE *pcom = NULL);
+	- str, return full path file name
+	- return, 0 success, 1 fail
+	
+int getSlaveFname(char *str, int slave=0, MDCE *pcom=NULL);
+	- str, return slave name 'which is working directory contain all database of the controller'
+	- slave, slave number, in case single controller it will be 0
+
+void closePort(MDCE *pcom=NULL);
+close the port but not delete the MDCE object
+
+void openPort(MDCE *pcom=NULL);
+reopen the port which specified in the last setComPar
+	- return, 0 success, fail return operating error code, 2 port not exist, 157 fail to connect ethernet
+	- note, you may call openPort instead of setComPar/setComParEx and the last communication setting will apply. The last communication setting is saved in file com.sav at the working directory. The communication setting could be changed via the communication status dialog(showcomstatus)
+	
+int openRemote(MDCE* pcom=NULL);
+	- return, -1 if didn't call openDce yet, else return 0
+	
+void showcomstatus(MDCE *pcom=NULL);
+This function will open a dialog to show the communication setting and statistics. this function should be call from the main application thread except call setMFCmode before.
+
+void RunKmi(MDCE *pcom=NULL);
+run kmi tool in remote mode(client). If there are several sessions, only one session could run kmi.
+
+void killKmi(MDCE *pcom=NULL, int closenet);
+	- closenet, if 1 then also close the local net server.
+	
+int RunAppl(char *papplname, MDCE *pcom=NULL);
+	- papplname, application name to run.
+this funciton is extension of RunKmi. it not only run kmi it run in remote mode any MEGA_F application such as wizalg, franal, intrptest axistest, tune and also kmi.
+	- return, application id it will be usd by killAppl to terminate application running in remote
+	
+void KillAppl(int applid, MDCE *pcom=NULL, int closenet);
+
+int loadDceSw(int pdlComp, MDCE *pcom=NULL);
+	- pdlComp, if not 0 then it will do PDL compilation if needed
+	- return, 0 success, else return numbers of errors
+	- note, call this function to update controller with all relevant software(MDP, PDL, Altera...)
+	
+int loadFirmName(char *name, int slave, MDCE *pcom);
+	- name, firmware name to be save, if NULL then save current applicaiton name
+	- slave, slave number
+	
+void updateDatabase(MDCE *pcom);
+update the dll internal database. call this function to refresh dll internal variables/functions
+
+:History logger
+These function support operation of internal logger that stores every message transfer between PC and controller. The data cab is view with dcehis.exe tool. The data is stored in circular buffer(if not file mode) with maximum size define in the HisStar function. In file mode the data is saved to disk. 
+>functions
+int HisStart(char *logFileName, int size, int stepToSave, int fileMode, MDCE *pcom);
+	- logFileName, file name to save log data
+	- stepToSave, relevant in fileMode = 1, store to disk file every stepToSave events.
+	- fileMode, if 0 then data is saved to memory cyclic, only when stop the data is saved to file. Noe zero then data is saved to file on the fly each stepToSave events
+	- return, 0 success, 1 already active, 1 fail to allocate memory
+	- note, call this function to start logger process, call hisStop or hisSave to save the result. call hisView to see the result.
+	
+void HisStop(MDCE *pcom);
+stop logger process and save the data collected to file.
+
+void HisSave(MDCE *pcom);
+save the data to dce.log and continue
+
+void HisView(MDCE *pcom);
+run the application dcehis.exe and open the file dce.log
+
+:Recived events
+int waitOnmsgP  (int* pcode, 
+				char* pmsg=NULL, 
+				int* pcolor=NULL, 
+				int* pparam=NULL, 
+				int *pnumovrflw=NULL, 
+				int timeout=INFINITE, 
+				MDCE *pcom=NULL);
+This function received PDL printl commands sanded form the PDL program running on the controller. The PDL printl command has the following syntax
+printl/mode1/mode2("...string...", var1, ...);
+mode2 is optional
+	- pcode, will be store with the mode2 value
+	- pmsg, store the string after processing, at least 200 chars
+	- pcolor, the color code as specified in mode1 is converted to value COLORREF type.
+	- pparam, pointer to array. The first will be written with number of parameters and the next is 32bit parameters
+	- pnumovrflw, store number of printl message lost. ex. not thread listening to waitOnMsgP and a lot of printl message comes then overflow happen. When return from waiOnMsgP then overflow counter reset.
+	- timeout, if -1 then means infinite, funciton will wait for PDL message send. 0 then function return immediately with return code 0 when message avaliable and -2 if no message available. Other values means the wait msec, when timeout the return code is 5.
+	- Return, 0 success, -1 communication object invalid, -2 no message available, 5 time out
+	- ex. pdl program executes printl like this(assume x_enc_pos=2000, x_p_p_g=0.01)
+	printl/103/00000044("x axis:enc_pos=%ld, pos loop gain=%g, x_enc_pos, x_p_p_g");
+	then thread which listens on waitOnMsgP will return with code 0 and parameters will be filled as follow
+	*pcode = 0x44
+	pmsg="x axis:enc_pos=2000, pos loop gain=0.01"
+	*pcolor=0x02ff0000;(code 3 in mode1 converted to blue color)
+	pparm[0]=2, pparm[1]=2000;*((float*))&pparam
+	*pnumovrflw=0(assume no overflow)
+	- Note, if one of the pointer is NULL, then it's means ignore. The waitOnMsgP should not be called by main thread with timeout>0 or infinite, because it will block the GUI. For application only have one thread could use polling mode. mode2(=*pcode) is a general purpose parameter which may use by application to identify the specific printl message. 
+	
+void releaseWaitMessage(MDCE *pcom);
+To release the thread of waitOnMsgP, when use polling sequence with the timeout is zero in waitMsgP then it's not need to call this funciton
+
+int insertEvent(int id, HANDLE h, MDCE *pcom);
+	- event id, in range 0... 199 are accepted. It's the table index that store all events in the dll.
+	- h, handle to event created by CreateEvent win32 function
+	- return, 0 success, -1 not called openDce yet, -2 code out of range
+instead of monitoring all message of printl pdl command(using waitOnMsgP) you can wait only part of them specified by event code and id.
+	- note, the event will be signaled if pdl will run printl with
+	code(mode2 field) equal to the initialized by the function setEventCode
+	number of parameters is one or more
+	the value of the first parameter equal to the id
+
+:Parameters list, for motor #498
+>quick view
+parameter		definition					unit
+X_enc_pos  		Feedback Position    		Count   
+X_ref_pos  		Reference Position    		Count   
+X_trg  			Target Position    			Count   
+X_pos_err  		Position Error    			Count   
+X_vel_fbf  		Feedback Velocity    		Count/s   
+X_ref_vel  		Reference Velocity    		Count/s   
+X_vel_err  		Velocity Error    			Count/s   
+X_ref_acc  		Reference Acceleration 		Count/s^2   
+X_curr_abs  	Actual Current    			Current(A)^2 
+X_command  		Command Current    			Current(A)*1000/36 
+Vcmd  			Analog Command    			V   
+Vbus  			Bus voltage    				V   
+X_volt_abs2  	Servo Voltage max(2500^2 map to 100% PWM)
+X_Aenc_sin_v  	SIN-Analog Encoder    V   
+X_Aenc_cos_v  	COS-Analog Encoder    V   
+X_cmd_pwm_in  	PWM command       
+X_hall_bits  	Digital hall bits  0~5     
+X_temperature  	Amplifier Temperature    ℃   
+X_avr_curr  	Soft-thermal Accumulator 
+>configuration center
+X_rotrayType  	Motor Type 0  Linear  		 
+						 1  Torque 
+						 2  AC servo 
+X_curr_mot_peak Peak Current 			  A_amp   
+X_curr_mot_cont Continuous Current 		  A_amp   
+X_forceConstant Torque Constant 		N/A_amp Nm/A_amp
+X_Resistance  	Resistance 				歐姆(ohm) 
+X_inductance  	Inductance 				(mH) 
+X_enc_360  線性馬達的極對距以極對距32mm的線馬搭配數位光學尺1um為例，其X_enc_360=32000counts 
+X_enc_360_div  旋轉馬達的極對數      
+X_mlnert  Screw Moment of inertia 旋轉馬達之轉動慣量   Kg*(m^2)  
+X_mass  Load Mass 線性馬達之負載重量   Kg  
+X_pitchScrew  Screw Pitch 導螺桿導程,僅用於AC  mm  
+X_gearRatyio  Gear Ratio AC伺服馬達之齒輪比 
+X_cntperunit 距離單位轉換馬達移動單位距離的count數線性馬達:X_cntperun每移動100mm
+			;的count數 旋轉馬達:X_cntperun每一圈的count數 
+X_Aenc_mode Encoder Type 編碼器類型 0  Analog encoder 1  Digital encoder 
+X_Aenc_mulFac  Multiplier factor 類比編碼器細分割比例
+MUX_ENC_EMUL_FB Encoder output Off  使用Buffered encoder On  使用Emulated encoder 
+FB_ENC_DIR  Buffer encoder invert On true, Off false
+X_emu_M  Emulated encoder 模拟编码器输出的分母
+X_emu_N  Emulated encoder 模拟编码器输出的分子
+X_emu_i_radius  Emulated index 
+X_emu_i_jitter  Emulated index 
+X_hall_mode  Hall Sensors 霍爾感測器類型 0  None  1  Digital hall 2  Analog hall 
+X_oper_mode  Operation mode 操作模式 0  Stand-Alone  1  Position mode 2  Velocity mode 3  Force/Torque mode 
+X_pulse_mode  Pulse mode 脈波格式 0  Quadrature(AqB) 1  Pulse/Direction 2  Pulse 
+up/Pulse dn
+X_fall_rise  Increment Position on 脈波命令觸發方式 0  Falling edge  
+1  Rising edge 
+X_cmd_ext_M  Electronic Gear 電子齒輪比分母(輸入) 
+X_cmd_ext_N  Electronic Gear 電子齒輪比分母(輸出) 
+X_pulse_dir  Invert pulse command 脈波命令反向 0  不選擇Invert command 1  選擇Invert command 
+IN_DIF_SINGLE  Hardware interface  Off  Differential signal, On  Single ended signal 
+...
+
+:Parameters mahy be useful to control the motor move
+X_enc_pos  Feedback Position 
+X_ref_pos  Reference Position 
+X_trg  Target Position 
+X_pos_err  Position Error 
+X_vel_fbf  Feedback Velocity    Count/s   
+X_ref_vel  Reference Velocity    Count/s   
+X_vel_err  Velocity Error    Count/s   
+X_ref_acc  Reference Acceleration   Count/s^2   
+X_temperature  Amplifier Temperature
+X_cmd_pwm_in  PWM command 
+X_command  Command Current 
+X_rotrayType  Motor Type 0  Linear  1  Torque 2  AC servo
+X_enc_360  線性馬達的極對距 以極對距32mm的線馬搭配數位光學尺1um為例，其X_enc_360=32000counts 
+X_enc_360_div  旋轉馬達的極對數 
+X_gearRatyio  Gear Ratio AC伺服馬達之齒輪比
+X_cntperunit  距離單位轉換馬達移動單位距離的count數線性馬達:X_cntperu每移動100mm的
+count數 旋轉馬達:X_cntperu每一圈的count數 
+X_Aenc_mode Encoder Type 編碼器類型 0  Analog encoder 1  Digital encoder 
+X_emu_M  Emulated encoder 模擬編碼器輸出的分母 
+X_emu_N  Emulated encoder 模擬編碼器輸出的分子 
+X_oper_mode  Operation mode 操作模式 0  Stand-Alone  1  Position mode 2  Velocity mode 3  Force/Torque mode 
+X_cmd_ext_M  Electronic Gear 電子齒輪比分母(輸入) 
+X_cmd_ext_N  Electronic Gear 電子齒輪比分母(輸出)
+X_cmd_ext_v_sc Velocity mode command Scaling 速度命令比例值，輸入單位電壓代表的轉速 
+count/s/1V in Velocity mode 
+X_cmd_ext_v_dz Velocity mode command Dead Band 速度命令無作用區(Dead band)輸入電壓
+小於此設定值時速度命令為0 
+X_cmd_ext_i_sc  Force/Torque mode command Scaling 電流命令比例值，輸入單位電壓代表的電流 (m/36*1000) m:current/V for voltage command m:current/(Full PWM) for PWM mode in which 36 is the peakcurrent of D1 in ampere 
+X_cmd_ext_i_dz  Force/Torque mode command Dead Band 電流命令無作用區(Dead band)輸入電壓小於此設定值時電流命令為0 
+X_cmd_pwm_mode Command Type 速度與電流模式下的命令輸入格式 0  Analog  1  PWM 50% 2  PWM 100% 
+X_st_phase  Invert motor 馬達出力方向 -1365表示Invert 打勾+1365表示Invert 不打勾 
+X_tr  In-Position 的誤差目標框 
+X_tr_time  In-Position 的反彈跳時間   Fclk 1Fclk=66.67us 
+X_vel_max  max speed
+X_acc  max Accelerate
+X_dcc  max Deccelerate
+X_dcc_kill  Dec. kill 紧急停止的减速度
+X_p2p_del  Dwell time 点对点运动休息时间
+X_new_sm_fac  Smooth factor 平滑參數 
+X_p2p_pos1  P1 
+X_p2p_pos2  P2
+X_run  Moving, 电机状态, 运行或停止
+X_I_flag  Homed 0  沒有執行原點程式 1  正在執行原點程式 2  歸原點成功 -1  歸原點失敗 
+X_max_err  Error window 最大跟隨誤差限制值
+X_index_vel  Home找index 時的移動速度
+X_index_tout  找index 超出此設定時間,歸原點動作會停止	fclk
+X_index_offs  原點偏移量 
+X_home_smooth 歸原點時的平滑參數 
+X_delMaxEnToBrk 煞車啟動延遲時間    Fclk  93 
+X_vel_stop  煞車啟動速度 
+X_delBrkToDis  煞車動作時間 
+X_emap_startp  補償起始位置
+
+
+
+
+
+
+
+
+
+
+

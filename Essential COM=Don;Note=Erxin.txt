@@ -1,0 +1,149 @@
+﻿Essential COM=Don;Note=Erxin
+
+# 简介
+- 面向组件与面向对象设计的区别
+oop = polmorphism + (some) late binding + (some) encapsulation + inheritance 
+
+component-oriented programming = polmorphism + (really) late binding + (real, enforced) encapsulation + interface inheritance + binary reuse 
+
+- com professional, professional person 
+Charlie Kindel 
+Grady Booch 
+
+- 动态链接和c++, MS 提供了
+__declspec(dllexport)关键字, 来提供方法引出或类的所有方法引出，将被存放在dll 的export list中, 运行时链接器将会产生一个引入库import library。这个库暴露了所有的FastString方法的成员符号，但并不暴露实际代码
+
+class __declspec(dllexport) FastString{
+...
+}
+
+
+application A | import library ---+
+                                  |
+application B | import library ----------> FastString.dll
+                                  |
+application C | import library ---+
+
+- 可移植性, c++ 没有二进制标准, 为了实现操作符重载， C++编译器往往惹你篡改每个入口点的符号名，以便允许同一个名字有多个用法，而不打破现有就C的连接器，成为name mangling
+
+消除名字改编的经典技术是使用
+extern "C"
+
+它引出的是成员函数非全局函数，且对上面例子中的FastString情况无用
+
+    + 另一种方法是使用DEF 文件，module definition file,允许引出符号被化名为不同的引入符号
+
+- 封装性和C++， C++标准中没有定义二进制格式上的封装性标准，如对象私有成员和大小的顺序，所以只根据接口简单替换DLL是有风险的
+
+MFC为了解决这一问题在发布新版本DLL时都修改名字例如xxx10.dll, xxx20.dll 
+
+- 把接口从实现中分离， encapsulation, 使用包装类将接口的具体实现与接口分离
+class __declspec(dllexport) FastStringItf{
+    class FastString;
+    FastString *m_pThis;
+    
+    Public:
+        FastStringItf(const char *psz);
+        ~FastStringItf(void);
+        int Length(void) const;
+        int Find(const char *psz) const;
+};
+
+当实现类FastString需要改变时，对FastStringItf构造函数中的new操作符的调用也要被重新编译,以确保分配足够的内存
+
+- 使用抽象类作为二进制接口，兼容性的起源是对于一下两个方面有不同的方案
+    + 如何在运行时表现语言的特性
+    +　连接时如何表达符号名
+
+通常使用条件编译指示符来强制使用统一的堆栈规则　例如ｗｉｎａｐｉ／ｗｉｎｂａｓｅａｐｉ　宏就是这个例子
+ＷＩＮＢＡＳＥＡＰＩ　void WINAPI Sleep(DWORD dwMsecs);
+
+    + 期望使用几种假设来提供一种二进制的标准
+        * 基于C的系统调用都必须遵守这种假设
+        * 所有的编译器都强制使用同样的顺序
+        * 最关键的，某个给定的平台上的所有C++编译器都实现了同样的虚函数调用机制
+
+    + 使用抽象函数定义接口方法，利用编译器实现vtbl的一致性来实现，vptr， 使所有公共函数定义为抽象基类中的纯虚函数，并让dll中提供一个全局函数让他来替客户程序调用new操作，这个函数必须以extern "C"的方式引用
+
+    这种方法的缺点是，接口类的析构函数不是虚函数，delete操作符调用并不会动态地找到最终类的析构函数，并从最外层向积累递归地销毁，但是如果虚函数定义为虚函数，将破坏接口类的编译器独立性，因为虚函数在vtbl中随着 编译器的不同而不同，这样解决方法就是显示的定义一个DELETE方法来辅助销毁对象
+
+- 运行时多态性，动态载入dll， LoadLibrary, GetProcAddress 
+IFastString *CallCreateFastString(cosnt char *psz){
+    Static IFastString *(*pfn)(const char*) = 0; 
+    if(!pfn){
+        const TCHAR szDLL[]  __TEXT("FastString.DLL");
+        const char szFn[] = "CreateFastString";
+        HINSTANCE h = LoadLibrary(szDLL);
+        if(h)
+        {
+            *(FARPROC*)&pfn = GetProcAddress(h, szFn);
+        }
+        return pfn? pfn(psz): 0;
+    }
+}
+
+GetProcAddress, Retrieves the address of an exported function or variable from the specified dynamic-link library (DLL).
+
+- 对象扩展性， 根据vtbl的布局，只是把戏方法追加到接口定义的尾部， C++ dynamic_cast操作符， RTTI， runtime type identification,但是其实现与编译器及其相关。  
+
+所以我们在二进制结构上需要提供一个方法来实现类食欲dynamic_cast操作符类是的操作，来支持运行时动态转换客户端需要的类型，方法中使用static_cast<Type> 来进行转换
+
+- 资源管理， 保证delete函数只被调用一次， 每个对象维护一个引用计数，接口指针被复制的时候该计数值增加，当接口指针被销毁的时候该计数值减少
+
+
+# 接口
+- 为了增加明确性与跨平台性，把定义接口的语言与实现的语言分离开，并消除C语言中两义性特征， IDL， interface definition language
+- IDL, COM IDL是在OSF 的DCE RPC 基础上修改, Open software foundation, distributed compting evironment remote procedure call 
+
+win32 dsk 包含MIDL.exe的IDL编译器，可以解析COM IDL 文件产生C/C++兼容的头文件，也会产生一个二进制文件，环境能够为原始IDL文件中定义的接口产生相应的，针对特定语言的接口定义，二进制文件被称为类型库type library，包含符号化的IDL
+
+- 方法和结果， 都返回一个HRESULT 类型错误号
+severity code   |reserve    | operator code     | information 
+31              | 30 29     | 28 - 16           | 15 - 0
+
+sdk 定义了两个宏
+SUCCEEDED(hr)
+FAILED(hr)
+
+    + 一些通用的FACILITY_NULL HRESULT 如下
+S_OK 
+S_FALSE 
+E_FAIL, 一般性失败
+E_NOTIMPL, 一般没有实现
+E_UNEXPECTED， 在不准确的时间调用的方法
+    
+    + SDK 提供噢乖了MAKE_HRESULT宏来合成HRESULT信息
+    const HRESULT CALC_E_IAMHOSTED = MAKE_HRESULT(SEVERIT_ERROR, FACILITY_ITF, 0x200+15)；
+    
+用户定义的HRESULT需要大于0x200的信息码
+ 
+- 接口和IDL，使用GUID来区分不同方法， C 定义了GUID结构128位值GUID, 别名为
+typedef struct _GUID {
+DWORD;
+WORD;
+WORD;
+BYTE[8];
+}GUID;
+typedef GUID IID; 
+typedef GUID CLSID;
+
+
+#define REFGUID const GUID&
+#define REFIID const IID& 
+#define REFCLSID const CLSID&
+- IUnknown, C++定义 
+extern "C" const IId IID_IUnknown;
+interface IUnknown {
+    virtual HRESULT STDMETHODCALLTPE QueryInterface(REFIID riid, void **ppv) = 0;
+    virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
+    virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
+};
+    
+在VC中STDMETHODCALLTYPE 宏被展开为stdcall
+    
+- 资源管理和IUnknown
+    
+    
+    
+    
+    

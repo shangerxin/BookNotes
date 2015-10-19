@@ -1,0 +1,814 @@
+﻿Mocking with Moq=Donald Belcham;Note=Erxin
+
+# Course Outline
+- Introduction to the Moq framework 
+- Introduction to Mocking 
+- HandRolled Mocks 
+- Mocking with Moq 
+- Advanced Mocking with Moq 
+- Outline 
+    + what is Moq?
+    + get start 
+- What is Moq 
+is only mocking library for .net developed from scratch to take full advantage of .net 3.5 linq expression tree and c# 3.0 features i.e. lambda expressions that make it the most productive type-safe and refactoring-friendly mocking library available 
+
+- supported framework 
+    + .net 3.5 and higher 
+    + silverlight 
+    + project containing tests can not be "client profile"
+
+- installation 
+    + .zip download http://code.goole.com/p/moq
+    
+    + nuget, install-package moq 
+    
+- summary 
+    + .net testing isolation framework 
+    + easy to install 
+
+
+# Using test doubles to improve unit tests 
+- Overview 
+    + unittesting can be difficult 
+    + complex code 
+    + code that is coupled to other classes 
+    + code that accesses external resources 
+    + test doubles can help 
+    + test doubles help you isolate the code you want to test 
+    + test doubles help support good coding principles help you keep your could easy to maintain 
+    
+- properties of a good unit test 
+    + atomic 
+    + deterministic 
+    + repeatable 
+    + order independent & isolated 
+    + fast, should really fast 
+    + easy to setup
+    
+- how test doubles can help 
+    + a common problem with unit tests 
+    + method under test may depend on multiple class and the classes are depend on other classes 
+ 
+ 
+# Hand rolled mock object 
+- outline
+- what are hand rolled mocks ?
+    + fake implementation of abstractions 
+    + used to verify class interaction in automated tests 
+    + created by hand writing code 
+    
+- creating hand rolled mocks 
+    + first basic class 
+    + implement the dependency interface type 
+    + flush out the dependency functionality needed 
+        * return values 
+        * exception throwing 
+        * was it called? verify a method or property is called 
+        * how many times was it called? 
+        
+- demo, creating hand rolled mocks 
+//aim test class is logging implementation 
+public class Logging
+{
+    private readonly IScrubSensitiveData _scrubSensitiveData;
+    private readonly ICreateLogEntryHeaders _createLogEntryHeaders;
+    private readonly ICreateLogEntryFooter _createLogEntryFooter;
+    private readonly IConfigurationSystem _systemConfiguration;
+    
+    public Logging(IScrubSensitiveData scrubSensitiveData,
+                   ICreateLogEntryHeaders createLogEntryHeaders,
+                   ICreateLogEntryFooter createLogEntryFooter,
+                   IConfigureSystem systemConfiguration)
+    {
+        ...
+    }
+    
+    public void CreateEntryFor(string message, LogLevel logLevel)
+    {
+    }
+}
+    
+    
+using NUnit.Framework;
+
+namespace PluralSight.HandRolledMocks.Tests
+{
+    public class MockScrubber:IScrubSensitiveData
+    {
+        public string From(string mesageToScrub)
+        {
+            this.FromWasCalled = true;
+        }
+        
+        public bool FromWasCalled {get; private set;}
+    }
+    
+    [TestFixture]
+    public class When_logging 
+    {
+        [SetUp]
+        public void Setup()
+        {
+            var scrubber = _mockScrubber = new MockScrubber();
+            var logger = new Logging(_mockScrubber, null, null, null);
+            logger.CreateEntryFor("my messaage", LogLevel.Info)
+        }
+        
+        [Test]
+        public void sensitive_data_should_be_scrubbed_from_the_log_message()
+        {
+            Assert.That(_mockScrubber.FromWasCalled);
+        }
+    }
+}
+    
+actually need to implement all the four inject class and test all the necessary methods 
+
+- the good 
+    + complete control over mock object functionality 
+    + no need to learn frameworks
+    + as complexity grows so do mock objects 
+    
+- the bad 
+    + each mock object adds more code 
+    + as complexity grows, so do mock objects 
+        * more hand rolled mock objects or 
+        * more complex mock objects 
+        
+- the ugly 
+    + brittleness when code under test changes 
+        * interface changes 
+        * interaction logic changes 
+        
+# Mocking with Moq 
+- AAA syntax 
+    + arrange
+        * creating a mock object
+        * pass the mock to the SUT
+    + act 
+        * execute the SUT
+    + assert
+        * verify SUT's interaction with mock object 
+    + demo AAA syntax 
+    
+public class CustomerService
+{
+    private readonly ICustomerRepository _customerRepository;
+    
+    public CustomerService(ICustomerRepository customerRepository)
+    {
+        _customerRepository = customerRepository;
+    }
+    
+    public void Create(CustomerToCreateDto customerToCreateDto)
+    {
+        var customer = BuildCustomerObjectFrom(customerToCreateDto);
+        
+        _customerRepository.Save(customer);
+    }
+}
+    
+[TestFixture]
+public class When_creating_a_customer
+{
+    [Test]
+    public void the_repository_save_should_be_called()
+    {
+        var mockRepository = new Mock<ICustomerRepository>();
+        
+        //except some kind of type object should be pass and the method x.Save should be called 
+        mockRepository.Setup(x => x.Save(It.IsAny<Customer>()));
+        
+        var customerService = new CustomerService(mockRepository.Object);
+        
+        //Act
+        customerService.Create(new CustomerToCreateDto());
+        
+        //Assert 
+        mockRepository.VerifyAll();
+    }
+}
+
+- simple mock verification 
+    + the assert in the AAA syntax 
+    + did the SUT work as expected ? 
+        * did a method get called?
+        * how many times did it get called? 
+        
+    + demo 
+    var listOfCustomerDtos = new List<CustomerToCreateDto>
+    {
+        new CustomerToCreateDto
+        {
+            FirstName = "Sam", LastName = "Sampson"
+        },
+        new CustomerToCreateDto 
+        {
+            FirstName = "Bob", LastName = "Builder"
+        }
+    };
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    
+    //the mockCustomerRepository.Object is the type of the mock instance which is passed in
+    var customerService = new CustomerService(mockCustomerRepository.Object);
+    
+    //Act
+    customerService.Create(listOfCustomerDtos);
+    
+    //Verify
+    mockCustomerRepository.Verify(x => x.Save(It.IsAny<Customer>()), Times.Exactly(listOfCustomerDtos.Count);
+    
+    make sure the Save method is called exactly times 
+    
+- return values 
+    + useful for control SUT execution flows 
+    + return values from 
+        * function calls 
+        * out parameters 
+        * ref parameters 
+    + returning different values 
+    + demo return values, use linq control the return values of a mock object Function 
+    [Test]
+    [ExpectedException(typeof(InvalidCustomerMailingAddressException))]
+    public void an_exception_should_be_thrown_if_the_address_is_not_created()
+    {
+        var customerToCreateDto = new CustomerToCreateDto {FirstName = "Bob", LastName = "Builder"};
+        var mockAddressBuilder = new Mock<ICustomerAddressBuilder>();
+        var mockCustomerRepository = new Mock<ICustomerRepository>();
+        mockAddressBuilder.Setup(x => x.From(It.IsAny<CustomerToCreateDto>()));
+                          .Returns(()=>null);
+        var customerService = new CustomerService(mockAddressBuilder.Object, mockCustomerRepository.Object);
+        
+        
+        //Act
+        customerService.Create(customerToCreateDto);
+    }
+    
+    [Test]
+    public void the_customer_should_be_saved_if_the_address_was_created()
+    {
+        var customerToCreateDto = new CustomerToCreateDto {FirstName = "Bob", LastName = "Builder"};
+        var mockAddressBuilder = new Mock<ICustomerAddressBuilder>();
+        var mockCustomerRepository = new Mock<ICustomerRepository>();
+        mockAddressBuilder.Setup(x => x.From(It.IsAny<CustomerToCreateDto>()));
+                          .Returns(()=> new Address());
+        var customerService = new CustomerService(mockAddressBuilder.Object, mockCustomerRepository.Object);
+        
+        
+        //Act
+        customerService.Create(customerToCreateDto);
+        
+        //Assert 
+        mockCustomerRepository.Verify(y => y.Save(It.IsAny<Customer>()));
+    }
+    
+    when mock encounter a complex type will return a null value 
+- Demo out parameters 
+aim test customer class method is 
+
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.Name);
+    
+    MailingAddress mailingAddress;
+    var mailingAddressSuccessfullyCreated = _mailingAddressFactory.TryParse(customerToCreate.Address, out mailingAddress);
+    
+    if(mailingAddress == null)
+    {
+        throw new InvalidMailAddressException();
+    }
+    customer.MailingAddress = mailingAddress;
+    _customerRepository.Save(customer);
+}
+
+[Test]
+public void the_customer_should_be_persisted()
+{
+    //arrange
+    var mockCustomerRepository = new Mock<ICustomerRepository>)();
+    var mockMailingAddressFactory = new Mock<IMailingAddressFactory>();
+    
+    //create the out parameter and use it with mock to make the mock class generate the specify output instance
+    var mailingAddress = new MailingAddress() {Country = "Canada"};
+    mockMailingAddressFactory.Setup(x => x.TryParse(It.IsAny<string>(), out mailingAddress))
+                             .Returns(true);
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockMailingAddressFactory.Object);
+    
+    //act 
+    customerService.Create(new CustomerToCreateDto());
+    
+    //assert 
+    mockCustomerRepository.Verify(x => x.Save(It.IsAny<Customer>()));
+}
+    
+- Demo, Multiple Return Values 
+public void each_customer_should_be_assigned_an_id()
+{
+    //arrange
+    var listOfCustomerToCreate = new List<CustomerToCreateDto>{
+        new CustomerToCreateDto();
+        new CustomerToCreateDto()
+    };
+    
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    var mockIdFactory = new Mock<IIdFactory>();
+    
+    var i = 1;
+    mockIdFactory.Setup(x => x.Create())
+                 .Returns(()=>i)
+                 .Callback(()=>i++);
+    //make the mock factory method should return start from value i and plus one after that 
+    
+    //act
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockIdFactory.Object);
+    customerService.Create(listOfCustomerToCreate);
+    
+    //assert
+    mockIdFactory.Verify(x => x.Create(), Times.AtLeastOnce());
+}
+- Method/Function Arguments 
+    + verifying what value was passed 
+    + different behaviours for different method parameters 
+    + can be used to help control SUT execution flow 
+    + demo argument tracking
+    [Test]
+    public void a_full_name_should_be_created_from_first_and_last_name()
+    {
+        var customerToCreateDto = new CustomerToCreateDto{
+            FirstName = "Bob",
+            LastName = "Builder"
+        };
+        
+        var mockCustomerRepository = new Mock<ICustomerRepository>();
+        var mockFullNameBuilder = new Mock<ICustomerFullNameBuilder>();
+        
+        mockFullNameBuilder.Setup(x => x.From(It.IsAny<string>(), It.IsAny<string>()));
+        
+        var customerService = new CustomerService(mockCustomerRepository.Object, mockFullNameBuilder.Object);
+        
+        //act
+        customerService.Create(customerToCreateDto);
+        
+        //assert 
+        mockFullNameBuilder.Verify(x => x.From(It.Is<string>(fn => fn.Equals(customerToCreateDto.FirstnName, 
+                                                                             StringComparison.InvariantCultureIgnoreCase)),
+                                               It.Is<string>(fn => fn.Equals(customerToCreateDto.LastName,
+                                                                            StringComparison.InvariantCultureIgnoreCase))));
+    }    
+    
+- Demo arguments and exceptions flow 
+    + Control the flow of the code 
+    mockCustomerStatusFactory.Setup(x => x.CreateFrom(It.Is<CustomerToCreateDto>(y => y.DesiredStatus == CustomerStatus.Platinum))).Returns(CustomerStatus.Platinum);
+    
+    this will control the return values 
+    
+- Mocking Exception
+    + mock object throws when invoked 
+    + verifying SUT exception handling 
+    + demo 
+    
+[Test]
+[ExceptedException(typeof(CustomerCreationException)]
+public void an_exception_should_be_raised()
+{
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    var mockCustomerAddressFactory = new Mock<ICustomerAddressFactory>();
+    
+    mockCustomerAddressFactory.Setup(x => x.From(It.IsAny<CustomerToCreateDto>()).Throws<InvalidCustomerMailingAddressException>();
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockCustomerAddressFactory.Object);
+    
+    //Act 
+    customerService.Create(new CustomerToCreateDto());
+}
+- mocking properties 
+    + verify "setter" calls 
+    + return values from "getter" calls 
+    + auto-mocking hierarchies(recursive mocks)
+    
+    + demo mock property setters 
+
+    + get current timezone
+    TimeZone.CurrentTimeZone.StandardName
+    
+    + demo 
+    //the function under test 
+    public void Create(CustomerToCreateDto customerToCreate)
+    {
+        var customer = new Customer(customerToCreate.FirstName, customerToCreate.LastName);
+        
+        _customerRepository.LocalTimeZone = TimeZone.CurrentTimeZone.StandardName;
+        
+        _customerRepository.Save(customer);
+    }
+    
+    //set the property checking assing logic by mock object. make sure the property LocalTimeZone is set
+    mockCustomerRepository.VerifySet(x => x.LocalTimeZone = It.Any<string>());
+- mocking property getters 
+//the function under test 
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.Name);
+    
+    if(!workstationId.HasValue)
+    {
+        throw new InvalidWorkstationIdException();
+    }
+    
+    customer.WorkstationCreateOn = workstationId.Value;
+    _customerRepository.Save(customer);
+}
+
+//test method 
+var mockCustomerRepository = new Mock<ICustomerRepository>)();
+var mockApplicatoinSettings = new Mock<IApplicationSettings>();
+
+mockApplicatoinSettings.Setup(x => x.WorkstationId).Returns(123);
+
+var customerService = new CustomerService(mockCustomerRepository.Object, mockApplicatoinSettings.Object);
+
+//Act 
+customerService.Create(new CustomerToCreateDto());
+
+//Assert 
+mockApplicatoinSettings.VerifyGet(x => x.WorkstationId);
+    
+- mock property Hierarchies 
+//the function under test 
+//the function under test 
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.FirstName, customerToCreate.LastName);
+    
+    var workstationId = _applicationSettings.SystemConfiguration.AuditingInformation.WorkstationId;
+    
+    if(!workstationId.HasValue)
+    {
+        throw new InvalidWorkstationIdException();
+    }
+    
+    customer.WorkstationCreateOn = workstationId.Value;
+    _customerRepository.Save(customer);
+}
+
+
+//test method 
+var mockCustomerRepository = new Mock<ICustomerRepository>)();
+var mockApplicatoinSettings = new Mock<IApplicationSettings>();
+
+//mock will automatic mock the hierarchies
+mockApplicatoinSettings.Setup(x => x.SystemConfiguration.AuditingInformation.WorkstationId).Returns(123);
+
+var customerService = new CustomerService(mockCustomerRepository.Object, mockApplicatoinSettings.Object);
+
+//Act 
+customerService.Create(new CustomerToCreateDto());
+
+//Assert 
+mockApplicatoinSettings.VerifyGet(x => x.SystemConfiguration.AuditingInformation.WorkstationId);
+
+- stubbing Properties 
+    + pre-set values for properties on mock objects, be able to change and used as return values
+    + changing those values
+    + SetupAllProperties
+    
+    + demo, mocking properties getters 
+//method under test 
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.Name);
+    var workstationId = _applicationSettings.WorkstationId;
+    if(!workstationId.HasValue)
+    {
+        throw new InvalidWorkstationIdException();
+    }
+    
+    customer.WorkstationCreateOn = workstationId.Value;
+    _customerRepository.Save(customer);
+}
+
+//control the return values during the test 
+public void the_workstation_id_should_be_used()
+{
+    var mockCustomerRepository = new Mock<ICustomerRepository>)();
+    var mockApplicatoinSettings = new Mock<IApplicationSettings>();
+    
+    //there is also a overload method to support set setup property 
+    mockApplicatoinSettings.SetupProperty(x => x.WorkstationId, 1234);
+    
+    //this method will create all properties 
+    mockApplicatoinSettings.SetupAllProperty();
+    
+    //then could access the setup property by the mock object property 
+    mockApplicatoinSettings.Object.WorkstationId = 2345;
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockApplicatoinSettings.Object);
+    
+    //Act 
+    customerService.Create(new CustomerToCreateDto());
+    
+    //Assert workstationId is accessed 
+    mockApplicatoinSettings.VerifyGet(x => x.WorkstationId);
+}
+- mocking events
+    + raise event on the mock 
+    + raise further down the hierarchy, just raise the event at the bottom of hierarchies mock will create the hierarchy for us 
+    + support non-standard event signatures 
+    + demo 
+//under test class 
+public CustomerService
+{
+    private readonly ICustomerRepository _customerRepository;
+    private readonly IMailingRepository _mailingRepository;
+
+    public CustomerService(ICustomerRepository customerRepository, IMailingAddressFactory mailingRepository)
+    {
+        _customerRepository = customerRepository;
+        _mailingRepository = mailingRepository;
+        
+        _customerRepository.NotifySalesTeam += NotifySalesTeam;
+    }
+    
+    private void NotifySalesTeam(object sender, NotifySalesTeamEventArgs e)
+    {
+        _mailingRepository.NewCustomerMessage(e.Name);
+    }
+}
+
+//test method 
+[Test]
+public void an_email_should_be_sent_to_the_sales_team()
+{
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    var mockMailingRepository = new Mock<IMailingRepository>();
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockMailingRepository.Object);
+    
+    //Act
+    mockCustomerRepository.Raise(x => x.NotifySalesTeam += null, new NotifySalesTeamEventArgs("jim"));
+    
+    //Assert the method NewCustomerMessage is called with a string parameter 
+    mockMailingRepository.Verify(x => x.NewCustomerMessage(It.IsAny<string>());
+}
+
+
+//test public delegate 
+namespace PluralSight.Moq.Code.Demo 
+{
+    public delegate void NotifySalesTeamDelegate(string name, bool broadcastToAllEmployees);
+    
+    public interface ICustomerRepository
+    {
+        void Save(Customer customer);
+        
+        event NotifySalesTeamDelegate NotifySalesTeam;
+    }
+}
+
+//update the mock raise event 
+mockCustomerRepository.Raise(x => x.NotifySalesTeam += null, "jim", false);
+- summary 
+
+
+# Advanced Mocking with Moq 
+- Introduction 
+    + strict and loose mocking 
+    + base class implementations 
+    + recursive mocking 
+    + centralize mock creation 
+    + protected members 
+    
+- Strict vs Loose Mocking 
+    + strict mock object, raise exception for anything on a mock object that doesn't have an explicitly declared expectation 
+    + loose mock object 
+        * no exception raise 
+        * returns default values when no expectation is explicitly declared 
+    + loose is the moq default behavior 
+    
+- Demo:Strict 
+public class CustomerService 
+{
+    private readonly ICustomerRepository _customerRepository;
+    
+    public CustomerService(ICustomerRepository customerRepository)
+    {
+        _customerRepository = customerRepository;
+    }
+    
+    public void Create(CustomerToCreateDto customerToCreate)
+    {
+        var customer = new Customer(customerToCreate.Name);
+        
+        //expectation method this will be checked both in strict and loose mock object 
+        _customerRepository.Save(customer);
+        
+        //unsetup method, strict mock object will throw exception 
+        _customerRepository.FetchAll(); 
+    }
+}
+
+[Test]
+public void the_customer_should_be_saved()
+{
+    //loose mock object, will not throw exception for the unsetup method 
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    //strict mock object will throw exception for any unsetup method call 
+    var mockCustomerRepository = new Mock<ICustomerRepository>(MockBehavior.Strict);
+    
+    mockCustomerRepository.Setup(x => x.Save(It.IsAny<Customer>()));
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object);
+    
+    //Act 
+    customerService.Create(new CustomerToCreateDto());
+    
+    //Assert 
+    mockCustomerRepository.Verify();
+}
+
+- base class implementation 
+    + aka "Partial Mocks"
+    + allows for invocation of base class implementation if no expectation 
+    + has been set on the member 
+    + necessary for mocking web/html controls in system.web, insure the method of the base class is called 
+- Demo: Base Class implementation
+public abstract class BaseFormatter 
+{
+    public virtual string ParseBadWordsFrom(string value)
+    {
+        return .value.Replace("SAP", string.Empty);
+    }
+}
+
+public class CustomerNameFormatter:BaseFormatter
+{
+    public string From(Customer customer)
+    {
+        var firstName = ParseBadWordsFrom(customer.FirstName);
+        var lastName = paseBadWordsFrom(customer.LastName);
+        
+        return string.Format("{0}, {1}", lastName, firstName);
+    }
+}
+
+//create test method to insure the base class method is called 
+[Test]
+public void bad_words_should_be_stripped_from_the_first_and_last_names()
+{
+    //Arrange
+    var mockNameFormatter = new Mock<CustomerNameFormatter>)();
+    
+    //Act 
+    mockNameFormatter.Object.From(new Customer("Bob", "SAPBuilder"));
+    
+    //Assert 
+    mockNameFormatter.Verify(x => x.ParseBadWordsFrom(It.IsAny<string>(), Times.Exactly(2)));
+}
+- Recursive Mocking 
+    + a mock object that returns a new mock object for every member 
+        * if the member is mockable (i.e. not a value type)
+        * if there is no expectation set on the member
+    + the same mock object is returned on all calls from a mock object's property 
+    
+    + create the top level one and let mock framework create the recursive mock object, and we could use the sub-mock object 
+    
+    + demo 
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.Name);
+    
+    var addressFormatter = _addressFormatterFactory.From(customerToCreate.Country);
+    
+    customer.Address = addressFormatter.From(customerToCreate);
+    
+    _customerRepository.Save(customer);
+}
+
+[Test]
+public void the_address_should_be_formatted()
+{
+    var mockCustomerRepository = new Mock<ICustomerRepository>();
+    
+    //the setting the default value, any property or setup is a default mock object 
+    var mockAddressFormatterFactory = new Mock<IAddressFormatterFactory>{DefaultValue = DefaultValue.Mock};
+    
+    var customer = new CustomerService(mockCustomerRepository.Object, mockAddressFormatterFactory.Object);
+    
+    var addressFormatter = mockAddressFormatterFactory.Object.From(It.IsAny<string>());
+    //get the inside generated mock object 
+    var mock = Mock.Get(addressFormatter);
+    
+    //Act 
+    customerService.Create(new CustomerToCreateDto());
+    
+    //Assert
+    mock.Verify(x => x.From(It.IsAny<CustomerToCreateDto>());
+}
+
+this technique will avoid create inherit mock objects 
+- Centralizing Mock Creation 
+    + MockRepository
+    + Configure all mock objects centrally 
+    + Verify all mock objects in one call 
+    
+- Demo, Centralizing Mock Creation 
+public void Create(CustomerToCreateDto customerToCreate)
+{
+    var customer = new Customer(customerToCreate.Name);
+    
+    var addressFormatter = _addressFormatterFactory.From(customerToCreate.Country);
+    
+    customer.Address = addressFormatter.From(customerToCreate);
+    
+    _customerRepository.Save(customer);
+}
+
+[Test]
+public void the_address_should_be_formatted()
+{
+    //Arrange
+    var mockFactory = new MockRepository(MockBehavior.Loose){DefaultValue = DefaultValue.Mock};
+    
+    var mockCustomerRepository = mockFactory.Create<ICustomerRepository>();
+    
+    //the setting the default value, any property or setup is a default mock object 
+    var mockCustomerAddressFormatter = mockFactory.Create<ICustomerAddressFormatter>();
+    
+    mockCustomerAddressFormatter.Setup(x => x.For(It.IsAny<CustomerToCreateDto>())).Returns(new Address());
+    
+    var customerService = new CustomerService(mockCustomerRepository.Object, mockCustomerAddressFormatter.Object);
+    
+    //Act 
+    customerService.Create(new CustomerToCreateDto());
+    
+    //Assert, the mockFactory will verify all the created mock objects, don't required to call each verify method manually 
+    mockFactory.Verify();
+}
+
+
+- Protected members, you want to verify a public method is call the class's protected member successfully 
+    + mocking members that use the 'protected' keyword
+    + no intenseness, have to use string values to specify their names 
+    + must use 'ItExpr' instead of It 
+    
+- Demo Protected members 
+public class CustomerNameFormatter
+{
+    public string From(Customer customer)
+    {
+        var firstName = ParseBadWordsFrom(customer.FirstName);
+        var lastName = ParseBadWordsFrom(customer.LastName);
+        
+        return string.Format("{0}, {1}", lastName, firstName);
+    }
+    
+    //the method have to be mark with virtual to let mocking framework to mock it
+    protected virtual string ParseBadWordsFrom(string value)
+    {
+        return value.Replace("SAP", string.Empty);
+    }
+}
+
+using Moq;
+using Moq.Protected;
+
+[TestFixture]
+public class When_formatting_a_customers_name
+{
+    [Test]
+    public void all_bad_words_should_be_scrubbed()
+    {
+        //Arrangevar mockCustomerNameFormatter = new Mock<CustomerNameFormatter>();
+        
+        //The verifiable method is let the last mock verify method to check the method
+        mockCustomerNameFormatter.Protected().Setup<string>("ParseBadWordsFrom", ItExpr<string>()).Returns("dummy_we_don't_care").Verifiable();
+        
+        //Act 
+        mockCustomerNameFormatter.Object.From(new Customer());
+        
+        //Assert
+        mockCustomerNameFormatter.Verify();
+    }
+}
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+

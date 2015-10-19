@@ -1,0 +1,1001 @@
+﻿Firefox XPCom Development;Note=Erxin
+
+# Setup development environment
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/Overlay_Extensions/XUL_School/Setting_Up_a_Development_Environment
+- install cygwin
+- install ide for example Komodo Edit
+- clean up bin directory 
+$ make clean 
+
+- install the extension 
+$ make install 
+
+if during the installation the firefox is open, you need to reopen it 
+
+- building idl files 
+    + xpcom interfaces are defined using idl files 
+    
+    + compile x=idl file to xpt, you need a command line tools called xpidl
+    it is include in the Gecko SDK(https://developer.mozilla.org/en-US/docs/Gecko_SDK)
+    
+    + add gecko sdk to environment path 
+    $ export GECKO_SDK=/path/to/your/sdk
+
+- Gecko/XULRunner SDK with XULRunner itself. The Gecko SDK is a collection of header files and tools used to develop general XPCOM components
+
+- signing extensions 
+
+
+# How to build XPCOM component in javascript 
+- reference 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Building_components_in_JavaScript
+
+- add-on sdk solution for XPCOM javascript 
+- implementation 
+- define the interface, for use the javascript component in other xpcom component
+    + support browse xpcom interface in xpcomviewer 
+    + XPIDL, but new version used webidl, https://developer.mozilla.org/en-US/docs/Mozilla/WebIDL_bindings
+    
+    + example define a helloworld with idl 
+#include "nsISupports.idl"
+
+[scriptable, uuid(xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)]
+interface nsIHelloWorld : nsISupports
+{
+  string hello();
+};
+
+- compiling the typelib, your interface definition must be compiled into a binary format(xpt) in order to be registered and used within mozilla applications 
+
+use gecko sdk to compile idl into biary format(xpt)
+
+copmile the typelib. {sdk_dir} is the directory in which you unpacked the gecko sdk 
+{sdk_dir}/bin/xpidl -m typelib -w -v -I {sdk_dir}/idl -e HelloWorld.xpt HelloWorld.idl 
+
+- Creating the component using xpcomutils 
+you can use import xpcomutils.jsm 
+
+XPCOMUtils.jsm javascript code module offers utility routines for javascript component loaded by the javascript component loader 
+
+Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+
+https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/XPCOMUtils.jsm
+    + expose a javascript class as a component using these utilities methods requires four key steps 
+    import XPCOMUtils.jsm 
+    declare the class impolementing the components 
+    create an array of component constructors 
+    define the NSGetFactory() or NSGetModule() entry point 
+    
+    + demo 
+//javascript interface file 
+Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+
+/***********************************************************
+class definition
+***********************************************************/
+
+//class constructor
+function HelloWorld() {
+// If you only need to access your component from JavaScript, uncomment the following line:
+//this.wrappedJSObject = this;
+}
+
+// class definition
+HelloWorld.prototype = {
+
+  // properties required for XPCOM registration:
+  classDescription: "My Hello World JavaScript XPCOM Component",
+  classID:          Components.ID("{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}"),
+  contractID:       "@dietrich.ganx4.com/helloworld;1",
+
+  // [optional] custom factory (an object implementing nsIFactory). If not
+  // provided, the default factory is used, which returns
+  // |(new MyComponent()).QueryInterface(iid)| in its createInstance().
+  _xpcom_factory: { ... },
+
+  // [optional] an array of categories to register this component in.
+  _xpcom_categories: [{
+
+    // Each object in the array specifies the parameters to pass to
+    // nsICategoryManager.addCategoryEntry(). 'true' is passed for both
+    // aPersist and aReplace params.
+    category: "some-category",
+
+    // optional, defaults to the object's classDescription
+    entry: "entry name",
+
+    // optional, defaults to the object's contractID (unless 'service' is specified)
+    value: "...",
+
+    // optional, defaults to false. When set to true, and only if 'value' is not
+    // specified, the concatenation of the string "service," and the object's contractID
+    // is passed as aValue parameter of addCategoryEntry.
+    service: true
+  }],
+
+  // QueryInterface implementation, e.g. using the generateQI helper (remove argument if skipped steps above)
+  QueryInterface: XPCOMUtils.generateQI([Components.interfaces.nsIHelloWorld]),
+
+  // Optional, but required if you want your component to be exposed to DOM
+  classInfo: XPCOMUtils.generateCI({classID: Components.ID("{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}"),
+                                    contractID: "@dietrich.ganx4.com/helloworld;1",
+                                    interfaces: [Ci.nsIHelloWorld],
+                                    flags: Ci.nsIClassInfo.DOM_OBJECT}),
+
+  // ...component implementation...
+  // define the function we want to expose in our interface
+  hello: function() {
+      return "Hello World!";
+  },
+};
+
+var components = [HelloWorld];
+
+if ("generateNSGetFactory" in XPCOMUtils)
+   var NSGetFactory = XPCOMUtils.generateNSGetFactory(components);  // Firefox 4.0 and higher
+ else
+   var NSGetModule = XPCOMUtils.generateNSGetModule(components);    // Firefox 3.x
+   
+   
+    + a simplify version of javascript component template is 
+Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+
+function HelloWorld() { }
+
+HelloWorld.prototype = {
+  classDescription: "My Hello World JavaScript XPCOM Component",
+  classID:          Components.ID("{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}"),
+  contractID:       "@dietrich.ganx4.com/helloworld;1",
+  QueryInterface: XPCOMUtils.generateQI([Components.interfaces.nsIHelloWorld]),
+  hello: function() { return "Hello World!"; }
+};
+var components = [HelloWorld];
+if ("generateNSGetFactory" in XPCOMUtils)
+  var NSGetFactory = XPCOMUtils.generateNSGetFactory(components);  // Firefox 4.0 and higher
+else
+  var NSGetModule = XPCOMUtils.generateNSGetModule(components);    // Firefox 3.x
+  
+- installation 
+    + for extension 
+copy helloworld.js and helloworld.xpt(only if you defined and compiled the idl to {extensiondir}/components/)
+
+delete compreg.dat and xpti.dat from your profile directory 
+
+restart application 
+
+    + for firefox 
+copy helloworld.js and helloworld.xpt only if you defined and compiled the idl to the {objdir}/dist/bin/components directory if running from the source 
+
+delete compreg.dat and xpti.dat from the components directory 
+
+delete compreg.dat and xpti.dat from your profile directory 
+
+restart application 
+  
+- using your component, remove the "[Components.intefaces.nsIHelloWorld]"  argument for the call to XPCOMUtils.generateQI() then you can access your component like this 
+    + using wrappedJSObject
+try{
+    var myComponent = Component.classes['@dietrich.ganx4.com/helloworld;1'].getService().wrappedJSObject;
+    
+    alert(myComponent.hello());
+}
+catch(anError){
+    ...
+}
+
+    + using xpcom installation 
+try {
+        var myComponent = Components.classes['@dietrich.ganx4.com/helloworld;1']
+                                    .createInstance(Components.interfaces.nsIHelloWorld);
+
+        alert(myComponent.hello());
+} catch (anError) {
+        dump("ERROR: " + anError);
+}
+
+- use XPCOMUtils to create a component service https://web.archive.org/web/20110829175619/http://weblogs.mozillazine.org/weirdal/archives/019620.html
+
+- pyxpidl tool suit is used to replace the older xpidl tool. it is used to generate c++ headers and xpcom typelibs(xpt files). 
+
+the sdk is the xulrunner_sdk directory 
+    + using pyxpidl 
+generate c++ header
+
+
+# XPCOM changes in Gecko 2.0 
+- no more fronzen interface, all interfaces are subject to change 
+
+- component registration, start from Gecko 2.0 component registered using manifest file 
+
+- the path of any XPT files must be listed explicitly in a manifest using an interface directive 
+interfaces components/mycomponent.xpt 
+
+- javascript components, the component is loaded only when the XPCOM component manager needs to create a component 
+chrome.manifest:
+;# The {classID} here must match the classID in mycomponent.js
+component {e6b866e3-41b2-4f05-a4d2-3d4bde0f7ef8} components/mycomponent.js
+contract @foobar/mycomponent;1 {e6b866e3-41b2-4f05-a4d2-3d4bde0f7ef8}
+category profile-after-change MyComponent @foobar/mycomponent;1
+
+the javascript code no longer export a NSGetModule(), now it must export a NSGetFactory() function, which accept a class id(cid) as a parameter 
+
+    + example 
+Components.utils.import("resource://gre/modules/XPCOMUtils.jsm");
+
+function myComponent() {
+}
+myComponent.prototype = {
+  // this must match whatever is in chrome.manifest!
+  classID: Components.ID("{e6b866e3-41b2-4f05-a4d2-3d4bde0f7ef8}"),
+
+  QueryInterface: XPCOMUtils.generateQI([Components.interfaces.nsIMyComponent]),
+
+  /* nsIMyComponent implementation goes here */
+  ...
+};
+
+// The following line is what XPCOM uses to create components. Each component prototype
+// must have a .classID which is used to create it.
+const NSGetFactory = XPCOMUtils.generateNSGetFactory([myComponent]);
+
+    + for backward compatiblity with Gecko 1.9.2 by dynamically detecting which symbols are exported by XPCOMUtils.jsm 
+/**
+* XPCOMUtils.generateNSGetFactory was introduced in Mozilla 2 (Firefox 4, SeaMonkey 2.1).
+* XPCOMUtils.generateNSGetModule was introduced in Mozilla 1.9 (Firefox 3.0).
+*/
+if (XPCOMUtils.generateNSGetFactory)
+    var NSGetFactory = XPCOMUtils.generateNSGetFactory([myComponent]);
+else
+    var NSGetModule = XPCOMUtils.generateNSGetModule([myComponent]);
+    
+- binary component, must be listed explicity in a manifest using a binary-component directive 
+
+binary-component components/*.dll 
+
+C++ in the component must be changed: a binary component no longer exports a NSGetModule() function. Instead, it exports an NSModule data symbol which points to a mozilla::Module structure. 
+
+sample c++ code, http://mxr.mozilla.org/mozilla-central/source/xpcom/sample/nsSampleModule.cpp
+
+extension use binary-component required use unpack property in the install manifest file 
+    
+- platform-specific directories, the component/chrome syste sued to look in platform-specific subdirectories of an extension, such as platform/WINNT_x86-msvc/chrome.manifest on window is no longer supported 
+
+use chrome os, abi registration instead https://developer.mozilla.org/en-US/docs/Chrome_Registration#os
+
+- category registration
+xpcom-startup and app-startup notification 
+
+what you need to change 
+    + if your extension currently observes either xpcom-startup or app-startup, you need to update your code to observe profile-after-change instead 
+    
+    + receiving startup notification in xpcom 
+    https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Receiving_startup_notifications
+    
+    + during application start up gets enough of xpcom and the application loaded and running that the extesion manager can then be loaded and handle installing, uninstalling and updating any installed extensions 
+    
+because chrome.manifest is a space-delimited format so the category name is changed to with dash 
+JavaScript global constructor 	JavaScript-global-constructor
+...  
+
+- xpcNativeWrapper changes, you can't disable XPCNativeWrappers from your manifest 
+    
+if your add-on depends pon XBL bindings attached to content objects, the ability to call functions or get and set properties created by XBL binding, you will need to use XPCNativeWrapper property 
+    
+    
+# firefox developer tools and developer edition 
+- reference page https://developer.mozilla.org/en-US/docs/Tools
+https://developer.mozilla.org/en-US/Firefox/Developer_Edition
+
+# firefox build process
+- prerequest 
+https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Windows_Prerequisites
+- build process 
+https://developer.mozilla.org/en-US/docs/Simple_Firefox_build
+    
+
+# platform/XPCOM, for javascript
+- implement XPCOM object interfaces 
+    + export a class called Unknown which implement the fundamental XPCOM interface nsISupports(all xpcom interfaces are inherit from it, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsISupports)
+    
+    contain AddRef(), QueryInteface(in nsIIDRef uuid, [iid_is(uuid),retval] out nsQIResult result), Release() 
+    
+    + all xpcom interfaces defination https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface
+    
+    such as 
+    ExtensionManager
+    IAccessible*
+    IDispatch
+    IJSDebugger 
+    amIInstallCallback
+    amIInstallTrigger
+    amiWebInstall*
+    imgI*
+    inIDomUtils
+    jsdlStackFrame
+    mozIAsyncFavicons
+    mozIAsyncHistory 
+    mozIColorAnalyzer
+    mozIJSSubScriptLoader
+    mozIPersonalDictionary
+    mozIPlaceInfo
+    mozIPlacesAtoComplete 
+    mozIRegistry
+    mozIRepresentativeColorCallback
+    mozISpellCheckingEngine
+    mozIStorageAggregateFunction 
+    mozIStorage*
+    mozITXTToHTMLConv
+    mozIThridPartyUtil
+    mozIVisitInfo
+    mozIVisitInfoCallback
+    mozIVisitStatusCallback
+    nsIAbCard,  represent and manipulate cards in the addressbook.
+    nsIAboutModule
+    nsIAbstractWorker
+    nsIAccelerometerUpdate
+    nsIAccess*
+    nsIAlertService
+    nsIAnnotationObserver 
+    nsIAnnotationService
+    nsIApp*
+    nsIArray
+    nsIAsync*
+    nsIAuth*
+    nsIAutoComplete*
+    nsIBadCertListener2
+    nsIBidiKeyboard
+    nsIBinaryInputStream
+    nsIBinaryOutputStream 
+    nsIBlocklistPrompt 
+    nsIBlocklistService 
+    nsIBoxObject
+    nsIBrowserBoxObject
+    nsIBrowserHistory 
+    nsIBrowserSearchService 
+    nsICRL*
+    nsICache*
+    nsIChannel*
+    nsICharsetResolver
+    nsIChromeFrameMessageManager
+    nsIChromeRegistry
+    nsIClassInfo 
+    nsIClipboard*
+    nsICollection
+    nsICommand*
+    nsIComponent
+    nsIConsole*
+    nsICompositionStringSynthesizer 
+    nsIContainerBoxObject
+    nsIContent*
+    nsIController
+    nsIControllers 
+    nsIConvertINputStream 
+    nsIConvertOutputStream 
+    nsICookie*
+    nsICrashReporter 
+    nsICrypto*
+    nsICurrentCharsetListener
+    nsIDBFolderInfo
+    nsIDNS*
+    nsIDOM*
+    ... and more 
+    
+    + demo implement the nsIObserver interface to listen for and log all topic notifications, built-in observable topics https://developer.mozilla.org/en-US/docs/Observer_Notifications
+var { Class }   = require('sdk/core/heritage');
+var { Unknown } = require('sdk/platform/xpcom');
+var { Cc, Ci }  = require('chrome')
+var observerService = Cc['@mozilla.org/observer-service;1'].
+                        getService(Ci.nsIObserverService);
+
+var StarObserver = Class({
+  extends:  Unknown,
+  interfaces: [ 'nsIObserver' ],
+  topic: '*',
+  register: function register() {
+    observerService.addObserver(this, this.topic, false);
+  },
+  unregister: function() {
+    observerService.removeObserver(this, this.topic);
+  },
+  observe: function observe(subject, topic, data) {
+    console.log('star observer:', subject, topic, data);
+  }
+});
+
+var starobserver = StarObserver();
+starobserver.register();
+    
+- implement and register XPCOM factories, exports a class called Factory which implements the nsIFactory interface, you can use this calss to register factories for XPCOM components you have defiends 
+
+var { Class } = require('sdk/core/heritage');
+var { Unknown, Factory } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome');
+
+var contractId = '@me.org/helloworld';
+
+// Define a component
+var HelloWorld = Class({
+  extends: Unknown,
+  get wrappedJSObject() this,
+  hello: function() {return 'Hello World';}
+});
+
+// Create and register the factory
+var factory = Factory({
+  contract: contractId,
+  Component: HelloWorld
+});
+
+// XPCOM clients can retrieve and use this new
+// component in the normal way
+var wrapper = Cc[contractId].createInstance(Ci.nsISupports);
+var helloWorld = wrapper.wrappedJSObject;
+console.log(helloWorld.hello());
+
+    + using class ID, you can specify one or let automatic generated 
+var { Class }              = require('sdk/core/heritage');
+var { Unknown, Factory }   = require('sdk/platform/xpcom');
+var { Cc, Ci, components } = require('chrome');
+
+// Define a component
+var HelloWorld = Class({
+  extends: Unknown,
+  get wrappedJSObject() this,
+  hello: function() {return 'Hello World';}
+});
+
+// Create and register the factory
+var factory = Factory({
+  Component: HelloWorld
+});
+
+var id = factory.id;
+
+// Retrieve the factory by class ID
+var wrapper = components.classesByID[id].createInstance(Ci.nsISupports);
+var helloWorld = wrapper.wrappedJSObject;
+console.log(helloWorld.hello());
+
+    + replaacing factory , if the factory you create has the same contract id as an existing registered factory, then you factory will replace the existing one. Components.classes object will not be updated at run time 
+    
+var id = Components.manager.QueryInterface(Ci.nsIComponentRegistrar).  contractIDToCID('@me.org/helloworld');
+var wrapper = Components.classesByID[id].createInstance(Ci.nsISupports);
+
+    + xpcom module exports a function factoryByContract to simplify this technique 
+var wrapper = xpcom.factoryByContract('@me.org/helloworld').createInstance(Ci.nsISupports);
+ly 
+by default factory are register and unregister automatically 
+
+- implement and register XPCOM services, xpcom module exports a class called Service which you can use to define XPCOM servies, making them available to all XPCOM users 
+
+    + demo to register a service 
+var { Class } = require('sdk/core/heritage');
+var { Unknown, Service } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome');
+
+var contractId = '@me.org/timestampedlogger';
+
+// Implement the service by subclassing Unknown
+var TimeStampedLogger = Class({
+  extends: Unknown,
+  get wrappedJSObject() this,
+  log: function(message) {
+    console.log(new Date().getTime() + ' : ' + message);
+  }
+});
+
+// Register the service using the contract ID
+var service = Service({
+  contract: contractId,
+  Component: TimeStampedLogger
+});
+
+// Access the service using getService()
+var wrapper = Cc[contractId].getService(Ci.nsISupports);
+var logger = wrapper.wrappedJSObject;
+logger.log('a timestamped message');
+
+- registering and unregistering, factories and services are registered with xpcom automatically when the add-on that created them is unloaded
+
+    + override default behavior 
+var xpcom = require('sdk/platform/xpcom');
+
+var factory = xpcom.Factory({
+  contract: contractId,
+  Component: HelloWorld,
+  register: false,
+  unregister: false,
+});
+
+//use register function to manually register 
+xpcom.register(factory);
+xpcom.unregister(factory);
+
+    + find out whether a service is registered by 
+xpcom.isRegistered(factory)
+
+- Unknown, this is the base class for all XPCOM objects, it is not intended to be used directly bu you can subclass it 
+
+    + inherit it by standard javascript inherit or heritage module 
+    
+    + subclass implement the nsIRequest interfaces, the nsISupports is already implemented in the Unknown class  
+var { Class } = require('sdk/core/heritage');
+var { Unknown } = require('sdk/platform/xpcom');
+
+var Request = Class({
+  extends: Unknown,
+  interfaces: [ 'nsIRequest' ],
+  initialize: function initialize() {
+    this.pending = false;
+  },
+  isPending: function() { return this.pending; },
+  resume: function() { console.log('resuming...'); },
+  suspend: function() { console.log('suspending...'); },
+  cancel: function() { console.log('canceling...'); }
+});
+
+//register a factory for this component by using the factory class 
+var { Factory } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome');
+var contractId = '@me.org/request'
+
+// Create and register the factory
+var factory = Factory({
+  contract: contractId,
+  Component: Request
+});
+
+// use the implmentation 
+var request = Cc[contractId].createInstance(Ci.nsIRequest);
+request.resume();
+
+- Factory, XPCOM factory 
+// Create and register the factory
+var factory = Factory({
+  contract: '@me.org/myComponent',
+  Component: MyComponent
+});
+
+- Service, use this class to register an XPCOM service 
+var service = Service({
+  contract: contractId,
+  Component: AlertService
+});
+
+//access the service by 
+var alertService = Cc[contractId].getService(Ci.nsIAlertsService);
+alertService.showAlertNotification(...);
+
+
+# Firefox internals 
+- gecko, is the name fo the layout engine developed by the mozilla project 
+- javascript code modules, let mutiple privileged javascript scopes share code, a module could by sued by fireforx itself as well as by extensions 
+    + references 
+    https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules
+    + standard code modules
+AddonManager.jsm 
+
+AddonRepository.jsm 
+
+Assert.jsm 
+
+ctypes.jsm, allow javascript code to call native libraries without requiring the development of an xpcom component 
+
+CustomizableUI.jsm, allows you to interact with customizable buttons and items in Firefox's main window UI 
+
+DeferredTask.jsm run a task after delay 
+
+Dict.jsm, provides an api for key/value pair dictionaries 
+
+DownloadLastDir.jsm, provides the path to the directory into which the last download occurred 
+
+Download.jsm, provides a single entry point to interact with the downloading capabilities 
+
+FileUtils.jsm, provies helpers for dealing with files 
+
+JNI.jsm, abstract the js-ctypes to provide an interface that allows javascript code to call code running in native JVMs 
+
+ISO8601DateUtils.jsm, provides routines to convert between javascript date to ISO 8601 date string
+ 
+Log.jsm, provides a log4j style api for logging log messages 
+
+NetUtil.jsm, provides helpful networking utitlity functions, provide easily copy data from an input stream to an ouput stream asynchronously 
+
+openLocationLastURL.jsm, provide access to the last URL opened using the "Open location" option in the file menu 
+
+OSFile.jsm, provide routien to access file. read write, rename create directories 
+
+PerfMeasurement.jsm, provides access to low-level hardware and OS performance measurement tools 
+
+PluralForm.jsm, provides an easy way to get the correct plural forms for the current local 
+
+PopupNotification.jsm, present non-modal notification to users 
+
+Promise.jsm, implement the Promises/A+ proposal as known in April 2013 
+
+PromiseWorker.jsm, a version of ChromeWorker which uses promises to return the worker's result instead of using an event to do so 
+
+Services.jsm, provides getter for conveniently obtaining access to commonly-used services 
+
+source-editor.jsm, used by developer toos such as the style editor, this interface implement the editor and lets you interfact with it
+ 
+Sqlite.jsm, a promise-based API to mozIStorage/SQLite 
+
+Task.jsm, implements a subset ot Task.js to make sequential asynchronouse operation simple, use yield operator 
+
+Timer.jsm, a pure JS implementation of window.setTimeout 
+
+Webapps.jsm, provides an interface to manager Open Web Apps 
+
+WebRequest.jsm, requires Gecko 41.0, provies an api to add event listeners for the various stages of making na HTTP request, the event listener receives detailed information about the request and can modify or cancel the request 
+
+XPCOMUtils.jsm, contains utilities for javascript components loaded by the JS component loader 
+
+- js-ctypes, call back and forth to native code written in C. C++ support is possible through vtable pointers see, https://developer.mozilla.org/en-US/docs/Mozilla/js-ctypes
+    + jni.jsm, it allows developers to ship a single binary for use with multiple version of firefox 
+    https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/JNI.jsm
+    + using com from js-ctypes 
+    https://developer.mozilla.org/en-US/docs/Mozilla/js-ctypes/Examples/Using_COM_from_js-ctypes
+
+- Mozilla MathML project, build a enhance MathML support within firefox and other mozilla-based applications 
+https://developer.mozilla.org/en-US/docs/Mozilla/MathML_Project
+
+- MFBT, mozilla framework based on templates is the central repository for macros, functions and data structures used throughout the mozila code. 
+
+    + functionality, types and type manipulation 
+StandardInteger.h 
+...
+    + Core 
+Types.h, further provides macros to define imported and exported c symbols 
+...
+    + Debugging
+Assertions.h 
+...
+    + Data structures 
+LinkedList.h 
+...
+
+- Projects, these are often parts of Firefox or other products
+https://developer.mozilla.org/en-US/docs/Mozilla/Projects
+
+- Necko, is a network library that provides a platform-independent api for several layers of netwroking, ranging from transport to persentation layers. the module is part of mozilla distribution 
+
+https://developer.mozilla.org/en-US/docs/Mozilla/Projects/Necko
+
+at the source path network/
+
+- firefox source code download 
+https://archive.mozilla.org/pub/firefox/releases/
+
+
+
+
+
+
+
+# XPCOM interfaces 
+- xpcom, cross-platform component object model, reference https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XUL/Tutorial/XPCOM_Interfaces#XPCOM_Services
+- most of the time you don't need to write native code for yourself, just search the suitable interfaces
+
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface
+- callnig xpcom from a script is called XPConnect 
+- creating xpcom objects 
+    + get a component 
+    + get the part of the component that implements the interface that we want to use 
+    + call the function we need 
+    
+- Contract ID, syntax of contract id is 
+@<internetdomain>/module[/submodule[...]];<version>[?<name>=<value>[&<name>=<value>[...]]]
+
+- call a function of a component 
+var aFile = Components.classes["@mozilla.org/file/local;1"].createInstance();
+if (aFile) aFile.QueryInterface(Components.interfaces.nsILocalFile);
+
+    + do the same thing in one line of code 
+var aLocalFile = Components.classes["@mozilla.org/file/local;1"].createInstance(Components.interfaces.nsILocalFile);
+
+- if you use QueryInteface to get a interface which is not implement by a component, a exception will be thrown. use instanceof to check if a component is implement a interface 
+
+var aFile = Components.classes["@mozilla.org/file/local;1"].createInstance();
+if (aFile instanceof Components.interfaces.nsILocalFile){
+  // do something
+}
+
+    + calling the functions of an interface, demo implement a copy file function with xpcom 
+function copyFile(sourcefile,destdir)
+{
+  // get a component for the file to copy
+  var aFile = Components.classes["@mozilla.org/file/local;1"]
+    .createInstance(Components.interfaces.nsILocalFile);
+  if (!aFile) return false;
+
+  // get a component for the directory to copy to
+  var aDir = Components.classes["@mozilla.org/file/local;1"]
+    .createInstance(Components.interfaces.nsILocalFile);
+  if (!aDir) return false;
+
+  // next, assign URLs to the file components
+  aFile.initWithPath(sourcefile);
+  aDir.initWithPath(destdir);
+
+  // finally, copy the file, without renaming it
+  aFile.copyTo(aDir,null);
+}
+
+copyFile("/mozilla/testfile.txt","/etc");
+
+- xpcom services, some xpcom components are special components called services. you do not create instances of them because only one should exist 
+
+use getService() method instead of createInstance() to get a reference to a XPCOM Service 
+
+    + example to call bookmark service supply by mozilla 
+var bmarks = Components.classes["@mozilla.org/browser/bookmarks-service;1"].getService();
+bmarks.QueryInterface(Components.interfaces.nsIBookmarksService);
+bmarks.addBookmarkImmediately("http://www.mozilla.org","Mozilla",0,null);
+
+
+# XPConnect 
+- XPConnect is a bridge between javascript and xpcom. it is actively used in xul application 
+- reference, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_bindings/XPConnect
+- xpcshell is a command line interface to mozilla javascript, it's a interface interpreter, it gives you a shell that talks to straight to mozilla, via javascript's xpconnect bridge into it 
+- using component with XPConnect 
+    + reference https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_bindings/XPConnect/Using_components
+
+    + demo, create script 
+    
+    
+var Cc = Components.classes;
+var Ci = Components.interfaces;
+
+var rc = Cc["@mozilla.org/registry;1"];
+var rs = rc.getService(Ci.nsIRegistry);
+
+//alternative way to start a script 
+var {Cc: classes, Ci: interfaces} = Components;
+
+    + the contents of Components 
+utils=[object nsXPCComponents_Utils]
+interfaces=[object nsXPCComponents_Interfaces]
+classes=[object nsXPCComponents_Classes]
+results=[object nsXPCComponents_Results]
+isSuccessCode=function isSuccessCode() {
+[native code]
+}
+Constructor=[object nsXPCComponents_Constructor]
+QueryInterface=function QueryInterface() {
+[native code]
+}
+interfacesByID=[object nsXPCComponents_InterfacesByID]
+classesByID=[object nsXPCComponents_ClassesByID]
+stack=JS frame :: Scratchpad/4 :: cDump :: line 8
+manager=[xpconnect wrapped nsIComponentManager]
+ID=[object nsXPCComponents_ID]
+Exception=[object nsXPCComponents_Exception]
+reportError=function reportError() {
+[native code]
+}
+canCreateWrapper=function canCreateWrapper() {
+[native code]
+}
+canCallMethod=function canCallMethod() {
+[native code]
+}
+canGetProperty=function canGetProperty() {
+[native code]
+}
+canSetProperty=function canSetProperty() {
+[native code]
+}
+
+- basic xpconnect objects 
+    + XPCWrappedNative, These objects are created when any natively implemented XPCOM object
+    + XPCWrappedJS, are the exact opposite of XPCWrappedNative. they exist to reflect an object from javascript into c++ 
+
+- script security, the security model for web content is based on the same-origin policy 
+cross compartement wrapper, is a static security policy 
+transparent wrapper, objects share an origin but not a global, the caller gets a transparent wrapper to the target object, allow access to all the traget's properties, functionally it's just as if the target is in the caller's compartment 
+cross-origin, if two compartments are cross-origin, the caller gets a cross-origin wrapper, all the property except window and location objects 
+    + provileged to unprivileged code, in add-on sdk runs content-scripts in sandboxes which are initialized with an expanded principal 
+
+xrays wrapper, design to prevent untrusted code from confusing trusted code by redefining objects in unexpected 
+
+    + unprivileged to privileged code
+opaque wrapper deinies all access to the target object. privileged code could use exportFunction() and cloneInfo() to copy objects to less privileged scope 
+
+    + security checks, securty principals and the act of subsuming to establish the security relationship between two compartments A and B 
+
+A subsume B, a can do anything that b can do 
+A subsume B && B subsume A, a and b are same-origin 
+...
+
+    + security principals 
+the sytem principals, pass all security check 
+content principal, it is associate with some web content which defined by the origin 
+expanded principal, specified as an array of origins. it subsumes every content pricinpal it contains 
+null principal, fails all security checks and no privileges
+
+    + security relationship 
+
+
+# XPCOM Reference 
+- Core functions 
+NS_Alloc
+NS_Free
+NS_GetComponentManager
+NS_GetComponentRegistrar 
+NS_GetMemoryManager
+NS_GetServiceManager
+NS_InitXPCOM2
+NS_InitXPCOM3
+NS_NewLocalFile
+NS_NewNativeLocalFile
+NS_Realloc
+NS_ShutdownXPCOM
+nsresult, is a strongly typed enum used to represent a value returned by an XPCOM function
+
+- standard xpcom components     
+nsCategoryManager, the xpcom category manager 
+nsDirectoyService, returns the locations of "well known" directories in an OS-independent manner 
+nsLocalFile, a component implementing nsILocalFile 
+nsObserverService, the xpcom observer service, it should be used in main thread only 
+nsScriptableInputStream 
+
+- xpcom inteface reference, some of the interface have built-in mozilla implementation 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface, provide by mozilla platfor 
+
+reference by grouping 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Reference_by_grouping
+
+- error code reference 
+https://developer.mozilla.org/en-US/docs/Mozilla/Errors
+
+- XPCOM glue classes, are provided for easier to use XPCOM from c++ 
+NS_ConvertASCIItoUTF16
+NS_ConvertUTF16toUTF8
+NS_ConvertUTF8toUTF16
+NS_LossyConvertUTF16toASCII
+nsACString, abstract class represent a character string composed of single-byte storage units. it isued to represent ASCII or UTF-8 character arrays 
+
+nsAString, abstract class represent a character string composed of double-byte storage units. This class is typically used to represent unicode character arrays 
+
+nsCOMPtr XPCOM interface references from c++ code 
+
+nsCString
+nsDependentCString 
+nsDependentCSubString 
+nsDependentString 
+nsDependentSubstring 
+nsEmbedCString, concrete class provides a way to construct a nsAString object that allocates null-terminated storage 
+nsMemory, provides static helper routines to manage memory. These routines allow easy access to XPCOM's global nsIMemory implementation without having to go through the service manager to get it 
+nsString 
+nsSupportsWeakReference 
+
+- XPCOM primitive,an xpcom object boxes a value of primitive type, all xpcom primitive are scriptable, and they all implement an XPCOM interface from the table below 
+
+it is rarely useful, The main use case is to store primitive values in a data structure that can only store XPCOM objects, such as nsIArray.
+
+- XPCOM string functions 
+NS_CStringAppendData
+NS_CStringCloneData, returns a null-terminated, heap allocated copy of the string's internal buffer
+NS_CStringContainerFinish 
+NS_CStringCOntainerInit
+NS_CStringContainerInit2 
+NS_CStringCopy 
+NS_CStringCutData 
+NS_CStringGetData 
+NS_CStringGetMutableData 
+NS_CStringInsertData 
+NS_CStringSetData
+NSCStringSetDataRange 
+NS_CStringToUTF16 
+NS_StringAppendData
+NS_StringCloneData, returns a null-terminated, heap allocated copy of the string's internal buffer
+NS_StringContainerFinish
+NS_StringContainerInit 
+NS_StringCopy 
+NS_StringCutData 
+NS_StringGetData
+NS_StringInsertData 
+NS_StringSetData
+NS_StringSetDataRange 
+NS_UTF16ToCString
+
+- demo use clipboard from xpcom
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Using_the_clipboard
+
+- language binding, a bridge between a particular language and XPCOM to provide access to XPCOM objects from that language
+
+xpcom is writen with c/c++, to allowed other language to access required bridging layer 
+
+    + avaliable bridging layers, for javascript 
+Component.object is object through XPConnect functionality reflected into javascript. Components object is a native instance of the nsIXCComponents 
+
+Component.Constructor, for javascript to create new xpcom instance 
+
+Components.Exception, a js nsIXPCException objects 
+
+Components.ID, jsIJSID 
+
+Components.classes, read-only object whose properties implement the nsIJSCID interface. Each object represents one of the classes of XPCOM components that can be constructed or accessed as an XPCOM service.
+
+Components.classesByID is a read-only object whose properties are classes indexed by CID 
+
+Components.interfaces, read-only bjct whose properties are itnerfaces indexed by their names 
+
+... 
+
+Exposed parts of the functions supplyed by the built-in XPCOM interfaces 
+
+    + other languages 
+JavaXPCOM 
+PIXPCOM, perl xpcom provides 
+PyXPCOM 
+RbXPCOM 
+XPConnect is a bridge between javascript and XPCOM with XPConnect you can use XPCOM components from javascript code. XPConnect is part of Firefox and is actively used in XUL applications 
+
+
+
+# Mozilla technologies 
+- DocShell, will move WebShell to DocShell, is the second iteraction of what originally started out as WebShell 
+
+- Embedded Dialog API 
+    
+- Feed content access API 
+
+- Firefox Accounts, is an identity provider that provies authentication and user profile data for mozilla cloud services 
+
+- Mork, is a database file format invented by David McCusker for the mozilla code since the original netscape database infromation was proprietary and could not be released open source. from mozilla 1.9 more widly used SQLite 
+
+- Places, bookmark and history management system introduced in firefox 3 
+    
+- preferences API, Preferences API allows you to save and read strings, numbers, booleans, and references to files to the preferences store. 
+    
+expose as a set of XPCOM, nsIPrefService, nsIPrefBranch 
+
+- Toolkit API, a set of programming interfaces (APIs) built on top of Gecko, provides advanced services to XUL 
+    + profile management 
+    + chrome registration 
+    + browsing history 
+    + extension and theme management 
+    + application update service 
+    + safe mode 
+    + printing  
+    
+    + official references for toolkit API
+        * Structure of an installable bundle, XULRunner applications, extensions and themes all share a common directory structure, and in some cases the same bundle can be used as a standalone XULRunner application as well as an installable application extension 
+
+        https://developer.mozilla.org/en-US/docs/Bundles
+    
+        * extension packaging 
+        https://developer.mozilla.org/en-US/Add-ons/Extension_Packaging
+        
+        * theme packaging 
+        https://developer.mozilla.org/en-US/docs/Theme_Packaging
+        
+        * multiple item extension packaging 
+        https://developer.mozilla.org/en-US/docs/Multiple_Item_Packaging
+        
+        * XUL application packaging 
+        https://developer.mozilla.org/en-US/docs/XUL_Application_Packaging
+        
+        * chrome registration, Chrome is the set of user interface elements of the application window that are outside the window's content area.
+        https://developer.mozilla.org/en-US/docs/Chrome_Registration
+        
+        * printing from XUL application 
+        https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XUL/Printing
+        
+- the publicity stream api, is a mozilla-hosted Activity Stream generated by a user's application usage. The publicity stream is provided as a central place for applications to publicize application usage for the purpose of notifying a user's friends of the applications which their friends are using.
+    
+
+# Using COM from js-ctypes 
+- reference
+
+
+
+
+
+
+
+
+

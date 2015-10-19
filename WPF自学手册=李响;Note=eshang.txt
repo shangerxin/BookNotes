@@ -1,0 +1,492 @@
+﻿WPF自学手册=李响;Note=eshang
+
+:微软编程历史
+>C与windows API, 参考图书, Charles Petzold著的<windows程序设计> http://www.charlespetzold.com/books.html
+>C++ 与 MFC, microsoft foundation class, <MFC程序设计>, <深入浅出MFC>, <MFC internals: inside the microof foundation class architecture>(深入解析MFC)
+>C#与windows form, 针对java, Charles Peztold<C# windows 程序设计>
+>C#与WPF, user 与 GDI, 在GDI基础上封装了GDI+, 绘制图形交给了directx
+- directx以COM形式暴露API, OpenGL是以C形式编程
+- WPF渲染依赖于directX
+- 可以直接移植到silverlight上
+- xaml与cs文件组合, WPF
+
+:WPF相关工具
+>xaml Pad, 安装windows sdk后安装的小工具,用于查看xaml代码, 提供对xml文件的树状窗口预览
+>csc, cs代码编译器, 无法编译xaml文件, 需要使用msbuild命令执行编译, 项目文件是xml文件
+>microsoft expression blend
+>reflector, 利用.net反射机制来分析程序集, 是一个款反编译软件, http://www.red-gate.com/products/reflector
+
+:WPF体系结构
+>层次, 由上至下
+- user application: game, office
+- system applicatoin: mce, desktop wm, shell, control panels, help, ie
+- application work: splash, win form, wpf, 3rd party game engine
+- High Level abstraction: managed directx, duser, avaton coreui, media foundation, common controls, pixa davinc, trident ms html, wpf/e, windows codecs
+- Mid level abstraction: d3dx/hlsl, mil core, dshow, wcs
+- Low level abstraction, opengl, direct3d, dxva, ddraw, gdi, user
+- OOI User make driver
+- Kernel, memory management scheduling device management, win32k, kstream
+- Driver Hardware, display controller, 3d engine, 2d engine/instance, video decode, video encode, print
+>WPF架构
+- 用户应用
+- 系统图形架构: MFC/ATL, WinForms, WPF, .netFramework
+- 系统图形架构: directx, user32
+- 操作系统核心与硬件驱动: WDDM, XPDM
+- 图形显卡
+>WPF内部结构
+- 托管与非托管的界限, CLR, common language runtime, 在CLR上的均为托管代码
+- WPF绘制
+- WPF应用程序从一开始分为两个线程开始, 分别负责用户界面UI的管理和渲染, 渲染为非托管代码
+- WPF类集中在, windowsBase.dll, presentationCore.dll, presentationFramework.dll中
+- WPF命名空间以system.windows开头
+- system.windows.controls是关于WPF空间的类
+- system.windows.media是关于绘图, 画刷, 视频和音频的类
+- system.windows.form是windows form编程相关的类
+- system.windows.forms.integretation是用来继承windows form与WPF程序
+>WP主要类
+- object
+- DispatcherObject(system.threading.dispatcherObject), 用于多线程
+- freezable(system.windows.freezable)包含画刷, 时间轴(timeline), 集合(geometry), 有一个changed事件, 用于通知WPF值变化, 可以冻结本身来变为只读,提高效率
+- visual(systemwindows.media.visual), 是一个走向类, 为WPF提供可视化支持, 提供显示, 透明度, 坐标转换, 区域剪切等
+- UIElement(system.windows.uielement), 包含布局, 输入和事件
+- FrameworkElement(system.windows.frameworkElement), 派生自uielement, 在其基础上增强了数据绑定, 样式, 以及资源等WPF核心功能
+- contentElement(system.windows.contentElement), 该类无法可视化自己
+- frameworkContentElement, 支持动画以及数据绑定, 该类型无法将自己可视化出来, 需要借助visual类
+- shape是基本形状的基类
+- control(system.windows.controls.control)是控件基类
+- contentcontrol, 派生自control, 是具有单一内容的控件
+- itemsControl, 支持多个条目显示的控件基类, 如列表,树等
+- system.windows.controls.panel, 布局容器
+
+:XAML
+>具有命名空间, xmlns 在xaml中
+- 各式, xmlns:nameSpaceName = URL
+- 使用系统类 xmlns:nameSpaceName = "clr-namespace:system;assembly=mscorlib"
+- 使用自定义类, xmlns:nameSpaceName = "clr-namespace:customClassName"
+- 使用外部程序库, xmlns:nameSpaceName = "clr-namespace:exterLibName;assembly=customLib"
+>根元素种类
+window, page, application, resourceDictionary
+>Content属性, 每个WPF元素都具有的属性, 不可以在content中插入其他标签, 可以直接指定, 也可以省略content标签
+<tag>
+    <tagName.Content>
+        values
+    </tagName.Content>
+</tag>
+;
+省略
+<tag>
+    values
+</tag>
+>类型转换器, 使用特性指定某个类为属性转换器
+[TypeConverter(aimType)]
+public class className{...}
+>XAML使用
+WPF, WPS XAML 是描述电子文档, silverlight XAML, WF XAML 描述windows工作流基础内容
+>XAML描述的界面可以使用c#完全实现, 在C#类中实现方法, initializeComponent()
+>xaml与C#混合编写WCF应用程序
+- system.windows.markup命名空间包含xamlReader类的静态load方法解析xaml,变为C#对象, 将字符串通过stringReader转换为xmlTextReader来构件程序
+ex.
+using system.windows.markup;
+using system.xml
+using system.io
+namespace app
+{
+    public classs custormWindow:window
+    {
+        public windowByXamlAndCode()
+        {
+            InitializeComponent();
+        }
+        public void InitializeComponent();
+        {
+            this.Title="myApp";
+            string strXaml = "<stackPanel>...</stackPanel>";
+            stringReader strReader = new stringReader(strXaml);
+            xmlTextReader xmlReader = new xmlTextReader(strXaml);
+            statckPanel stackObj = (stackPanel)XamlReader.Load(xmlReader);
+            this.content = obj;
+        }
+        [staThread]
+        public static void main()
+        {
+            Application app = new Application();
+            app.Run(new custormWindow);
+        }
+    }
+}
+- 容器对象具有findName()方法来查找其中包含的控件
+>WPF, 典型做法, markup+code-behind
+- xaml文件包含所有的布局信息, cs文件处理业务逻辑
+- WPF基本的四个文件
+app.xaml, 应用程序入口, xaml文件中 x:Class指定的类名必须和对应的cs文件中的类名一致
+app.xaml.cs, 后台代码实现, 实现时必须加上partial
+mainwindow.xaml, 应用程序主窗口, 描述界面组成
+mainwindow.xaml.cs, 必须在mainWindow中调用initializeComponent方法
+- 工作原理
+在应用程序目录下, *.g.cs表示文件是自动产生的, app.xaml中的代码会自动转换为app.g.cs文件, 程序入口main函数即在其中
+- 也可以在xaml中嵌入代码
+<window ...
+xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+x:class="mainWindow">
+...
+<x:Code>
+    <![CDATA[code ...]]>
+</x:Code>
+...
+</window>
+不过尽量不要使用这种方式, 而且内部的代码中不要出现]]>\r\n 如果出现]]>则在后面加一个空格以与代码结束段区分, 插入的c#代码中不能使用using
+
+:依赖属性
+>依赖属性
+public static readonly DependencyProperty IsDefaultProperty = DependencyProperty.Register("refencePropertyName", typeof(regType), typeof(Owner), [ValidatecallBack]);
+- 例如button也继承了DependencyObject类, WPF绝大多数UI组件都继承自DependencyObject
+- DenpendencyObject, 具有GetValue, SetValue方法
+>引入依赖属性的原因, MSDN中解释的设计思想能用属性解决的问题就不要使用方法与事件
+>动画
+<obj.Tirgger>
+    <EventTrigger ..>
+        <BeginStoryboard>
+            <storyBoard>
+            </storyBoar>
+        </BeginStoryboard>
+    </EventTrigger>
+</obj.Trigger>
+>xaml中添加自定义类
+- 自定义类, 在cs文件中
+- 在xaml文件中引入自定义类的资源
+    <rootType
+        xmlns:local:"clr-namespace:selfDefineClassName">
+    ...
+    <rootType.resources>
+        <local:custormClassName x:Key="defineCustormResourceName"/>
+    </rootType.resources>
+    ...
+    </rootType>
+- 在xaml对象中使用自定义资源
+<element ... property="{Binding source{Staticesource defineCustormResourceName}, path=property_of_defineCustormResourceName}">..</element>
+- 依赖属性优先级
+    - 本地址, 动态引用, 数据绑定
+    - 模板的父类
+    - 样式触发器
+    - 模板触发器
+    - 样式设置
+    - 主题样式 trigges, setters
+    - 属性值继承
+    - 元数据的默认值
+>附加属性
+元素具有容器元素的一些属性, 例如row, colmn, dock等, 设置后容器根据元素的这些属性来对内容排序
+本质上来说附加属性页是一种依赖属性, 只不过注册方法略有不同
+public static readonly DependencyProperty varNameProperty = DependencyProperty.RegisterAttached( "varName", typeof(varProperty), typeof(varOwner), new FrameworkPropertyMetadata(fasle, FrameworkPropertyMetadataOpetions.AffectsRender));
+public static void SetvarNameProperty(UIElement e, type value){...};
+public static type GetvarNameProperty(UIElement e, type value){...};
+
+:路由事件
+> 就是可以触发多个事件处理函数的事件
+> CLR事件和路由事件关联和接触处理函数的差别
+    - CLR +=, Delegate.Combine(...)
+    - 路由事件routed event +=, AddHandler(...)
+    - CLR -=, Deleaget.Remove(...)
+    - 路由事件 -=, RemoveHandler(...)
+>引入路由事件这个概念的意义
+在一般的CLR事件中事件处理是针对有个对象的, 而在WPF中由于允许多个元素的随意嵌套, 为了提高事件处理以及开发的简便性, 引入路由事件. 例如用button与text与image嵌套组成的图形按键, 不需要为text, image的click事件重写为button的click事件处理
+>使用方法
+public class custormClass
+{
+    public static readonly RoutedEvent someEvent;
+    ...
+    someEvent = EventManager.RegisterRoutedEvent("eventType",...);
+}
+>路由事件策略
+- bubbling, 事件源一直向上
+- direct, 事件源出发, 围绕一圈结束
+- tunneling, 从根节点出发一直到事件源
+>事件处理函数区别
+- 路由事件处理函数
+public delegate void RoutedEventHanler(object sender, routedEventArgs e);
+- 一般事件处理函数
+public delegate void MouseEventHandler(object sender, MouseEventArgs e);
+
+:WPF的命令Command
+>定义菜单
+    <menu>...
+>自定义右键菜单
+    <contextMenu>...
+>Command类
+ApplicationCommands.Cut, ApplicationCommnads.Copy, Paste, Save, Close
+- 是抽象层比事件更为高级的概念, 将应用程序划分为任务, 原因是简洁, 无须担心各个UI状态
+- 是为了综合所有页面的事件处理函数, 提供commandBinding方式. 为事件处理提供统一的接口
+	some_event0	-> commandBinding -> ExecuteHandler
+	some_event1						 CanExecuteHandler
+	some_event2
+- CommandSource是触发command的对象
+- commandTarget是command应用在上面的对象
+- ICommand接口, 具有Execute, CanExecute方法, CanExecute用于判断当前command是否可以应用指定的commandTarget
+- RoutedCommand, WPF中直接实现Execute函数, 具有PreviewExecute和Execute事件
+- WPF内置的Command库
+applicationCommands, 提供常用功能, cut, copy, past, new, open, print, printpreview
+navigationCommands, 提供导航, browserForward, browseBack
+EditingCommands, alignLeft, alignRight, ToggleBold
+componentCommand, 提供用户界面处理, MoveFocusForward, MoveFocusBackward
+mediaCommands, 提供多媒体指令, play, pause
+- commandBinding, 用于关联command和实现command事件处理的函数
+	commandBinding save = new CommandBinding(applicationCommands.save, saveExecuted, saveCanExecute);
+	this.CommandBindings.Add(save);
+	
+:工程
+- 新建工程的时候可以选择窗口类型
+命令行, window窗口, 库
+命令行窗口在程序开发阶段用于输出一些调试信息, 特别是程序出错等GUI无法显示的时候
+- 窗口生命周期
+sourceInitiated->activated->loaded->contentRended->deactivated->closing->closed
+- 窗口具有一些通用属性, 如width等
+- 非规则窗口
+	- 就是使用GUI+等绘制出来的图形
+	- 设置window属性
+		background="transparent" allowsTransparency="True" windowStyle="None"
+	- 为窗口添加拖曳功能
+		this.DragMove()
+
+:页面和导航
+- 一类导航寄宿于窗口中
+- 一类XAML浏览器应用
+- 四个核心
+	page, hyperlink, navigationServices, Journal每次连接通过journal记录作为历史
+- Page, 继承自frameworkElement, 比window更精简
+一般不设置自身尺寸, 由宿主决定
+- navigationWindow是继承自window, 提供了导航栏, 是顶层窗口, 不允许嵌套, frame可以嵌套到任何空间
+- 可以使用iframe来显示WPF页面
+
+:布局
+- canvas
+支持坐标
+- stackPanel
+顺序, 垂直或者水平
+- wrapPanel
+类似于stacpanel, 会自动将元素折起来排放
+- dockPanel
+使得子元素停靠在面板的某一条边上
+- grid
+- 自定义布局 
+	* 测量尺寸
+		MeasureOverride(size), 父类告诉子类可分配的空间
+		ArrangeOverride(Size), 告诉父类至少需要的空间
+甚至可以旋转空间角度布局, 使用internalChild来调用容器内部控件
+
+:控件与Content
+- Content模型
+	- 为了提供灵活性
+	- ContentControl类继承的均包含Content属性
+	- Content将所有元素分为两类, 一个类是UIElement, 一类是非UIElement类, 前者使用OnRender方法来显示其内容, 后者一般使用ToString()反应内容
+- 派生关系
+Control<-ContentControl<-HeaderedContentControl
+		 ItemsControl	 HeaderItemsControl
+- ContentControl的子类有
+ContentControl<-Button, window, checkbox, tooltip...
+HeaderContentControl, 不仅包含content还多了header属性
+ItemsContrl与ContentControl不同, 包含了一个Content集合, 用items或itemsource来表示, 例如menu, listBox都派生自ItemsControl
+- Decorator, 围绕子控件添加效果, 可以为任何UIElement提供修饰
+- 经典控件, Content
+	- label
+	- buttonbase
+	- button
+	- repeatButton, 在一直被按着的情况下才会触发单击事件
+	- toggleButton
+	- checkbox
+	- radiobutton
+	- tooltip
+- HeaderContent,控件
+	- groupBox
+	- expander
+- items控件, 继承自itemsControl
+	- listbox
+	- combobox
+	- menu
+- range控件
+	- progressbar
+	- slider
+	
+:资源
+>程序集资源
+	- 资源文件, resource file
+		* 引用, <image source"pack://application:...path"/>
+	- 内容文件, content file, 用相对位置定位, 在编译的时候可以设置拷贝到输出目录
+	- site of origin文件, 不参加编译, 程序不知道该文件是否存在, 使用uri定位, 代码中国使用getRemoteStream获取
+>URI语法
+	- 协议:授权:路径
+	- pack://authority|application:,,,/resource_file_path
+	- wpf规定, application与authority中的/都要使用","替换
+>逻辑资源, 保存元素resouce属性中的.net对象, staticresource
+	- 任何.net元素都可以作为资源
+	- 添加命名空间, xmls:s = "clr-namespace:system;assembly=mscorlib"
+	- 定义资源, 例如一个字符串
+		<s:string x:key="buttonContent">
+		</s:string>
+	- 使用资源
+		<button content="{staticresource buttonContent}"/>
+	- 一种是静态资源, 只从资源字典中查找一次, 必须先声明后使用
+	- 一种是动态资源, 应用程序需要时查找
+	- 系统资源, 可以直接使用或者动态引用
+		- systemColors
+		- systemFonts
+		- systemParameters
+	- 共享资源, 默认情况下资源使用的都是同一个实例. 可以使用不同实例, 需设置x:share="False"
+	- 代码访问资源
+		windowObj.resource['key']
+		可以随时动态添加资源, 资源就是一个字典
+	- 程序集之间共享资源, 同一个solution下多个工程, 设置工程依赖来共享资源
+		- 添加工程引用
+		- 在app.xaml中添加mergeddictionaries合并资源字典
+		<application.resources>
+			<resourceDictionary>
+				<resourcedictionary.mergeddictionaries>
+					<resourcedictionary source="path"/>
+				</resourcedictionary.mergeddictionaries>
+			</resourcedictionary>
+		</application.resources>
+		- 另一种方式是使用ComponentResourcekey来标记资源, 可以标记类型和资源ID直接引用共享资源
+		<imagebrush x:key="{componentResourceKey typeInTargetAssembly={x:type local:dlllib}, resourceid=some_bursh_name}"
+		
+:样式和控件模板
+> style可以设置基类, baseon, 设置目标类型, targettype
+> 模板绑定和模板触发器
+	- templateBinding, 类似于一般的数据绑定, 但又如下限制
+		* 仅在可视化树内有效
+		* 不能应用在freezable派生对象的属性上
+> 混合使用模板和换肤
+
+:数据绑定
+> 绑定方向
+	- oneway, 数据源到目标
+	- oneWayTosource, 从目标到数据源
+	- twoway
+> 数据源
+	- 要实现iNotifiyPropertyChanged接口
+> 触发变化, 在binding的, UpdateSourceTrigger设置, 例如
+	- lostFocus
+	- propertyChanged
+	- explicit, 需要明确调用
+	BindingExpression be = nameTextBox.getBindingExpression(textbox.property);
+	be.updateSource();
+> 绑定数据源的4种方法, 给出了各自的适用范围
+	- source, 数据源均使用source属性获取, 适用于源为普通的.net对象
+	- element, 多用于元素之间的绑定
+	- relativesource, 如果指定数据源时需要设置相对位置
+	- dataContext, 多个元素绑定到同一个对象
+> 数值转换, 必须实现IValueConverter接口, 之后再binding表达式使用
+> 数据验证, 必须实现validationRules接口, 之后再binding表达式使用
+> 不合法信息反馈
+	- tooltip提示, 使用relativesource绑定, 定义validation.Error对象
+	- ErrorTemplate, 文本框提示红色等
+	- 元素的validation.ErrorTemplate属性用于设置validation出错的显示样式
+> 集合视图, 实现过滤, 排序, 分组
+	- 首先要创建数据的集合视图, collectionViewSource类的对象
+	- 分组, groupDescriptions属性, 可以设置groupStyle样式
+	- 排序, 为集合视图添加sortDescriptions类
+	- 过滤, 为集合视图添加filter类
+		
+:二维图形
+> DPI, Dots per inch
+> DIU, 宣称分辨率无关, 规定坐标为1/96英寸, 取决于操作系统DPI的设置
+> WPF坐标系
+	- 默认坐标, 左上0,0
+	- 自定义坐标, 使用transform类实现, 就是对原有坐标系进行变换
+	- 点, point
+	- 向量, vector
+	- 几何变换
+	- 缩放
+	- 错切, 与指定线垂直的坐标不变, 其他坐标缩减
+	- 其次坐标系, 是三维矩阵的特例
+	- 变换种类
+		* translateTranform, 平移
+		* rotateTransform
+		* scaleTransform
+		* skewTransform, 错切
+		* matrixTransform
+		* transformGroup
+> wpf图形结构
+	- 应用
+	- WPF
+	- kernel&driver, xpdm, wddm等
+> 立即模式和保留模式
+	- GDI/GDI+ 是属于立即模式, 利用wm_paint消息绘制
+	- 立即模式, 每次都绘制到屏幕上
+	- 保留模式, 保存到显存, 一次性输出到屏幕
+	- 考虑不同模式, 在绘制到屏幕的时候使用的都是当前画刷
+> 逻辑树与可视化树
+	- 逻辑树, 就是一个层次结构
+		* 资源查找
+		* 属性值继承
+	- 可视化树, 必须继承自visual
+		* 描述用户界面外观
+> 二维图形元素
+	- visual, 用户图形界面都是visual
+	- drawing, 描述窗口里绘制的内容如何描述
+	- geometry, 
+	- shape
+> 颜色
+	- 颜色域, CIE, 国际照明组织定义色度图
+	- 微软惠普推出标准红绿蓝颜色空间标准, sRGB, scRGB
+	- AdobeRGB, 扩大了绿色色域
+> 画刷, 6种画刷
+	- solidColorBrush
+	- LinearGradientBrush
+	- radialGrandientBrush
+	- ImageBrush
+	- DrawingBrush, 使用drawing对象填充
+	- visualBrush, 使用visual对象填充
+> shape, 高级图形, 响应布局等
+> geometry, 简单的图形, 不响应任何其他事件, 同事使用多种类使用了geometry, 例如pathgeometry
+> drawing, 比geometry更完善一些, 可以绘制文本甚至视频
+> Hittest行为, visual对象的行为
+
+:动画
+> WPF是基于compositionTarget实现
+> 实现动画前提
+	- 必须是依赖属性
+	- 必须实现了iAnimatable接口
+	- 必须是可以应用动画的类型
+		* double
+		* int
+		* point
+		* wpf为基本的22种类型提供了响应的动画类
+	- 触发动画
+		* beginAnimation
+		* applyAnimationClock
+> 动画类型
+	- from
+	- to
+	- by, 从起始点开始后计数
+> 动画行为
+	- beginStroyBoard
+	- pauseStroyboard
+	- resumeStoryBoard
+
+: WPF3D
+> WPF3d并不是为了游戏设计
+> 文档
+	- 文档流, contentElement
+	- xpsdocument, 固定文档
+	- 保存文档, serializerWriter
+	- 打开文档, application.command.open
+	
+:互操作
+>wpf与winform
+	- wpf使用winformsystem.windows.forms引用
+	- winform不能直接使用wpf, vs2010在winform添加wpf会自动处理
+>win32嵌入wpf
+	- 即c++中引用wpf内容
+	- 工程属性添加对clr支持
+	- 添加相关引用
+	- 设置线程模式在winmain函数前
+	[system::staThreadAttribute]
+	int WINAPI winMain(...)
+	- 使用hwndSource
+>wpf嵌入win32
+	- 使用hwndHost
+	- win32dll的dll需要设置clr支持
+	- 引用相关dll
+	
+:自定义控件
+:WPF类图
+object
+-applicationCommands - markupextention -dispatcherobject...

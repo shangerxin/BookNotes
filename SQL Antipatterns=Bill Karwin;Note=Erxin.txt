@@ -1,0 +1,1182 @@
+﻿SQL Antipatterns=Bill Karwin;Note=Erxin
+
+# Introduction
+- who is this book for, for software developers who ned to use SQL
+- what is an antipattern, is a technique that is intended to solve a problem but that often leads to other problems
+- parts of this book
+    + logical database design antipatterns
+    + physical database design antipatterns
+    + query antipatterns
+    + application development antipatterns
+- anatomy of an antipattern
+    + objective
+    + the antipattern
+    natural common solution
+    + how to recognize the antipattern
+    + legitimate uses of the antipattern
+
+- performance, scalability and optimization are important for many people who develop database-driven applications
+    + SQL performance tuning
+
+- conventions
+    + typography, SQL keywords are formatted in all capitals and in a monospaced font
+    + terminology
+- entity-relationship diagrams
+
+
+# Part I Logical database design antipatterns
+- Jaywalking
+    + what's the greatest number, 
+    + match a word boundary in sql
+    + what character will never appear
+- create a intersection table to solve the condition many map to many 
+- naive trees
+- objective store and query hierarchies
+    + to achieve a blog common tree, use a table map to it's self to compose a tree structure
+    use parent_id contain the parent of the current common_id
+    
+    bugs
+    1
+    |
+    V
+    *
+    comment 1-|
+      *       |
+      ^       |
+      |       |
+      --------|
+adjacency list, this is common for software developer to use to save hierarchy data.
+the query example
+SELECT c1.*, c2.*, c3.*, c4.*
+FROM Comments c1 -- 1st level
+    LEFT OUTER JOIN Comments c2
+    ON c2.parent_id = c1.comment_id -- 2nd level
+    LEFT OUTER JOIN Comments c3
+    ON c3.parent_id = c2.comment_id -- 3rd level
+    LEFT OUTER JOIN Comments c4
+    ON c4.parent_id = c3.comment_id; -- 4th level
+but this query have a disadvantage point, it's hard to compute a aggregate such as count()
+
+maintaining a tree with adjacency list, query example
+INSERT INTO Comments (bug_id, parent_id, author, comment)
+VALUES (1234, 7, 'Kukla' , 'Thanks!' );
+
+UPDATE Comments SET parent_id = 3 WHERE comment_id = 6;
+
+- How to recognize the antipattern      
+- Legitimate uses of the antipattern
+    + don't over-engineer
+    recursive query syntax using the WITH keyword followed by a common
+    table expression.
+    
+    WITH CommentTree
+        (comment_id, bug_id, parent_id, author, comment, depth)
+    AS (
+        SELECT *, 0 AS depth FROM Comments
+        WHERE parent_id IS NULL
+        UNION ALL
+            SELECT c.*, ct.depth+1 AS depth FROM CommentTree ct
+            JOIN Comments c ON (ct.comment_id = c.parent_id)
+    )
+    SELECT
+    *
+    FROM CommentTree WHERE bug_id = 1234;
+  
+- solution, use alternative tree models compare to the adjacency list
+    + path enumeration
+    In the Comments table, instead of the parent_id column, define a column
+    called path as a long VARCHAR. The string stored in this column is the
+    sequence of ancestors of the current row in order from the top of the
+    tree down, just like a UNIX path.
+  
+    the stored data example
+    comment_id  path    author  comment
+    1           1/      Fran    What’s the cause of this bug?
+    2           1/2/    Ollie   I think it’s a null pointer.
+    3           1/2/3/  Fran    No, I checked for that.
+    
+    + nested sets
+    the nested sets solution stores information with each node that pertains to the set of its descendants, rather than the node's immediate parent
+    the nsleft number is less than the numbers of all the node’s children, whereas the nsright number is greater than the numbers of all the node’s children. These numbers have no relation to the comment_id values.
+    An easy way to assign these values is by following a depth-first traversal of the tree, assigning nsleft numbers incrementally as you descend a branch of the tree and assigning nsright numbers as you ascend back up the branch.
+    
+        1  14
+     |           |
+    2 5         6 13
+    |           |       |
+    3 4         7 8     9  12
+                        10 11
+    
+    you can retrieve comment #4 and its descendants by searching for nodes whose numbers are between the current node’s nsleft and nsright.
+    
+    + closure table
+    The Closure Table solution is a simple and elegant way of storing hier archies. It involves storing all paths through the tree,
+    addition to a plain Comments table, create another table TreePaths, with two columns, each of which is a foreign key to the Comments table
+    Store one row in this table for each pair of nodes in the tree that shares an ancestor/descendant relationship, even if they are separated by multiple levels in the tree. Also add a row for each node to reference itself. 
+    
+    ancestor descendant ancestor descendant ancestor descendant
+    1 1                 1 7                 4 6
+    1 2                 2 2                 4 7
+    1 3                 2 3                 5 5
+    1 4                 3 3                 6 6
+    1 5                 4 4                 6 7
+    1 6                 4 5                 7 7
+    
+    retrieve ancestors of comment
+    SELECT c.*
+    FROM Comments AS c
+        JOIN TreePaths AS t ON c.comment_id = t.descendant
+    WHERE t.ancestor = 4;
+    
+     improve the Closure Table to make queries for immediate parent or child nodes easier. Add a TreePaths.path_length attribute to the Closure Table design. The path_length of a node’s self-reference is zero, the path_length of its immediate child is 1, the path_length of its grandchild is 2, and so on. 
+    
+    + which design should you use
+        * adjacency list, is the most conventional design and many software developers recognize it
+        * recursive queries using with or connect by prior make it more efficient to use adjacency list design
+        * path enumeration is good for breadcrumbs in user interfaces, but it's fragile because it fails to enforce referential integrity
+        * nested set, it also fail to support referential integrity, it's best used when you need to query a tree more frequentialy than you need to modify the tree
+        * closure table, the only design in the chapter that could allow a node to belong to multiple trees, it use space consumption as a trade-off for reducing computing
+        
+- ID required, Objective Establish primary key conventions
+the objective is to maker sure every table has a primary key
+- primary key is important when you need to
+    + prevent a table from containing duplicate rows
+    + reference individual rows in queries
+    + support foreign key references
+ 
+    + pseudokeys is vendor-dependent as shown by the following table
+    AUTO_increment  MYSQL
+    GENERATOR       Firebird, Interbase
+    IDENTITY        DB2, Derby, MS SQL
+    ROWID           SQLite
+    SEQUENCE        DB2, Firebird, Informix, ingres, oracle, postegresql
+    SERIAL          MySQL, POstgreSQL
+
+- antipattern, one size fits all
+    + the primary key's column name is id
+    + the data type is 32-bit or 64 bit integer
+    + unique values are generated automatically
+- solution use pseudokey such as auto increase column or compound key
+- using USING to give a alias name to prevent the same name between two column in a query, when reference a id from another table use a more explicit column name such as tableName_id for a foreign key column
+
+SELECT * FROM Bugs JOIN BugsProducts USING (bug_id)
+
+- Compound keys are hard
+Most databases support some function to return the last value a sequence generated. For example, MySQL calls this function LAST_INSERT_ID( ), Microsoft SQL Server uses SCOPE_IDENTITY( ), and Oracle uses SequenceName.CURRVAL( ).
+
+SELECT MAX(bug_id) + 1 AS next_bug_id FROM Bugs;
+This isn’t reliable when you have concurrent clients both querying for the next value to use.
+
+- primary key antipattern
+    + choose sensible names for your primary key, such as name the key as bug_id for the bug table
+    use the same column name in foreign key where possible
+
+    + embrace natural keys and compound keys, compound key will simplify a query which need to use join
+
+- key less entry
+    + simplify data base architecture
+    relational database design is almost as much about relationships between tables as it is about the individual tables
+    
+    + leave out the constraints
+        * becomes to write code to ensure referential integrity manually
+        * it is hard to maintain relation ship manually in real project
+        * performance is often used as a justification for cutting corners but it usually creates more problems than it solves
+
+    + declare constraints
+        * software industry average is 15 to 50 bugs per 1000 lines of code
+        * supporting multitable changes
+        cascading updates
+        
+- entity attribute-value, EAV
+    + use a generic attribute table
+    when need to support variable attributes is to create a second table, storing attributes as rows, each row in this attribute table has three columns
+        * the entity, is a foreign key to a parent table
+        * the attribute, this is simply the name of a column in a conventional table
+        * the value, each entity has a value for each of its attribute
+        
+    this pattern is called Entity-attribute-value, the benefits
+        * both table have few columns
+        * the number of column doesn't need to grow to support new attributes
+        * you avoid a clutter of columns that contain null in rows where the attribute is inapplicable
+    
+    + supporting data integrity, when you use EAV, you sacrifice many advantages that a conventional database design would have given you
+        * can't make mandatory attributes, can't specify a value of attribute must exist
+        
+        * can't use sql data types, it's no way to reject invalid data by row
+    
+        * can't enforce referential integrity, can't apply constraint on attribute_value column
+    
+        * can't make up attribute names, attributes may not being named consistently
+    + recognize the antipattern
+        * define new attribute at runtime
+        * what's the maximum number of joins I can do
+        * I can't figure out how to write a report for our e-commerce platform
+    
+    + the EVA entity relationship
+    Issues 0->* IssueAttributes
+    
+    + reconstructing row, retrieving each attribute value requires a join for each attribute. You must know all attributes at the time you write this query.
+    
+    reconstructs the row shown earlier
+    SELECT i.issue_id,
+        i1.attr_value AS "date_reported" ,
+        i2.attr_value AS "status" ,
+        i3.attr_value AS "priority" ,
+        i4.attr_value AS "description"
+    FROM Issues AS i
+        LEFT OUTER JOIN IssueAttributes AS i1
+            ON i.issue_id = i1.issue_id AND i1.attr_name = 'date_reported'
+        LEFT OUTER JOIN IssueAttributes AS i2
+            ON i.issue_id = i2.issue_id AND i2.attr_name = 'status'
+        LEFT OUTER JOIN IssueAttributes AS i3
+            ON i.issue_id = i3.issue_id AND i3.attr_name = 'priority' ;
+        LEFT OUTER JOIN IssueAttributes AS i4
+            ON i.issue_id = i4.issue_id AND i4.attr_name = 'description' ;
+    WHERE i.issue_id = 1234;
+    
+    + this kinds of scenario also could be solve with NOSQL technology 
+        * Berkely db, is a popular key-value store
+        http://www.oracle.com/technology/products/berkeley-db/
+        
+        * cassandra is a distributed column-oriented database, developed at facebook and contributed to apache
+        http://incubator.apache.org/cassandra/
+    
+        * couchDB is a document-oriented database, a distributed key-value store that encodes values in JSON
+        
+        * haddoop and hbase make up an open source DBMS inspired by google's mapReduce algorithm
+        
+        * mongoDB is a document-oriented database like couchDB
+        * redis is a document-oriented in-memory database
+        http://code.google.com/p/redis/
+        * Tokyo cabinet is a key-value store, designed in the vein of POSIX dbm
+        http://1978th.net/
+        
+- store dynamic attribute without EAV, when you have a finite number of subtypes and you know the attribute of each subtype
+    + single table inheritance, to store all related types in one table, some attributes are common to all subtypes, many attributes are subtype-specific and must be given a null value on any row storing an object
+    
+    + concrete table inheritance, another solution is create a separate table for each subtype. every table contain the same attributes that are common to the base type
+    
+    advantage of this is that you are prevented from storing a row containing values for attributes that don't apply to that row's subtype
+    
+    advantage of concrete table inheritance is that you don't need an extra attribute to define the subtype on each row
+    
+    however it's hard to tell the common attributes, to solve this by add a common view to collect all the common attributes for the sub tables
+    
+    + class table inheritance, mimics inheritance is the third solution, though tables were object oriented classes, create a single table for the base type, containing attributes common to all subtypes, for each subtype create another table
+    
+    + semistructured data, if you must support new attributes frequently you can add a BLOB column to store data in a format such as xml or json, with encodes both the attribute names and their values
+    
+    advantage is it's completely extensible
+    disadvantage is sql has little support for accessing specific attribute, you can't easily select individual attributes within the blob for row-based restrict, aggregate calculation, sorting
+    
+    this design is best when you can't limit yourself to a finite set of subtypes and when you need complete flexibility to define new attributes
+
+- polymorphic associations
+    + reference multiple parent table, such as create a comment table both for bugs and new features
+    bugs 1->*              comments
+    feature request 1->*
+
+    + antipattern, using dual-purpose foreign key, use a common issue_id to record the reference id and a issue_type as string to record which table name is the source of the id
+    
+    + choose a mature and reputable framework to implement the polymorphic association or you are reinventing the wheel
+- mixing data with metadata, metadata object is sotred as a string value, such as in EAV the name of an attribute column is stored as a string in the attr_name
+
+- solution, creating intersection tables, compare to the polymorphic association it's better
+    comments 1 -> * Bugs comments   * <- bugs
+             1 -> * Features comments * <- feature requests
+             
+the meta data will enforce data integrity
+a potential weakness of this solution is that it permits association that you might not want t be permitted, declaring a unique constraint on the comment_id column of each intersection table to ensure a given comment can be referenced only once
+
+merging lanes, there are two ways to query the intersection tables
+    + normal sql union
+    SELECT b.issue_id, b.description, b.reporter, b.priority, b.status, b.severity, b.version_affected, NULL AS sponsor
+    FROM Comments AS c
+    JOIN (BugsComments JOIN Bugs AS b USING (issue_id))
+    USING (comment_id)
+    WHERE c.comment_id = 9876;
+    UNION
+    SELECT f.issue_id, f.description, f.reporter, f.priority, f.status, NULL AS severity, NULL AS version_affected, f.sponsor
+    FROM Comments AS c
+    JOIN (FeaturesComments JOIN FeatureRequests AS f USING (issue_id))
+    USING (comment_id)
+    WHERE c.comment_id = 9876;
+
+    provide null placeholders for columns that are unique to each parent table. 
+
+    + SQL COALESCE( ) function. This function returns its first non-null argument. 
+    SELECT c.*,
+        COALESCE(b.issue_id, f.issue_id ) AS issue_id,
+        COALESCE(b.description, f.description) AS description,
+        COALESCE(b.reporter, f.reporter ) AS reporter,
+        COALESCE(b.priority, f.priority ) AS priority,
+        COALESCE(b.status, f.status ) AS status,
+        b.severity,
+        b.version_affected,
+        f.sponsor
+    FROM Comments AS c
+        LEFT OUTER JOIN (BugsComments JOIN Bugs AS b USING (issue_id))
+            USING (comment_id)
+        LEFT OUTER JOIN (FeaturesComments JOIN FeatureRequests AS f USING (issue_id))
+            USING (comment_id)
+    WHERE c.comment_id = 9876;
+
+- create a common super-table, creating a base table that all of your parent tables extend and add the foreign key in the child comments table
+
+issues 1 -> 0..1 bugs
+       1 -> 0..1 feature requests
+       1 -> * comments
+    
+the primary key of bugs and feature are also foreign key, the point is that if you use an ancestor table like issues, you can rely on the enforcement of your database's data integrity by foreign keys
+    
+
+# multicolumn attributes
+- create multi columns, such as a bug table contain multiple kinds of tags
+CREATE TABLE Bugs (
+    bug_id SERIAL PRIMARY KEY,
+    description VARCHAR(1000),
+    tag1 VARCHAR(20),
+    tag2 VARCHAR(20),
+    tag3 VARCHAR(20)
+);
+unused column will be set to null
+- adding and removing values
+- antipattern, ensuring uniqueness, use the multicolumn attributes antipattern, the database can't prevent this
+- antipattern cost one tactic is to guess at a moderate number of columns and expand later. this change is costly in three ways
+    + restructuring a database table
+    + some database implement this kind of table restructure by defining a new table, copying the data from the old table
+    + when you add a column in the set for a multicolumn attribute you must revisit every sql statement in every application that uses this table
+- this antipattern is used when there is a max number of attributes
+- legitimate uses of the anitpattern
+- solution, create dependent table to solve this kind of requirement when it is hard to define the max columns
+    + create a dependent table with on column for the multivalue attribute. define a foreign key in the dependent table to associate the values to its parent row in the bug table
+    CREATE TABLE Tags (
+        bug_id BIGINT UNSIGNED NOT NULL
+        tag VARCHAR(20),
+        PRIMARY KEY (bug_id, tag),
+        FOREIGN KEY (bug_id) REFERENCES Bugs(bug_id)
+    );
+    
+    
+# metadata tribbles
+- objective, support scalability, performance degrades for any database query as volumne of data goes up. using indexes intelligently helps
+structure a database to imporve the performance
+- antipattern, clone tables or columns
+    + querying a table with few rows is quicker than querying a table with many rows
+    + split a single long table into multiple tables
+    + split a single column into multiple columns using column names based on distict values in another attribute
+
+- mixing metadata with data, for example, appending the year onto the base table name, making a data value into a column name or a table name, will create more problems than you solve
+
+- spawing tables
+
+CREATE TABLE Bugs_2008 ( . . . );
+CREATE TABLE Bugs_2009 ( . . . );
+CREATE TABLE Bugs_2010 ( . . . );
+
+ a new data value can cause a need for a new metadata object. This is not usually the relationship between data and metadata in SQL.
+
+- managing data intergrity, prevent the data is inserted into wrong table
+- synchronizing data, some of the data may update to make them belong to other table, this will also cause trouble
+- ensuring uniqueness, should make sure the primary key values are unique across all the split tables
+- synchronizing metadata, when add new column, it is hard to use union statement to query all the table
+- managing referential integrity, if a dependent table like comments references bugs, the dependent table cannot declare a foreign key, parent table is split into many
+- identifying metadata tribbles columns
+- legitimate uses of the anitpattern, manually splitting tables is for archiving, removing historical data from day-to-day use
+- example sharding database at wordpress.com, make each customer use a individual database to isolate the database backup process, split database sensibly makes database administration tasks easier after the database size passes a certain threshold
+- partition and normalize, there are better ways to improve performance if a table gets too large, instead of splitting table manually, include horizontal partitioning, vertical partitioning and using dependent tables
+    + horizontal partitioning, it is a feature, define a logical table with some rule for separating rows into individual partitions, the database manages the rest
+    physically the table is split, but you can still execute the sql statements against the table as whole, split table by row
+
+    in mysql 5.1, support 
+
+    CREATE TABLE Bugs (
+        bug_id SERIAL PRIMARY KEY,
+        -- other columns
+        date_reported DATE
+    ) PARTITION BY HASH ( YEAR(date_reported) )
+    PARTITIONS 4;
+
+    + vertical partitioning, split table by column, use to separate BLOB(binary large object block) column to physical separate from other columns in a table
+
+    CREATE TABLE ProductInstallers (
+        product_id BIGINT UNSIGNED PRIMARY KEY,
+        installer_image BLOB,
+        FOREIGN KEY (product_id) REFERENCES Products(product_id)
+    );
+
+    store all variable data in a separate table then queries against the primary table can benefit the speed
+    
+- fixing metadata tribbles columns, the remedy for metadata tribbles columns is to create a dependent table
+CREATE TABLE ProjectHistory (
+    project_id BIGINT,
+    year SMALLINT,
+    bugs_fixed INT,
+    PRIMARY KEY (project_id, year),
+    FOREIGN KEY (project_id) REFERENCES Projects(project_id)
+);
+
+instead of one row per project with multiple columns for each year, use multiple rows with one column for bugs fixed.
+
+
+# physical database design antipatterns
+- rounding error, floating point multiply error
+- floating number in sql, according to the IEEE 754 standard
+- rounding by necessity
+    + not all values you can describe in decimal can be stored in binary, some numbers must be rounded to a value that is very close
+    + such as save 1.333... to save this have to compromise to use finite precision
+    + decimal 59.95 have to use infinite precision to save it in binary
+    + you have to assume that any value in the database column may have been rouned
+    + some of the data types support related data types called double precision and real
+- using float in sql
+    + using float equal to select a row may get no result such as, to prevent this happen, should use ABS to strip the sign from difference, compare the difference small enough to treat is effectively equal
+    select * from accounts where hourly_rate = 59.95
+    
+    compare with threshold
+    SELECT * FROM Accounts WHERE ABS(hourly_rate - 59.95) < 0.000001;
+    
+    SELECT * FROM Accounts WHERE ABS(hourly_rate - 59.95) < 0.0000001;
+    
+- floating type document reference
+http://en.wikipedia.org/wiki/IEEE_754-1985
+david goldberg's article "What Every Computer Scientist Should Know About Floating-Point Arithmetic"
+
+- using exact values in financial applications is important
+- how to recognize the antipattern
+- legitimate uses of antipattern
+    + need real number values with a greater range than integer or numeric
+    + oracle uses the float data type to mean an exact scaled numeric whereas the binary_float data type is an inexact numeric
+
+- solution, use numeric data type, use numeric or decimal sql data types for fixed-precision fractional numbers
+    + precision of 9 means
+    can store a value like 123456789 not 1234567890
+    
+    +  precision of 9 with a scale of 2 means you can store a value like 1234567.89, but not 12345678.91 or 123456.789.
+    
+    + numeric and decimal store rational numbers without rounding as the floating do
+    
+- do not use float if you can avoid it
+
+
+# 31 flavors
+- objective, restrict a column to specific values
+- specify values in the column definition
+    + use check constraint on the column
+    + this kind of solution is hard to maintain when add new values for the column
+- solution, specify values in data
+    + restrict values in a column, create a lookup table with one row for each value you allow in the bugs.status column, then declare a foreign key constraint on the bugs.status
+
+    CREATE TABLE BugStatus (
+    status VARCHAR(20) PRIMARY KEY
+    );
+    
+    INSERT INTO BugStatus (status) VALUES ('NEW' ), ('IN PROGRESS' ), ('FIXED' );
+    
+    CREATE TABLE Bugs (
+        -- other columns
+        status VARCHAR(20),
+        FOREIGN KEY (status) REFERENCES BugStatus(status)
+        ON UPDATE CASCADE
+    );
+
+
+# phantom files
+- when database table associate many images with database entities, the application open each file by the path
+- objective store images or other bulky media, query database to retrieve the relative image files
+- assume you must use files, likewise you can store multiple images in a dependent table, many people store the image as a file on the filesystem and store the path to the file as a varchar
+this kind of solution have multiple risks
+- files don't obey delete, transaction isolation, rollback, database backup tools
+- Use BLOB Data Types As Needed
+
+# Index Shotgun
+- objective, optimize performance
+- the best technique for improving performance in your database is use indexes well
+- using indexes without a plan
+    + defining no indexes or not enough indexes
+    + defining too many indexes or indexes that don't help
+    + running queries that no index can help
+
+- ansi sql standard says nothing about indexes, every brand of database is free to implement indexes differently
+
+- when no index can help, beware to write queries base on the indexes
+CREATE INDEX TelephoneBook ON Accounts(last_name, first_name);
+
+queries can't benifit from the indexes
+    + SELECT * FROM Accounts ORDER BY first_name, last_name;
+    + SELECT * FROM Bugs WHERE MONTH(date_reported) = 4;
+
+some databases support indexes on expressions, this kind of index only benefit the query use the expression
+
+- low-selectivity indexes, the lower the selectivity ratio the less effective an index is 
+
+database tracks the selectivity of indexes and shouldn’t use an index that gives no benefit
+
+- solution, mentor your indexes
+- Disable any query result caching while you’re measuring query performance. 
+- Remember to disable or turn down the reporting rate of profilers after you’re done measuring
+- explain, query execution plan(QEP), the syntax to request a QEP varies by database brand
+
+database brand          QEP reporting solution
+ibm db2                 explain, db2expln, command, or visual explain
+microsoft sql server    set showplan_xml or display execution plan
+mysql                   explain
+oracle                  explain plan
+postgreSQL              explain
+sqlite                  explain
+
+the information in a QEP report is vendor-sepcific. you should read the mysql manual page "optimizing queries" with explain
+- nominate
+- covering indexes, if an index provides all the columns we need, then we don't need to read rows of data from the table at all
+
+CREATE INDEX BugCovering ON Bugs
+(status, bug_id, date_reported, reported_by, summary);
+
+SELECT status, bug_id, date_reported, summary
+FROM Bugs WHERE status = 'OPEN' ;
+
+The database doesn’t need to read the corresponding rows from this table. You can’t use covering indexes for every query, but when you can, it’s usually a great win for performance
+
+some of database have tools to do this
+    + ibm db2 design advisor
+    + microsoft sql server database engine tuning advisor
+    + mysql enterprise query analyzer
+    + oracle automatic sql tuning advisor
+
+- test, creating indexes, profile your queries again
+- rebuild, provide the most efficiency when they are balanced, each database brand uses vendor-specific terminology syntax and capabilities
+
+database brand          index maintenance command
+ibm db2                 rebuild index
+ms sql server           alter index .. reorganize, alter index ... rebuild, or dbcc dbreindex
+mysql                   analyze table or optimize table
+oracle                  alter index ... rebuild
+postgreSQL              vaccum or analyze
+sqlite                  vacumm    
+
+
+# fear of the unknown
+- objective distinguish missing values, sql supports a special null value corresponding to the NULL keyword
+    + you can use null in palce of a value that is not available at the time the row is created
+    + given column can use a null value when it has no applicable value on a given row
+    + a function can return a null when given invalid inputs
+    + an outer join uses null values as placeholders for the columns of an unmatched table in a outer join
+- antipattern, use null as an ordinary value or vice versa, null value follows some special behavior too
+    + using null in expressions
+
+    select hours + 10 from bugs
+    if hours is null then the query will return null
+
+    null is not the same as zero, A number ten greater than an unknown is still an unknown.
+
+    everyting operate with null is return null
+    
+    + searching nullable columns
+    
+    SELECT * FROM Bugs WHERE assigned_to = 123;
+    
+    SELECT * FROM Bugs WHERE NOT (assigned_to = 123);
+    
+    + it is common to make the following mistakes searching for null values or non-null values
+    
+    SELECT * FROM Bugs WHERE assigned_to = NULL;
+    SELECT * FROM Bugs WHERE assigned_to <> NULL;
+    
+    should use
+    select * from bus where assigned_to is not null;
+    
+    but a comparison to NULL is never true
+    
+    + using null in query parameters, you can't directly use null as this kind of query parameters
+    
+    SELECT * FROM Bugs WHERE assigned_to = ?;
+    
+- avoiding the issue, handling null makes queries more complex,     `but sometime for the missing values should use null, it's better than choose a special value to identity as null be cause this will become more harder to maintain
+
+- are null relational, use null should be take care
+- legitimate uses of the antipattern
+    + the antipattern is using null like ordinary value or using an ordinary value like null
+    
+    + similarly, user input cannot represent a null directly
+        * myslq's mysqlimport tool treat \N represent a null
+        * .net 2.0 and newer supoprts a property called convertEmptyStringToNull
+    
+- use null as a unique value, sql's three-valued logic, true/false/null
+- null in scalar expression
+expression          expected    actual  because    
+NULL = 0            TRUE        NULL Null is not zero.
+NULL = 12345        FALSE       NULL Unknown if the unspecified value is equal to a given value.
+NULL <> 12345       TRUE        NULL Also unknown if it’s unequal.
+NULL + 12345        12345       NULL Null is not zero.
+NULL || ’string’    ’string’    NULL Null is not an empty string.
+NULL = NULL         TRUE        NULL Unknown if one unspecified value is the same as another.
+NULL <> NULL        FALSE       NULL Also unknown if they’re different.    
+    
+- null in boolean expression, null is neither true nor false
+expression          expected    actual because
+NULL AND TRUE       FALSE       NULL    Null is not false.
+NULL AND FALSE      FALSE       FALSE   Any truth value AND FALSE is false.
+NULL OR FALSE       FALSE       NULL    Null is not false.
+NULL OR TRUE        TRUE        TRUE    Any truth value OR TRUE is true.
+NOT (NULL)          TRUE        NULL    Null is not false.
+
+- using 'NULL' to compare to null value is not always right
+SELECT * FROM Bugs WHERE assigned_to <> 'NULL' ;
+this will works when assigned_to is a integer but will not work in
+SELECT * FROM Bugs WHERE assigned_to = 'NULL'
+    
+    
+# ambiguous groups
+- get row with greatest value per group
+for example get lastest bug reported for each product in the bugs database
+
+SELECT product_id, MAX(date_reported) AS latest, bug_id
+FROM Bugs JOIN BugsProducts USING (bug_id)
+GROUP BY product_id
+    
+bug this sql is not works correctly in some condition
+
+- antipattern, reference nongrouped columns, it reveals a common misconception that many programmers have about how gruping queries work in SQL
+    + single value rule
+    every column in the select-list of a query must have a single value row per row group
+    
+    most database will report error when you try to pass columns named as arguments to aggregate functions when it is not in the group by clause
+    
+   + sql can't make inference in several cases
+        * if two bus have he exact same value for date_reported, and that is the greatest value in the group, which value of bug_id should be query report?
+    
+        * if you query for two different aggregate functions, min(), max such as, these probaly correspond to two different rows in the group
+    
+        SELECT product_id, MAX(date_reported) AS latest,
+        MIN(date_reported) AS earliest, bug_id
+        FROM Bugs JOIN BugsProducts USING (bug_id)
+        GROUP BY product_id;
+            
+- sql support a query modifier called distinct which also could be achieve by group
+SELECT DISTINCT date_reported, reported_by FROM Bugs;
+
+equal to
+
+SELECT date_reported, reported_by FROM Bugs
+GROUP BY date_reported, reported_by;            
+            
+- mysql and sqlite can't guarantee a reliable result for a column
+- several way to resolve this antipattern
+    + query only functionally dependent columns
+            
+    SELECT product_id, MAX(date_reported) AS latest
+    FROM Bugs JOIN BugsProducts USING (bug_id)
+    GROUP BY product_id;
+            
+    only select the relative group by column without other unused column
+    
+    + using a correlated subquery
+    SELECT bp1.product_id, b1.date_reported AS latest, b1.bug_id
+    FROM Bugs b1 JOIN BugsProducts bp1 USING (bug_id)
+    WHERE NOT EXISTS
+    (SELECT
+    *
+    FROM Bugs b2 JOIN BugsProducts bp2 USING (bug_id)
+    WHERE bp1.product_id = bp2.product_id
+    AND b1.date_reported < b2.date_reported
+                
+    + using a derived table
+            
+    SELECT m.product_id, m.latest, MAX(b1.bug_id) AS latest_bug_id
+    FROM Bugs b1 JOIN
+    (SELECT product_id, MAX(date_reported) AS latest
+    FROM Bugs b2 JOIN BugsProducts USING (bug_id)
+    GROUP BY product_id) m
+    ON (b1.date_reported = m.latest)
+    GROUP BY m.product_id, m.latest;
+            
+    Use the derived table solution as a more scalable alternative to the correlated subquery. The derived table is noncorrelated        
+            
+    + using a join, create a join that tries to match against a set of rows that may not exist, called an outer join
+    
+    + using an aggregate function for extra columns, 
+            
+    + concatenating all values per group
+
+
+# random selection
+- objectie, fetch a sample row
+    + displaying rotating content
+    + auditing a subset of records
+    + generate test data
+    + assigning incoming calls to available operators
+
+- antipattern, sort data randomly
+SELECT * FROM Bugs ORDER BY RAND() LIMIT 1;
+
+Sorting by a nondeterministic expression (RAND( )) means the sorting cannot benefit from an index
+
+a table scan, and it often involves saving the entire result as a temporary table and sorting it by physically swapping rows.
+
+- legitimate uses of the antipattern, sort by random is tolerable if your data set is bound to be small
+
+- solution, in no particular order
+    + choose a random key value between 1 and max
+    SELECT b1.* FROM Bugs AS b1 
+    JOIN (SELECT CEIL(RAND() * (SELECT MAX(bug_id) FROM Bugs)) AS rand_id) AS b2
+    ON (b1.bug_id = b2.rand_id);
+
+    This solution assumes that primary key values start at 1 and that primary key values are contiguous
+            
+    + choose random row use offset
+    + proprietary solution, 
+    
+    
+# poor man's search engine
+- objective, full text search
+- antipattern, pattern matching predicates they have poor performance
+SELECT * FROM Bugs WHERE description REGEXP 'crash' ;
+- solution, use the right toool
+    + vendor extensions
+    + full-text index type for mysql
+    ALTER TABLE Bugs ADD FULLTEXT INDEX bugfts (summary, description);
+    
+    + text indexing in oracle, support text-indexing features since oracle 8
+        * content, index type for a single text column
+        * ctxcat, index type is specialized for short text samples
+        * ctxxpath, specialized for searching an xml document with the existsnode()
+        + ctrule, have a large collection of documents in your database and you need to classify them based on their content
+    
+    + full-text search in microsoft sql server
+    EXEC sp_fulltext_table 'Bugs' , 'create' , 'BugsCatalog' , 'bug_id'
+    
+    SELECT * FROM Bugs WHERE CONTAINS(summary, '"crash"' );
+    
+    + full-text search in sqlite,  Three versions of the searchable text extension exist, known as FTS1, FTS2, and FTS3
+    
+    + sphinx search, Sphinx Search (http://www.sphinxsearch.com/) is an open source search engine technology that integrates well with MySQL and PostgreSQL
+    
+    + apache lucene, http://lucene.apache.org, mature search engine for java applications
+    
+    + roll your own, define a table Keywords to list keywords for which users search, and define an intersection table BugsKeywords to establish a many-tomany relationship
+    
+    CREATE TABLE Keywords (
+    keyword_id SERIAL PRIMARY KEY,
+    keyword VARCHAR(40) NOT NULL,
+    UNIQUE KEY (keyword)
+    );
+    CREATE TABLE BugsKeywords (
+    keyword_id BIGINT UNSIGNED NOT NULL,
+    bug_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (keyword_id, bug_id),
+    FOREIGN KEY (keyword_id) REFERENCES Keywords(keyword_id),
+    FOREIGN KEY (bug_id) REFERENCES Bugs(bug_id)
+    );
+    
+    
+    write a stored procedure to make it easier to search for a given keyword.
+    
+    CREATE PROCEDURE BugsSearch(keyword VARCHAR(40))
+    BEGIN
+            SET @keyword = keyword;
+        PREPARE s1 FROM 'SELECT MAX(keyword_id) INTO @k FROM Keywords
+        WHERE keyword = ?';
+        
+        EXECUTE s1 USING @keyword;
+        DEALLOCATE PREPARE s1;
+        
+        IF (@k IS NULL) THEN
+            PREPARE s2 FROM 'INSERT INTO Keywords (keyword) VALUES (?)' ;
+            EXECUTE s2 USING @keyword;
+            DEALLOCATE PREPARE s2;
+            SELECT LAST_INSERT_ID() INTO @k;
+            PREPARE s3 FROM 'INSERT INTO BugsKeywords (bug_id, keyword_id)
+            SELECT bug_id, ? FROM Bugs
+            WHERE summary REGEXP CONCAT('' [[:<:]]'' , ?, '' [[:>:]]'' )
+            OR description REGEXP CONCAT('' [[:<:]]'' , ?, '' [[:>]]'' )';
+            EXECUTE s3 USING @k, @keyword, @keyword;
+            DEALLOCATE PREPARE s3;
+        END IF;
+        PREPARE s4 FROM 'SELECT b. * FROM Bugs b
+        JOIN BugsKeywords k USING (bug_id)
+        WHERE k.keyword_id = ?';
+        
+        EXECUTE s4 USING @k;
+        DEALLOCATE PREPARE s4;
+    END
+    
+    define a trigger to populate the intersection table as each new bug is inserted. If you need to support edits to bug descriptions, you may also have to write a trigger to reanalysis text and add or delete rows in the BugsKeywords table
+    
+    CREATE TRIGGER Bugs_Insert AFTER INSERT ON Bugs
+        FOR EACH ROW
+    BEGIN
+        INSERT INTO BugsKeywords (bug_id, keyword_id)
+        SELECT NEW.bug_id, k.keyword_id FROM Keywords k
+        WHERE NEW.description REGEXP CONCAT('[[:<:]]' , k.keyword, '[[:>:]]' )
+        OR NEW.summary REGEXP CONCAT('[[:<:]]' , k.keyword, '[[:>:]]' );
+    END
+  
+
+  
+# spaghetti query
+- objective, decrease sql queries
+one sql query is difficult, complex and expensive so they reason that two sql queries must be twice as bed
+
+- antipattern solve a complex problem in one step
+    + unintended products make by join or aggregate function
+    + may produce wrong Cartesian products
+    
+- solution, divide the conquer
+    + split up a spaghetti query into several simpler queries
+
+    + query doesn't produce an unwanted cartesian product
+    + easier to add other queries
+    + sql engine is more reliably to execute a simple query than a complex query
+    + easier to explain how several straightforward queries work
+
+    + example select all the fixed and opened bugs from sql table
+    (SELECT p.product_id, f.status, COUNT(f.bug_id) AS bug_count
+    FROM BugsProducts p
+    LEFT OUTER JOIN Bugs f ON (p.bug_id = f.bug_id AND f.status = 'FIXED' )
+    WHERE p.product_id = 1
+    GROUP BY p.product_id, f.status)
+
+    UNION ALL
+
+    (SELECT p.product_id, o.status, COUNT(o.bug_id) AS bug_count
+    FROM BugsProducts p
+    LEFT OUTER JOIN Bugs o ON (p.bug_id = o.bug_id AND o.status = 'OPEN' )
+    WHERE p.product_id = 1
+    GROUP BY p.product_id, o.status)
+
+    + writing sql automatically with sql, use code generation
+
+    + you asked for it you got it
+    
+- legitimate uses of the antipattern
+only for testing current data
+    
+SELECT b.*, a.first_name, a.email
+FROM Bugs b JOIN Accounts a
+    ON (b.reported_by = a.account_id);
+    
+- solution, name columns explicitly
+take all you want, but eat all you take
+   
+    
+# implicit columns
+- objective, reduce typing
+- antipattern, a shortcut
+    + breaking refactoring
+    In an INSERT statement that uses implicit columns, you must give values for all columns in the same order that columns are defined in the table. 
+
+    + hidden costs
+    Even a gigabit network can be saturated by a hundred application clients querying for thousands of rows at a time.
+
+
+# application development antipatterns
+- Objective: Recover or Reset Passwords  
+- Antipattern: Store Password in Plain Text
+- web application project and books for security
+19 Deadly Sins of Software Security [HLV05]. 
+Another good resource is the Open Web Application Security Project http://www.owasp.org
+- solution,  Store a Salted Hash of the Password
+SHA2('xyzzy') = '184858a00fd7971f810848266ebcecee5e8b69972c5ffaed622f5ee078671aed'
+- using a hash in sql
+CREATE TABLE Accounts (
+    account_id SERIAL PRIMARY KEY,
+    account_name VARCHAR(20),
+    email VARCHAR(100) NOT NULL,
+    password_hash CHAR(64) NOT NULL
+);
+
+INSERT INTO Accounts (account_id, account_name, email, password_hash) VALUES (123, 'billkarwin' , 'bill@example.com' , SHA2('xyzzy' ));
+    
+- Adding Salt to Your Hash, prevent hacker to access and use his own hash password database compare with your hash password database
+    
+“dictionary attack” is by including a salt in your password-encoding expression. A salt is a string of meaningless bytes you concatenate with the user’s password
+    
+- Hiding the Password from SQL this also prevent sql injection attack
+The hash( ) function is guaranteed to return only hexadecimal digits
+
+- Resetting the Password Instead of Recovering the Password
+    CREATE TABLE PasswordResetRequest (
+    token CHAR(32) PRIMARY KEY,
+    account_id BIGINT UNSIGNED NOT NULL,
+    expiration TIMESTAMP NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES Accounts(account_id)
+    );
+    SET @token = MD5('billkarwin' || CURRENT_TIMESTAMP);
+    INSERT INTO PasswordResetRequest (token, account_id, expiration)
+    VALUES (@token, 123, CURRENT_TIMESTAMP + INTERVAL 1 HOUR);
+
+
+    + When the application receives a request for the special reset_passwordscreen, the value in the token parameter must match a row in the PasswordResetRequest table
+- cryptography tool
+PBKDF2 (http://tools.ietf.org/html/rfc2898) is a widely used key strengthening standard.
+Bcrypt (http://bcrypt.sourceforge.net/) implements an adaptive hashing function.
+
+
+
+# sql injection
+- objective, write dynamic sql queries, build sql queries as strings and combine application variables into the string, called dynamic sql
+
+- antipattern, execute unverified input as code
+    + accidents may happen
+    http://bugs.example.com/project/view.php?name=O’Hare
+    
+    SELECT * FROM Projects WHERE project_name = '$project_name'
+
+    + the top web security threat, change password logic in sql
+    $sql = "UPDATE Accounts SET password_hash = SHA2('$password' ) WHERE account_id = $userid"
+
+    http://bugs.example.com/setpass?password=xyzzy&userid=123 OR TRUE
+
+    then the sql will change the password for every count in the database
+    
+- the quest for a cure, In reality, only single technique isn't proof against all forms of SQL Injection
+    + Escaping input Values, But it doesn’t work as well for nonstring content.
+    
+    + query parameters, a panacea to SQL Injection is to use query parameters. parameters aren’t a universal solution because the value of a query parameter is always interpreted as a single literal value. this don't fit for
+        * no lists of values can be a single parameter
+        * no table identifier can be a parameter
+        * no column identifier can be a parameter
+        * no sql keyword can be a parameter
+
+        * it is hard to debug, the query have to log when execute the query
+        
+    + stored procedures, However, it’s possible to use dynamic SQL in stored procedures unsafely.
+
+    + data access frameworks No framework can force you to write safe SQL code.
+
+- solution, trust no one
+    + filter input
+    + parametrize dynamic values
+    + quoting dynamic values
+    + isolate user input from code
+    + get a buddy to review your code
+
+
+# Pseudokey Neat-Freak
+- objective, tidy up the data, there is a certain tpe of person who is unnerved by a gap in a series of numbers.
+bug_id      status  product_name
+1           OPEN    Open RoundFile
+2           FIXED   ReConsider
+4           OPEN    ReConsider
+
+- filling the corners
+    + assigning numbers out of sequence
+    instead of allocating a new primary key value using the automatic pseudokey mechanism, and select the unused the id then the gap will be automatic filled
+    
+    SELECT b1.bug_id + 1
+    FROM Bugs b1
+    LEFT OUTER JOIN Bugs AS b2 ON (b1.bug_id + 1 = b2.bug_id)
+    WHERE b2.bug_id IS NULL
+    ORDER BY b1.bug_id LIMIT 1;
+
+    This method is both inefficient and weak for concurrency
+    
+    + renumbering existing rows
+    use a strategy of updating the key values of existing rows to eliminate gaps and make all the values contiguous. this may still be a temporary solution when the pseudokey generator will allocate a new value and leaving a new gap
+
+    + manufacturing data discrepancies, It’s not a good idea to reuse the row’s primary key value
+
+- solutioin, get over it, the primary key don't have to be consecutive numbers to identify rows
+    + numbering rows, row numbers in a query result don't correspond to primary key values in the table, especially when you use query operations like join group by or order by
+    SELECT t1.* 
+    FROM
+        (SELECT a.account_name, b.bug_id, b.summary,
+        ROW_NUMBER() OVER (ORDER BY a.account_name, b.date_reported) AS rn
+        FROM Accounts a JOIN Bugs b ON (a.account_id = b.reported_by)) AS t1
+    WHERE t1.rn BETWEEN 51 AND 100;
+
+    + using GUIDs, A GUID is a pseudorandom number of 128 bits 
+        gains two advantages over traditional psesudokey generators
+        * you can generate pseudokeys on multiple database servers oncurrently without using the same values
+        * no one wil complain about gaps
+        
+        disadvantage
+        * the values are long nad hard to type
+        * the values are random, you can't infer any pattern or relay on greaer value indicating a more recent row
+        * storing a GUID requires 16 bytes, this takes more space and runs more slowly than using a typical 4-byte integer
+
+    + are integers a nonrenewable resource?
+    A 32-bit integer can represent a maximum of 2^32 distinct values. It’s true that each time you allocate a value for a primary key, you’re one step closer to the last one.
+    
+    nsert 1,000 rows per second, 24 hours per day, you can continue for 136 years before you use all values in an unsigned 32-bit integer.
+    
+    64-bit integer will  continuously for 584,542 years.
+    
+    
+# see no evil
+- objective, write less code, everyone wants to write elegant code
+- antipattern, making bricks without straw
+<?php
+$sql = "SELECT * FROM Bugs";
+if ($bug_id) {
+$sql .= "WHERE bug_id = " . intval($bug_id);
+}
+$stmt = $pdo->prepare($sql);?>
+Developers waste an unbelievable amount of time and energy trying to debug problems like this by looking at the code that builds the SQL, instead of looking at the SQL itself.
+- solution, recover from errors gracefully
+    + maintain the rhythm, checks the status after each all that could cause a error
+    <?php
+    try {
+    $pdo = new PDO("mysql:dbname=test;host=localhost",
+    "dbuser", "dbpassword");
+    } catch (PDOException $e) {
+        report_error($e->getMessage());
+        return;
+    }
+    $sql = "SELECT bug_id, summary, date_reported FROM Bugs
+    WHERE assigned_to = ? AND status = ?";
+    if (($stmt = $pdo->prepare($sql)) === false) {
+        $error = $pdo->errorInfo();
+        report_error($error[2]);
+        return;
+    }
+    if ($stmt->execute(array(1, "OPEN")) === false) {
+        $error = $stmt->errorInfo();
+        report_error($error[2]);
+    return;
+        
+- retrace your steps
+    + build your sql query in a variable, instead of building it ad hoc in the arguments of the api method, this gives you the opportunity to examime the variable before you use it
+    + choose a palce to ouput sql that is not part of your application output
+    + do not print the sql query with html comments
+    
+    
+# diplomatic immunity
+- objective, employ best practices
+    + keeping application source code unser revision control
+    + developing and running automated unit tests or functional tests
+    + writing documentation
+
+- antipattern, make sql a second-class citizen
+    + The role of software engineer and database administrator are separate in some companies.
+    + The SQL language used for relational databases is different from conventional programming. 
+    + IDE is good for normal programming language but not good support for sql
+    + in it, it's ordinary for knowledge and operation of the database to be focused on one person
+
+- solution, establish a big-tent culture of quality
+    + specify project requirements clearly and in writing
+    + design and develop a solution for your requirements
+    + validate and test that your solution match the requirements
+
+- exhibit docmuemntation
+    + entity-relationship diagram
+    + tables columns and views comment
+    + relationships, referential integrity constraints implement dependencies between tables
+    + triggers, data validation, data transformation and logging database
+    + stored procedures, document your stored procedures like an api
+        * what problem is the procedure solving?
+        * does a procedure perform any changes to data
+        * input, output type
+        * do you intend the procedure to replace a certain type of query
+        * do you use the procedure to grant unprvileged users access to privileged tables
+    + sql security, what database users do you define for applications to use?
+    + database infrastructure, this information is chiefly used by it staff and dbas
+- trail of evidence source control
+- burden of proof, testing
+- case, multiple branches
+
+# magic beans
+- objective, simplify models in mvc
+    + The controllers accept user input
+    + The models handle everything else
+    + The views present information
+
+input -> controller -> view -> output
+            |           |
+            |           |
+            --> Model <--
+
+- antipattern, the model is an active record
+    + CRUD operations, Create Read Update Delete
+    + active record, is a data access pattern, you define a class corresponding to a table or view in your database, you can call a class method find() that returns an object instance of the class, you can also use either inserts a new row or save() to updates the existing row
+
+- leaky abstractions, an abstraction simplifies
+    + some complex JOIN, GROUP BY method is not easy to complete with Active Record
+    + the more enhancements expose the fact that class uses sql internally
+
+- Golden Hammer antipattern: if the only tool you have is a hammer, treat everything as if it were a nail.
+
+- active record couples models to the schema, 
+    + refactor your database to represent a new structure is not easy when use active record pattern
+    + active record exposes CRUD functions, other programmers could use CRUD function directly instead of use the active record
+    
+    + active record encourage an anemic domain model
+
+    + using testing magic beans is hard, test each layers in mvc is hard
+        * Testing the model
+        * Testing the view
+        * Testing the controller
+
+     separate business logic from the database access and separate business logic from presentation, it would help to meet the goals of MVC
+
+- solution, the model has a active record
+    + Grasping the Model
+    + information expert
+    HAS-A (aggregation), IS-A (inheritance)
+    + creator, A domain model that aggregates its DAOs should have the responsibility to create those objects.
+    + low coupling
+    + high cohension
+    + putting the domain model into action, 
+        * the class interaction diagram
+        * by decoupling the model's interface from its underlying database structure
+        * each model class creates the objects to interact with one or more tables
+        * the model classes encapsulate the hide the database queries
+        * the in some cases, a query is too complex to do easily through a dao and writing custom sql is needed
+    + test plan object, you should be able to test your model without connecting to a live database. If you decouple your model from its DAO
+    separate models and controllers and separate data access components from models
+        
+- get down to each
+spaghetti code, if you don't follow the object oriented design
+        
+- normalization database
+    + to represent facts abuot the real world in a way that we can understand
+    + to reduce storing facts redundantly and to prevent anomalous or inconsistent data
+    + to support integrity constraints
+    
+- first normal form, the table must be a relation, the table msut not have any repeating groups
+row in a relation is a combination between several sets, choosing one value from each set.
+repeating group means one row may have mutiple values from the given set
+bugs 1 -->* bugsTags
+    
+- second normal form, is identical to the first normal form, unless your table has a compound primary key.
+
+reduce the redundancy vs second normal form
+
+bugTags  *<--- 1 Tags
+
+- third normal form, make columns map to other table's primary key to reduce the Redundancy data
+
+- boyce-codd formal form
+third normal form, all nonkey attributes must depend on the key of the table. In Boyce-Codd normal form, key columns are subject to this rule as well.
+this come up when the table has multiple sets of columns could serve as the table's key
+
+- fourth normal form, many-to-many relationship deserves an additional table:
+ splitting the table so that we have one intersection table for each type of many-to-many relationship.
+
+- fifth normal form, meets the criteria of Boyce-Codd normal form and does not have a compound primary key is already in fifth normal form
+
+- further normal forms, Domain-Key normal form (DKNF) says that every constraint on a table is a logical consequence of the table’s domain constraints and key constraints. 
+
+- common sense, rules of normalization aren't esoteric or complicated, they're really just a common sense technique to reduce redundancy and imporve consistency of data
+
+
+
+
+
+# reference 
+- books
+SQL Programming Style
+
+
+
+
+
+
+
+
+ 
+    
+    
+    
+    
+    
+    

@@ -1,0 +1,1764 @@
+﻿The Essential of COM=Kenny Kerr;Note=Erxin
+
+# Microsoft Component Object Model
+- Introduction
+    + don't rely on any version of windows
+
+- what is com 
+com is an architecture for component reuse that allows dynamic and efficient composition of systems from independently developed binary components 
+Don Box
+- core concepts 
+    + essential 
+    IUnknown and a Cpp compiler 
+    
+    + nonessential 
+    Registry
+    Apartments and activation 
+    Interface Definition Language(IDL)
+    Proxies and marshaling 
+    Servers and security 
+    VARIANT, BSTR, and SAFEARRAY
+    DCOM
+    ActiveX
+    OLE
+    servers
+    security 
+   
+    + a cpp compiler is required, it is the only language that support compose COM at any level without runtime support 
+
+- Pillars of COM 
+    + interface, the main thing, you understand com 
+    + classes, implement the com interfaces 
+    + apartments 
+    + security 
+    
+- history 
+    + OLE 1 release in 1990, dde allow application communication 
+    + OLE2(built on COM) released in 1993 
+    + office use com 
+    + windows shell use com 
+    + microsoft transaction server 
+    + window nt.4.0 option package to scale the window server 
+    + directx, relys only centres of com 
+    + xmllight xml faster 
+    
+- the players 
+    + principla architecture and developers 
+        * tony williams 
+        * bob atkinson 
+        * craig wittenberg 
+        * rick hill 
+        
+    + principal evangelists 
+        * Kraig brockschmidt 
+        * Don Box 
+
+
+# COM and C++ 
+- introduction, com++ 98 background 
+- COM as bettern c++ 98 
+    + c++ and object-oriented programming 
+    + modern c++ .. and the dark age of managed code and treated cpp
+    + software distribution, library vendor, prevent load some module into memory redundantly
+
+    + dll, use dynamic link to solve the problem, there is a portability issue 
+    + binary standard, at a binary level, adopted from c in a portable fasion 
+    c++ compilation model is designed to support a tight binary coupling so that the compiler and linker can produce insanely efficient code 
+
+- dynamic linking, you need to understand the dll before com 
+    + dynamic vs. static, OS developer to load code runtime 
+    + a dll can export a c-style function, an application can choose to load the dll in order to call this exported function 
+
+    + exporting c-style functions 
+    + performance, there may be large of chunk of code your application rarely use keeping this isolated in a dll is a efficient to improve your application start up time and reduce your memory footprint 
+    + additional benefits 
+
+    + demo 
+    //natural for c and c++ compilers and developers
+    #library.h
+    #pragma once 
+    
+    void Cluck();
+
+    //library.cpp 
+    #include library.h 
+    #include <stdio.h>
+    
+    void Cluck()
+    {
+        printf("c-style cluck!\n");
+    }
+
+    //done, we need to compile and link the file, use a separate module definition file is a simple way which are broken into sections 
+    //library.def 
+    EXPORTS
+    
+    Cluck 
+    // the file list is 
+    library.h, library.cpp, library.def 
+    
+    // next step is compile it to produce a dll and a lib file for applications to link with 
+    $ cl /W4 /LB library.cpp, library.def
+    cl is the shortcut of compile and link 
+    /W4, tell the compiler to warn about most code defects 
+    LD option tell the compiler to produce a dll, technically it pass the dll option to the linker 
+
+    //then use the produced library
+    //create application.cpp 
+    #include "library.h"
+    int main()
+    {
+        Cluck();
+    }
+    // compile the application 
+    $ cl /W4 application.cpp /link library.lib 
+    $ application.exe 
+    //will execute the application
+    
+    if delete the lib then the application will not be executable 
+    
+    if change the function definition of the dll, the application will not find the entry point of the Cluck function
+    
+    + use tool dependency walker 
+    
+    + calling convention, x64 calling convention will overwrite all the calling convention definition to a uniform version. if you want to port to 32bit processor, vc++ compiler also ignore calling convention when targeting arm processors 
+    
+    cdecl calling convertion, window api use the __stdcall stand call for most part
+    
+    + com standardize on other than the cdecl aslo support stdcall 
+    
+    + add function definition for the library and application 
+    void __stdcall HenCluck()
+    {
+        printf("c-style cluck!\n");
+    }
+    
+    void __stdcall HenCluck();
+    
+    need recompile the application to use the library
+    
+    + c# application to use the library, tell the names want to use the InteropServices namespace without qualification
+    using System.Runtime.InteropServices;
+    
+    class Application
+    {
+        [DllImport("library.dll")]
+        static extern void HenCluck();
+        
+        static void Main()
+        {
+            HenCluck();
+        }
+    }
+    //compile the application, by default will run all codes any processor architecture
+    //find out the processor architecture in command line 
+    $ echo %processor_architecture%
+    AMD64/x86
+    
+    the AMD is conspectus of 64 is the first produce by AMD 
+    //check the cpp compiler target by execute the compiler without parameters 
+    $ cl 
+    
+    //so the best way to do it is specify the platform parameter for the c# compiler 
+    // this will make sure the .net runtime will load the right runtime during execution 
+    $ csc /platform:x86 managed.cs 
+    
+- exporting objects to outside 
+    + COM involves cheating?!
+    this is where we need cheat a little, we can't rely on cpp that is standardize at a binary level 
+    
+    the designer of COM discovered was virtually all of the cpp compiler on the window platform happens to implement virtual function in the same way. this was a key discovery. then they decided to take the coincidence as a blessing and use it as the basis for COM's interface inheritance 
+    this enable polymorphism and com version of object-oriented programming, com also expected object implement the standard calling convention
+
+    + demo 
+        * create a interface for the exposed object 
+//library.h
+struct IHen
+{
+    virtual void __stdcall Cluck() = 0;
+    virtual void __stdcall Roost() = 0;
+};
+IHen* __stdcall CreateHen();
+  
+//make sure not using any not portable feature in cpp, avoid directly expose a cpp class directly 
+//so to expose a class instance, we need a factory method to create hens 
+
+        * update the module definition file 
+//library.def 
+EXPORTS 
+
+CreateHen 
+
+        * implement the library, remove the stdio header and instead use the windows.h which support a common TRACE macro 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+
+#define TRACE OutputDebugString
+
+struct Hen: IHen 
+{
+    Hen()
+    {
+        TRACE("Cheep!\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n")
+    }
+    
+    void __stdcall Cluck()
+    {
+        TRACE("Cluck\n");
+    }
+    
+    void __stdcall Roost()
+    {
+        TRACE("Zzzz!\n");
+    }
+};
+IHen* __stdcall CreateHen()
+{
+    return new Hen; 
+}
+//OutputDebugString is handy because it sends a string to any attached debugger, if one is not attached, you can also use SystemInternals 'Debug View application to view the debug output' this will separate the release build and debug build 
+//the Hen class is compiler specific but the interface is not 
+//the Cluck and Roost are callable in any c and cpp tool chain, but the construction and destruction are not. We'll deal with the constructor by hiding it inside the CreateHen function to expose the construction to the outside  
+    
+    * use the library
+//application.cpp 
+#include "library.h"
+
+int main()
+{
+    IHen* hen = CreateHen();
+    hen->Cluck();
+    hen-Roost();
+    
+    delete hen;
+}
+//this code will not call the destructor successfully, if you add virtual to the destructor will include an new issue, because calling the destructor is compiler specific
+//using a delete operator on a pointer to an object that wasn't allocated with a matching new operator gives unpredictable results 
+//we need lifetime management to solve this issue 
+
+- managing lifetime 
+    + how and when to delete? 
+    + if you new it, you must delete it, both of the operation is compiler specific 
+    + proliferation of interfaces may be implemented by a class, if simply add a virtual to the destructor, which interfaces should be added? and when to call the delete methods. add multiple delete method may cause delete heap object more than once 
+    
+    + demo 
+        * test add virtual delete function 
+//library.h 
+#pragma once 
+
+struct IHen 
+{
+    virtual void __stdcall Cluck() = 0;
+    virtual void __stdcall Roost() = 0;
+    virtual void __stdcall Delete() = 0;
+};
+
+IHen* __stdcall CreateHen();
+    
+        * add virtual Delete() implementation 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+
+#define TRACE OutputDebugString
+
+struct Hen: IHen 
+{
+    Hen()
+    {
+        TRACE("Cheep!\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n")
+    }
+    
+    void __stdcall Cluck()
+    {
+        TRACE("Cluck\n");
+    }
+    
+    void __stdcall Roost()
+    {
+        TRACE("Zzzz!\n");
+    }
+    
+    void __stdcall Delete()
+    {
+        delete this;
+    }
+};
+IHen* __stdcall CreateHen()
+{
+    return new Hen; 
+}
+    
+    * use the delete method to delete the object 
+//application.cpp 
+#include "library.h"
+
+int main()
+{
+    IHen* hen = CreateHen();
+    hen->Cluck();
+    hen-Roost();
+    
+    hen->Delete();
+}
+    
+//practice model is have each object manage account of outstanding references. Each time an interface pointer is provided, the count is incremented, each time interface pointer release account is descrease 
+    
+    * use AddRef and Release to help manage the lifetime
+//library.h 
+#pragma once 
+
+struct IHen 
+{
+    virtual void __stdcall Cluck() = 0;
+    virtual void __stdcall Roost() = 0;
+    virtual void __stdcall AddRef() = 0;
+    virtual void __stdcall Release() = 0;
+};
+
+//every time you need to duplicate a pointer, you simply call AddRef to tell the object that an additional reference has been taken, 
+
+IHen* __stdcall CreateHen();
+
+    * add implementation, the AddRef and Release could be implemented base on the requirement. Now just simple use the ++ and -- operator to simple the demo 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+
+#define TRACE OutputDebugString
+
+struct Hen: IHen 
+{
+    unsigned m_count;
+    
+    Hen():m_count(0)
+    {
+        TRACE("Cheep!\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n")
+    }
+    
+    void __stdcall Cluck()
+    {
+        TRACE("Cluck\n");
+    }
+    
+    void __stdcall Roost()
+    {
+        TRACE("Zzzz!\n");
+    }
+    
+    void __stdcall AddRef()
+    {
+        ++m_count;
+    }
+    
+    void __stdcall Release()
+    {
+        if(0 == --m_count)
+        {
+            delete this;
+        }
+    }
+};
+IHen* __stdcall CreateHen()
+{
+    IHen* result = new Hen; 
+    result->AddRef();
+    return result;
+}
+    
+    * make use of the new library in the application, the application can dish out the same Hen object simply by duplicating the pointer and calling the AddRef method to notify 
+//application.cpp 
+#include "library.h"
+
+int main()
+{
+    IHen* hen = CreateHen();
+    hen->Cluck();
+    hen-Roost();
+    
+    //we might want to manage the hen's roosting activities from this other block of code
+    {
+        IHen * hen2 = hen;
+        hen2->AddRef();
+        
+        hen2->Roost();
+        
+        hen2->Release();
+    }
+    hen->Release();
+}
+//this lifetime management function is limited by the stack 
+- Extending object, int the previous have a integration issue, whenever change the library we required to recompile the application to make it adapt to the new library
+    + interface are immutable contracts, supply by the physical and or binary signature, older component and newer component will not compatible 
+
+    + objects can still be extended base on the interface immutable, be we must make sure the object implemented consistent 
+    
+    + we also need to discover the new changes 
+    c++ includes a number of language elements that together are referred to as runtime-type information 
+    such as dynamic_cast operator, but RTTI is another compiler dependency feature 
+
+    + demo, we change the IHen interface to a more common interface name IObject
+        * change the interface file definition and adds more interfaces for demo the feature changes 
+//library.h
+struct IObject
+{
+    virtual void __stdcall AddRef() = 0;
+    virtual void __stdcall Release() = 0;
+};
+
+struct IHen:IObject
+{
+    virtual void __stdcall Cluck() = 0;
+    virtual void __stdcall Roost() = 0;
+};
+
+struct IHen2: IHen
+{
+    virtual void __stdcall Forage() = 0;
+};
+
+struct IOfflineChicken: IObject
+{
+    virtual void __stdcall Load(char const* file) = 0;
+    virtual void __stdcall Save(char const* file) = 0;
+};
+
+IHen* __stdcall CreateHen();
+
+        * change the implementation, the overlapping virtual functions need to be implemented only once within the Hen class. cpp compiler will take care of arranging the virtual function tables so that everything lines just so 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+
+#define TRACE OutputDebugString
+
+struct Hen: IHen 
+{
+    unsigned m_count;
+    
+    Hen():m_count(0)
+    {
+        TRACE("Cheep!\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n")
+    }
+    
+    //
+    // IObject
+    //
+    void __stdcall AddRef()
+    {
+        ++m_count;
+    }
+    
+    void __stdcall Release()
+    {
+        if(0 == --m_count)
+        {
+            delete this;
+        }
+    }
+    
+    //
+    // IHen
+    //
+    
+    void __stdcall Cluck()
+    {
+        TRACE("Cluck\n");
+    }
+    
+    void __stdcall Roost()
+    {
+        TRACE("Zzzz!\n");
+    }
+    
+    //
+    // IHen2
+    //
+    void __stdcall Forage()
+    {   
+        TRACE("Forage!\n");
+    }
+    
+    //
+    // IOfflineChicken
+    //
+    void __stdcall Load(char const* /*file*/)
+    {
+    
+    }
+    
+    void __stdcall Save(char const* /*file*/)
+    {
+    
+    }
+};
+IHen* __stdcall CreateHen()
+{
+    IHen* result = new Hen; 
+    result->AddRef();
+    return result;
+}
+
+//after this implementation there is still a problem, the CreateHen function still expose a IHen interface which make the application don't have any idea of the new IHen2 and IOfflineChicken methods  
+//we need a mechanism on the root object interface that provides some runtime discoverability, something that any interface naturally inherits and all objects will then implement 
+//a universal way for an application to query any interface for another interface, returning a duplicated pointer properly adjusted point to the right view table 
+//essentially this is just what dynamic_cast does, but we need to implemented it on our own 
+    * modify the library.h to implement the dynamic_cast like logic, 
+//library.h
+struct IObject
+{
+    virtual void __stdcall AddRef() = 0;
+    virtual void __stdcall Release() = 0;
+    
+    //given some interface pointer, let it return a pointer to some other interface given its name, if successfully new pointer is return otherwise is null 
+    virtual void* __stdcall As(char const* type) = 0;
+};
+
+    * implement the new interface 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+
+#define TRACE OutputDebugString
+
+struct Hen: IHen 
+{
+    ...
+    //we going to match interface base on their names 
+    void* __stdcall As(char const* type)
+    {
+        if(0 == strcmp(type, "IHen2") ||
+           0 == strcmp(type, "IHen") || 
+           0 == strcmp(type, "IObject"))
+        
+        {
+            AddRef();
+            
+            //we need to add reference because we duplicated the parameter pointer 
+            //we can't simply cast every interface, because they need to hierarchy of interfaces and that would be ambiguous to the compiler 
+            //the resulting interface pointer points to a v table, which is simply a superset of what's required 
+            return static_cast<IHen2*>(this);
+        }
+        else if(0 == strcmp(type, 'IOfflineChicken'))
+        {
+            AddRef();
+            return static_cast<IOfflineChicken*>(this);
+        }
+        else //return NULL for not support interface 
+        {
+            return NULL;
+        }
+        //it doesn't matter through which hierarchy you return the IObject interface pointer, but you should be consistent
+    }
+    
+    //
+    // IOfflineChicken
+    //
+    void __stdcall Load(char const* /*file*/)
+    {
+    
+    }
+    
+    void __stdcall Save(char const* /*file*/)
+    {
+    
+    }
+};
+IHen* __stdcall CreateHen()
+{
+    IHen* result = new Hen; 
+    result->AddRef();
+    return result;
+}
+
+    * use the library in the application
+//application.cpp 
+#include "library.h"
+
+int main()
+{
+    IHen* hen = CreateHen();
+    hen->Cluck();
+    IHen2* hen2 = static_cast<IHen2 *>(hen->As("IHen2"));
+    
+    //check the return value is not null 
+    if(hen2)
+    {
+        hen2->Forage();
+        hen2->Release();
+    }
+    //we should set the released pointer to null to prevent it be miss reused 
+    hen2 = NULL;
+    
+    //the pointer value of hen and hen2 are equal, but offline is a little different which add additional offset for the object, which point to a different virtual table start address, the compiler know where the IOfflineChicken v table resides
+    IOfflineChicken* offline = static_cast<IOfflineChicken*>(hen->As("IOfflineChicken"));
+    if(offline)
+    {
+        offline->Save("filename");
+        offline->Release();
+    }
+    hen->Release();
+    hen = NULL;
+}
+
+// this is the prototyped the essential ingredients of COM's IUnknown interface
+    
+- Say hello to IUnknown
+struct IUnknown
+{
+    virtual HRESULT __stdcall QueryInterface(GUID const& id, void** result) = 0;
+    virtual ULONG __stdcall AddRef() = 0;
+    virtual ULONG __stdcall Release() == 0;
+}
+
+//COM use GUID instead of the string type name, use QueryInterface function instead of the As function in the previous demo 
+
+
+    
+# IUnknown and modern c++ 
+- introduce the GUID and HRESULT 
+- S_OK, it's just an HRESULT 
+    + HRESULT, 32-bits that make up a HRESULT are separated into three categories
+    typedef long HRESULT;
+
+    + Severity code, just 1-bit and not coincidently the values sign bit indicates whether the HRESULT value is in a broad category of either successful HRESULT values or failure values 
+    
+    + Facility code, 11-bits indicates the software component that may have generated the error, given a large layered issue 
+    error may be as a result of some infrastructure issues, rather than application-specific issues 
+
+    + status code, 16bit and describes more specifically the actual error within the context of the facility code 
+
+COM provides the SUCCEEDED and FAILED macros for just check a function call is success or not 
+#define SUCCESSED(hr) (((HRESULT)(hr)) >= 0) //probably 
+#define FAILED(hr) (((HRESULT)(hr)) < 0) //not 
+
+this is rarely used, in practice S_OK happens to be the value, there are other successful error codes S_False 
+
+- Demo, S_OK it's jut an HRESULT
+#include "windows.h"
+#define TRACE OutputDebugString
+
+int main()
+{
+    HRESULT hr = S_OK; //S_OK is 0 
+    //or test with 
+    HRESULT hr = S_FALSE; //S_FALSE is 1
+    
+    //test with worldly wisdom method 
+    if(SUCCESSED(hr))
+    {
+        //the hr equal to S_FALSE will also access in this branch
+        TRACE("Succeeded\n");
+    }
+    
+    if(FAILED(hr))
+    {
+        TRACE("failed\n");
+    }
+    
+    if(S_OK == hr)
+    {
+        //ok
+    }
+    else 
+    {
+        //fail
+    }
+}
+
+//S_OK is a universally accept value, meaning unconditional success 
+//if a function returns as false, it usually means its behaving in a slightly different manner, it's a clue to the caller that the behavor is changed some how  
+//so with check S_OK wee could do additional check whenever a function return a S_FALSE
+
+    + there are two scenarios 
+        * when you implement your self COM-style API, and reports errors via HRESULT values 
+
+        you can naturally return the result of any nested function and even simply pass on its result 
+
+        * using API such as DirectX, instead of pollute user's data during exception happen, but rather to produce a shine crash dump for future analyse
+
+    + use Exception class to handle the different return values and create crash dump by inline function 
+    
+struct ComException
+{
+    HRESULT error;
+    
+    ComException(HRESULT const hr): error(hr) {}
+};
+
+inline void HR(HRESULT const hr)
+{
+    if(S_OK != hr)
+    {
+        throw ComException(hr);
+    }
+}
+
+// this will usually live in a common header file, use the HR function to avoid add if statements littered throughout your application
+
+- Taming the GUID, 128-bit value used by COM to identify things, physically unique name, GUID is borrowed from RPC as did many other subsystems in windows 
+
+    + globally unique identifier 
+    + 128bit value 
+    + GUID have many names, such as UUID, universal unique identifier 
+    typedef GUID UUID 
+    typedef GUID IID 
+    typedef GUID CLSID
+    
+    IID, interface id
+    CLSID, class id 
+
+    + in cpp, GUID is a struct because most cpp not supply 128 int type 
+    + GUID also could be used in unique register and temp file name 
+    
+    + demo, the compiler directives link in msdn https://msdn.microsoft.com/en-us/library/d9x1s805(v=vs.140).aspx
+    
+//use precompiled header to contain windows.h and predefined common functions 
+//application.cpp
+#include "precompiled.h"
+
+#pragma comment(lib, "rpcrt4.lib")
+//The following pragma causes the linker to search for the EMAPI.LIB library while linking. The linker searches first in the current working directory and then in the path specified in the LIB environment variable.
+
+int main()
+{
+    GUID guid;
+    ASSERT(RPC_S_OK == UuidCreate(&guid));
+    //UuidCreate, takes into account the computer network adapter which is a globally unique MAC address factors in other local information to produce a globally unique 128-bit number 
+    //if your pc don't have adapter may fail 
+    
+    HR(CoCreateGuid(&guid));
+    //the rpc lib is not using the HRESULT
+    //a convenient solution is use COM's co-create GUID function which wrapper the RPC function and turn result to HRESULT before returning 
+    
+    unsigned short* rpc_string; //unicode wide character string 
+    ASSERT(RPC_S_OK == UuidToString(&guid, &rpc_string));
+    //UuidToString is used a custom RPC allocator, so it could possibly fail if it is ran out of memory, it also means you need to call another rpc function to free the memory when you are done 
+    trace(L"%s\n", rpc_string);
+    //output: xxx-xxx-...
+    
+    wchar_t ole_string[39];
+    ASSERT(StringFormGUID2(guid, ole_string, _countof(ole_string)));
+    //OLE, com's predecessor also provide a guid to string there is a fuzzy line to the OLE and com function 
+    //COM version don't use a allocator but it except the caller provide a buffer 
+    //function will return zero when fail, second parameter is buffer pointer and third is length
+    TRACE(L"%s\n", ole_string);
+    //output: {xxx-xxx-...}
+    
+    //copy the output ole string to standard string 
+    std::wstring std_string(ole_string+1, _countof(ole_string) -3);
+    TRACE(L"%s\n", std_string.c_str());
+    
+    GUID guid2;
+    ASSERT(RPC_S_OK == UuidFromString(rpc_string, &guid2);
+    //this function expect the guid string format in rpc way without curly brackets
+    HR(CLSIDFromString(ole_string, &guid2);
+    
+    ASSERT(RPC_S_OK == UuidFromString(reinterpret_cast<unsigned short*>(const_cast<wchart_t*>(std_string.c_str())), &guid2));
+    
+    ASSERT(RPC_S_OK == RpcStringFree(&rpc_string));
+}
+
+//use a macro to add assert in debug build and expression in release build 
+//in window sdk also provide a UUID generate tool 
+$ uuidgen
+//copy the output to clipboard 
+$ uuidgen|clip  
+    
+//use the window sdk and compose the guid in the code 
+//application.cpp 
+int main()
+{
+    GUID guid = //189300e4-1f85-49de-a0bd-ec4a08962608
+    {
+        0x189300e4, //a long 
+        0x1f85, //a short 
+        0x49de, //a short 
+        {0xa0, 0xbd, 0xec, 0x4a, 0x08, 0x96, 0x26, 0x08} array of 8-bytes 
+    };//total 128bit 
+    
+    //VC compiler supply a simple way to create a guid, the compiler attaches the GUI to the class definition then you can simply use the UUID of keyword 
+    struct __declspec(uuid("189300e4-1f85-49de-a0bd-ec4a08962608")) TypeName;
+    
+    //use the __uuidof keyword to retrieve the attached uuid from the class type 
+    GUID guid2 = __uuidof(TypeName);
+}
+
+- Demo, Implement IUnknown
+    * use IUnknown replace the IObject
+#pragma once
+#include <unknwn.h>
+
+#define TRACE OutputDebugString
+
+struct __declspec(uuid("xx-xxx-xx")) IHen:IUnknown
+{
+    virtual void __stdcall Cluck() = 0;
+    virtual void __stdcall Roost() = 0;
+};
+
+struct __declspec(uuid("xx-xx-xx")) IHen2:IHen
+{
+    virtual
+};
+
+struct __declspec(uuid("xx-xx-xx")) IOfflineChicken: IUnknown
+{
+    virtual HRESULT __stdcall Load(char const* file) = 0;
+    virtual HRESULT __stdcall Save(char const* file) = 0;
+};
+
+HRESULT * __stdcall CreateHen(IHen** phen);
+
+//com also required the function could be called remotely must return HRESULT
+
+    * change implementation 
+//library.cpp 
+#include "library.h"
+#include <windows.h>
+#include <crtdbg.h>
+
+#define ASSERT _ASSERT
+#define TRACE OutputDebugString
+
+struct Hen:IHen2, IOfflineChicken
+{
+    long m_count;
+    Hen(): m_count(0) 
+    
+    ~Hen()
+    {
+        TRACE("chiken soup!\n");
+    }
+    
+    //
+    // IUnknown
+    //
+    ULONG __stdcall AddRef()
+    //return unsigned long for diagnostic
+    {
+        return ++m_count
+    }
+    
+    UNLONG __stdcall Release()
+    {
+        UNLONG const result = --m_count;
+        if(0 == result)
+        {
+            delete this;
+        }
+        
+        return result;
+    }
+    
+    //the void** is used to turn off the cpp type system to let the code be portable for other compiler 
+    HRESULT __stdcall QueryInterface(IID const& id, void **result)
+    {
+        //assert the result pointer pointer is valid 
+        ASSERT(result);
+        
+        //casting to IUnknown is ambiguous, just pick one inherit branch and cast it a particular object should always return the same interface when query for IUnknown
+        //IHen2 is after than IOfflineChicken when return IUnknown, because it's the left-most base in the class implementation which means static_cast won't to do anything, it don't require to adjust the pointer to the right v table 
+        if(id == __uuidof(IHen2) ||
+           id == __uuidof(IHen) ||
+           id == __uuidof(IUnknown))
+        {
+            *result = static_cast<IHen2*>(this);
+        }
+        else if(id == __uuidof(IOfflineChicken)
+        {
+            *result == static_cast<IOfflineChicken*>(this);
+        }
+        else //for unsupported interface
+        {
+            *result = nullptr; //0 don't forget the set the return result pointer to null 
+            return E_NOINTERFACE;
+        }
+        
+        //one of the rule to com is the Release method should be called on the same interface the AddRef is called on, don't break this rule 
+        //use the IUnknown interface is the safe way to call the AddRef and Release
+        static_cast<IUnknown*>(*result)->AddRef();
+        return S_OK;
+        
+    }
+    //in production code the AddRef and Release method will not be implemented like this 
+};
+
+//thread safe function implementation, use InterlockedIncrement, _InterlockedDecrement function to increase a value which is implemented as a compiler intrinsic 
+ULONG __stdcall AddRef()
+//return unsigned long for diagnostic
+{
+    return _InterlockedIncreatement(&m_count);
+}
+
+UNLONG __stdcall Release()
+{
+    UNLONG const result = _InterlockedDecrement(m_count);
+    if(0 == result)
+    {
+        delete this;
+    }
+    
+    return result;
+}
+//you can only relay on the value return by the _InterlockedDecrement, _InterlockedIncreatement functions and not the value of the variable itself, it's a atomic implementation 
+//some cases you need to read some value for some other purpose without changing its value, then you need to mark the count value to volatile, so that the compiler will know read the latest value for you on each time    
+
+    * upgrade the CreateHen function
+//library.cpp 
+HRESULT __stdcall CreateHen(IHen** result)
+{
+    ASSERT(result);
+    
+    //this std::nothrow will return a pointer when no memory instead of throw exception 
+    *result = new (std::nothrow) Hen;
+    
+    if(NULL == *result)
+    {
+        return E_OUTOFMEMORY;
+    }
+    
+    (*result)->AddRef()
+    return S_OK;
+}
+
+    * change the application code to use the library 
+//application.cpp 
+#include "library.h"
+
+int main()
+{
+    IHen* hen
+    
+    if(S_OK != CreateHen(&hen))
+    {
+        return 0;
+    }
+    
+    hen->Cluck();
+    
+    IHen2* hen2;
+    //IUnknown interface provide a non-virtual function templates as a convenience to prevent write the below codes to query a interface to prevent error input codes, the template take advantage of decl specifier and adds some much needed type safety 
+    //if(S_OK == hen->QueryInterface(__uuidof(IHen2), 
+       reinterpret_cast<void**>(&hen2)))
+    if(S_OK == hen->QueryInterface(&hen2))
+    //the compiler will expand the template method QueryInterface to the up comment original call 
+    {
+        hen2->Forage();
+        hen2->Release();
+    }
+    
+    IOfflineChicken* offline;
+    if(S_OK == hen->QueryInterface(&offline))
+    {
+        offline->Save("filename")'
+        offline->Release();
+    }
+    
+    hen->Release();
+}
+
+- demo IUnknown and c# 
+    + previous dll call in c# was used DllImport("Library.dll")
+using System.Runtime.InteropServices;
+
+class Application
+{
+    static void Main()
+    {
+        HenCluck();
+    }
+    
+    [DllImport("Library.dll")]
+    static extern void HenCluck();
+}
+
+    * c# required to redefine interface of the com objects 
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[Guid("xxx-xxx-xxx-xx")]
+interface IHen
+{
+    [PreserveSig]void Cluck();
+    [PreserveSig]void Roost();
+}
+//clr will check the HRESULT for us, if the COM function failed will throw exception for us 
+//we could let the clr close the function, which could be done by PreserveSig attribute 
+//for the inherited IHen2 which from IHen should be define along, define IHen2 inherit from IHen will not work in c# because the CPP is implement the COM function base on the virtual function talbe, but clr is not implement the virtual function as cpp 
+//we need to thread any com defined interface as isolate inherite from IUnknown
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[Guid("xxx-xxx-xxx-xx")]
+interface IHen2
+{
+    //IHen
+    [PreserveSig]void Cluck();
+    [PreserveSig]void Roost();
+    
+    //IHen2 
+    [PreserveSig] void Forage();
+}
+//the function of IHen order is required to keep the same as IHen which follow the virtual table definition 
+    * use the defined interface in c# 
+class Application 
+{
+    static void Main()
+    {
+        IHen hen = CreateHen();
+        hen.Cluck();
+        hen.Roost();
+        
+        IHen2 hen2 = (IHen2)hen;
+        hen2.Forage();
+    }
+    
+    [DllImport("Library.dll", PreserveSig = false)]
+    static extern IHen CreateHen();
+}
+//CreateHen is a function which is not in a interface definition, so we could call it directly. The PreserveSig is set by default 
+//PreserveSig, Indicates whether unmanaged methods that have HRESULT or retval return values are directly translated or whether HRESULT or retval return values are automatically converted to exceptions. Set the PreserveSig field to true to directly translate unmanaged signatures with HRESULT or retval values; set it to false to automatically convert HRESULT or retval values to exceptions. By default, the PreserveSig field is true.When true, the resulting method signature returns an integer value that contains the HRESULT value. In this case, you must manually inspect the return value 
+//other prarameter SetLastError=true instructs the marshaler to read this variable after the native function returns, and stash the error code where you can later read it with Marshal.GetLastWin32Error().
+//in c# will automatic call the AddRef and Release and also you could call the QueryInterface method directly 
+//if want to change the type, then directly use c-style type cast 
+    * build and run the code 
+    $csc /platform:x86 /out:Debug\Managed.exe Managed.cs 
+    keep the output folder same as library.dll which will let the main function access the method 
+    * com define a binary standard, clr support com but not transparently 
+
+    * c# is not c++ like language, clr is very different from com 
+
+- the rise of the smart pointer, originally cpp don't allowed pointer dereference operator -> to be user defined, this is the main operator to write classes which is behave like a pointer
+auto_ptr, it was designed to hold a pointer for you within a function and it did that well and served its purpose, you initialize it with a pointer returned by the new operator. it has some dubious semantics when you tried to copy it. auto_ptr class template is deprecated in the current cpp standard 
+c++11 supply unique_ptr and shared_ptr to replace the simple auto_ptr
+    + demo the rise of smart pointer, smart pointer is supply a way to call it's members throw pointer dereference operator, in normal COM operation, any received interface should be called with Release method in the previous demo
+    the Release method also requred to be called only once, which much be the original AddRef interface called on. You also can't call Release on a null pointer like Delete method 
+    
+    * write a simple smart pointer template 
+template<typename T> 
+struct ComPtr 
+{
+    T* m_ptr;
+    ComPtr(): m_ptr(0){}
+    ~ComPtr()
+    {
+        if(m_ptr)
+        {
+            m_ptr->Release();
+        }
+    }
+    
+    T* operator->() const 
+    {
+        ASSERT(m_ptr);
+        return m_ptr;
+    }
+}
+    * use the new smart pointer with COM application
+//application.cpp 
+int main()
+{
+    ComPtr<IHen> hen;
+    
+    if(S_OK != CreateHen(&hen.m_ptr))
+    {
+        return 0;
+    }
+    hen->Cluck();
+    
+    ComPtr<IHen2> hen2;
+    if(S_OK == hen->QueryInterface(&hen2.m_ptr))
+    {
+        hen2->Forage();
+    }
+    
+    ComPtr<IOfflineChicken> offline;
+    if(S_OK == hen->QueryInterface(&offline.m_ptr))
+    {
+        offline->Save("filename");
+    }
+}
+    * this kinds of smart pointer implementation is have a issue, we could not let the member m_ptr be accessible from the outside to prevent miss use. Add GetAddressOf method to return a pointer to pointer to solve this common bug  
+template<typename T> 
+class ComPtr 
+{
+    T* m_ptr;
+public:
+    ComPtr(): m_ptr(0){}
+    ~ComPtr()
+    {
+        if(m_ptr)
+        {
+            m_ptr->Release();
+        }
+    }
+    
+    T* operator->() const 
+    {
+        ASSERT(m_ptr);
+        return m_ptr;
+    }
+    
+    T** GetAddressOf()
+    {
+        //the assert make sure valide pointer will not be silent overridden 
+        ASSERT(!m_ptr);
+        return &m_ptr;
+    }
+}
+    * now update the application to use the GetAddressOf function instead of directly operate the pointer member 
+//application.cpp 
+int main()
+{
+    ComPtr<IHen> hen;
+    
+    if(S_OK != CreateHen(hen.GetAddressOf()))
+    {
+        return 0;
+    }
+    hen->Cluck();
+    
+    ComPtr<IHen2> hen2;
+    if(S_OK == hen->QueryInterface(hen2.GetAddressOf()))
+    {
+        hen2->Forage();
+    }
+    
+    ComPtr<IOfflineChicken> offline;
+    if(S_OK == hen->QueryInterface(offline.GetAddressOf()))
+    {
+        offline->Save("filename");
+    }
+}
+//still the smart pointer cant prevent call the Release() method multiple time, hen->Release() again will trigger exception 
+//we need to let the smart pointer only expose the COM interface without the AddRef and Release method to prevent miss operation 
+//make the pointer dereference operator return a pointer but mark the AddRef and Release method as private, we could achieve this by define another template class to do this as wrapper 
+template <typename T>
+class RemoveAddRefRelease:public T
+{
+    ULONG __stdcall AddRef();
+    ULONG __stdcall Release();
+};
+
+//and make the overwrite pointer dereference operator return the wrapper template 
+template<typename T> 
+class ComPtr 
+{
+    T* m_ptr;
+public:
+    ComPtr(): m_ptr(0){}
+    ~ComPtr()
+    {
+        if(m_ptr)
+        {
+            m_ptr->Release();
+        }
+    }
+    
+    RemoveAddRefRelease<T> * operator->() const 
+    {
+        ASSERT(m_ptr);
+        return static_cast<RemoveAddRefRelease<T>*>(m_ptr);
+    }
+    
+    T** GetAddressOf()
+    {
+        //the assert make sure valide pointer will not be silent overridden 
+        ASSERT(!m_ptr);
+        return &m_ptr;
+    }
+}
+//there is still problem, what if a developer create a copy of COM pointer? then the pointer will be copied without additional call to AddRef, this is a bug 
+//what if you want to return a interface pointer of your own? there is no way to detach a pointer from a smart pointer 
+// the c++11 new pointer written by expert solve this questions 
+- c++11 as better com, building large scale system in cpp 
+    + is COM redundant? not every application needs to be distributed as a collection of binaries cpp11 brings many of the benefits of com back to c++ 
+    + consider c++11 smart pointer before turning to COM, could help easily port any c++ dll to COM  
+    + demo, shared_ptr, unique_ptr, 
+    
+        * remove the COM relative codes in the previous demo and remove the library.h 
+#include <windows.h>
+#include <memory>
+#define TRACE OutputDebugString
+
+struct Hen: IHen2, IOfflineChicken
+{
+    Hen()
+    {
+        TRACE("Cheep!\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n");
+    }
+    
+    //remove the previous defined and implemented IUnknown interface 
+    
+    //
+    // IHen, the calling convention is also could be removed to let the compiler decide 
+    //
+    void Cluck()
+    {
+        TRACE("Cluck!\n");
+    }
+    
+    void Roost()
+    {
+        TRACE("Zzzz!\n");
+    }
+    
+    //
+    // IHen2 
+    //
+    void Forage()
+    {
+        TRACE("Forage!\n");
+    }
+    
+    //
+    // IOfflineChicken
+    //
+    void Load(char const* /*file*/)
+    {
+    }
+    
+    void Save(char const* /*file*/)
+    {
+    }
+}
+
+int main()
+{
+    Hen hen;
+    hen.Cluck();
+    hen.Forage();
+}
+
+//if you want to pass object to other function, such as async, a container which is outside your current function in this time a unique_ptr is a good one to be chosen 
+//unique pionter is a class template new to c++ that takes the place of the deprecated and much blind auto point of old auto pointer 
+//unique pointer stores and exclusively owns the object being pointed to, it assume a object is allocated on the heap and will be deleted by smart pointer's destructor using delete operator this is the default behavior, you could derive the unique_ptr and overwrite the destruct function
+//copy the pointer is not allowed by the unique_ptr
+int main()
+{
+    std::unique_ptr<Hen> hen(new Hen);
+    hen.Cluck();
+    hen.Forage();
+}
+
+//in the next version of cpp will release a make unique function to hide the new operator as well, unique_ptr supply a move function to transfer the owner ship to other unique_ptr
+//the move function reuqired the class implement the move semantics, after move the pointer the previous unique_ptr will be mark as empty 
+int main()
+{
+    std::unique_ptr<Hen> hen(new Hen);
+    hen.Cluck();
+    
+    std::unique_ptr<Hen> other = std::move(hen);
+    hen.Forage();
+}
+
+//multiple shared reference, which could be solved by shared_ptr
+int main()
+{
+    std::shared_ptr<Hen> hen = std::make_shared<Hen>();
+    hen.Cluck();
+    
+    std::shared_ptr<Hen> other = hen;
+    hen.Forage();
+}
+//with this implementation, the class itself don't required to implement the reference counting 
+//shared pointer needs to allocate it's own dynamic memory to record the reference counting and the object which will be automatic achieved by make_shared function 
+//make_shared knows enough about the object as well as the reference counting to combine them to a single object location 
+
+//overall this is a not a binary protable solution like com but it's certainly a usuful set of tools 
+
+
+# libraries 
+- introduction, morden cpp 11 library for help develop com 
+- windows runtime cpp template library (WRL)
+    + windows runtime(WinRt) vs. Classic COM 
+    + windows runtime library, classic COM is a well development COM, not only support store application but also could be used to develop window 7 application, its a tool of windows sdk and not actually like a visual c++ library like MFC or ATL 
+    + jointly owned by windows and visual c++ 
+    + window runtime is a more flexibility library to replace the ATL, this course will focus on two library of window runtime which could be used to develop classic COM and window runtime development
+        * first is smart pointer for handling COM interfaces 
+        * second is a template for help implement COM 
+        
+- WRL's ComPtr, window runtime supply a COM smart pointer like our implement version but much better
+    + it provide COM-aware copy semantics 
+    + provide c++11 move semantics, to avoid unnecessary AddRef and Release pairs when moving pointers around 
+    + many other convenience methods 
+    
+- demo WRL's ComPtr, which hide the QueryInterface function too, it provide CopyTo method to wrap the QueryInterface which intelligently handle pointer duplication generically. Then if you as for the same interface will not required to call the QueryInterface method again 
+    * ComPtr will automatic call the addref and release method which also implement the copy semantics
+#include "library.h"
+#include <wrl.h>
+using namespace Microsoft::WRL;
+
+int main()
+{
+    ComPtr<IHen> hen;
+    if(S_OK != CreateHen(hen.CetAddressOf()))
+    {
+        return 0;
+    }
+    
+    //this copy method will automatic add reference by the wrl comptr template which implement the copy semantics
+    ComPtr<IHen> other = hen;
+    
+    hen->Cluck();
+    
+    ComPtr<IHen2> hen2;
+    if(S_OK == hen->CopyTo(hen2.GetAddressOf()))
+    {
+        hen2->Forage();
+    }
+    
+    ComPtr<IOfflineChicken> offline;
+    if(S_OK == hen->CopyTo(Offline.GetAddressOf()))
+    {
+        offline.Save("filename");
+    }
+}
+    * when you want to pass the pointer to a container or caller function the better way is transfer the ownership not just call the AddRef or Release method 
+ComPtr<IHen> other = std::move(hen);
+hen = std::move(other);
+
+//whenever a system component fail, we could throw a exception and catch a crash dump to help us investigate in the offline 
+
+struct ComException
+{
+    HRESULT error;
+    ComException(HRESULT hr):error(hr){}
+};
+
+inline void HR(HRESULT hr)
+{
+    if(S_OK != hr)
+    {
+        throw ComException(hr);
+    }
+}
+
+//this function will help us hide the underlying type with smart pointer 
+static ComPtr<IHen> CreateHen()
+{
+    ComPtr<IHen> hen;
+    HR(CreateHen(hen.CetAddressOf()));
+    return hen;
+}
+
+//now we could update the main function and use our helper method 
+int main()
+{
+    ComPtr<IHen> hen = CreateHen();
+    
+    //this copy method will automatic add reference by the wrl comptr template which implement the copy semantics
+    ComPtr<IHen> other = hen;
+    
+    hen->Cluck();
+    
+    ComPtr<IHen2> hen2;
+    if(S_OK == hen->CopyTo(hen2.GetAddressOf()))
+    {
+        hen2->Forage();
+    }
+    
+    ComPtr<IOfflineChicken> offline;
+    if(S_OK == hen->CopyTo(Offline.GetAddressOf()))
+    {
+        offline.Save("filename");
+    }
+}
+// there is no performance overhead, because the COM pointer is move-aware, compiler will automatic determine the object can be move instead of copy to the caller
+
+//one serious flaw of com pointer is GetAddressOf method which simply return the underlying pointer which is get the naked com pointer. The ComPtr's implementation neglects to assert the pointer whose address is being returned is not pointing to anything 
+//this means it is only when the ComPtr is not holding a reference then we could call the GetAddressOf method or we will encounter reference count issue 
+ComPtr<IHen> hen = CreateHen();
+HR(CreateHen(hen.GetAddressOf()));
+//this code pieces introduce reference counting bug, the previous count of hen is lost 
+    * one way to get over this is, just call the GetAddressOf method inside helper functions 
+    * ComPtr also provide a ReleaseAndGetAddressOf() method which also solve the problem but it's not a good approach
+    * suggest to fix the ComPtr's GetAddressOf method with simply assert 
+    //client.h 
+    T** GetAddressOf() throw()
+    {
+        __WRL_ASSERT__(!ptr_);//added wrl assert macro  
+        return &ptr_;
+    }
+    
+    //but the only gotcha is someone use the GetAddressOf method to create an array of interface pointers and this code you find actually expects this pointer to be valid. DirectX 3d have some function to accept array of interface pointers, suggest to fix that code too
+    
+- WRL's runtime class 
+    + ComPtr is for COM clients 
+    + RuntimeClass is for COM servers, it is a class template implement the reference counting, IUnknown, object identity and Runtime type discovery, it is much better than ATL 
+    + Demo, simplest way to implement a COM class. only required to change the library.h file. we change the implementation
+//library.cpp
+# include <wrl.h>
+using namespace Microsoft::WRL;
+
+#define ASSERT _ASSERT
+#define TRACE OutputDebugString
+
+//the RuntimeClassFlags is compile time flags which help the WRL template class to implement the COM class at runtime, in this time RuntimeClassFlags<ClassicCom> strip out any code that is needed for this implementation such as actual windows runtime's specific to window 8 
+//runtime class only implement the base method of IUnknown, the additional required interface will be used to implement the QueryInterface function by runtime class 
+//although the IHen2 is inherit from IHen, we also required to add all of them to help implement the QueryInterface function, there is no hand-rolled chain of statements and table of macros as ATL reuqired too 
+struct Hen: RuntimeClass<RuntimeClassFlags<ClassicCom>, 
+                         IHen,
+                         IHen2,
+                         IOfflineChicken>
+//this is not a variation template, the generic type list is significant because it allows the runtime type discovery required by COM by means of COM interface IDs or GUIDs and it not forwarding arguments 
+//c++11 also introduce a contextual keyword which will be used to imply the methods will be override a base class member, the compiler will check the override method is exist in the base class 
+{
+    long m_count;
+    
+    Hen()
+    {
+        TRACE("Cheep\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup\n");
+    }
+    
+    //remove the previous implemented IUnknown functions and the reference count 
+    
+    //
+    //IHen we only required to implement our interface 
+    //
+    void __stdcall Cluck() override
+    {
+        TRACE("Cluck\n";)
+    }
+    
+    void __stdcall Roost() override 
+    {
+        TRACE("Zzzz\n";)
+    }
+    
+    //
+    // IHen2
+    //
+    void __stdcall Forage() override
+    {
+        TRACE("Forage!\n");
+    }
+    
+    //
+    // IOfflineChicken
+    //
+    void __stdcall Load(char const* /*file*/) override 
+    {
+    }
+    
+    void __stdcall Save(char const* /*file*/) override 
+    {
+    }
+    
+};
+
+//this is the place variatic template come in by window runtime, variatic template is not support by 2012 compiler. WRL library simulated the variatic template on VS 2010 compiler, so it works
+//we will take vantage of move semantics and perfect forwarding 
+HRESULT __stdcall CreateHen(IHen** result)
+{
+    ASSERT(result);
+    
+    //WRL don't required nothrow operator 
+    //*result = new (std::nothrow) Hen;
+    *result = nullptr;
+    
+    //Make function will create the hen object and will forward any arguments to its constructor 
+    //there is also a Make and Initialize function which will forward the arguments to a member function and return HRESULT 
+    //we need to be explicit about the ComPtr being return, because of the RuntimeClass template's type list expands, we need to disambiguate the IHen interface so we use the IHen2 interface 
+    ComPtr<IHen2> hen = Make<Hen>();
+    
+    //ComPtr support bool operator to check if its not valid we don't required to compare with null, to help check the OUTOFMEMORY 
+    if(!hen)
+    {
+        return E_OUTOFMEMORY;
+    }
+    
+    //ComPtr already have one reference after created so we don't required to manually call the AddRef method 
+    //(*result)->AddRef();
+    
+    //the Detach method disassociate the ComPtr from the interface without releasing it then you can safely return it to the caller at the last moment 
+    *result = hen.Detach();
+    return S_OK;
+}
+
+//then the COM server implementation is completed and the COM client is not aware it 
+
+- Demo ATL, the author don't recommend to use ATL any longer for writing COM code, ATL is a defective library for writing COM code for a very long time 
+also the window runtime library is not available to port older platform such as window xp, only support vista and later
+
+//ATL required to implement the IUnknown three members by ourself 
+//library.cpp
+#inlcude "library.h"
+#include <atlbase.h>
+#include <atlcom.h>
+
+#define ASSERT _ASSERT
+#define TRACE OutputDebugString
+
+//we need to replace the ATL implementation of IUnknown, CComObjectRootEx(Typing)
+struct Hen: CComObjectRootEx<CComMultiThreadModel>,
+            IHen2,
+            IOfflineChicken
+{
+    //use ATL interface map macro to supply the interfaces, this map did the same thing like the window runtime library generic list
+    BEGIN_COM_MAP(Hen)
+        COM_INTERFACE_ENTRY(IHen)
+        COM_INTERFACE_ENTRY(IHen2)
+        COM_INTERFACE_ENTRY(IOfflineChicken)
+    END_COM_MAP()
+    
+    Hen()
+    {
+        TRACE("Cheep\n");
+    }
+    
+    ~Hen()
+    {
+        TRACE("Chicken soup!\n");
+    }
+    
+    HRESULT __stdcall CreateHen(IHen** result)
+    {
+        ASSERT(result);
+        *result = nullptr;
+        
+        //this CComObject provide the IUnknown members 
+        auto object = new (std::nothrow)CComObject<Hen>;
+        
+        if(!object)
+        {
+            return E_OUTOFMEMORY;
+        }
+        
+        *result = object;
+        (*result) -> AddRef();
+        return S_OK;
+        
+        //sometime you are not sure the requested interface is implemented by the class we could actually call the QueryInterface function on this object 
+        
+        //we need to wrapper the QueryInterface in the AddRef and Release function to prevent the function call is failed. and then the object is deleted   
+        object->AddRef();
+        HRESULT hr = object->QueryInterface(result);
+        object->Release();
+        return hr;
+    }
+}
+//we also required provide a module object to ATL 
+//this module provide a form of garbage collection and participation in COM activation 
+struct Module: CAtlDllModuleT<Module>
+{    
+};
+
+static Module _AtlModule;
+
+BOOL __stdcall DllMain(HINSTANCE, DWORD reason, void* reserved)
+{
+    //hook into the dll entry function 
+    return _AtlModule.DllMain(reason, reserved);
+}
+
+    * change the application to use the ATL version library 
+#include "library.h"
+#include <atlbase.h>
+
+//the smart pointer of atl version also implement the move semantics which make the performance almost the same 
+struct ComException
+{
+    HRESULT error;
+    ComException(HRESULT hr):error(hr){}
+};
+
+inline void HR(HRESULT hr)
+{
+    if(S_OK != hr)
+    {
+        throw ComException(hr);
+    }
+}
+
+static CComPtr<IHen> CreateHen()
+{
+    CComPtr<IHen> hen;
+    //ATL doesn't provide a GetAddressOf method but it add assert for the get address operator 
+    //HR(CreateHen(hen.GetAddressOf()));
+    HR(CreateHen(&hen));
+    return hen;
+}
+
+int main()
+{
+    CComPtr<IHen> hen = CreateHen();
+    hen->Cluck();
+    
+    CComPtr<IHen2> hen2;
+    
+    if(S_OK == hen->QueryInterface(&hen2))
+    {
+        hen2->Forage();
+    }
+    
+    CComPtr<IOfflineChicken> offline;
+    if(S_OK == hen->QueryInterface(&offline))
+    {
+        offline->Save("filename");
+    }
+}
+
+
+# COM advance topic, Part 2 
+# The runtime 
+- introduction 
+runtime service, take com beyond just IUnknown 
+
+- activation, is process a com client to find a com object. normally use to create instance of com class. It is created by factory method. this may include loading dll or start a process seperatly or remotely 
+
+    + moving from "CreateHen()" to "CoGetClassObject(HenId)"
+
+    + CoInitializeEx, include the initializing runtime 
+    
+    + client request get class object at runtime CoGetClassObject 
+    
+    + DllGetClassObject
+    
+- registration allow client active object without known how a com service is packaged or where it is deployed. Server tipically provide a way to register itself 
+
+server export as dll and export several registration functions DllRegisterServer & DllUnregisterServer 
+
+out of process server tipically unregister itself base on specific command line options. Registration tipically contain create registery keys. It is used to provide information to help to find the registed COM server. RegCreateKeyTransacted & RegOpenKeyTransacted  RegSetValue & RegDeleteTree 
+
+a reliable way to handling registration is use kernel transaction manager 
+
+it is also possible to configure your application to activate a COM server without registry 
+<file name="Server.dll"><comClass clsid="{...}"
+the com runtime can retrieve the information on behalf of the client and loads to the com server apropriate 
+
+- class Factory. a special interface a com class may implement to provide a universal or generalize way to create com object 
+
+IClassFactory, if you want to use common instance creation common functions and better interoperate other non cpp runtime that support com 
+included methods CoCreateInstance & CoCreateInstanceEx 
+
+- Remoting, getting "IHen" from here to there. COM runtime rely on the remoting arechitecture. from dcom to rpc, apartments, proxy and steps 
+
+we will explain apartment and threading models 
+
+remoteable interfaces, how interfaces and information that communicate is remoted whether in an apartment in a process or between different process or even different machines 
+
+the remoting architecture can be pretty complicated 
+
+from IDL to MIDL to RPC 
+
+stop talking about DCOM, the same runtime facility that allowed com work cross apartment, cross process and across network. RPC is the real hero behand the scene. we only need to deep understand the COM and COM runtime 
+
+- summary 
+
+Activation 
+Registration 
+Class Factories 
+Remoting 
+
+
+# Activation 
+- clients and servers 
+    + client create, activate other wise gain access to a com server and retrive specific interfaces implementate by the server 
+    
+    in the previous examble use 
+    CreateHen() -> IHen to get a specific instance 
+    
+    COM runtime supply a more general function to do this 
+    CoCreateInstance(HenId) -> IHen 
+    
+    in this module we will only talk about client to activate server object only using class id. without knowledge of specific dll. it's a common way to expose COM 
+    
+    + server, itself can be a COM client or other sever 
+
+- preparing the client 
+
+    + no ATL in this course! don't use the ATL wizard 
+
+    + use a empty cpp project to activate as a com client 
+    
+    + CoInitializeEx & CoUninitialize 
+    
+    + demo 
+    
+        * add a win32 project 
+        * select application etting and select a console application with no addtional library 
+        * remove all the auto created folder 
+        
+        * add precompiled headers this will save a little of time in the long run 
+
+        precompiled.h 
+        precompiled.cpp 
+        client.cpp 
+
+        * update project settings to properly build the project 
+        select the combo box Configuration, select all configuration, then the change will effect all the configuration 
+
+        click Configuration Properties|c/c++ in the configuration properties tree set warning level to 4 to make compiler supply more warnings. select Configuration Properties|c/c++|Precompiled Headers this is where to tell the compile to use a precompiled header to speed up compile time. Change the default precompiled header name from stdafx.h to precompiled.h 
+        
+        change the Precompiled Header to Use(/Yu)
+        
+        * select the property of the precompiled.h. the change Precompiled Header to Create(/Yc)
+        
+        * add content to the precompiled.h add window runtime library header 
+#pragma once 
+
+#include <wrl.h> 
+
+        * switch to the precompiled.cpp and include the precompiled header. as a com client have to deal with lots of hresults 
+#include "precompiled.h"
+
+using namespace Microsoft::WRL;
+
+int main()
+{
+
+}
+
+//not finished to 3:53 
+        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+        
+        
+        
+        

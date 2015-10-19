@@ -1,0 +1,354 @@
+﻿// ==UserScript==
+// @name 			12306.CN è®¢ç¥¨åŠ©æ‰‹ for Firefox
+// @namespace		http://www.u-tide.com/fish/
+// @description		å¸®ä½ è®¢ç¥¨çš„å°åŠ©æ‰‹ :-)
+// @match			http://dynamic.12306.cn/otsweb/*
+// @match			https://dynamic.12306.cn/otsweb/*
+// @require			https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js
+// @icon			http://www.12306.cn/mormhweb/images/favicon.ico
+// @run-at			document-idle
+// ==/UserScript==
+
+
+var loginUrl = "/otsweb/loginAction.do";
+var queryActionUrl = "/otsweb/order/querySingleAction.do";
+//é¢„å®š
+var confirmOrderUrl = "/otsweb/order/confirmPassengerAction.do";
+
+//-----------------å…¥å£----------------------
+
+function entryPoint() {
+	var location = window.location;
+	var path = location.pathname;
+
+	if ((path == loginUrl && location.search == "?method=init") || path == "/otsweb/login.jsp") {
+		//ç™»å½•é¡µ
+		initLogin();
+	} else if (path == queryActionUrl) {
+		initTicketQuery();
+	}
+}
+
+if (navigator.userAgent.indexOf("Gecko") == -1) {
+	alert("æé†’ï¼šæœ¬è„šæœ¬é€‚åˆäºŽ Firefox ï¼Œæ‚¨å½“å‰çš„æµè§ˆå™¨ä¸å…¼å®¹ï¼Œè¯·ä½¿ç”¨Firefoxç‰ˆæœ¬çš„è„šæœ¬ï¼");
+} else {
+	entryPoint();
+}
+
+//-----------------å…¥å£----------------------
+
+//-----------------å·¥å…·----------------------
+function notify(str, timeout, skipAlert) {
+	GM_notification(str);
+}
+
+function setCookie(name, value) {
+	var Days = 30;
+	var exp = new Date();
+	exp.setTime(exp.getTime() + Days * 24 * 60 * 60 * 1000);
+	document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
+}
+
+function getCookie(name) {
+	var arr = document.cookie.match(new RegExp("(^| )" + name + "=([^;]*)(;|$)"));
+	if (arr != null) return unescape(arr[2]); return '';
+}
+
+//èŽ·å¾—æ—¶é—´ä¿¡æ¯
+function getTimeInfo() {
+	var d = new Date();
+	return d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds();
+}
+//-----------------å·¥å…·----------------------
+
+//-----------------è‡ªåŠ¨åˆ·æ–°----------------------
+function initTicketQuery() {
+	//åˆå§‹åŒ–è¡¨å•
+	var form = $("form[name=querySingleForm] .cx_from");
+	form.find("tr:last").after("<tr><td colspan='9'><label><input type='checkbox' id='keepinfo' checked='checked' />è®°ä½ä¿¡æ¯</label> <label><input checked='checked' type='checkbox' id='autoRequery' />è‡ªåŠ¨é‡æ–°æŸ¥è¯¢</label>ï¼ŒæŸ¥è¯¢å‘¨æœŸ(S)ï¼š<input type='text' value='6' size='4' id='refereshInterval' style='text-align:center;' />(ä¸å¾—å°äºŽ6) " +
+	"<label style='display:none;'><input type='checkbox' checked='checked' id='chkAudioOn'>å£°éŸ³æç¤º</label> <label><input type='checkbox' id='chkSeatOnly'>ä»…åº§ç¥¨</label> <label><input type='checkbox' id='chkSleepOnly'>ä»…å§é“º</label>" +
+	"<input type='button' id='enableNotify' onclick='window.webkitNotifications.requestPermission();' value='è¯·ç‚¹å‡»ä»¥å¯ç”¨é€šå‘Š' style='line-height:25px;padding:5px;' /> <span id='refreshinfo'>å·²åˆ·æ–° 0 æ¬¡ï¼Œæœ€åŽæŸ¥è¯¢ï¼š--</span> <span id='refreshtimer'></span></td></tr>");
+
+	//æ˜¾ç¤ºåº§çº§é€‰æ‹©UI
+	var ticketType = [];
+	$(".hdr tr:eq(2) td").each(function (i, e) {
+		ticketType.push(false);
+		if (i < 3) return;
+		ticketType[i] = true;
+
+		var c = $("<input/>").attr("type", "checkBox").attr("checked", true);
+		c[0].ticketTypeId = i;
+		c.change(function () {
+			ticketType[this.ticketTypeId] = this.checked;
+		}).appendTo(e);
+	});
+	//åº§çº§é€‰æ‹©
+	$("#chkSeatOnly").click(function () {
+		if (!this.checked) return;
+		$(".hdr tr:eq(2) td").each(function (i, e) {
+			$(this).find("input").attr("checked", $(this).text().indexOf("åº§") != -1).change();
+		});
+		$("#chkSleepOnly")[0].checked = false;
+	});
+	$("#chkSleepOnly").click(function () {
+		if (!this.checked) return;
+		$(".hdr tr:eq(2) td").each(function (i, e) {
+			$(this).find("input").attr("checked", $(this).text().indexOf("å§") != -1).change();
+		});
+		$("#chkSeatOnly")[0].checked = false;
+	});
+
+	//é€šçŸ¥æƒé™
+	$("#enableNotify").remove();
+
+	//ä¿å­˜ä¿¡æ¯
+	function saveStateInfo() {
+		if (!$("#keepinfo")[0].checked) return;
+		setCookie("_from_station_text", $("#fromStationText").val());
+		setCookie("_from_station_telecode", $("#fromStation").val());
+		setCookie("_to_station_text", $("#toStationText").val());
+		setCookie("_to_station_telecode", $("#toStation").val());
+		setCookie("_depart_date", $("#startdatepicker").val());
+		setCookie("_depart_time", $("#startTime").val());
+	}
+	$("#submitQuery, #stu_submitQuery").click(saveStateInfo);
+
+	//æ˜¯å¦æ˜¯å­¦ç”Ÿç¥¨ï¼Ÿ
+	var buttonid = "";
+	var autoRefresh = false;
+	$("#submitQuery, #stu_submitQuery").click(function () {
+		buttonid = this.getAttribute("id");
+		timeCount = Math.max(6, parseInt($("#refereshInterval").val()));
+		autoRefresh = ($("#autoRequery")[0].checked);
+	});
+	$("#autoRequery").change(function () {
+		autoRefresh = this.checked;
+		if (!this.checked) return;
+
+		resetTimer();
+	});
+
+	//å®šæ—¶æŸ¥è¯¢
+	var timeCount = 0;
+	var queryCount = 0;
+	var timer = null;
+	var isTicketAvailable = false;
+	var audio = null; //é€šçŸ¥å£°éŸ³
+	var timerCountDown = 0;
+	function resetTimer() {
+		queryCount = 0;
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
+		$("#refreshtimer").html("");
+	}
+	function countDownTimer() {
+		timerCountDown--;
+		$("#refreshtimer").html(" ã€" + timerCountDown + "ç§’åŽè‡ªåŠ¨æŸ¥è¯¢...ã€‘");
+
+		if (timerCountDown > 0) {
+			timer = setTimeout(countDownTimer, 1000);
+		} else {
+			doQuery();
+		}
+	}
+	function displayQueryInfo() {
+		queryCount++;
+		$("#refreshinfo").html("å·²åˆ·æ–° " + queryCount + " æ¬¡ï¼Œæœ€åŽæŸ¥è¯¢ï¼š" + getTimeInfo());
+		$("#refreshtimer").html("æ­£åœ¨æŸ¥è¯¢");
+	}
+	function doQuery() {
+		timer = null;
+		displayQueryInfo();
+		$("#" + buttonid).click();
+	}
+
+	var highLightRow = function (row) {
+		row.css("background-color", "#FD855C");
+	}
+	var highLightCell = function (cell) {
+		cell.css("background-color", "#95AFFD");
+	}
+	var onticketAvailable = function () {
+		resetTimer();
+		$("#refreshinfo").html("å·²ç»æœ‰ç¥¨é¸Ÿï¼");
+
+		setTimeout(function () {
+			if (window.Audio && $("#chkAudioOn")[0].checked) {
+				if (!audio) {
+					audio = new Audio("http://www.w3school.com.cn/i/song.ogg");
+					audio.loop = false;
+				}
+				audio.play();
+				notify("å¯ä»¥è®¢ç¥¨äº†ï¼", null, false);
+			} else {
+				notify("å¯ä»¥è®¢ç¥¨äº†ï¼", null, false);
+			}
+		}, 100);
+	}
+
+	//æ£€æŸ¥æ˜¯å¦å¯ä»¥è®¢ç¥¨
+	var checkTickets = function (row) {
+		if ($("input.yuding_x", row).length > 0) return false;
+
+		var hasTicket = false;
+		$("td", row).each(function (i, e) {
+			if (!ticketType[i - 1]) return;
+			var el = $(e);
+
+			var info = $.trim(el.text());
+			if (info != "--" && info != "æ— ") {
+				highLightCell(el);
+				hasTicket= true;
+			}
+		});
+
+		return hasTicket;
+	}
+
+	//ç›®æ ‡è¡¨æ ¼
+	var g = $(".obj")[0];
+	g.addEventListener("DOMNodeInserted", function (e) {
+		e = e || event;
+		var row = $(e.target);
+
+		if (checkTickets(row)) {
+			if (!isTicketAvailable) {
+				onticketAvailable();
+			}
+
+			isTicketAvailable = true;
+			highLightRow(row);
+		}
+		if (!timer && !isTicketAvailable && autoRefresh) {
+			timerCountDown = timeCount + 1;
+			//æ²¡æœ‰å®šæ—¶å™¨çš„æ—¶å€™ï¼Œå¼€å¯å®šæ—¶å™¨å‡†å¤‡åˆ·æ–°
+			countDownTimer();
+		}
+	}, true);
+	g.addEventListener("DOMNodeRemoved", function () {
+		isTicketAvailable = false;
+	});
+
+	//å›žå¡«ä¿¡æ¯
+	var FROM_STATION_TEXT = getCookie('_from_station_text');  // å‡ºå‘ç«™åç§°
+	var FROM_STATION_TELECODE = getCookie('_from_station_telecode');  // å‡ºå‘ç«™ç”µæŠ¥ç 
+	var TO_STATION_TEXT = getCookie('_to_station_text');  // åˆ°è¾¾ç«™åç§°
+	var TO_STATION_TELECODE = getCookie('_to_station_telecode');  // åˆ°è¾¾ç«™ç”µæŠ¥ç 
+	var DEPART_DATE = getCookie('_depart_date');  // å‡ºå‘æ—¥æœŸ
+	var DEPART_TIME = getCookie('_depart_time'); // å‡ºå‘æ—¶é—´
+	$("#fromStationText").val(FROM_STATION_TEXT);
+	$("#fromStation").val(FROM_STATION_TELECODE);
+	$("#toStationText").val(TO_STATION_TEXT);
+	$("#toStation").val(TO_STATION_TELECODE);
+	$("#startdatepicker").val(DEPART_DATE);
+	$("#startTime").val(DEPART_TIME);
+}
+
+//-----------------è‡ªåŠ¨åˆ·æ–°----------------------
+
+//-----------------è‡ªåŠ¨ç™»å½•----------------------
+
+function initLogin() {
+	//login
+	var url = "https://dynamic.12306.cn/otsweb/loginAction.do?method=login";
+	var queryurl = "https://dynamic.12306.cn/otsweb/order/querySingleAction.do?method=init";
+	//Check had login, redirect to query url
+	if (parent && parent.$) {
+		var str = parent.$("#username_ a").attr("href");
+		if (str && str.indexOf("sysuser/user_info") != -1) {
+			window.location.href = queryurl;
+			return;
+		}
+	}
+
+	//æ’å…¥ç™»å½•æ ‡è®°
+	var form = $("#loginForm");
+	form.find("table tr:eq(3)").before('<tr><td>è®°å½•</td><td colspan="2"><label><input type="checkbox" id="keepInfo" /> è®°å½•ç”¨æˆ·åå’Œå¯†ç </label> (<span style="color:red;">è­¦å‘Šï¼šå¯èƒ½ä¼šæ³„æ¼æ‚¨çš„å¯†ç ï¼</span>)</td></tr><tr><td colspan="3">' +
+	'<input type="button" id="enableNotify" onclick="$(this).hide();window.webkitNotifications.requestPermission();" value="è¯·ç‚¹å‡»ä»¥å¯ç”¨é€šå‘Š" style="line-height:25px;padding:5px;" /><input type="button" id="refreshButton" value="è‡ªåŠ¨ç™»å½•" style="line-height:25px;padding:5px;" /></td></tr>');
+
+	if (window.webkitNotifications && window.webkitNotifications.checkPermission() != 0) {
+		window.webkitNotifications.requestPermission();
+	} else {
+		$("#enableNotify").remove();
+	}
+
+
+	function submitForm() {
+		var submitUrl = url;
+		var un = $("#UserName").val();
+		var up = $("#password").val();
+		var rand = $("#randCode").val();
+
+		if (!rand || rand.length != 4) {
+			alert("è¯·è¾“å…¥éªŒè¯ç ï¼");
+			stopLogin();
+			return;
+		}
+
+		if ($("#keepInfo")[0].checked) {
+			setCookie("__un", un);
+			setCookie("__up", up)
+		}
+		$.ajax({
+			type: "POST",
+			url: submitUrl,
+			data: {
+				"loginUser.user_name": un
+			  , "user.password": up
+			  , "randCode": rand
+			},
+			timeout: 30000,
+			success: function (msg) {
+				if (msg.indexOf('è¯·è¾“å…¥æ­£ç¡®çš„éªŒè¯ç ') > -1) {
+					stopLogin();
+					alert('è¯·è¾“å…¥æ­£ç¡®çš„éªŒè¯ç ï¼');
+					return;
+				};
+				if (msg.indexOf('å½“å‰è®¿é—®ç”¨æˆ·è¿‡å¤š') > -1) {
+					reLogin();
+				}
+				else {
+					notify('ç™»å½•æˆåŠŸï¼Œå¼€å§‹æŸ¥è¯¢è½¦ç¥¨å§ï¼');
+					window.location.href = queryurl;
+				};
+			},
+			error: function (msg) {
+				reLogin();
+			},
+			beforeSend: function (XHR) {
+				//alert("Data Saved: " + XHR);
+			}
+		});
+	}
+
+	var count = 1;
+	function reLogin() {
+		count++;
+		$('#refreshButton').val("(" + count + ")æ¬¡ç™»å½•ä¸­...").disabled = true;
+		notify("è‡ªåŠ¨ç™»å½•ä¸­ï¼š(" + count + ") æ¬¡ç™»å½•ä¸­...");
+		setTimeout(submitForm, 3000);
+	}
+	function stopLogin() {
+		$('#refreshButton').val("è‡ªåŠ¨ç™»å½•")[0].disabled = false;
+	}
+	//åˆå§‹åŒ–
+	$("#refreshButton").click(function () {
+		count = 1;
+		$(this).val("(1) æ¬¡ç™»å½•ä¸­...");
+		notify("è‡ªåŠ¨ç™»å½•ä¸­ï¼š(1) æ¬¡ç™»å½•ä¸­...");
+		submitForm();
+		return false;
+	});
+
+	var kun = getCookie("__un");
+	var kup = getCookie("__up");
+	if (kun && kup) {
+		$("#UserName").val(kun);
+		$("#password").val(kup);
+		$("#randCode")[0].focus();
+	}
+}
+
+//-----------------è‡ªåŠ¨ç™»å½•----------------------

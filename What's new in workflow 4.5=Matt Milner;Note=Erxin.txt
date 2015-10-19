@@ -1,0 +1,369 @@
+﻿What's new in workflow 4.5=Matt Milner;Note=Erxin
+
+
+# outline
+- c# expression
+    + c# expression in c# projects, create workflow project is changed to c# not vb syntax
+    + upgraded 4.x project use vb will continue use vb
+    + demo create workflow activity and call it code behind
+    Activty workflow = new ActivtyClass();
+    WorkflowInvoker.Invoke(workflow);
+    
+    //dynamic activity, load workflow from xaml file
+    var settings = new ActivityXamlServicesSettings{ CompileExpression = true };
+    var activity = (Activity)ActivityXamlServices.Load(uriofXamlFile);
+    WorkflowInvoker.Invoke(activity, settings);
+    
+    //imperative activity 
+    
+    Sequence = s = new Sequence{ DisplayName = "imperative", 
+                                 Activities = { new WriteLine {
+                                            Text = new CSharpvalue<string>("String.Format(\"not as simple\")")}}};
+                                    
+    TextExpressionCompilerSettings settings = new TextExpressionCompilerSettings
+    {
+        AlwaysGenerateSource = true,
+        ActivityName = "Sequence",
+        ForImplementation = false, //when not use a dynamic activity set to false 
+        Activity = s, 
+        Language = "C#", 
+        RootNamespace = null,
+        GenerateAsPartialClass = false
+    };
+    TextExpressionComilerResults results = new TextExpressionCompiler(settings).Compile();
+    
+    if(results.HasErrors)
+    {
+        foreach(var item in results.CompilerMessages)
+        {
+            
+        }
+    }
+    else
+    {
+        ICompiledExpressionRoot cer = Activator.CreateIntance(results.ResultType, new object[] {s}) as ICompiledExpressionRoot;
+        //Attach it to the activity 
+        CompiledExpresionInvoker.SetCompiledExpressionRoot(s, cer);
+        WorkflowInvoker.Invoke(s);
+    }
+    
+    //Dynamic Acivity Manuall, is similar to the previous one but set forImplementation to true 
+    DynamicActivity da = (DynamicActivity)ActivityXamlServices.Load(workflowXamlUri);
+    TextExpressionCompilerSettings  settings = 
+    {
+        AlwaysGenerateSource = true,
+        ActivityName = "Sequence",
+        ForImplementation = true, //when use a dynamic activity set to true
+        Activity = s, 
+        Language = "C#", 
+        RootNamespace = null,
+        GenerateAsPartialClass = false
+    };
+    Activator.CreateInstance(result.ResultType, new object[] {actvity}) as ICompiledExpressionRoot);
+    WorkflowInvoker.Invoke(activity);
+    
+- managing/navigating large workflows, Navigation
+    + panning, pan model can draw the workflow, delete select the panning icon to delete the mode
+    use middle button to switch to open/close panning model
+    + multiselect, ctrl click motion and click multiple items 
+    + find/find in files, support search directly in xaml, find in file will also search cs and xaml
+    come back to the breadcrumb 
+    
+    + document outline 
+    use the document outline  View|Other Window|Document Outline will give a tree view of workflow 
+    + sample application
+        * drop and connect, will automatic add connection 
+        * drop on connection, support drag drop on line 
+        * auto-generated sequence
+        * validation errors fail a build
+    http://www.microsoft.com/en-us/download/details.aspx?id=21459
+- simplified activity authoring
+- documenting and validating improvements
+    + annotations, on your workflow element, can be hidden or expanded 
+    right click a element to add annotations
+    + flow decision name
+    + validating flow chart connections, check the property of the flow char element to validate unconnected item 
+- new activities
+    + no persist scope, identify of scope of your workflow, your state is persisted 
+    + invoke delegate, define a activity func or action, and use this activty to invoke this activity  
+    + smtp client, activty use delegate command 
+        * add a value, set the type to Property, select activity delegate
+        * add smtpClient
+        system.net.attachment, name the delegate
+        
+        * add InovkeDelegate to the previous setup delegate name then the delegate result will be assigne to the property 
+    
+# State machine workflow 
+- wf state machine history 
+    + .net 3.x, state machine 
+    + .net 4.0, redesign the workflow foundation, no state machines 
+    + .net 4.0, update 1 with state machine
+    + .net 4.5, included 
+- state machine activities 
+    + state machine initial state = state1
+    state machine is the main container 
+    
+    state1 ---transition ---> state isFinal = true
+    A   |
+    |   |
+    +---+
+    
+    + transitions, make up with triggers
+    trigger --> condition --> action --> target state 
+    trigger, any activity on close that is a signal the transition to start 
+    condition, expression<bool> 
+    action, do something 
+
+    + state machine basics
+        * drag the state machine
+        * click a state to edit the state
+        * setup variables of the state
+        * add activity to entry to init the state 
+        * add activity to execute when exit the state 
+        * add two more state, and connect two state will add transition will named as T#
+        * double click T# to edit
+        * add activity to trigger, when the activty is complete, the transition will start
+        * add condition expression
+        * the action will be the expression equal to true  
+        * if condition is not match will keep state at the previous state 
+        * if the condition expression is not set, means if the trigger happen will transition to the next state 
+        * the delay activity is only triggered whenever enter the state at the fist time 
+        
+    + triggerless transition, all of my transitions are setup this way, penitential can run, will directly check the condition value, if not match will go back to the previous state 
+    
+    + shared triggers 
+    Trigger
+    |
+    V
+    Condition          Condition
+    |                   |
+    V                   V
+    Action              Action
+    target state        other target state 
+    
+        * the transition support add shared trigger transition 
+        * also could drag and drop the state to itself could also add shared trigger transition
+    
+- using triggers and transitions, conditional transition 
+- state machine tracking, add feature to use workflow tracking 
+    + stateMachineStateQuery
+    added to tracking profile
+    enables query on name 
+    
+    + stateMahcineStateRecord
+    emitted on entry 
+    state and state machine name 
+
+    + setup tracking by setup from the web.confg
+    
+    <System.serverModel>
+        <behaviors>
+            <serviceBehaviors>
+                <behavior>
+                    <etwTracking profileName="stateTracking"/>
+                </behavior>
+            </serviceBehaviors>
+        </behaviors>
+        
+        <tracking>
+            <profiles>
+                <trackingProfile name="StateTracking">
+                    <workflow activityDefinitionId="*">
+                        <stateMachineStateQuries>
+                            <!--the active name * means all activtiy-->
+                            <stateMachinesStateQuery activityName="*">
+                                <annotations>
+                                    <annotation name="Overview" value="State entered"/>
+                                </annotations>
+                            </stateMachineStateQuery>
+                        </stateMachineStateQuries>
+                    </workflow>
+                </trackingProfile>
+            </profiles>
+        </tracking>
+    </System.serverModel>
+
+    the tracking will be log at Event log|Applicaiton and Servers Logs | Microsoft | Windows | Application Server-Applications | 
+    right click the menu Analytic and Debug log will show the debug log of workflow 
+    will be track the tracking  to Analytic log, don't forget to set the filter Microsoft-Windows-Application Service-Application/Analytic; to filter only the workflow event log 
+
+    + the state machine state query also could be implement by code from workflow api
+
+
+# Contract first workflow services 
+- outline 
+    + contract first workflow services 
+    + implemented contracts 
+    + implement contract and validate the workflow service contract 
+    + workflow will generate activties for the import services 
+    
+- Implemented Contract 
+    + define a service contract interface 
+    + make workflow service implement interface 
+    + click the backgroud of the workflow service xamlx
+    + select the proprety ImplementContracts 
+    + select the interface type 
+    the return contract method value should be named as OperationNameResult 
+    
+    all the argument should be set as paramters for the Send/Receive method 
+    + the unimplement contract method will be display as warning, the wsdl is generated by the workflow, and it's not block the service built 
+
+    the exception is required to mark witl FailContract
+
+- import service contract 
+    + right click the workflow project
+    + choose import service contract 
+    + will automatic generate activities base on the contract 
+    + these kinds of activity configuration only need to care about 
+        * Content/parameter expressions 
+        * CanCreateInstance
+        * Correlation 
+
+# Workflow Versioning 
+- introduction
+    + versioning concepts
+    + using workflow application 
+    + workflow services versioning 
+- versioning concepts 
+    + do i need versioning? 
+    if you plan to have workflow running at the same time which are based on versions of the same definition
+    
+    + workflow identity, used to provide uniqueness for workflow versions 
+        * extend the name/type to include version 
+        * added to the persistence store 
+        run schema upgrade script
+        existing instance get null identity 
+        
+        * update existing schema and all the current instance will become to null identity 
+
+    + set up the workflow persistence database by the sql scrpt local at 
+    c:\windows\microsoft.net\framework\v4.0.30319\sql\en\SqlWorkflowInstanceStoreLogic.sql
+       SqlWorkflowInstanceStoreSchema.sql
+       SqlWorkflowInstanceStoreSchemaUpgrade.sql 
+       
+- versioning with workflow application 
+    + workflow application, pass in 
+    Activity 
+
+    + workflow Appliation pass in activity, and workflowIdentity for workflow versioning 
+    
+    + when persistence, will save state and identity, instance store 
+    
+    + workflowApplication getInstance(returns identity)
+    
+    the workflow Application will check the WorkflowIdentity and load the Activity version match the identity and load the state from the store 
+    
+- workflow service conversioning 
+    + workflowService
+    Activity, WorkflowIdentity  --persist(state + identity) -->instanceStore
+    |                                                          A A
+    |                                                          | |
+    workflow service host---correlation -gets identity --------+ |
+    service, supported versions ----------------load-------------+
+    
+    workflowServiceHostFactory          <--App_code/ExpenseService 
+    WorkflowService            WorkflowService  
+    WorkflowIdentity           App_Code/ExpenseService  
+    
+- Demo: We-hosted service 
+    + DefinitionIdentity is null, the service is requested and updated and resume the previous version 
+    
+    + Add new App_Code folder
+    + Create subfolder and the folder is named as xaml file name and without extend name 
+    copy the previous xamlx file to the folder and and rename the file with version number
+    Name_v0.xamlx 
+    
+    + select the workflow file and set the property DefinitoinIdentity and select to create new one
+    give the version number such as 1.1
+    
+    + come down to send mail activity 
+    
+    + the previous stored instance will use the older version service 
+    
+- demo self-hosted service 
+    + console application 
+    + create self host service in code 
+    WorkflowService service = GetCurrentService();
+    List<WorkflowService> previousVersions = GetPreviousVersionsOfService();
+    
+    WorkflowServiceHost host = new WorkflowServiceHost(service, new Uri("http://localhost/Temporary/ExppenseService/"));
+    if(previousVersion != null && previousVersions.Count > 0)
+        previousVersions.ForEach((ws) => host.SupportedVersions.Add(ws));
+    
+    host.Open();
+    
+    //create previous service version list 
+    //load the previous version files as the other workflow console application 
+    var service = XamlService.Load(filePath) as WorkflowService;
+    CompileExpression(service.Body);
+    return service;
+- what can I change 
+    + add/remove, implementation activities 
+    + modify the control flow of the service 
+    + change the configuration name 
+    + change the implemented contracts property, will simplify the validation steps 
+    + don't change the contract 
+    + you could change the implementation 
+    + don't change the service name
+    + don't make different version with same identity 
+    
+    
+# Dynamic Update 
+- updating your running workflow instance 
+    + what is dynamic update
+    when you have a workflow instance which was started with one definition and you want to update to complete using a different definition 
+    + applying dynamic update, 4.5 workflow 
+    
+    activity 1 ---> instance store 
+                        |
+    activity 2          |
+    |                   |
+    |                   |
+    V                   V    
+    create update map, make activity 1 map to activity 2 
+
+    + create update maps 
+    use api to do it 
+    
+    DynamicUpdateService.PrepareForUpdate(Activity);
+    
+    will take a copy of the current activity properties 
+    edit the activity 
+    
+    VisualBasic.Setting(builder, VisualBasic.GetSetting(builder));
+    WorkflowViewState.SetViewStateManager(builder.Implementation, WorkflowViewState.GetViewStateManager(biulder.Implementation));
+    ActivityXamlServices.CreateBuilderWriter(new XamlXmlWriter(xmlWriter, new XamlSchemaContext()));
+    
+    CreateUpdateMap(Activity);
+    
+    + handling dynamic update activities 
+
+- updating with workflow application 
+    + pick the workflow 
+    
+- native activity 
+    + virtual void OnCreateDynamicUpdateMap
+    you participate in map creation 
+    allow/disallow updates
+    manipulate activities in the map 
+    
+    + virtual void updateInstance(NativeActivityUpdateContext)
+    updates have been performed
+    update your state/logic as needed
+    use context.IsNewlyAdded(0 to check for new children 
+    
+    it is up to you to decide if your activity is updated what is the next step to take 
+    
+    take the update map and attach them to workflow to service 
+    
+- updating workflow service 
+    
+    
+    
+    
+    
+
+
+
+
+

@@ -1,0 +1,280 @@
+﻿python excel library; Note = Erxin
+
+:introduction
+>Python Excel, www.python-excel.org 
+>create excel com obj
+
+:python excel
+>contains three modules
+xlrd, xlwt, xlutils
+>mmap, python memory map file module
+    - map normal file which is open by python build-in method open to physical memory
+    - If you want to create a memory-mapping for a writable, buffered file, you should flush() the file first. This is necessary to ensure that local modifications to the buffers are actually available to the mapping.
+    - support method
+        * To map anonymous memory, -1 should be passed as the fileno along with the length
+        mmap.mmap(-1, length)
+        * standard file method
+        * split operation, [start:end:step]
+    - optional keyword parameter
+    ACCESS_READ, ACCESS_WRITE, or ACCESS_COPY
+    ACCESS_WRITE will both affect both the memory and underlying file
+    - map the file with opened file hander should use the fileno() method 
+    mmap.mmap(fileno, length[, tagname[, access[, offset]]]), window version
+    - use case
+        * use as file cash
+        * use it to exchange data between parent process with child process
+        import mmap
+        import os
+
+        map = mmap.mmap(-1, 13)  #anonymous memory file
+        map.write("Hello world!")
+
+        pid = os.fork()
+
+        if pid == 0: # In a child process
+            map.seek(0)
+            print map.readline()
+
+            map.close()
+>xml, python standard library, contains three categories
+    - a pythonesque xml tree library
+    ElementTree, xml.etree, lxml, Everyone else should start with the faster and more pythonic 
+    - event-driven xml parsers
+    elementTree's iterpars()
+    pyexpat, a fast and low level xml parser
+    sax, xml.sax package, well-know low-level SAX API
+    - xml tree libraries that adhere to the w3c DOM standard
+        * miniDom, xml.dom.minidom package
+        * pullDom, xml.dom.pulldom package
+    - pyxser, a python extension to serialize/deserialize python objects to xml
+    - lxml, a fast and wide used python xml c base library
+        * website, http://lxml.de
+        * import library
+        from lxml import etree
+        * element class
+        root = etree.Element("root") #create root elemnt by the factory method
+        print(root.tag)              #access elements through the tag property
+        #add child element by two ways
+        root.append( etree.Element("child1") )  #add child element
+        child2 = etree.SubElement(root, "child2")
+        #out put the xml elements
+        print(etree.tostring(root, pretty_print=True))
+        child = root[0]             #access element
+        element_index = root.index(child)   #only support etree
+        * element list
+        root[0] = root[-1] #this will move the element in lxml.etree, 移位
+        child0, child1, ... child_n -> child_n, child0, child1, ..., child_n-1
+        * create element attribute 
+            - the elment factory method
+            etree.Element(element_name, attr_name=value)
+            - use the attributes collection's get(), set() method
+            element_obj.attrib[attr_name]
+            element_obj.get(attr_name)
+            element_obj.set(attr_name, value)
+        * element contain text
+            - element_obj.text
+            - xhtml style text
+            b'<html><body>TEXT<br/></body></html>'
+            element_obj.text, element_obj.tail to get the text surround 'br'
+            to prevent tail text appear in the tostring method
+            etree.tostring(element_obj, with_tail=False)
+        * support xpath
+        element_obj.xpath()
+        * tree iteration
+        all nodes in the tree, including ProcessingInstructions, Comments and Entity instances. it yields element in doc order.
+        element_obj.iter() will return a iterable collection
+        element_obj.iter(filter0, filter1, ...), filter is the specify element name
+        element_obj.iter(tag=etree.Element), only return element node
+        filter support wildcard *, ?
+        * serialisation
+        tostring(), 
+        write(file_path), write to file, file-like object or url(ftp, put, http, post)
+        argument support pretty_print and encoding
+        default encoding is ascii
+        support serialize to html or extract text content by passing keyword method
+        etree.tostring(element_obj, method='xml')
+        etree.tostring(element_obj, method='html')
+        etree.tostring(element_obj, method='text')
+        * get content from string
+        etree.XML(xml_str)
+        * element tree class, is a wrapper with a node, provide couple of methods for serialisation and general document handling
+        tree = etree.ElementTree(element_obj)
+        tree.docinfo.xml_version
+        tree.docinfo.doctype
+        the parse() function return element tree object from file or file-like 
+        element tree serialises as a complete document include doctype and dtd content in the document. Used etree.tostring(tree.getroot()) to serialise only root element 
+        * parsing form strings and files
+        etree.fromstring(xml_str) return element obj
+        etree.XML(), use to write XML literals right into the source
+        etree.HTML(), like XML()
+        etree.parse(), use to parse from file and file-like obj, it return element tree, support
+            an open file object
+            a file-like object that has a .read(byte_count) method returning a byte string on each call
+            a filename string
+            an HTTP or FTP URL string
+        custom parser object, it could be used in the above parse functions
+        parser = etree.XMLParser(remove_blank_text = True)
+        root = etree.XML(xml_str, parser)
+        * incremental parsing, support two ways
+            - use the parameter inplemented read method, the parse() function will call the read method until get nothing
+            - use the parser's feed interface
+            parser = etree.XMLParser()
+            parser.feed(xml_part_str0)
+            parser.feed(xml_part_str1)
+            ...
+            root = parser.close()
+            after close() or encounter a exception, the parser object could be reuse
+        * even-driven parsing
+        fit for search for a small fraction which is deep inside the document tree, support two event driven parser interfaces, one generate the event when building the tree. the other doesn't build the tree at all.
+            - iterparse()
+            for event, element in etree.iterparse(file_like_obj)
+                print(event, element.tag, element.text)
+            the parser only generate the event when it complete parse the element. we can control through the events keyword argument
+            etree.iterparse(file_like_obj, events=('start', 'end'))
+            use iterparse on database dumps, it have a root and followed thousands of repeated data elements, in this case, it's best to let lxml build the and only intercept on the data element
+            etree.iterparse(xml_file, tag=data_tag_name)
+            - generate the event without build xml tree. Need to define a parser target
+            class ParserTarget:
+                events = []
+                close_count = 0
+                def start(self, tag, attrib):
+                    self.events.append(("start", tag, attrib))
+                def close(self):
+                    events, self.events = self.events, []
+                    self.close_count += 1
+                    return events
+            pt = ParserTarget()
+            parser = etree.XMLParser(target = pt)
+            events = etree.fromstring(xml_str, parser)
+        element_obj.clear() to release the used memory, to prevent use to much memory when parse large xml file
+        * namespace
+        xhtml = etree.Element("{http://www.w3.org/1999/xhtml}html")
+        body = etree.SubElement(xhtml, "{http://www.w3.org/1999/xhtml}body")
+        body.text = "Hello World"
+        print(etree.tostring(xhtml, pretty_print=True))
+        '''
+        <html:html xmlns:html="http://www.w3.org/1999/xhtml">
+          <html:body>Hello World</html:body>
+        </html:html>
+        '''
+        use etree.QName(name_space, local_name) to seperate namespace and localname
+        tag = etree.QName(name_space, local_name)
+        tag = etree.QName(element_obj)
+        look up the current namespace define from the property, xhtml.nsmap
+        set, get the property of element base on the defined namespace
+        * e-factory provides a simple and compact syntax for generate html and xml
+        from lxml.builder import E
+        
+        def CLASS(*args): # class is a reserved word in Python
+            return {"class":' '.join(args)}
+            
+        html = page = (
+            E.html(       # create an Element called "html"
+                E.head(
+                    E.title("This is a sample document")
+                 ),
+                 E.body(
+                   E.h1("Hello!", CLASS("title")),
+                   E.p("This is a paragraph with ", E.b("bold"), " text in it!"),
+                   E.p("This is another paragraph, with a", "\n      ",
+                     E.a("link", href="http://www.python.org"), "."),
+                   E.p("Here are some reservered characters: <spam&egg>."),
+                   etree.XML("<p>And finally an embedded XHTML fragment.</p>"),
+                )
+            )
+        )
+        * element maker
+        from lxml.builder import ElementMaker
+        E = ElementMaker(namespace = url_str,
+                         nsmap = {'p': url_str})
+        DOC = E.doc
+        TITLE = E.title
+        SECTION = E.section
+        PAR = E.par
+        my_xml_doc = DOC(
+            SECTION(
+                TITLE('...')
+                PAR('...')
+                PAR('...')
+            )
+            SECTION(
+                TITLE('...')
+                PAR('...')
+                PAR('...')
+            )
+        )
+>copy, python standard library
+from copy import deepcopy
+new_copied_obj = deepcopy(obj)
+>xlrd, read from xls file
+    - open method
+    work_book_obj = open_workbook(file_path, file_content)
+    support input file path or file_content(string)
+    - navigate a workbook
+    work_book_obj contain collections of sheets, 
+    sheets contains nrows, the total rows number
+                    ncols, the total columns number
+    get a cell value, sheet_obj.cell(row, col).value
+    - introspecting a book
+    xlrd.Book, returned by open_workbook, contain all information with the workbook
+    nsheets, contain the sheet number, sheet_by_index() to get the sheet
+    sheet_names, contain all the sheet names, sheet_by_name() to get the sheet
+    Book object also contain other attrib
+        * codepage
+        * countries
+        * user_name
+    - introspecting a sheet
+    attributes contains
+        * name
+        * nrows
+        * ncols
+        * cell(row, col), return cell object contain value and ctype attrib
+        * cell_value(row, col), to directly return cell value
+        * col_label_ranges
+        * row_label_ranges
+        * visibility
+    - iterating over the contents of sheet
+    row, col, 
+    row_slice(), col_slice(), get a list of cell obj
+    row_types(), col_types(), a list of integers representing the cell types
+    - utility functions
+    cellname(row, col), turns a row and col index into a relative cell reference
+    cellnameabs(row, col), absolute reference
+    colname(), turn col index to column name
+    - Unicode
+    most of the cell object will be unicode and in rare case asccii string
+    UTF_16_LE
+    - Types of cell
+    text, xlrd.XL_CELL_TEXT
+    number, xlrd.XL_CELL_NUMBER
+    date, date don't really exist in excel, it will return the number format string looks alike a date
+    xldate_as_tuple() method is provide for turning the float in a date to tuple suitable for instanting data/time object
+        * excel file have two data mode , one for window, another is apple machine
+    boolean,
+    error, cell value that are integer representing specific error codes
+    - Empty / Blank
+    xlrd.XL_CELL_EMPTY, constant is present no informatin in the cell
+    there is only one "empty cell" whose value is an empty string
+    xlrd.XL_CELL_BLANK, cell where only formating information is present
+    - Names, types, excel can define additional information by names
+> xlwt, use for generate ms excel spreedsheet files
+    - module contents
+    easyxf(function), use to create and config xfstyle objects to use with write method
+    workbook(class), use to create a workbook
+    worksheet(class), use to respresent the content of a sheet in a workbook
+    - WorkBook class
+    WorkBook(encoding='ascii', style_compression=0)
+    add_sheet(name), return a worksheet object
+    save(filename_or_stream)
+    - WorkSheet class
+    WorkSheet(name, parent_book)
+    write(r, c, label='', style=Style.default_style)
+        * r, c, zero relative row col number
+        * the data value to be written
+        * style, xf extend format
+        
+    
+    
+    
+
+    

@@ -1,0 +1,753 @@
+﻿Get familiar with Browser internals;Note=Erxin
+
+# Browser helper object, IE 
+- BHO, browser helper object is a dll module, design as a plugin for microsoft internet explorer. it is COM
+- implementation 
+    + each time a new instance of internet explorer starts it check the window registry for the following key 
+    HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects
+    
+    If Internet Explorer finds this key in the registry, it looks for a CLSID key listed below the key. The CLSID keys under Browser Helper Objects tell the browser which BHOs to load
+
+    for each BHO IE call CoCreateInstance to start the instance of the BHO in the same process, If the BHO is started and implements the IObjectWithSite interface, it can control and receive events from Internet Explorer
+    
+- BHO API expose hooks 
+
+
+# Document compatibility modes in internet explorer 9 
+- IE and later will determine how to ernder a page based on the X-UA-Compatible header. if it not present, then look for DocType, if document type is missing then the page is render in IE 5 mode(quirks mode of IE7)
+
+- recommend doctype in IE9 is 
+<!DOCTYPE html>
+
+including a url in doctype will make IE to use stand mode, for example 
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+
+- compatible view 
+- developer tools, f12, this is useful for debug something suddenly started breaking in IE9 that didn't break in IE8 
+
+use compatible meta tag to change the render way 
+<head>
+<title>The Page Title</title>
+<meta http-equiv="X-UA-Compatible" content="IE=8" />
+</head> 
+place this in the header 
+
+    + available values for X-UA-Compatible settings are 
+    5 (renders as if IE 7 in Quirks mode which is very similar to how content was rendered in IE 5)
+    7, 8, and 9 (these ignore the DocType if present and display as if in Standards mode of the browser specified)
+    EmulateIE7, EmulateIE8, EmulateIE9 (these take the DocType into consideration and displays using Standards mode or Quirks mode of the browser specified)
+    Edge, tells the browser to use the highest mode 
+
+    + is your site have a large number of pages, place the tag in http response header will be a better choice than change the pages respectively
+
+
+# Internet explorer extensibility, Add-in-express
+- the earlier version of IE allowed embedding binary objects only in page code as activex controls. version 5 start support binary winapi code 
+- supported features
+    + Internet explorer commands, each command should be implemented as a separate com-object and register in separated registry key 
+    + context menus, each menu should be register in a separated registry key 
+    + toolbars, separated key 
+    + explorer bar, as an activex control and registered in a special registry key 
+
+- benefits 
+    + develop IE browser helper object(BHO), bars and toolbars in one integrated project or separate ones 
+    + customize vertical or horizontal IE bars with any .net controls 
+    + create toolbar with any .net controls including usercontrol components 
+    + extend IE menu 
+    + add new items to the built-in tools and help menus
+    + extend built-in IE command bar 
+    + define custom keyboard shortcut 
+    + share data blocks over IE threads and processes 
+    + deploy and update your IE add-ons using msi-based web-enabled setup projects 
+    + make your IE add-ons thread safe, interprocess-communicative, isolated and secure 
+
+- project architecture, add-in express is based on the IE SDK 
+
+    + all addons based on add-in express are implemented as browser helper objects, add-in express run-time code is already thread-sae and context sensitive, you needn't do anything to make your add-ins such. 
+
+    + add-in express isolates your add-ons with a sepcial loader 
+    + context synchronization, provides access to IE objects that are actal in current context 
+    + data globalization, support for utiliz data in whole browser process 
+    + will help to registers all your extensibility features, you don't do it manually 
+    + windows explorer, add-in express make sure your add-ons only works with internet explorer 
+    
+    + with add-in express your IE add-on is a .net component. add-in express can serve as a container or components 
+
+    + main IE module supports 
+        + commands, a collection of commands you add to internet explorer 
+        + conetxt menu, a collection of popup menu items 
+        + bars, a collection of each item of which makes a appropriated .net user control a custom explorer bar 
+        + toolbar, it is a collection each item of which makes a appropriated .net user control a custom toolbar 
+        
+        + events 
+            * application event such as 
+            BeforeNavigate2
+            CommndStateChange 
+            ...
+            
+            * IE module 
+            OnBrowserResized 
+            OnConnect 
+            ...
+            
+            * HTTP Negotiations 
+            OnAfterResponse 
+            OnAuthenticate 
+            ...
+            
+    + access IE and html objects and event, IE module contain all IE application level events. to handle document level event by use ADXIEHtmlDocEvents
+
+- advanced IE bars 
+docking bar 
+support drag drop and hide show, form header support specify icon 
+
+- deployment, right click and create setup project 
+- developers for developers 
+    + mltip-tabbed ui, multi-threaded ie7,... Every time a new tab is opened, IE creates a new instance of your BHO
+
+    + whole IE extensibility features in one project 
+
+    + whole ie extensibility features in one project 
+    
+    + isolate by loaders, there are two version of loader, 32 and 64 
+    
+    + deployment and redeployment 
+
+
+# hooking 
+- reference
+https://en.wikipedia.org/wiki/Hooking
+https://msdn.microsoft.com/en-us/library/windows/desktop/ms632589(v=vs.85).aspx
+
+- it is used to alter or augment the behavior of an operating system of applications or other software components intercepting function calls or message or events 
+
+- methods 
+    + physical modification, modifying an executable or library before application is running through techniques of reverse engineering 
+
+    + use disassembler the entry point of a function could be found, also could be achieved by altering the import table of executable 
+    
+    alternate method for achieving function hooking is by intercepting function calls through a wrapper library, the wrapper library is design to call any of the functionality from the original library or replace a new logic 
+    
+    + runtime modification
+        * window support to insert hooks that can be used to process or modify system events and application events for dialogs scrollbars and menus as well as other items 
+
+        * linux could use similar manner to process network events within the kernel through NetFilter
+        
+    change the very first few code instructions of the target function to jumpy to an injected code, alternately on systems using shared library concept, interrupt vector table or the import descriptor table can be modified 
+
+- sample code, virtual method table hooking, virtual method table VMT or Vtable, the item of Vtable is assigned in runtime, here is a typical VTM hooking  
+class VirtualTable {  // example class  
+    public:  
+    virtual void VirtualFunction01( void );  
+};
+
+void VirtualTable::VirtualFunction01( void )  {  
+    printf("VirtualFunction01 called");  
+}
+
+typedef void ( __thiscall* VirtualFunction01_t )( void* thisptr );  
+VirtualFunction01_t g_org_VirtualFunction01;
+
+//our detour function  
+void __fastcall hk_VirtualFunction01( void* thisptr, int edx )  {  
+    printf("Custom function called");  
+    //call the original function  
+    g_org_VirtualFunction01(thisptr);  
+}  
+int _tmain(int argc, _TCHAR* argv[])  {
+
+    DWORD oldProtection;
+
+    VirtualTable* myTable = new VirtualTable();  
+    void** base = *(void***)myTable;
+
+    VirtualProtect( &base[0], 4, PAGE_EXECUTE_READWRITE, &oldProtection );  
+    //save the original function  
+    g_org_VirtualFunction01 = (VirtualFunction01_t)base[0];  
+    //overwrite  
+    base[0] = &hk_VirtualFunction01;  
+    VirtualProtect( &base[0], 4, oldProtection, 0 );
+
+    //call the virtual function (now hooked) from our class instance  
+    myTable->VirtualFunction01();
+
+    return 0;  
+}
+
+    + __thiscall, on member functions and is the default calling convention used by C++ member functions that do not use variable arguments, __thiscall, the callee cleans the stack, the this pointer being passed via register ECX not on the stack 
+
+    One reason to use __thiscall is in classes whose member functions use __clrcall by default. In that case, you can use __thiscall to make individual member functions callable from native code.
+
+    * __cdecl calling convention. All function arguments are pushed on the stack, with the this pointer placed on the stack last. the stack is cleaned up by the caller, it can do vararg functions. The __cdecl calling convention creates larger executables than __stdcall, because it requires each function call to include stack cleanup code.
+    
+    * __stdcall, The callee cleans the stack, so the compiler makes vararg functions __cdecl. Functions that use this calling convention require a function prototype. 
+
+    ARM and x64 machines, __thiscall is accepted and ignored by the compiler
+    https://msdn.microsoft.com/en-us/library/ek8tkfbw.aspx
+
+    + __fastcall, specifies that arguments to functions are to be passed in registers, when possible. only apply for x86 architecture 
+
+        * argument-passing order, first two dword or smaller arguments that are found in the argument list from left to right are passed in ECX and EDX, others are passed on stack from right to left 
+        * called function pops the arguments from the stack 
+        * @ is prefixed to names and followed by the number of bytes(in decimal) in the parameter list is suffixed to names 
+        * no case translation performed 
+
+    the /Gr compiler option causes each function in the module to compile as __fastcall, unless declared by a conflicting attribute or main 
+
+    x64 and arm will ignore the declaration 
+
+    + VirtualProtect(
+        _In_ LPVOID lpAddress, //start page region 
+        _In_ SIZE_T dwSize,
+        _In_ DWORD flNewProtect, //The memory protection option. 
+        _Out_ PDWORD lpflOldProtect
+    );
+    https://msdn.microsoft.com/en-us/library/windows/desktop/aa366898(v=vs.85).aspx
+
+    Changes the protection on a region of committed pages in the virtual address space of the calling process
+    To change the access protection of any process use the VirtualProtectEx function 
+    
+    flNewProtect options 
+        * PAGE_EXECUTE_READWRITE
+        * PAGE_EXECUTE 
+        * PAGE_EXECUTE_READ 
+        * PAGEEXECUTE_WRITECOPY
+        * PAGE_NOACCESS
+        * PAGE_READONLY 
+        * PAGE_READWRITE 
+        * PAGE_WRITECOPY 
+        * PAGE_TARGETS_INVALID
+        * PAGE_TARGETS_NO_UPDATE
+        ...
+    
+    It is best to avoid using VirtualProtect to change page protections on memory blocks allocated by GlobalAlloc, HeapAlloc, or LocalAlloc, because multiple memory blocks can exist on a single page
+    
+- c# keyboard event hook     
+using System.Runtime.InteropServices;
+
+namespace Hooks
+{
+	public class KeyHook
+	{
+		/* Member variables */
+		protected static int Hook;
+		protected static LowLevelKeyboardDelegate Delegate;
+		protected static readonly object Lock = new object();
+		protected static bool IsRegistered = false;
+
+		/* DLL imports */
+		[DllImport("user32")]
+		private static extern int SetWindowsHookEx(int idHook, LowLevelKeyboardDelegate lpfn,
+			int hmod, int dwThreadId);
+
+		[DllImport("user32")]
+		private static extern int CallNextHookEx(int hHook, int nCode, int wParam, KBDLLHOOKSTRUCT lParam);
+
+		[DllImport("user32")]
+		private static extern int UnhookWindowsHookEx(int hHook);
+
+		/* Types & constants */
+		protected delegate int LowLevelKeyboardDelegate(int nCode, int wParam, ref KBDLLHOOKSTRUCT lParam);
+		private const int HC_ACTION = 0;
+		private const int WM_KEYDOWN = 0x0100;
+		private const int WM_KEYUP = 0x0101;
+		private const int WH_KEYBOARD_LL = 13;
+
+		[StructLayout(LayoutKind.Sequential)]
+		public struct KBDLLHOOKSTRUCT
+		{
+			public int vkCode;
+			public int scanCode;
+			public int flags;
+			public int time;
+			public int dwExtraInfo;
+		}
+
+		/* Methods */
+		static private int LowLevelKeyboardHandler(int nCode, int wParam, ref KBDLLHOOKSTRUCT lParam)
+		{
+			if (nCode == HC_ACTION)
+			{
+				if (wParam == WM_KEYDOWN)
+					System.Console.Out.WriteLine("Key Down: " + lParam.vkCode);
+				else if (wParam == WM_KEYUP)
+					System.Console.Out.WriteLine("Key Up: " + lParam.vkCode);
+			}
+			return CallNextHookEx(Hook, nCode, wParam, lParam);
+		}
+		
+		public static bool RegisterHook()
+		{
+			lock (Lock)
+			{
+				if (IsRegistered)
+					return true;
+				Delegate = LowLevelKeyboardHandler;
+				Hook = SetWindowsHookEx(
+					WH_KEYBOARD_LL, Delegate,
+					Marshal.GetHINSTANCE(
+						System.Reflection.Assembly.GetExecutingAssembly().GetModules()[0]
+					).ToInt32(), 0
+				);
+
+				if (Hook != 0)
+					return IsRegistered = true;
+				Delegate = null;
+				return false;
+			}
+		}
+
+		public static bool UnregisterHook()
+		{
+			lock (Lock)
+			{
+				return IsRegistered = (UnhookWindowsHookEx(Hook) != 0);
+			}
+		}
+	}
+}
+
+To install a global hook, a hook must have a native dynamic-link library (DLL) export to inject itself in another process 
+    + function signature 
+[DllImport("user32.dll", SetLastError = true)]
+static extern IntPtr SetWindowsHookEx(HookType hookType, HookProc lpfn, IntPtr hMod, uint dwThreadId);
+A HookType constant specifying the type of hook to install
+A HookProc delegate representing the hook procedure method
+
+to hook low level events use: 
+using (Process process = Process.GetCurrentProcess())
+using (ProcessModule module = process.MainModule)
+{
+    IntPtr hModule = GetModuleHandle(module.ModuleName);
+
+    hHook = SetWindowsHookEx(HookType.WH_KEYBOARD_LL, hook, hModule, 0);
+}
+
+Remember to call CallNextHookEx in your callback delegate
+Remember to call UnhookWindowsHookEx using the handle returned by SetWindowsHookEx
+
+        * msdn link 
+        https://msdn.microsoft.com/en-us/library/windows/desktop/ms644990(v=vs.85).aspx
+
+HHOOK WINAPI SetWindowsHookEx(
+  _In_ int       idHook, //The type of hook procedure to be installed.
+  _In_ HOOKPROC  lpfn,
+  _In_ HINSTANCE hMod,
+  _In_ DWORD     dwThreadId
+);        
+lpfn, A pointer to the hook procedure. If the dwThreadId parameter is zero or specifies the identifier of a thread created by a different process, the lpfn parameter must point to a hook procedure in a DLL
+
+hMod, A handle to the DLL containing the hook procedure pointed to by the lpfn parameter
+
+dwThreadId, The identifier of the thread with which the hook procedure is to be associated. 0 means all existing threads in desktop application, windows store app is different 
+
+        * type of hook procedure 
+        WH_CALLWNDPROC
+        WH_CALLWNDPROCRET
+        WH_CBT, Installs a hook procedure that receives notifications useful to a CBT application
+        WH_KEYBOARD_LL, Installs a hook procedure that monitors low-level keyboard input events
+        ....
+
+    + CallNextHookEx, Passes the hook information to the next hook procedure in the current hook chain. A hook procedure can call this function either before or after processing the hook information
+    
+LRESULT WINAPI CallNextHookEx(
+  _In_opt_ HHOOK  hhk, //ignore 
+  _In_     int    nCode, //hook code passed to the current hook procedure 
+  _In_     WPARAM wParam, //the meaning of this parameter depends on the type of hook associated with the current hook chain 
+  _In_     LPARAM lParam // depends on the type of hook associated with the current hook chain 
+);
+
+Hook procedures are installed in chains for particular hook types. CallNextHookEx calls the next hook in the chain. Calling CallNextHookEx is optional, but it is highly recommended; otherwise, other applications that have installed hooks will not receive hook notifications and may behave incorrectly as a result.
+
+- API/function hooking/Interception using JMP instruction hooks by overwriting the first six bytes of a desitnation function with a JMP instruction to a new function 
+compile the code and use dll injection to inject the code to hook the method 
+
+/*
+ This idea is based on chrom-lib approach, Distributed under GNU LGPL License.
+ Source chrom-lib: https://github.com/linuxexp/chrom-lib
+ Copyright (C) 2011  Raja Jamwal
+*/
+#include <windows.h>  
+#define SIZE 6
+
+typedef int (WINAPI *pMessageBoxW)(HWND, LPCWSTR, LPCWSTR, UINT);  // Messagebox prototype
+int WINAPI MyMessageBoxW(HWND, LPCWSTR, LPCWSTR, UINT);            // Our detour
+
+void BeginRedirect(LPVOID);                                        
+pMessageBoxW pOrigMBAddress = NULL;                                // address of original
+BYTE oldBytes[SIZE] = {0};                                         // backup
+BYTE JMP[SIZE] = {0};                                              // 6 byte JMP instruction
+DWORD oldProtect, myProtect = PAGE_EXECUTE_READWRITE;
+
+INT APIENTRY DllMain(HMODULE hDLL, DWORD Reason, LPVOID Reserved)  
+{  
+    switch(Reason)  
+    {  
+        case DLL_PROCESS_ATTACH:                                        // if attached
+        pOrigMBAddress = (pMessageBoxW)GetProcAddress(GetModuleHandle("user32.dll"), // get address of original
+                          "MessageBoxW");  
+        if(pOrigMBAddress != NULL)  
+            BeginRedirect(MyMessageBoxW);                               // start detouring
+        break;
+
+        case DLL_PROCESS_DETACH:  
+            memcpy(pOrigMBAddress, oldBytes, SIZE);                       // restore backup
+
+        case DLL_THREAD_ATTACH:  
+        case DLL_THREAD_DETACH:  
+            break;  
+    }  
+    return TRUE;  
+}
+
+void BeginRedirect(LPVOID newFunction)  
+{  
+    BYTE tempJMP[SIZE] = {0xE9, 0x90, 0x90, 0x90, 0x90, 0xC3};         // 0xE9 = JMP 0x90 = NOP oxC3 = RET
+    memcpy(JMP, tempJMP, SIZE);                                        // store jmp instruction to JMP
+    DWORD JMPSize = ((DWORD)newFunction - (DWORD)pOrigMBAddress - 5);  // calculate jump distance
+    VirtualProtect((LPVOID)pOrigMBAddress, SIZE,                       // assign read write protection
+           PAGE_EXECUTE_READWRITE, &oldProtect);  
+    memcpy(oldBytes, pOrigMBAddress, SIZE);                            // make backup
+    memcpy(&JMP[1], &JMPSize, 4);                                       // fill the nop's with the jump distance (JMP,distance(4bytes),RET)
+    memcpy(pOrigMBAddress, JMP, SIZE);                                 // set jump instruction at the beginning of the original function
+    VirtualProtect((LPVOID)pOrigMBAddress, SIZE, oldProtect, NULL);    // reset protection
+}
+
+int WINAPI MyMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uiType)  
+{  
+    VirtualProtect((LPVOID)pOrigMBAddress, SIZE, myProtect, NULL);     // assign read write protection
+    memcpy(pOrigMBAddress, oldBytes, SIZE);                            // restore backup
+    int retValue = MessageBoxW(hWnd, lpText, lpCaption, uiType);       // get return value of original function
+    memcpy(pOrigMBAddress, JMP, SIZE);                                 // set the jump instruction again
+    VirtualProtect((LPVOID)pOrigMBAddress, SIZE, oldProtect, NULL);    // reset protection
+    return retValue;                                                   // return original return value
+}
+
+    * APIENTRY, is a alias for WINAPI, definition for the calling convention stdcall
+    * GetProcAddress, Retrieves the address of an exported function or variable from the specified dynamic-link library (DLL)
+
+    FARPROC WINAPI GetProcAddress(
+      _In_ HMODULE hModule,
+      _In_ LPCSTR  lpProcName
+    );
+
+    hModule[in], a handle function to the dll module that contains the function or variable, the LoadLibrary, LoadLibraryEx, LoadPackagedLibrary, or GetModuleHandle function return this handle 
+    
+    reference using runtime dynamic link 
+    https://msdn.microsoft.com/en-us/library/windows/desktop/ms686944(v=vs.85).aspx
+    
+- netfilter hook, use hook to alter network traffic in linux 
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/skbuff.h>
+
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/in.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
+
+/* Port we want to drop packets on */
+static const uint16_t port = 25;
+
+/* This is the hook function itself */
+static unsigned int hook_func(unsigned int hooknum,
+                       struct sk_buff **pskb,
+                       const struct net_device *in,
+                       const struct net_device *out,
+                       int (*okfn)(struct sk_buff *))
+{
+        struct iphdr *iph = ip_hdr(*pskb);
+        struct tcphdr *tcph, tcpbuf;
+
+        if (iph->protocol != IPPROTO_TCP)
+                return NF_ACCEPT;
+
+        tcph = skb_header_pointer(*pskb, ip_hdrlen(*pskb), sizeof(*tcph), &tcpbuf);
+        if (tcph == NULL)
+                return NF_ACCEPT;
+
+        return (tcph->dest == port) ? NF_DROP : NF_ACCEPT;
+}
+
+/* Used to register our hook function */
+static struct nf_hook_ops nfho = {
+        .hook     = hook_func,
+        .hooknum  = NF_IP_PRE_ROUTING,
+        .pf       = NFPROTO_IPV4,
+        .priority = NF_IP_PRI_FIRST,
+};
+
+static __init int my_init(void)
+{
+        return nf_register_hook(&nfho);
+}
+
+static __exit void my_exit(void)
+{
+    nf_unregister_hook(&nfho);
+}
+
+module_init(my_init);
+module_exit(my_exit);
+    
+- internal IAT(Import address table) hooking, hook functions that are imported from another module. This can be used to hook functions in a different process from the calling process
+#include <windows.h>
+
+typedef (*pMessageBoxA) (HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType); //This is the 'type' of the MessageBoxA call.
+pMessageBoxA RealMessageBoxA; //This will store a pointer to the original function.
+
+void DetourIATptr(const char* function, void* newfunction, HMODULE module);
+
+int __stdcall NewMessageBoxA(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType) { //Our fake function
+    printf("The String Sent to MessageBoxA Was : %s\n");
+    return RealMessageBoxA(hWnd, lpText, lpText, uType); //Call the real function
+}
+
+int main(int argc, CHAR *argv[]) {
+   DetourIATptr("MessageBoxA",(void*)NewMessageBoxA,0); //Hook the function
+   MessageBoxA(NULL, "Just A MessageBox", "Just A MessageBox", 0); //Call the function -- this will invoke our fake hook.
+   return 0;
+}
+
+//Find the IAT (Import Address Table) entry specific to the given function.
+void **IATfind(const char *function, HMODULE module) 
+{ 
+	int ip = 0;
+	if (module == 0)
+		module = GetModuleHandle(0);
+	PIMAGE_DOS_HEADER pImgDosHeaders = (PIMAGE_DOS_HEADER)module;
+	PIMAGE_NT_HEADERS pImgNTHeaders = (PIMAGE_NT_HEADERS)((LPBYTE)pImgDosHeaders + pImgDosHeaders->e_lfanew);
+	PIMAGE_IMPORT_DESCRIPTOR pImgImportDesc = (PIMAGE_IMPORT_DESCRIPTOR)((LPBYTE)pImgDosHeaders + pImgNTHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+
+	if (pImgDosHeaders->e_magic != IMAGE_DOS_SIGNATURE)
+		printf("libPE Error : e_magic is no valid DOS signature\n");
+
+	for (IMAGE_IMPORT_DESCRIPTOR *iid = pImgImportDesc; iid->Name != NULL; iid++) {
+		for (int funcIdx = 0; *(funcIdx + (LPVOID*)(iid->FirstThunk + (SIZE_T)module)) != NULL; funcIdx++) {
+			char *modFuncName = (char*)(*(funcIdx + (SIZE_T*)(iid->OriginalFirstThunk + (SIZE_T)module)) + (SIZE_T)module + 2);
+			const uintptr_t nModFuncName = (uintptr_t)modFuncName;
+			bool isString = !(nModFuncName & (sizeof(nModFuncName) == 4 ? 0x80000000 : 0x8000000000000000));
+			if (isString) {
+				if (!_stricmp(function, modFuncName))
+					return funcIdx + (LPVOID*)(iid->FirstThunk + (SIZE_T)module);
+			}
+		}
+	}
+	return 0;
+}
+
+void DetourIATptr(const char *function, void *newfunction, HMODULE module) {
+	void **funcptr = IATfind(function, module);
+	if (*funcptr == newfunction)
+		 return;
+
+	DWORD oldrights, newrights = PAGE_READWRITE;
+	//Update the protection to READWRITE
+	VirtualProtect(funcptr, sizeof(LPVOID), newrights, &oldrights);
+
+	RealMessageBoxA = (pMessageBoxA)*funcptr; //Some compilers require the cast like "MinGW" not sure about MSVC
+	*funcptr = newfunction;
+
+	//Restore the old memory protection flags.
+	VirtualProtect(funcptr, sizeof(LPVOID), oldrights, &newrights);
+}
+
+    * POSIX, an acronym for Portable Operating System Interface
+    * stricmp is deperacted which is a POSIX not standard c90, recommand use _stricmp they are all implement the function case-insensitive comparison of strings
+    
+
+# BHO example 
+- cpp example 
+http://www.adp-gmbh.ch/win/com/bho.html
+- c# example 
+http://www.codeproject.com/Articles/19971/How-to-attach-to-Browser-Helper-Object-BHO-with-C
+http://www.codeproject.com/Articles/2219/Extending-Explorer-with-Band-Objects-using-NET-and
+
+- fireBreath, cross-platform browser plugin framework 
+https://github.com/firebreath/FireBreath
+
+- internet explorer architecture 
+https://msdn.microsoft.com/en-us/library/aa741312(VS.85).aspx#content_extensions
++-------------------------------+
+|IExplorer.exe                  |
++--------------+----------------+
+|ShDocVw.dll   |BrowseUI.dll    |
++--------------+----------------+
+|MSHTMl.dll                     |
+|html/css parser and render     |
+|DOM, DHTML, activeDocument     |
++-------------------------------+
+|URLMon.dll                     |
+|security and download          |
++-------------------------------+
+|WInInet.dll                    |
++-------------------------------+
+    + IExplore.exe, is a small application that relies on the other main components of internet explorer to do the work of rendering, navigation, protocol implementation and so on 
+    + Browsui.dll provides the user interface to Internet Explorer, referred to as the chrome 
+    + Shdocvw.dll provides functionality such as navigation and history, referred to as the WebBrowser control 
+    Mshtml.dll, referred to by its code name, "Trident". Mshtml.dll exposes interfaces that enable you to host it as an active docume, it may be called upon to host other comonents depending on the html document's content, sch as script engines 
+    + urlmon. offers functionality for MIME handling and code download 
+    + WinInet.dll is the windows internet protocol handler 
+
+- extending internet explorer 
+    + Browser Extensions. This category of end-user extensions adds additional functionality to Internet Explorer content. BHO 
+    
+    + Content Extensions. These extend the types of content that can be parsed and displayed, like ActiveX control
+        * active documents, doc objects, when a user navigates from a html page to a word document, extend the compund document technology of OLE, create view throw IOleDocument
+        https://msdn.microsoft.com/en-us/library/bx9c54kf(VS.71).aspx
+        * activex controls, https://msdn.microsoft.com/en-us/library/aa751972(v=VS.85).aspx
+        * behaviors 
+        script-based behaviors using .htc files provide a way to componentize and reuse html content 
+        binary behavior, similar to activex control 
+        * window forms control 
+        * pluggable protocol, 
+    + Hosting and Reuse, reuse Internet explorer component you could build your own browser 
+    
+- browser plugins vs extensions the difference 
+http://colonelpanic.net/2010/08/browser-plugins-vs-extensions-the-difference/
+    + plugins, quite simply a thrid party library plugs in to the browser and be embedded inside a webpage using <embed> tag or <object> tag, allowed to communicate with javascript, 
+        * examples 
+        flash, silverlight, apple quicktime, adobe reader
+        
+    the plugin only effect embedded page, these usually called NPAPI plugins, they are written using the NPAPI, in safari you could also use a webkit plugin, in IE you could do this with activex control 
+    
+        * what a plugin can't do, plugins have to handle a mime type or be embedded into a web page, they don't put there automatically, they don't create toolbar, don't affect browser menu 
+    
+    + extensions, can add onto the browser UI, process page that the browser loads 
+        * examples 
+        DownThemAll for firefox 
+        * firebug for firefox 
+        * google voice for chrome 
+        * let there be comic sans for safari 
+    
+    in firefox you could o this by c++ or javascript, IE could do it with special activex control called BHO 
+    
+        * a extension could contain plugin but plugin can't contain an extension 
+    
+    + FireBreath is a cross-platform opensource project to help create plugin 
+    
+    + when not to use a plugin 
+    
+- !Internet explorer create process, IEInternal blogs
+http://www.enhanceie.com/ie/dev.asp
+
+sublink write stable browser extensions 
+https://msdn.microsoft.com/en-us/library/aa753617(VS.85).aspx#tip6
+    
+# IEBlog 
+- DOMParser and XMLSerializer in IE9 Beta 
+- Edge demos 
+https://github.com/MicrosoftEdge/Demos
+    
+    
+# Firefox 
+- XPCOM, https://en.wikipedia.org/wiki/XPCOM, cross-platform component model from mozilla, similar to microsoft COM and CORBA (Common Object Request Broker Architecture)
+
+# Knowledge bases
+- CORBA links, (Common Object Request Broker Architecture), https://en.wikipedia.org/wiki/Common_Object_Request_Broker_Architecture
+- PE file, portable executable, is a file format for executables, object code, dlls FON font files and other used in 32-bit and 64-bit version of windows operations systems. is a data structure that encapsulates the information necessary for the windows OS loader to manage the wrapped executable code include 
+    + dynamic library references for linking
+    + api export and import tables 
+    + resource management data 
+    + thread-local storage (TLS) data 
+    
+on NT operating system, the PE format is used for exe, dll, sys(device driver)
+    
+the extensible firmware interface(EFI) specification states that PE is the standard executable format in EFI environment 
+
+PE is a modified version of the Unix COFF(Common Object File Format, https://en.wikipedia.org/wiki/COFF), PE/COFF is an alternative term in windows development
+    
+    + support architecture PE currently supports the IA-32, IA-64, x86-64 (AMD64/Intel64), and ARM instruction set architectures (ISAs). Prior to Windows 2000, Windows NT (and thus PE) supported the MIPS, Alpha, and PowerPC ISAs. Because PE is used on Windows CE, it continues to support several variants of the MIPS, ARM (including Thumb), and SuperH ISAs.
+    
+    + Analogous formats to PE are ELF(used in linux and most other version of Unix) and Mach-O(used in Mac OS X)
+    https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+    
+    + layout, consists of a number of headers and sections that tell the dynamic linker. an executable image consists of several different regions, each of which require different memory protection; sot the start of each section must be aligned to page boundary. for instance 
+        * .text secion(hold program code) mapped as execute/readonl 
+        * .data section(hold global variables) is mapped as no-execute/readwrite
+        
+    to avoid wasting sapce, the different sections are not page aligned on disk. so part job of the dynamic linker is to map each section to memory individually and assign the correct permission to the result regions according to the instruction found in the headers 
+    
+    + import table, IAT, which is used as a lookup table when the application is calling a function from a different module. it can be form of both import by ordinal and import by name. 
+    compiled program cannot known the memory location of the libraries it depends upon, an indirect jump is required whenever an API call is made 
+    the dynamic linker loads modules and joins them together, it writes actual addresses into the IAT slots, so that they point to the memory locations of the corresponding library functions 
+    the extra jump cost a performance penalty but it provides a benefit, the nmber of memory pages that need to by copy-on-write(https://en.wikipedia.org/wiki/Copy-on-write) changed by the loader is minimized, saving memory and disk i/o time. if the compiler knows a head of time that a call will be inter-module(via a dllimport) it can produce more optimized code that simply results in a indirect call opcode(operation code, https://en.wikipedia.org/wiki/Opcode)
+    
+    + relocations, PE files do not contain position-independent-code(https://en.wikipedia.org/wiki/Position-independent_code, PIC), they are compiled to preferred base address emitted by the compiler/linker are fixed ahead of time. if a PE file can't be loaded at its preferred address, the OS will rebase it and make recalculation of path and modification. the result code is private to the process and no longer shareable 
+    This is contrast with ELF which uses fully position-independent code and a global offset table, which trades off execution time against memory usage in favour of the latter. 
+    
+    + .net metadata and the PE format, in a .net executable, the PE code section contain a stub that invokes the CLR virtal machine startup entry, _CorExeMain or _CorDLlMain in mscoree.dll, much like it was in visual basic executables.
+    
+    the virtual machine then makes use of .net metadata present, the root of which, IMAGE_CORE20_HEADER(also called "CLR header") is pointed to by IMAGE_DIRECTORY_ENTRY_COMHEADER entry in the PE headers data directory, IMAGE_CORE20_HEADER strongly resembles PE's optional header, essentially playing its role for the CLR loader 
+    
+    the CLR-related data including the root structure itself, is typically contained in the common code section. .text. it is composed of a few directories: metadata, embedded resources, strong names and a few for native-code interoperability. metadata directory is a set of tables that list all the distinct .net entities in the assembly. including types, methods, fields, constants, events as well as references between them and to other assemblies 
+    
+    + use on other operating system 
+    the PE format is also used by ReactOS, historycally been used by a number of other operating system, including SkyOS and BeOS, but then eventually move to ELF 
+    
+    mono development platform intends to be binary compatible with microsoft .net it uses the same PE format as the microsoft implementation 
+    
+    on x86, unix-like some binaries can be executed with Wine, the HX DOS Extender also use PE format, like Wine for dos 
+    
+    mac osx 10.5 can parse and load PE files but not binary compatible with windows 
+- dynamic linker, in window 
+https://en.wikipedia.org/wiki/Dynamic_linker
+    
+- dynamic link library 
+https://en.wikipedia.org/wiki/Dynamic-link_library#Symbol_resolution_and_binding
+    + symbol resolution and binding 
+    The ordinal represents the position of the function's address pointer in the DLL Export Address table. It is common for internal functions to be exported by ordinal only.
+
+    For most Windows API functions only the names are preserved across different Windows releases; the ordinals are subject to change. Thus, one cannot reliably import Windows API functions by their ordinals.
+
+    Importing functions by ordinal provides only slightly better performance than importing them by name: export tables of DLLs are ordered by name
+    
+    It is also possible to bind an executable to a specific version of a DLL, that is, to resolve the addresses of imported functions at compile-time.
+
+- dll injection, https://en.wikipedia.org/wiki/DLL_injection
+- hooking, Microsoft msdn, https://msdn.microsoft.com/en-us/library/windows/desktop/ms644959(v=vs.85).aspx
+- activex control
+introduction, https://msdn.microsoft.com/en-us/library/aa751972(v=VS.85).aspx
+build, https://msdn.microsoft.com/en-us/library/aa751970.aspx
+- browser extension for IE
+https://msdn.microsoft.com/en-us/library/aa753588.aspx
+    + create toolbar 
+    https://msdn.microsoft.com/en-us/library/aa753588.aspx
+- internet explorer 9 developer guide 
+https://msdn.microsoft.com/en-us/ie/ff468705.aspx
+
+DOMParser and XMLSerializer in IE9 beta 
+http://blogs.msdn.com/b/ie/archive/2010/10/15/domparser-and-xmlserializer-in-ie9-beta.aspx
+
+- ATL Com Desktop Components, 
+https://msdn.microsoft.com/en-us/library/t9adwcde.aspx
+tutorial, https://msdn.microsoft.com/en-us/library/599w5e7x.aspx
+http://www.codeguru.com/cpp/com-tech/atl/tutorials/article.php/c17/A-Simple-COM-tutorial-using-ATL.htm
+http://www.codeproject.com/Articles/96/Beginner-s-Tutorial-COM-ATL-Simple-Project
+https://en.wikipedia.org/wiki/Active_Template_Library
+http://www.tenouk.com/visualcplusmfc/atlstepbystep30.html
+
+- rootkit a stealthy type of software designed to hide the existence of certain processes or programs from normal methods, https://en.wikipedia.org/wiki/Rootkit
+
+- list of microsoft programming interface and framework, https://en.wikipedia.org/wiki/List_of_Microsoft_Windows_application_programming_interfaces_and_frameworks
+
+- CComGITPtr, a ATL COM template pointer class 
+https://msdn.microsoft.com/en-us/library/t62af25w.aspx
+http://www.codeproject.com/Articles/17837/Global-Interface-Table-An-Easy-Way-to-Marshal-an-I
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    

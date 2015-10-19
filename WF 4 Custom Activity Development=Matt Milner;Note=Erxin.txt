@@ -1,0 +1,524 @@
+﻿WF 4 Custom Activity Development=Matt Milner;Note=Erxin
+
+
+# Overview
+- creating declarative activities
+    + building activities using other activities, compose activity 
+    no code to write
+    jsut like working a workflow
+    
+    + build activities using the designer 
+        * define a root control flow activity 
+        * add arguments and variables
+        * use activities to define the logic 
+        
+    + invoke a activity from code behind
+    WorkflowInvoker.Invoke(new NotifyManager(), inputs);
+- code activities, activity basics 
+    + activity logic defined in code
+    + define arguments for your activity 
+    + variety of activity models
+        * simple code execution
+        * control flow management custom control flow activities 
+        * asynchronous execution 
+        
+    activity <- code activity 
+             <- native activity 
+             <- asyncCodeActivity 
+             <- Activity<TResult> <- code activity<T>
+                                  <- native activity<T>
+                                  <- asyncCdoe activity<T>
+                                  
+- choosing activity type 
+    + code activity implementation is .net code in the execute method
+    + native activity, used to schedule child activities, can be used to amnage bookmarks which used to communicate to the workflow runtime
+    + asyncCodeActivity, begin/end pattern to use threads to accomplish work 
+    + activity With result<T> and derivations, syntactic suger for activities with single return type, return property is of type T
+- activity context 
+    + your interface to the runtime 
+    schedule work
+    register bookmarks 
+    manage argument and variable access
+    
+    + different contexts for different activity types 
+    native activity context, give you everything about the workflow runtime, and bookmark to schedule other activities 
+    code activity context, a few of items to communicate with workflow runtime
+    asyncCodeActivity
+    
+- arguments nad variables 
+    + argument 
+    define properties of type InArgument<T>, OutArgument<T> etc.
+    
+    + variables 
+        * define private props or fields of types variable<T>
+        * tell the runtime about your variables - helps manage state /persistence 
+        * native activities only 
+    
+    + set and get values using the activityContext
+        * data is managed in the context 
+
+- demo code activities 
+using System.ServiceModel.Syndication;
+    public class GetFeed:CodeActivity 
+    {
+        public InArgument<string> FeedUrl {get;set;}
+        public OutArgument<SyndicationFeed> FeedResult {get;set;}
+        
+        protected override void Execute(CodeActivityContext context)
+        {   
+            var feed = SyndicationFeed.Load(XmlReader.Create(FeedUrl.Get(context)));
+            FeedResult.Set(context, feed);
+        }
+    }
+    
+    with generic type could use return to directly return the output result 
+- asynchronous activites 
+    + derive from AsynCodeActivity or AsyncCodeActivity<T>
+        * provides beginExecute/EndExecute methods to override
+        * runtie handles wait handles, callbacks etc 
+        
+    + beginExecute requires return of IAsyncResult
+        * return result from asynchronous callbacks
+        * create an action or Func and return the reuslt of calling beginInvoke 
+- activity validation 
+
+
+# wf4 native activity 
+- creating control flow activities 
+    + control flow activities schedule other activites for execution 
+    what separates one activity from another is how they are scheduled
+    
+    + activties dervied from native activity or nativeActivity<T>
+    nativeActivityContext contains the scheduling methods 
+    
+    + optional callbacks used to notify parent of completion or fault 
+    
+- defining child activites 
+    + single child activity 
+    provide individual properties of type activity(e.g.Body)
+    
+    + provide collection<Activity> to allow multiple children
+    
+    + declare activity collection in metadata 
+    important b/c you must own an activity to schedule it 
+
++ demo control flow native activty 
+
+public sealed class MyParallel:NativeActivity
+{
+    Collection<Activity> children = new Collection<Activity>();
+    CompletionCallback completed;
+    public  Collection<Activity> Branches
+    {
+        get { return children; }
+    }
+    
+    public MyParallel()
+    {
+        completed = new CompletionCallback(ActivityCompleted);
+    }
+    
+    public void ActivityCompleted(NativeActivityContext context, ActivityInstance activity)
+    {
+        Console.WriteLine("activity completed");
+    }
+    
+    protected override void Execute(NativeActivityContext context)
+    {
+        //context.Abort, CancelChild, or .... such manage child activity method from the context 
+        context.ScheduleActivity(child, completed);
+    }
+}
+
+
+//use the native activity
+WorflowInvoker.Invoke(GetWorkflow());
+
+private static Activity GetWorkflow()
+{
+    return new Sequenec
+    {
+        Activites = 
+        {
+            new MyParallel{
+                Branches = {
+                    new WriteLine{Text = "First"},
+                    new WriteLine{Text = "Second"}
+                }
+            },
+            new WriteLine{Text="After parallel"};
+        };
+    }
+}
+also could use sequence activity to make the activity called as the order
+
+- use NativeActivity as save activity metadata 
+    + metadata is read by the runtime 
+        * discover variables, activities arguments, etc
+        * default process uses reflection
+        
+    + your activity should provide explicit metadata 
+        * better performance, more control 
+        * register implementation variables
+        * registering dynamic arguments/ variables 
+        * activity validation, help check argument values 
+        
+- providing variable scope, is used to create variables to pass between native child activity 
+    + create a collection<Variable>
+    + provide a public property to expose the collection 
+    + register the collection in the metadata 
+        * without this, variables are not persisted 
+
+- demo 
+
+public sealed class MySequence: NativieActivity
+{
+    Collection<Activity> children;
+    Collection<Variable> variable;
+    
+    //implement variable
+    Variable<int> currentIndex;
+    CompletionCallback completed;
+    
+    public Collection<Activity> Activites
+    {
+        get {return children;}
+    }
+    
+    public Collection<Variable> Variables
+    {
+        get {return variables;}
+    }
+
+    public MySequenece()
+    {
+        children = new Collection<Activity>();
+        variable = new Collection<Variable>();
+        currentIndex = new Variable<int>();
+        
+        completed = new CompletionCallback(childComplete);
+    }
+    
+    protected override void CacheMetadata(NativeActivityMetatData metadata)
+    {
+        metadata.SetVariablesCollection(variables);
+        metadata.SetChildrenCollection(children);
+        
+        metadata.AddImplemetationVariable(currentIndex);
+    }
+    
+    public void childComplete(NativeActivityContext context, ActivitInstance activity)
+    {
+        var index = currentIndex.Get(context);
+        currentIdnex.Set(context, ++index);
+        if(index < children.Count)
+        {
+            context.ScheduleActivity(children[index], completed);
+        }
+    }
+    
+    protected override void Execute(NativeActivity context)
+    {
+        currentIndex.Set(context, 0);
+        if(children.Count > 0)
+        {
+            context.ScheduleActivity(children[0], completed);
+        }
+    }
+}
+
+//use the CustomActivity
+return new CurrentActivities.MySequence{
+    Variables = {textValue},
+    Activites = {
+        new WriteLine{Text = textValue};
+        new Assign<string> 
+    }
+}
+
+- bookmark, use to pause activity and continue in the next time
+    + native actvities can create bookmarks
+    + named bookmark resumeable from host or extensions 
+    + bookmark callbacks to handle the signal and/or data 
+        * multiple resume allows an activity to remain blocked
+        * nonblocking allows the activity to continue processing but with a callback 
+        * options can be combined
+
+    + CanInduceIdle property, true could be persistence, false will block the workflow 
+        * return true for activities that create bookmarks to enable idle/persistence 
+    
+- Bookmarks
+    + Activities create named bookmarks 
+    + host can resume bookmarks (with data)
+    + activities can receive callback when bookmark is resumed (with data)
+    
+- demo bookmark 
+public sealed class WaitForData<T>:NativeActivity<T>
+{
+    [RequiredArgument]
+    public InArgument<string> BookmarkName {get;set;}
+    
+    protected override void Execute(NativeActivityContext context)
+    {
+        //MultipleResume, NonBlocking, None 
+        context.CreateBookmark( BookmarkName.Get(context), BookmarkCallback(DataAddrived), BookmarkOptions.MultipleResume);
+    }
+    
+    public void DataAddrived(NativeActivity context, Bookmark bk, object)
+    {
+        Result.Set(context, data);
+    }
+    
+    //override the property 
+    protected override book CanInduceIdle
+    {
+        get{return true;}
+    }
+}
+
+
+//use the workflow by workflow application
+
+var wfapp = new WorkflowApplication(new ReportProcessing(), new Dicitonary<string, object>{
+    {"report", model.Report} //argument
+});
+
+wfapp.completed += (wce)=>{
+    var response = (MangerResponse)wce.Outputs
+}
+
+
+//run the bookmark application 
+wf.App.Run();
+
+//get the output 
+wfApp.ResumeBookmark("BookmarkName", model.Response);
+
+
+# WF4 Advanced Activity Development
+- introduction
+    + ActivityAction and ActivityFunc concept
+    + IAcitivtyTemplateFactory, generate activity from a tool class
+    + execution properties, execute activity on different threads 
+    + no persist zones
+
+- Understanding ActivityAction and ActivityFunc 
+    + same as Action and Func delegate 
+    
+    + provides much needed "templating" support to activities 
+    + ActivityAction - enables invoking arbitrary activity 
+    
+        * imagine a template where others can plug into your execution 
+        * variations in generic types enable parameter passing 
+        
+    * ActivityFunc enables invoking activity and getting back a result 
+    
+- Using ActivityAction 
+    + has a handler and arguments 
+        * handler, placeholder for an activity 
+        * arguments, delegateInArgument<T> available to handler 
+        
+    + NativeActivityContext.ScheduleAction<T>(), two teps 
+        * Schedule action 
+        * pass arguments 
+    
+        * example
+        +---your activity--+         
+        |inarg1            |
+        |inarg2            |
+        +------------------+
+        |handler           |
+        +------------------+
+    
+        handler <--- sequence 
+        +--------------------+
+        |write line inarg1   |
+        |write line inargs2  |
+        +--------------------+
+        the handler could be a any activity, the Inarg1, Inarg2 is the scope parameters
+    
+- Using ActivityFunc 
+    + Adds DelegateOutArgument<T>
+        * provides a single result, or output argument 
+
+    + NativeActivityContext.ScheduleFunc<TResult>()
+        * CompletionCallback<T> provides the resulting out argument 
+    
+    
+- Demo activity func
+
+public sealed class SendMailWithFunc : NativeActivity
+{
+    public InArgument<string> RecipientAddress {get;set;}
+    public InArgument<string> FromAddress {get;set;}
+    public InArgument<string> Subject {get;set;}
+    
+    //The browsable attribute is used to mark the property will not shown on
+    //the design property window
+    [Browsable(false)]
+    public ActivtyFunc<string> CreateBodyText{get;set;}
+    
+    protected override void Execute(NativeActivityContext context)
+    {
+        if(CreateBodyText != null)
+        {
+            //trigger the ActivityFunc with arguments
+            context.ScheduleFunc<string>(CreateBodyText, BodyCreated);
+        }
+        else 
+        {
+            SendMailInternal(context, null);
+        }
+    }
+    
+    private void BodyCreated(NativeActivityContext context, ActivtyInstance instance, string data)
+    {
+        SendMailInternal(context, data);
+    }
+    
+    private void SendMailInternal(NativeActivityContext context, string mailBox)
+    {
+        //set the email data  and send the mail
+    }
+}
+    
+// use the SendMailWithFunc activity
+new CustomActivity.SendMailWithFunc
+{
+    FromAddress = "xxx",
+    RecipientAddress = "xxxx",
+    Subject = "xxx",
+    CreateBodyText = new ActivityFunc<string>{
+        Result = new DelegateOutArgument<string>{Name = "FuncResult"},
+        Handler = new Sequenec
+        {
+            Activities = 
+            {
+                new Assign<string> {
+                    To = new VisualBasicReference<string>("FuncResult"),
+                    Value = "Body created in code function"
+                }
+            }
+        }
+    }
+}
+
+the activity could add custom designer
+    
+- IActivityTemplateFactory 
+    + tool for configuring activities as toolbox actiion 
+    your implementation of IActivityTemplateFactory to the toolbox 
+    
+    + Create set of activities and configure 
+        * create method must return single activity (root)
+    
+    + useful for 
+        * adding multiple activities in one step 
+        * configuring properties or arguments on activities automatically
+        * adding ActivityAction or ActivityFunc to an activity 
+    
+    + demo 
+    public class SendMailFactory:IActivityTemplateFactory
+    {
+        public System.Activities.Activity Create(DependencyObject target)
+        {
+            return new CustomActivities.SendMailWithFunc{
+                Result = new DelegateOutArgument<string> {Name = "FuncResult"},
+                Handler = new Sequence
+                {
+                    Activities = 
+                    {
+                        new Assign<string> {
+                            To = new VisualBasicReference<string>("FuncResult"),
+                            Value="Body created in factory"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    drag and drop the activity factory in designer will automatic create Func activity handler 
+    
+- Execution properties 
+    + some data needs to be scoped to the execution context could use execution properties 
+        * thread local storage(TLS) does not work well with WF
+        
+    + Execution properties can be added to the context , the property is a diction of context 
+        * execution properties, dictionary of property values 
+        the values also could used in child activity of a native activity 
+        
+    + IExecutionProperty
+        * enables the property to initialize on CLR thread
+        * cleanup the CLR thread
+    
+- NoPersistHandle
+    + Some activities require the workflow to not go idle 
+        * Execution properties that cannot be persisted 
+        * activities with state that must remain in memory 
+        
+    + create a no perssitHandle
+        * enter, begin the no persist zones
+        * exit, ends the no persist zones
+        * nativeActivityContext required for both calls 
+        
+- demo execution properties 
+
+public class PowerShellExecutionProperty: IExecutionProperty
+{
+    public Pipline Pipline {get;set;} //custom
+    public static string Name = "PowerShellProperty";
+    public void CleanupWorkflowThread(){}
+    public void SetupWorkflowThread(){}
+}
+
+// use the property in a native activity method 
+context.Properties.Add(PowerShellExecutionProperty.Name, new PowerShellExecutionProperty{Pipline = pipe});
+persisteHandle.Get(context).Enter(context);
+
+//get the property
+var exProp = context.Properties.Find(PowerShellExecutionProperty.Name) as PowerShellExecutionProperty;
+    
+//execute a powershell command 
+Collection<PSObject> results = exProp.Pipline.Invoke();
+    
+//all the child activity of native activity could get the execution property to execute a powershell command 
+    
+
+//garenty the code is enter no persist zone 
+Variable<NoPersistHandle> persistHandle;
+    
+persistHandle.Get(context).Enter(context);
+//...during this code workflow runtime will not try to persistence any context and activity 
+persistHandle.Get(context).Exit(context);
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    

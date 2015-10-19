@@ -1,0 +1,460 @@
+API, Application Programming Interface.主要的windows函数都在windows.h头文件中声明
+
+SDK, Software Development Kit, 有软件开发商提供的软件开发包，某些也会提供API函数
+
+窗口，桌面也是窗口，窗口句柄HWND, 长整型，之后还有图标句柄，光标句柄。就是无符号长整型的地址
+
+消息，windows是事件驱动的系统,查看任何变量的定义位置可以右键选择->goto definition
+typedef struct  tagMSG
+{
+  HWND  hwnd;
+  UNIT  message;    //windows中消息是unSignL，所有消息宏定义格式WM_XX,如WM_KEYDOWN
+  WPARAM  wParam;   
+  LPARAM  lParam;
+  DWORD time;
+  POINT pt;
+}MSG;
+分类为进队列消息，非进队列消息
+
+WinMain函数，是所有windows程序的启动函数，由插入到每个程序的启动代码调用
+int WINAPI Winmain
+(
+  HINSTANCE hInstance,    //当前用例的句柄
+  HINSTANCE hPrevInstance, //前一用例句柄,在win32下始终为NULL
+  LPSTR  lpCmdLine        //命令行，参数, 在调试时要传递命令行参数可以选择，Project->Setting->Debug
+  int nCmdShow            //显示样式
+}
+其中前面WINAPI宏即是_stdcall的替换
+
+创建窗口过程，设计窗口类，注册窗口，创建窗口，显示窗口更新
+
+回调函数，不是由函数的实现方（编码者）调用，而已由系统根据特定条件或事件进行调用
+回调函数建立方法
+定义回调函数，注册回调函数，对事件进行处理
+
+
+设计窗口类，窗口类由WINCLASS结构定义
+typedef struct _WINCLASS
+{
+  UNINT style;            //用于定义窗口样式，所有样式以CS_XXXX开头
+  WNDPROC lpfnWndProc;    //指向窗口过程函数，也是回调函数
+  int cbClsExtra;     //这一类窗口创建实体时，所有窗口共享的内存存储空间大小
+  int cbWinExtra;       //特定窗口创建时需要的附加内存空间大小
+  HANDLE  hInstance;  //指定包含窗口过程的程序实例句柄
+  HICON hIcon;        //窗口类的图标句柄，为NULL则为默认
+  HCURSOR hCursor;    //鼠标指针
+  HBRUSH  hbrBackground;  //背景画刷句柄，系统发出窗口重绘时，可以用来指定一个标准的系统颜色
+  LPCTSTR lpszMenuName;   //菜单名称
+  LPCTSTR lpszClassName;  //制定窗口类的名称
+}WNDCLASS;
+
+windows消息处理机制
+设计窗口类，其中的过程函数地址赋值给lpfnWndProc
+调用RegisterClass(&wndclass)注册窗口回调函数
+当程序接收到某一窗口消息时，调用DispatchMessage(&msg)将窗口回传给系统
+基于同一个窗口类创建的窗口使用同一个窗口过程
+
+WINPROC定义
+typedef LRESULT (CALLBACK * WNDPROC)(HWND, UNIT, WPARAM, LPARAM);
+两个数据类型LRESULT 实际为long, CALLBACK 实际为_stdcall,为一种重新定义的函数指针类型
+
+函数有两种格式_stdcall和_cdecl, 区别是函数参数入栈顺序，有调用函数入栈，还是由被调用函数入栈。Win32 API都遵循_stdcall原则， Vc++默认是_cdecl，对于需要使用_stdcall的函数必须在函数名之前加入声明，而用CALLBACK来替换的原因是命名简明
+
+HICON LoadIcon(HINSTANCE hInstance, LPCTSTR lpIconName)
+载入图标资源，其中HICON类型为 CONST CHAR* 型，而图标的ID是一个整数。可以使用系统宏来进行转换MAKEINTRESOURCE 把ID转换为 LPCTSTR
+
+使用GetStockObject(int fnObject)函数可以取得画刷，画笔，字体和调色板。Stock是原料的意思。
+HGDIOBJ GetStockObject(int fnObject);
+例如为窗口制定黑色画刷
+winclass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+
+注册设计好的窗口类
+ATOM RegisterClass(CONST WNDCLASS *lpWndClass);
+ATOM是一个低16位为正常值，高16位为0的数值
+
+创建窗口
+HWND CreateWindow
+(
+  LPCTSTR lpClassName,  //已注册完的窗口类名指针
+  LPCTSTR lpWindowName, //所要建立的窗口名称
+  DWORD   dwStyle,      //窗口样式
+  int     x,
+  int     y,
+  int     nWidth,
+  int     nHeight,
+  HWND    hWndParent,
+  HMENU   hMenu,
+  HANDLE  hInstance,     //建立窗口的程序用例句柄
+  LPVOID  lpParam        //建立窗口的附加参数
+);
+lpParam作为WM_CREAT消息附加参数传入数据指针，在创建多文档窗体时，lpParam必须指向CLIENTCREATSTRUCT结构体，其他多数情况都设置为NULL
+
+可以为指定的窗口设置覆盖窗口样式
+#define WS_OVERLAPPEDWINDOW
+(
+  WS_OVERLAPPED|  //一个层叠的窗口
+  WS_CAPTION|
+  WS_SYSMENU|
+  WS_THICKFRAME|  //具有可调边框窗口
+  WS_MINIMIZEBOX|
+  WS_MAXIMIZEBOX
+);
+CW_USEDEAFUALT (CW为CreatWindow)的缩写，表明窗口样式使用默认值，窗口有父子关系时，必须加上WS_CHILD样式。
+
+窗口建立后的显示
+BOOL  ShowWindow
+(
+  HWND  hWnd,   //要显示的窗口句柄
+  int   nCmdShow  //显示的状态
+)
+nCmdShow的几种状态，SW_HIDE, SW_SHOW, SW_SHOWMAXIMIZED, SW_SHOWMINIMIZED, SW_SHOWNORMAL
+
+更新窗口内容
+BOOL UpdateWindow( HWND hWnd );
+UpdateWindow通过发送一个WM_PAINT消息来更新窗口内容
+
+消息循环
+BOOL GetMessage
+(
+  LPMSG lpMsg,    //指向消息结构地址
+  HWND  hWnd,     //指定接收目标窗口的句柄，NULL时为指定当前调用线程的所有消息
+  UINT  wMsgFilterMin,    //设置获取最小的消息值
+  UINT  wMsgFilterMax     //设置最大的消息值
+);
+函数除收到WM_QUIT外的消息均返回非零
+所以通常的消息循环代码
+MSG msg;
+while( GetMessgae( &msg, NULL, 0, 0 ) )
+{
+  TranslateMessage(&msg);   //用于将虚拟按键转换为字符，字符消息被投递到调用线程的消息队列中，当下一次调用GetMessage时被取出
+  DispatchMessage(&msg);  //分派一个消息到窗口过程，由窗口过程对消息进行处理。实际是先回传操作系统，操作系统再调用窗口过程函数，系统利用WNDCLASS类中的lpfnWndProc过程指针
+}
+TranslateMessage在每次案件时将WM_KEYDOWN和WM_KEYUP转换为WM_CHAR
+也可使用PeekMessage函数来得到消息
+
+发送消息可以使用SendMessage, PostMessage, PostThreadMessage
+对于线程消息，MSG结构中的hWnd成员为NULL
+
+窗口过程函数
+LRESULT CALLBACK WindowProc
+(
+  HWND  hwnd,
+  UINT  uMsg,
+  WPARAM  wParam,
+  LPARAM  lParam
+);
+其中过程名可以随意取，但是函数参数格式固定（由C中的函数指针类型所决定）
+
+设备描述表Device Context简称DC，Windows下所有图形操作均由DC来完成，使用时只要获取对应类的DC句柄
+绘图时使用GetDC函数来得到资源，使用后用ReleaseDC来释放资源
+窗口的一切内容改变程序都会接到WM_PAINT消息
+BeginPaint用来开始绘制，需要对象句柄，和PAINTSTRUCT结构，如果对象背景区域没有被擦除，系统会使用WNDCLASS结构的hbrBackground成员制定的画刷来擦除背景
+
+销毁窗口，使用DistroyWindow函数，一般在WM_CLOSE消息响应函数中进行调用
+在接到WM_DISTROY,消息时使用PostQuitMessage函数来向应用程序消息队列中发送WM_QUIT，其中的wParam参数常用作WinMain函数的返回值，用于提供程序消息循环部分的推出。（GetMessage函数只有接到WM_QUIT消息才返回0值）
+
+默认消息处理，即返还给系统处理，使用函数DefWindowProc函数过程
+
+匈牙利表示法
+a   数组        
+b   布尔        
+by  无符号字符   
+c   字节        
+cb  字节计数
+rgb rgb颜色
+cx,cy 短整型计算x,y长度
+dw  无符号长整
+fn  函数
+h   句柄
+i   整数
+m_  类的成员
+n   短整或整型
+np  近指针
+p   指针
+l   长整
+lp  长指针
+s   字符串
+sz  以零结束的字符串
+tm  正文大小
+w   无符号整型
+x,y 无符号整型x,y
+
+封装性Encapsulation, 继承性 Inheritance, 多态性 Polymorphism
+
+:win api
+>dispathMessage(&msg), 向系统回传消息, 最终系统分派消息到一个窗口过程
+>loadIcon(), 加载图标
+>loadCursor(), 加载指针
+>showWindow(), 显示指定窗口
+>updateWindow(), 刷新窗口
+>getMessage(), 从系统消息队列中取消息
+>translateMessage(), 将虚拟键盘消息转换为字符消息
+>peekMessage(), 同getMessage从消息队列取消息, 不同之处可以取后不放回队列
+>sendMessage(), 发送并等待指定的窗口过程结束后继续执行
+>postMessage(), 发送后继续执行
+>postThreadMessage(), 向线程发消息
+>LRESULT CALLBACK WindowProc(
+	HWND hwnd,
+	UINT uMsg,
+	WPARAM wParam,
+	LPARAM lParam
+); 窗口过程格式, 内部使用switch case结构来处理消息
+>getDC(), 返回特定窗口关联的dc句柄
+>ReleaseDC(), 来释放资源
+>TextOut(), 在指定位置输出文字
+>PostQuitMessage(), 结束当前程序
+>DefWindowProc(), 调用默认的窗口过程函数
+>console, window, 应用的区别, 是在编译的时候使用不同的编译指令, /subsystem:console, /subsystem:windows
+>GetParent(), 取得父级窗口句柄
+
+
+:c++中结构域类的区别
+>结构默认成员是共有的
+>类默认的成员是私有的
+>在类中定义成员的时候不能直接给成员赋值, 需要使用构造函数
+>函数覆盖, 隐藏, 重载
+	- 覆盖, 在太情况下, 基类函数具有virtual关键字
+	- 隐藏, 派生类与基类同名, 但参数列表不同, 切不论基类是否具有virtual关键字, 对于隐藏的函数可以使用 baseClassName::functionName() 的形式调用基类函数
+	- 重载, 同名函数在同一个类中
+
+:MFC框架剖析
+>CWnd类结构
+Cwin->CFrameWnd->CMDIChildWnd
+				 CMDIFrameWnd
+				 CMiniFrameWnd
+				 COlePFrameWnd
+	  CDialog->CCommonDialog->CColorDialog
+							  CFileDialog
+							  CFindReplaceDialog
+							  CFontDialog
+							  COleDialog->COleBusyDialog
+										  COleChangeIconDialog
+										  COleChangeSourceDialog
+										  COleConvertDialog
+										  COleInsertDialog
+										  COleLinksDialog->COleUpdateDialog
+	  CView->CCtrlView->CEditView
+						CListView
+						CRichEditView
+						CTreeview
+			 CScrollView->user scroll view
+			 CFormView->user form view
+						CDaoRecordView
+						CHtmlView
+						COleRecordView
+						CRecordView
+>vc首先运行到全局对象, 之后执行winmain, 完成全局对象初始化
+>Afx, 前缀表示Application framework
+>MFC中创建应用程序步骤
+	- 创建应用程序类全局对象
+	- 进入WinMain函数
+	- 调用AfxWinMain
+		* 调用AfxGetThread获得CWinThread类型指针
+		* 调用AfxGetApp获得CWinApp类型指针
+		* AfxWinInit()
+		* InitApplication()
+		* pThread->InitInstance(), 应用程序线程初始化
+			- AfxEnableControlContainer();
+			- Enable3dControls()
+			- Enable3dControlsStatic()
+			- LoadStdProfileSettings() //load standard ini file
+			- new SingleDocTemplate()
+			- AddDocTempalte()
+			- CCommandLineInfo cmdInfo
+			- ParseCommandLine(cmdInfo)
+			- ProcessShellCommand(cmdInfo)
+			- m_pMainWnd->ShowWindow()
+			- m_pMainWnd->UpdateWindow()
+		* pThread->Run()
+>MFC中窗口注册, 使用AfxEndDeferRegisterClass完成
+>创建窗口, CWnd::CreateEx(), 其子类很多都是调用这个函数实现创建窗口的. 其中会调用PreCreateWindowEx(), 用于提供对窗口样式的修改
+>运行窗口, 其中pThread->Run(), 定义于CWndThread类中, 使用PeekMessage()来处理消息, 并使用PumpMessage()分发消息到窗口过程, 其中PumpMessage是GetMessage()的封装
+>MFC采用D/V模型, 文档/视图模型, document/view, 将数据与显示分离, 是MVC的雏形
+	- InitInstance()方法定义文档模型, 该对象将文档, 框架, 视图组织在一起
+	- AddDocTemplate()将文档模型插入到文档模版中
+>创建窗口过程
+	- 设计
+	- 注册
+	- 创建
+	- 显示
+	- 更新
+	- 消息循环
+>在classView中添加消息处理方法, add windows message handler
+
+:简单绘图
+>class view, 添加message map
+	- Automation 选项卡, 允许用户加入自己的方法或属性, S固有, C自定义, M方法
+	- Message filter, 消息分类
+	- Foreign class, 与当前选定类相关的外部类
+	- Foreign variable, 当前选定类相关的外部变量
+>框架中包含视图类, 所以在MFC中所有的消息都由视图类首先接受, 如同墙上贴着一层墙纸, 手首先触摸的是墙纸
+>添加删除函数使用classView来操作
+>消息处理函数添加在注释宏之间
+//{{AFX_MSG_MAP(ClassName)
+ON_Message_Name()
+//}}AFX_MSG_MAP
+>MFC消息映射机制没有使用虚函数实现的原因是由于MFC派生层次多, 避免每个类都使用并查找对应的多层虚函数表的资源浪费, 而是使用在每个类中定义用静态消息映射表的机制来完成
+>MFC中WndClass中WindowProc函数中调用OnWndMsg()来处理消息映射, 其先查看子类头文件中是否在DECLARE_MESSAGE_MAP()宏之上两个AFX_MSG_MAP之间有子类消息响应函数原型, 如果由则到子类源文件中查看BEGIN_MESSAGE_MAP和END_MESSAGE_MAP两个宏定义之间的消息处理映射函数, 如果子类中没有定义消息映射函数则直接调用基类函数处理
+>MFC提供了对设备资源的封装, CDC, 该类封装了所有绘图相关的操作, 提供了一个数据成员m_hDC用来保存于绘图相关的资源句柄, 使用GetDC()对其赋值
+	- 使用win api画线
+	HDC hdc;
+	hdc = ::GetDC(m_hWnd);
+	MoveToEx(hdc, x, y, NULL);
+	LineTo(hdc, point.x, point.y);
+	::ReleaseDC(m_hWnd, hdc);
+	- 使用CDC画线
+	CDC* pDC = GetDC();
+	pDC->MoveTo(pointSource);
+	pDC->LineTo(pointEnd);
+	ReleaseDC(pDC);
+	- 使用CClientDC类实现画线功能, 实际其内部调用了CDC类, 好处是可以自动释放资源, 根据传入的窗口句柄得到绘图区域, 传入getParent()的句柄可以在工具栏绘图
+	CClientDC dc(this);
+	dc.MoveTo(m_ptOrigin);
+	dc.LineTo(point);
+	- 使用CWindowDC对象绘图, 好处是不需要手动释放dc, 并且可以得到的绘图区域是整个装口, 包含框架, 工具栏, 视图区
+	CWindowDC dc(this);//CWindowDC dc(getParent()); 取得整个窗口区域的绘图区
+	dc.MoveTo(pointSource);
+	dc.LineTo(pointEnd);
+	- GetDesktopWindow(), 可以在window桌面窗口画线
+>绘制彩色线条
+	- 默认状态下, DC具有黑色画笔, 绘制的所有线条为黑色, MFC中CPen创建画笔
+	CPen(int nPenStyle, int nWdith, COLORREF crColor)
+	使用, RGB宏创建COLORREF类型的值
+	在程序中, 构造一个GDI对象后不会立即生效, 必须选入设备描述表它才会生效, 使用
+	SelectObject()将GDI对象选入设备描述表, 该函数会返回之前选入的GDI对象
+	CPen pen(PS_SOLID, 1, RGB(255,0,0));
+	CClientDC dc(this);
+	CPen* pOldPen = dc.SelectObject(&pen);
+	dc.MoveTo(pointSource);
+	dc.LineTo(pointEnd);
+	dc.SelectObject(pOldPen);
+	画笔宽度小于等于1时虚线类型才有效
+>画刷绘图, 用于填充一块区域
+CBrush brush(RGB(255,0,0));
+CClientDC(this);
+dc.FillRect(CRect(topLeft, bottomRight), &brush);
+只填充左侧和上部即矩形内, 部填充下部和右侧
+>位图画刷
+CBrush(CBitmap* pBitmap);
+LoadBitmap(LPCTSTR resourceName);
+LoadBitmap(UINT resourceID);
+>透明画刷, 使用CDC绘制矩形Rectangle
+	- 直接绘制矩形, 内部虽然是白色的, 但是并不是透明的, 系统默认使用白色画刷填充
+	CClientDC dc(this);
+	dc.Rectangle(CRect(pointStart, pointEnd));
+	- 使用GetStockObject取得黑色或者白色或空画刷NULL_BRUSH, 在使用CBrush类提供的FromHandle来将句柄转换为CDC
+	static CDC* PASCAL FromHandle(HDC hDC);
+	CClientDC dc(this);
+	CBrush* pBrush = CBrush::FromHandle((HBRUSH)GetStockObject(NULL_Brush));
+	CBrush* originalBrush = dc.SelectObject(&pBrush);
+	dc.Rectangle(CRect(pointStart, pointEnd));
+	dc.SelectObject(originalBrush);
+>静态成员的访问
+类名::函数名, 类型:变量名
+>MFC提供 int SetROP2(int DrawMode)函数来设置绘图模式, 具有多种模式
+R2_BLACK, R2_WHITE, R2_MERGENOTPEN画笔颜色取反, 再与屏幕颜色进行或操作
+
+:文本编辑
+>插入符, Caret, 创建插入符, 创建后的插入符默认是隐藏的
+void CreatSolidCaret(int nWdith, int nHeight); //创建默认插入符
+void CreateCaret(CBitmap* pBitmap); //创建图形插入符
+>显示插入符
+void ShowCaret()
+>从设备描述表取得当前字体信息
+BOOL GetTextMetrics(LPTEXTMETRIC lpMetrics) const;
+	- 将取得的字体信息存入TEXT METRIC结构体中, 每个字体都有自己的baseline信息
+	- typedef struct tagTEXTMETRIC
+	{
+		int tmHeight;
+		int tmAscent; //字体最高长度
+		int tmDescent; //字体最低长度
+		...
+	}TEXTMETRIC; //包含字体宽度, 最大宽度, 高度等字体信息
+>重绘窗口, 引用程序窗口变化就会发生重绘, 这是需要相应WM_PAINT, MFC提供了对该消息的相应函数OnDraw
+>添加字符串资源, CString类提供
+BOOL LoadString(UINT nId); 
+	- nId, 是字符串资源号
+>路径, 设备描述表中还有一个路径层, path bracket, 类似于PS中蒙版图层的效果, 路径图层可以和设备描述表的剪切区域做互操作从而影响图形显示的区域
+>CDC类中取得字符串屏幕显示的宽度和高度
+CSize GetTextExtent(const CString& str) const;
+	- CSize是类似于Windows的Size结构体
+	typedef tagSize
+	{
+		int cx;
+		int cy;
+	}Size
+>剪切区域, clipping region, 可以理解为一个绘图区域, 大小可调整. 例如客户区就是一个剪切区域, 当然也可以在客户区中建立剪切区域
+BOOL SelectClipPath(int Mode);
+将当前路径层和设备描述表中已有的剪切区域按照一定的模式进行互操作
+	- RGN_DIFF, 新的剪切区域包含当前的剪切区域
+	- RGN_AND, 新的区域与当前的区域做交集
+>字符输入, 增加对WM_CHAR的响应
+>设置光标位置
+static void PASCAL SetCaretPos(POINT point);
+>获取背景颜色, 字体颜色
+virtual COLORREF SetTextColor(COLORREF crcolor);
+GetBkColor();
+>CString.left(int nCount) const; 返回指定位置左侧字符串内容
+>设置字体, CFont类, 初始化函数有
+CreateFont, CreateFontIndirect, CreatePointFont, CreatePointFontIndirect
+BOOL CreatePointFont(int nPointSize, LPCTSTR lpszFaceName, CDC* pDC = NULL);
+	- nPointSize, 创建字体的高度, 单位是一个点的12分之一, 例如12个点的字体需要输入120
+	- lpszFaceName, 字体名
+	- pDC, CDC指针, 用来将nPointSize抓换位逻辑单位, 如果为空则使用屏幕设备描述表来完成转换, 和其他GDI对象一样, 创建后需要选入设备描述表才生效.
+	- ex.
+	CFont font;
+	font.CreatePointFont(300, "华文行楷", NULL);
+	CFont *pPreFont = dc.SelectObject(&font);
+	...
+	dc.SelectObject(pPreFont);
+>字母变色功能的实现, 使用CDC的输出文字函数DrawText
+int DrawText(const CString& str, LPRECT lpRect, UINT nFormat);
+dc.SetTextColor(color);
+会将输出的文字限制在指定的巨型范围内, 如果超出则截断
+>普通定时器, CWnd类的SetTimer
+UINT SetTimer(UINT nIDEvent, UINT nElapse, void(CALLBACK EXPORT*lpfnTimer)(HWND, UINT, UINT, DWORD));
+	- nIDEvent, 定时器标示, 如果函数成功则返回该值
+	- nElapse, 时间间隔, 毫秒
+	- lpfnTimer, 回调函数, 如果非空则操作系统会调去该函数处理定时器消息, 如果为NULL则WM_TIMER就会发送到应用程序队列中, 然后由程序中响应此消息的窗口进行处理
+	
+:菜单
+>使用菜单编辑器创建菜单资源, 如果每项都选中popup则为弹出式菜单
+>添加菜单响应, 使用ClassWizard工具来完成, View|ClassWizard
+>菜单命令的路由
+	- 视图类同文件中添加AFX_MSG消息映射宏
+	- 源文件中两处添加了AFX_MSG_MAP注释宏之间添加了ON_COMMAND宏, 将菜单号和命令函数关联和消息响应函数的实现
+	- 具体过程, 当单击菜单时, 直到找到一个消息处理函数为止
+	框架类->视图类(如果有处理函数则调用, 消息结束)->文档类->视图类->框架类->应用程序类
+>只有CWnd派生的类才有MessageBox成员函数, 使用MFC全局函数AfxMessageBox
+int AfxMessageBox(LPCSTR lpszText, UINT nType=MB_OK, UINT nIDHelp=0);
+>Window 消息分类
+	- 标准消息, 除了WM_COMMAND之外所有WM_开头的都是标准消息, 从CWnd派生的类都可以接受标准消息
+	- 命令消息, 自菜单, 加速键, 工具栏, 按钮发出的消息都以WM_COMMAND形式呈现, MFC中通过菜单ID来区分不同的命令消息, SDK中通过wParam参数识别, 从CCmdTarget派生的类都可以接受这类消息
+	- 通告消息, 由控件产生的消息, 例如按钮单击, 列表框选择都会产生这类消息, 目的是向父级窗口(通常是对话框)通知事件发生, 以WM_COMMAND形式呈现, 从CCmdTarget类都可以收到这类消息, 实际上CWnd是派生自CCmdTarget
+		* CWnd来生的类可以接受三种消息
+		* CCmdTarget派生的类只能接受除了标准消息以外的其他消息
+>window消息路由的过程和区别, 在MFC中
+AfxWndProc->AfxCallWndProc->WindowProc->OnWndMsg判断消息类型
+	- 标准消息, 直接使用消息映射机制调用对应的处理函数, 查找那个类响了当前消息
+	- 命令消息, 调用OnCommand函数来处理
+	- 通告消息, 交给OnNotify函数来处理
+	注:命令消息, 通告消息最后都调用OnCmdMsg函数
+>取得窗口菜单栏
+CMenu* GetMenu() const;				//CWnd类成员
+CMenu* GetSubMenu(int nPos) const;	//CMenu类成员
+>标记菜单项
+UINT CheckMenuItem(UINT nIdCheckItem, UINT nCheck)
+	- nCheck, 可选项有四个,MF_CHECKED, MF_UNCHECKED, MF_BYPOSITION第一个参数为索引, MF_BYCOMMAND第一个参数为ID	
+>默认菜单项, 有的菜单下的颜色使用粗体字实现, 就是默认菜单, 一个子菜单只能有一个默认菜单
+BOOL SetDefaultItem(UINT uItem, BOOL fByPos = FALSE);
+>设置菜单的图形标记CMenu类的
+BOOL SetMenuItemBitmaps(UINT nPosition, UINT nFlags, const CBitmap* pBmpUnchecked, const CBitmap* pBmpChecked);
+		
+		
+		
+		
+
+
+
+
+

@@ -1,0 +1,202 @@
+﻿SQL Server 2008从入门到精通(2)=刘奎;Note = Erxin
+
+## 函数
+- 函数的限制
+对数据库表的修改, 操作不在函数中的游标, 发送电子邮件, 修改目录
+- 可以使用的语句
+declare, set, 游标操作, 控制语句(除try ... catch), select, 使用insert update delete修改局部变量, execute调用存储过程
+- 类型, 按照返回类型分为
+表值函数, 标量函数, 聚合函数
+- 创建
+create function fun_name
+@paremeter_name type [=defualt][,...n]
+returns @return_value [Table<table_type_definition>]
+[with [encryption]|execute_as_clause][,...n]]
+	[as]
+	begin
+		function_body
+		return
+	end
+- 创建clr聚合函数
+添加sql数据库项目, 添加数据库引用, 使用聚合模版, 完成有在解决方案管理器右键, 可以直接将聚合函数部署到sql server
+- 系统聚合函数
+数据库|可编程性|函数|系统函数|聚合函数
+sum, binary_checksum, count,
+var, 可以用于select查询以便返回结果集中所有列值的方差
+stev, 可以用于select, 用于返回标准方差
+- 系统数学函数
+数据库|可编程性|函数|系统函数|数学函数
+
+## 同义词
+- 相当于系统中的快捷方式的作用, 对可能会改变的对象建立引用, 对象改变后不会影响对同义词的操作代码
+- 支持的对象, 表, 视图, 存储过程, 函数(除聚合函数外)
+- 创建同义词
+	* 右键数据库|同义词|新建
+	* create synonym synonym_name
+	for [server.]database.dbo.object
+- 使用, 创建后可直接使用
+- 同义词信息, sys.synonyms
+
+## 触发器
+- 分类
+登陆触发器, DDL触发器, DML触发器
+- 登陆触发器, 用户登陆到SQL Server, 在身份验证之后, 建立会话之前, 登陆触发器不能检测用户尝试登陆失败的次数, 不过可以通过日志了解
+	* 创建
+	create trigger trigger_name
+	on all server
+	for logon
+	begin ... end
+- DDL触发器, data definition language
+DDL语言, create, alter, drop等语句
+- DML触发器, 
+	* 针对insert, update, delete创建
+	* 分为, after, instead of
+	
+## transact-sql结构化程序设计
+- 变量作用域
+	* 存储过程和局部变量都是局部作用域
+	* 脚本中的变量时全局作用域, 如果使用GO语句则将脚本划分为多个全局作用域
+	* GO的作用
+	清除之前的全局变量
+	GO语句之间顺序执行
+- 定义变量, declare
+- 常量
+unicode, N''
+二进制, 0x开头数字
+bit, 0,1
+money, [$]123[.]4
+uniqueidentifier, 可以用字符串或二进制表示
+- 算数运算同C
+- 逻辑运算同VB, 增加
+IN, BETWEEN, SOME|ANY
+- 控制流
+IF, WHILE, RETURN , GOTO, ...
+WAITFOR delay|time time_to_delay|time_to_execute
+- 执行字符串, 最好使用
+sp_executesql, 不要使用execute(容易引起注入攻击)
+
+## 索引
+- 分类
+	* 聚集索引, 对象按照索引进行排序存储
+	* 非聚集索引
+	* 唯一索引
+- 注意, 尽量对insert update少的列建立索引
+- 创建
+create index
+- 索引信息
+sys.indexes
+
+## 事务与锁
+- 特点
+作为单独的SQL执行单元处理
+原子性
+相同性, 事务成功后必须让所有的数据保持相同
+隔离性(并发性), 中间数据不能被其他事务读取
+持久性, 完成后对系统的影响是持久的
+- 事务之间的隔离级别
+read uncommitted, 无隔离
+read committed, 个人隔离基本, 写入锁
+repeatable read, 较高的隔离级别, 读取锁
+serializable, 串行
+- 设置事务级别
+	* set transaction isolation level
+	* ado组建也可以设置隔离级别, 对应四种事务隔离级别
+- 编写事务
+begin transaction [transaction_name|@variable] [with mark ['description']]
+- 不能作为事务代码的语句
+alter database, alter fulltext catalog, alter fulltext index, backup,...
+主要为大型数据操作或修改数据库等
+- 大事务可以使用语句分割, 小事务尽量不要使用, 便于恢复
+save transaction t_name
+- 提交
+commit transaction t_name
+- ADO编写事务
+SqlTransaction t = cnn.BeginTransaction(IsolationLevel.ReadCommited)
+...
+t.Commit();
+- 原则
+	* 简短, 数据量小
+	* 不要在期间等待用户输入
+	* 灵活使用隔离
+- 事务日志, 可以在每个数据库的事务属性中查找, 同时可以增加日志文件数量
+select * from sys.database_files where type_desc = 'LOG'
+- 监视日志控件使用
+DBCC SQLPERF(LOGSPACE)
+
+## Sql server 2008的安全机制
+- 身份验证模式
+混合模式, window身份验证模式
+- 混合模式, 使用sa账户名, 密码
+- 角色, 登录名, 用户
+sp_helpsrvolemember
+sys.server_principals
+sys.sp_addsrvrolemember
+sys_dropsrvrolemember
+- 权限
+control, alter, take ownership, create
+
+## 备份与还原数据库
+- 恢复模式, recover, simple full bulk_logged
+修改恢复模式
+alter database_name set recovery full|bulk_logged|simple
+- 查看恢复模式
+check_db_recovery_model database_name
+- backup, restore
+
+## 复制
+- 分为发布和同步
+	* 发布
+	数据库|复制|本地发布, 按照向导操作
+	*同步, 配置订阅
+	数据库|复制|本地订阅
+	* 使用发布数据
+	修改数据
+	复制|本地发布|选择发布项, 右键重新初始化所有订阅, 点选使用新快照, 标记为重新初始化
+- 可以在对应项上生成所需的sql 脚本
+
+## 数据库镜像
+- 主体, 镜像, 见证(监督主体数据库达到自动切换镜像数据库)
+- 建立主体, 镜像
+创建用户
+备份主体
+在镜像服务器还原主体
+创建数据库镜像端点
+	create login [login_name]
+	from windows
+	with default_database = [master], default_language=[简体中文]
+	go
+	create endpoint dbMirroringM
+	state = started
+	as tcp(listener_port = 5023)
+	for databse_mirroing(role= partner, encryption = supported)
+	go
+	grant connection on endpoint::dbMirroringM
+	to [login_name]
+创建数据库镜像端点
+	create login [login_name]
+	from windows
+	with default_database = [master], default_language=[简体中文]
+	go
+	create endpoint dbMirroringM
+	state = started
+	as tcp(listener_port = 5022)
+	for databse_mirroing(role= partner, encryption = supported)
+	go
+	grant connection on endpoint::dbMirroringM
+	to [login_name]
+执行net stat -a查看指定端口是否已经开始ijianding
+- 设置数据库镜像, 主体, 镜像互相设置parter
+alter database database_name
+set partner = N'tcp://servername:port'
+- 触发数据库故障转移
+alter database database_name set partner failover
+- 手动故障转移
+数据库|属性|镜像|故障转移
+- 自动故障转移
+alter database database_demo set witness=N'tcp:servername:port'
+多增加设置一步见证数据库
+
+
+
+
+

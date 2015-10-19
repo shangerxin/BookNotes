@@ -1,0 +1,181 @@
+﻿程序员的自我修养, 链接, 装载与库=俞甲子, 潘爱民; Note=Erxin
+
+## 温故而知新
+- 虚拟内存, 增加中间层以控制内存使用
+- 内存分段, 不同的程序使用不同的内存块, 依然有效率问题
+- 分页, 将内存地址空间分为等分的固定大小的页, 一般为4KB或4MB, 现在基本为4KB, 将不同程序使用的内存放在不同的页中
+    * 虚拟页
+    * 物理页
+    * 磁盘页
+- 线程基础, thread, 也成为轻量级进程(lightweight process, LWP), 是一个程序执行流的最小单元. 标准的线程由ID, 当前指针PC, 寄存器集合和堆栈组成, 一个进程的所有线程共享内存空间(包括代码段, 数据段, 堆等)
+	* 多线程好处
+	合理利用等待时间, 在大计算量时防止UI假死, 并发处理, 发挥多CPU或多核性能, 相对于多进程在数据共享方面效率更高
+	* 线程的访问权限
+	线程只要知道其他线程堆栈地址就可以访问其他线程
+	栈(函数的参数), 线程局部存储, 寄存器
+	* 从C程序员的角度看线程数据是否私有
+	私有, 局部变量, 函数参数, TLS数据
+	共享, 全局变量, 堆, 函数的静态变量, 程序代码, 打开的文件
+	* 多核下的线程并发才是真正的并发运行, 线程数大于CPU数时都是模拟的并发
+	* 线程状态
+	运行running, 就绪ready, 等待waiting,
+	* 调度方法
+	优先级调度(priority schedule), 轮转法(round robin)
+		+ window中的线程调度
+		BOOL WINAPI SetThreadPriority(HANDLE hThread, int nPriority)
+		+ linux中不直接支持线程, 可以使用多个进程共享内存的方式实现线程的功能
+		fork, 速度较快为当前进程的副本, 在执行fork后内存是, copy on write
+		exec, 可以执行新的进程
+		clone, 类似于exec但可选的共享当前进程的内存和文件等
+	* 线程分类
+		+ IO密集型, 频繁等待的线程
+		+ CPU密集型, 很少等待的线程
+		+ CPU密集优先级总是由于IO密集线程程序得到提升, IO密集型等待到一定时间后优先级会提高到足够让其执行
+	* 可抢占线程和不可抢占线程
+	抢占, preemptiong, 线程用尽时间片后会被强制剥夺执行的权利, 进入就绪状态的过程
+		+ 可抢占操作系统
+		+ 不可抢占, 现在已经很少见
+- 线程安全
+	* 原子的, Atomic, 单指令操作, CPU执行指令的最小单元, 也是不会被打断的最小指令
+	* windows里有一套API专门进行原子操作, interlocked API
+	InterlockedExchange, 原子地交换两个值
+	InterlockedDecrement, 原子地减少一个值
+	InterlockedIncrement, 原子地增加一个值
+	InterlockedXor, 原子地进行异或操作
+	* 对于复杂数据结构更改的同步性, 通用的手段是锁
+		+ 同步, Synchronization, 同一时间一个线程访问
+		+ 锁, Lock, 取锁, Acquire,	释放, Release
+		+ 二元信号, binary semaphore, 是最简单的一种锁, 只有两种状态, 适合只能被唯一一个线程独占的资源, 可以被一个线程获取释放, 或由其他线程释放锁
+		+ 多线程并发访问资源, 多元信号量简称信号量, semaphore,一个初始为N的信号量允许N个线程并发访问
+		+ 线程访问资源首先取信号量
+		信号量值减1
+		若小于0, 进入等待否则继续执行
+		+ 线程访问完资源后
+		信号量加1
+		如果信号量大于1, 则唤醒一个等待中的线程
+	* 互斥量, mutex, 类似于二元信号量, 不同的是信号量可以在整个系统中被任意线程获取并释放, 互斥锁只能被相同的线程获取并释放
+	* 临界区, critical section, 比互斥量更加严格的同步手段
+	与互斥量与信号量的区别, 它们在系统中任何进程里都是可见的, 但是临界区作用范围仅限于本进程, 其他同互斥量
+	* 读写锁, read-write lock, 为了更加特定的场合的同步使用
+		+ 自由, 随意访问 
+		+ 共享, 可以让多个线程以相同的锁取得资源
+		+ 独占, 独占方式, 需要等待对象自由时才能加锁
+	* 条件变量, condition variable
+		+ 任意线程可以等待一个条件变量
+		+ 线程可以唤醒某个条件变量, 同时也就触发了对应等待的线程
+	* 可重入reentrant与线程安全, 一个函数未执行完, 由于外部因素又进入该函数
+		+ 多个线程同时执行这个函数
+		+ 函数自身调用自身
+		+ 可重入标准
+		不使用(局部)静态变量或全局非const变量
+		不返回任何(局部)静态或全局非静态变量指针
+		仅依赖于调用方提供的参数
+		不依赖任何单个资源的锁(mutex)等
+		不调用任何不可重入的函数
+	* 过度优化
+		+ 由于编译器为了提高效率将某些变量缓存入线程的寄存器(线程寄存器是独立的)
+		+ 由于CPU的动态调度, 为了执行效率调整了一些指令的执行顺序
+			1. 编译器调整
+			2. CPU自行调整
+		+ 使用volatile关键字阻止过度优化, 作用
+			1. 阻止编译器将变量缓存到寄存器而不写回
+			2. 阻止编译器调整操作volatile变量的指令顺序
+			3. 注, volatile变量并不能阻止CPU硬件对指令顺序的调整
+		+ CPU的自行调整指令顺序是并发问题难以解决的一个问题. 甚至双if 加lock的模式也不一定会保证有效的屏蔽并发
+		针对这个问题, 一般的CPU提供一条barrier() 指令来防止barrier后的指令调整到barrier之前
+			if(condition)
+			{
+				lock();
+				if(condition)
+				{
+					T* temp = new T;
+					barrier();
+					pInst = temp;
+				}
+			}
+- 多线程的内部情况
+线程的并发调度是由多处理器或操作系统调度来实现的, 大多数操作系统都在内核中提供对线程的支持, 如windows和linux(和linux kernel_thread并不是一回事), 用户实际使用的线程并不是内核线程
+一些轻量级的线程库提供的多线程可能多个只对应一个内核线程, 用户态多线程的实现方法
+	* 一对一模式, 最简单的, 一个用户线程对应一个内核线程, 但是内核线程 不一定对应一个用户线程
+		+ 一般直接使用API或系统调用创建的线程均为一对一线程
+		+ 优点, 线程之间是真正的并发, 一个线程阻塞不会影响其他线程
+		+ 缺点, 操作系统限制了内核线程的数量, 这样用户的线程数量受到影响
+			    内核线程调度切换开销大, 导致用户程序执行效率低
+	* 多对一模式, 多个用户线程对应一个内核线程
+		+ 优点, 切换迅速, 线程数量不受限
+		+ 缺点, 一个用户线程阻塞所有对应于该内核线程的用户线程全部阻塞
+	* 多对多模式, 是以上两个模式的折中
+	
+## 静态链接
+- 编译器
+	+ 词法分析, 有一个lex程序可以根据指定的规则将程序源文件拆分为一系列的token
+	而普通的词法分析的一般过程, 扫描器scanner->有限状态机finite state machine->记号 token
+	+ 语法分析, 语法分析器, grammar parser, 产生语法树, syntax tree, 以表达式为节点的树
+	语法分析工具, yacc, yet another compiler compiler
+	+ 语义分析, semantic analyzer
+	静态语义, static semantic, 动态语义, dynamic semantic
+	+ 中间语言生成器, 源码及优化器, source code optimizer
+	中间代码, intermediate code
+	p-code
+	三地址码, three-address code
+	+ 代码生成器, code generator, 目标代码优化器, target code optimizer
+- 连接器, 将各个模块相互引用的部分进行处理, 地址和空间分配, address and storage, 符号决议, symbol resolution, 和 重定位, relocation
+	+ 静态链接
+	
+## 目标文件里有什么
+- 可执行文件, executable, PC下主要是windows 下的PE, portable executable和linux ELF, executable linkable format(ELF), 都是COFF, common file format的变种
+中间文件格式, object, 与可执行文件格式类似
+- 其他可执行文件格式, intel/ microsoft的OMF object module format, unix a.out, ms-dos COM
+- 其他按照可执行文件格式存储的文件, window 下的dll, linux下的so文件, 静态链接库
+- 目标文件内容
+节, section
+段, segment
+代码段, code section
+段表, section table
+BSS, block started by symbol
+.rodata, 只读段
+.comment, 注释段
+.data, 初始化了全局静态变量和局部静态变量
+.debug, 调试信息
+.dynamic, 动态链接信息
+.hash, 符号哈希表
+.line, 调试时的行号表
+.note, 额外的编译信息, 如公司, 版本号等
+.strtab, 用于存储ELF文件中用到的各种字符串
+分段的好处是可以利于CPU优化及内存资源共享
+- 使用, objdump 工具显示任意文件格式内容
+.symtab, symbol table, 符号表
+.shstrtab, section string table 段名表
+.plt, .got, 动态链接的跳转表和全局入口表
+.init, .fini, 程序初始化终结代码段
+- 使用objcopy 工具将任意文件嵌入
+- ELF文件结构
+ELF header
+.text
+.data
+.bss
+... othersection
+section header table
+string tables, symbol tables
+- 使用工具readelf来查看ELF文件, 文件格式有32和64两个版本
+	* unix中定义在 /usr/include/elf.h
+	* ELF定义了一些公共变量表示变量大小等
+	* ELF文件中的魔数, magic, 文件开始的16个字节, 定义类文件类型, 32/64位, 字节顺序等
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	

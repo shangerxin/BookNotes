@@ -1,0 +1,502 @@
+﻿Linux kernel in a nutshell=Greg Kroah;Note=Erxin
+
+# building the kernel
+- preface
+- who this book is for
+- how the book is organized
+part I
+ch1, when and why you would want to build the kernel
+ch2, requirement for building and using the kernel
+ch3, retrieving the source
+ch4, configuring and building
+ch5 installing and booting
+ch6, upgrading a kernel
+
+part II
+ch7, customizing a kernel
+ch8, kernel configuration recipes
+
+part III, kernel reference
+ch9, kernel boot command-line parameter reference
+ch10, kernel build command-line reference
+ch11, kernel configuration option reference
+
+part IV, additional information
+appendix A, helpful utilities
+appendix b, bibliography
+- full book reference
+http://www.kroah.com/lkn.
+- conventions used in this book
+italic, constant width, constant width bold, constant width italic
+
+- roles
+editor, development editor, production editor, technical editor, copyeditor, proofreader, indexer, cover designer, interior designer, illustrator/photographer, cover photographer
+
+- do not configure or build your kernel with superuser permissions enable
+    + most of the task should be down under normal user
+    + only two or three commands it takes to install a new kernel should be done as the superuser(root)
+    may be there are bugs when build under superuser premission, such as del some files in the /dev directory
+    + kernel source code should also never be placed in the /usr/src/linux/ directory, which is the system libraries were built against. do not do any kernel directory under the /usr/src/ directory, but in a local user directory
+    
+
+# requirements for building and using the kernel
+- this chapter is base on 2.6.18 kernel
+- tools to build the kernel
+    + a compiler
+    + a linker
+    + a make utility
+- compiler, kernel is written in the C programming language with a small amount of assembly language in some places
+the gcc C compiler must be used
+http://gcc.gnu.org
+
+check gcc version
+$ gcc --version
+
+for 2.6.18 kernel at lease required 3.2 version
+
+- linker, the C compiler gcc need an additional set of tools known as binutils, to linking and assembling of source files
+
+binutils can usually be found in a distribution package called binutils
+http://www.gnu.org/software/binutils
+
+for 2.6.18 kernel, at lease required the 2.12 release of binutils
+
+check the binutils version by 
+$ ld -v
+
+- make, a tool that walks the kernel source tree to determine which files need to be compiled
+the kernel requires the GNU version of make, usually be found in a package called make for your distribution
+http://www.gnu.org/software/make.
+
+for 2.6.18 at lease need 3.79.1 release of make
+
+check make version
+$ make --version
+
+- tools to use the kernel, if you upgrade your kernel of your current distribution, some of the package release by the current distribution may also need to upgrade to fit for the new kernel
+    + util-linux, this package is a collection of small utilities that do a wide range of different tasks
+
+    + download the util-linux
+    http://www.kernel.org/pub/linux/utils/util-linux
+    
+    + check the version
+    $ fdformat --version
+
+- module-init-tools, modules save memory by loading just the code that is needed to control the machine properly
+
+download the module init tool from
+http://www.kernel.org/pub/linux/utils/kernel/module-init-tools
+
+2.6.18 kernnel required at lease 0.9.10 module-init-tools
+
+blacklisting modules to prevent them from being automatically loaded by the udev package
+
+check the version
+$ depmod -V
+
+- filesystem-specific tools
+util-linux package contain a few of utilities but some of the more popular filesystems have separate packages that contain the necessary programs
+
+ext2/ext3/ext4
+ext3 and experimental ext4 filesystems are upgrades of ext2 and can be managed with the same tools
+
+ext2-based tool can work the other two filesystems 
+
+e2fsprogs package, is required to work with these packages
+http://e2fsprogs.sourceforge.net.
+
+2.6.18 kernel required at least 1.29 release of e2fsprogs, choose the newest eversion in order to take advantage of newer features in the ext3 and ext4
+
+check version 
+$ tune2fs
+
+- JFS, filesystem from IBM, you must have the jfsutils pacakge
+source
+http://jfs.sourceforge.net.
+
+2.6.18 kernel release, the 1.1.3 release ofjfsutils 
+
+check version
+$fsck.jfs -V
+
+- ReiserFS, reiserfsprogs package
+source
+http://www.namesys.com/download.html
+
+2.6.18 kernel release, the 3.6.3 release of reiserfsprogs
+
+check version
+$reiserfsck -V
+
+- XFS, filesystem from SGI, xfsprogs package
+source
+http://oss.sgi.com/projects/xfs.
+
+2.6.18 kernel release, the 2.6.0 release ofxfsprogs
+
+check version
+$xfs_db -V
+
+- Quotas, quota-tools package, let you set quotas on users provide statistics on the amount of quota being used by different users
+
+source
+http://sourceforge.net/projects/linuxquota.
+
+2.6.18 kernel release, the 3.09 release ofquota-tools
+
+check version
+$quota -V
+
+- NFS, filesystem properly, you must have thenfs-utils package
+
+source
+http://nfs.sf.net.
+
+2.6.18 kernel release, the 1.0.5 release ofnfs-utils
+check version
+$showmount --version
+
+- Other tools
+some distributions call quota instead of quota-tools, nfs-common instead of nfs-utils
+
+udev,  enables Linux to provide a persistent device-naming system in the /dev directory
+Almost all Linux distributions useudevto manage the/dev directory, so it is required in order to properly boot the machine.
+
+udev developer mailing list
+linux-hotplug-devel@lists.sourceforge.net
+
+recommended that you use the version of udev that comes with your Linux distribution
+
+upgrade udev on your own from 
+http://www.kernel.org/pub/linux/utils/kernel/hotplug/udev.html.
+
+ 2.6.18 kernel release, the 081 release of udev
+
+check the version
+$ udevinfo -V
+
+- Process tools, procps includes the commonly used tools ps and top
+
+source
+http://procps.sourceforge.net.
+
+check version
+$ ps --version
+
+- PCMCIA tools, older kernel versions, this program was called pcmcia-cs, but that has been replaced with pcmciautils
+
+source
+ftp://ftp.kernel.org/pub/linux/utils/kernel/pcmcia.
+
+check version
+$ pccardctl -V
+
+
+# Retrieving the Kernel Source
+- what tree to use
+    + development, denoted by an odd number for the second release number, 2.5.25 was a development kernel
+    + stable, stable branch used even number, 2.4.25 is a stable
+
+Then the developers started working on new features and started releasing the-rc versions as development kernels
+
+- where to find the kernel source
+http://www.kernel.org
+
+using the wget or curl utilities
+
+$wget http://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.17.8.tar.gz
+
+$curl http://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.17.8.tar.gz -o linux-2.6.17.8.tar.gz
+
+check the latest kernel version
+http://www.kernel.org/kdist/finger_banner
+
+- what to do with the source
+create a local directory to save to source
+$ mkdir ~/linux
+
+now move the source code into this directory
+unzip the code
+$ tar -xzvf linux-2.6.17.8.tar.gz
+
+
+# configuring and building
+- configure the kernel with appropriate options, it's done by the standard make utility
+    + kernel configuration is kept in a file called .config in the top directory of the kernel source tree
+    
+    + configuring from scratch
+    navigate to the pre unzipped folder of linux-2.6.17.10
+    $ cd linux-2.6.17.10
+    $ make config
+    make config
+    scripts/kconfig/conf arch/i386/Kconfig
+    *
+    * Linux Kernel Configuration
+    *
+    *
+    * Code maturity level options
+    *
+    Prompt for development and/or incomplete code/drivers (EXPERIMENTAL) [Y/n/?]
+    Y
+    *
+    * General setup
+    *
+    Local version - append to kernel release (LOCALVERSION) []
+    Automatically append version information to the version string
+    (LOCALVERSION_AUTO) [Y/n/?]Y
+    ...
+
+
+the answer
+y Build directly into the kernel.
+n Leave entirely out of the kernel.
+m Build as a module, to be loaded if needed.
+? Print a brief descriptive message and repeat the prompt.
+
+The kernel contains almost two thousand different configuration options
+
+    + default configuration options, This is true for the i386 architecture
+    $ cd linux-2.6.17.10
+    $ make defconfig
+
+    a .config will write out
+
+    + modify the configuration, three different interactive kernel configuration tools
+        * menuconfig
+        * a GTK+ based graphical one called gconfig
+        * QT-based graphical one called xconfig
+        
+        * console configuration method
+        $ make menuconfig
+
+        [*]mark by them. That means that this option is selected (by virtue of the*being in the middle of the[]characters)
+        The third option has a<>marking, showing that this option can be built into the kernel (Y), built as a module (M), or left out altogether (N).
+
+- building the kernel
+$ make
+
+If the kernel build finished without any errors, you have successfully created a
+kernel image
+
+- advanced building options, the document could be found at Documentation/kbuild directory
+    + build faster on multiprocessor machines
+    $ make -j#
+    the number of core you want to use such as $ make -j4
+
+    + building only a portion of the kernel, build the files in dirvers/usb/serial directory enter
+    $ make drivers/usb/serial
+    will not build the final module images in that directory, to do that you can use the M= argument
+    
+    $ make M=drivers/usb/serial
+    will build all he needed files in that directory and link the final module
+
+    when buid a single directory in one of the wyas show, will nt influnce the final kernel image, recall the 
+    $ make
+    to rebuild the final kernel
+    
+    $make drivers/usb/serial/visor.ko
+    will only build the drivers/usb/serial/visor.ko kernel module
+    
+    + source in one place, output in another, use 0= to tell where to place the output to place 
+    for example, if the kernel source is located on a cd-rom mounted on /mnt/cdrom/ and you will to palce the built files in your local directory
+    $ cd /mnt/cdrom/linux-2.6.17.11
+    $ make 0=~/linux/linux-2.6.17.11
+
+    + different architectures, ARCH= argument, specify compiler that you wish to use CC= argument or a cross-compile toolchain with CROSS_COMPILE 
+    $ make ARCH=0x86_64 defconfig
+    
+    $ make ARCH=arm CROSS_COMPILE=/usr/local/bin/arm-linux
+    built the whole kernel with an ARM toolchain located in /usr/local/bin/
+    
+    $ make CC="ccache gcc"
+    non-compiled kernel to change what the build system uses for the compiler, using the distcc or ccache programs
+    
+    $ make CC="ccache distcc"
+    use both distcc and ccache programs both of which help greatly reduce the time it takes to build a kernel together
+    
+# installing and booting from a kernel
+- all the the install command need to be run as the root user
+$ sudo ls ~/linux/linux-2.6.17.11/Makefile
+Password:
+Makefile
+
+- using a distribution's installation scripts, all most all distribution come with a script called installkernel that can be used by the kernel build system
+    + distribution offer the installkernel usually put it in a package called mkinitrd, try to install it if installkernel don't exist
+    
+    + if you built any modules and want to install first
+    $ make modules_install
+    will install all the modules
+    
+    modules are placed in the /lib/modules/kernel_version directory
+    
+    + install the kernel image manually without installkernel script by
+    $ make install
+        * system will verify the kernel
+        * install the static kernel portion into /boot
+        * any needed initial ramdisk images will be automatically created, using the modules that have installed during the modules_install phase
+        * bootloader program will be properly notified that a new kernel is present, in the next boot to let user select it
+        * install finished
+        
+- installing by hand
+    + install the modules
+    $ sudo make modules_install
+    
+    + the static kernel image must be copied into /boot directory, for an i386-based kernel do
+    $ sudo make kernelversion
+    2.6.17.11
+    
+    + use this value in palce of text KERNEL_VERSION in the following steps
+    $ sudo cp arch/i386/boot/bzImage /boot/bzImage-KERNEL_VERSION
+    $ sudo cp System.map /boot/System.map-KERNEL_VERSION
+
+    edit a configure file for a GRUB and LILO bootloaders
+
+    if boot process does not work properly, this may because an initial ramdisk image is needed
+    
+    use this script to install the kernel automatically instead of having to type the previous commands all the time
+    
+    #!/bin/sh
+    #
+    # installs a kernel
+    #
+    make modules_install
+    # find out what kernel version this is
+    for TAG in VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION ; do
+    eval `sed -ne "/^$TAG/s/ //gp" Makefile`
+    done
+    SRC_RELEASE=$VERSION.$PATCHLEVEL.$SUBLEVEL$EXTRAVERSION
+    # figure out the architecture
+    ARCH=`grep "CONFIG_ARCH " include/linux/autoconf.h | cut -f 2 -d "\""`
+    # copy the kernel image
+    cp arch/$ARCH/boot/bzImage /boot/bzImage-"$SRC_RELEASE"
+    # copy the System.map file
+    cp System.map /boot/System.map-"$SRC_RELEASE"
+    echo "Installed $SRC_RELEASE for $ARCH"
+
+- modifying the bootloader for the new kernel, there are two common used bootloader
+    + GRUB, is common used and easily than LILO
+    modify the /boot/grub/menu.lst file to let the new kernel present
+    
+    check the info page
+    $ info grub
+    
+    consider the following menu.lst file from a gentoo system
+    timeout 300
+    default 0
+    splashimage(hd0,0)/grub/splash.xpm.gz
+    title 2.6.16.11
+        root(hd0,0)
+        kernel /bzImage-2.6.16.11 root=/dev/sda2 vga=0x0305
+        
+    title 2.6.11
+        root(hd0,0)
+        kernel /bzImage-2.6.16 root=/dev/sda2 vga=0x0305
+    
+    + LILO
+    modify the/etc/lilo.conf configuration file and then run the lilo command to apply the changes, see the LILO manpage
+    $ man lilo
+    
+    example one of the configuration file
+    boot=/dev/hda
+    prompt
+    timeout=50
+    default=2.6.12
+    image=/boot/bzImage-2.6.15
+        label=2.6.15
+        read-only
+        root=/dev/hda2
+    image=/boot/bzImage-2.6.12
+        label=2.6.12
+        read-only
+        root=/dev/hda2
+        
+    after change the configuration file run the command /sbin/lilo program to write the configuration 
+    $ sudo /sbin/lilo
+    
+    + check the bootloader version and type
+    $ ls -F /boot | grep grub
+    if there is a grub sub directory then you use the GRUB
+    
+    $ ls /etc/lilo.config
+    then you use the LILO
+    
+
+# upgrading a kernel image
+- first backup the .config file in the kernel source directory
+$ cd ~/linux/linux-2.6.17.11
+$ cp .config ../good_config
+
+- only file simple steps are needed to upgrade a kernel 
+    + get the new source code
+    the character F means full patch, called patch the program patch takes
+    + apply the changes to the old source tree to bring it up to the newer level
+    + reconfigure the kernel based on the previous kernel configuration
+    + build the new kernel
+    + install the new kernel
+
+- which patch applies to which release
+    + stable kernel patches apply to the base kernel version, 2.6.17.11 patch will only apply to 2.6.17 kernel, will not apply to 2.6.17.9
+    
+    + base kernel release patches only apply to the previous base kernel version, 2.6.18 will only apply to 2.6.17 and will not apply to 2.6.17.y
+    
+    + incremental patches upgrade from a specific release to the next release
+
+- finding the patch, as we want to 2.6.17.9 -> 2.6.17.11 then we need download two patches, 2.6.17.10 and 2.6.17.11
+
+the stable and base kernel are located in the same directory structure, incremental patches are in incr subdirectory
+
+$cd ~/linux
+$ lftp ftp.kernel.org/pub/linux/kernel/v2.6/incr
+
+get patch-2.6.17.9-10.bz2
+get patch-2.6.17.9-11.bz2
+
+- applying the patch
+    + uncompress the patch after download
+    $ bzip2 -dv patch-2.6.17.9-10.bz2
+    $ bzip2 -dv patch-2.6.17.9-11.bz2
+    $ ls -F
+
+    apply the patch to the kernel directory
+    $ cd linux-2.6.17.9
+    $ patch -p1 < ../patch-2.6.17.9-10
+
+    if upgrade more than two version, recommended to go backward and then upgrade forward, 2.6.17.9 -> 2.6.17 -> 2.6.17.11
+
+    look at the makefile of the kernel to see the kernel version
+    $ head -n 5 Makefile
+    
+    don't forget to change the directory name to fit for the kernel version
+- reconfigure the kernel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

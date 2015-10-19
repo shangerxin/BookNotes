@@ -1,0 +1,89 @@
+﻿问题提出：有的时候，在服务器安装某个EXE文件，想让它能够在系统重启时自动运行，虽然放在“开始-程序-启动”能够运行，但是对于远程维护的服务器，由于用户帐户的不同，就不会不能如意。
+      如果能把某个EXE文件作为系统的一个服务，就可以不必担心注销、重启了。
+问题解决：从网上搜索到“把EXE文件注册成服务的方法”以及“EasyService 一键服务 批处理程序”，这两个很实用，其它的都无法完美做到注册成服务。
+以下是具体的方法，放在博客上做个记录，也方便需要的同志。
+此方法已经本人试用，能够成功把 .exe 注册成服务，并设置成自动运行，机器重启也正常运行。
+
+
+把EXE文件注册成服务的方法
+（本文原作者的内容进行列步骤处理）
+Instsrv.exe可以给系统安装和删除服务
+Srvany.exe可以让程序以服务的方式运行
+把这两个程序保存在一个方便的位置，例如C盘根目录下。
+我们举例来说明，把OE作为一个服务添加进Windows XP Professional操作系统中，并把这个服务命名为“Mail”。
+
+1、CMD:    c:\instsrv.exe Mail c:\srvany.exe
+就是把srvany.exe注册为系统的服务，服务名是Mail
+运行后，会提示已成功安装了这个服务，此时在“控制面板”里的“服务”也能看到新添加的这个mail服务。
+但是，如果后面的srvany.exe是其它的exe文件的话，是不能直接启动该服务的。
+2、Regedit：在HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services下找到添加的Mail，
+            点击右键，新建一个键，命名为“Parameters”，
+            点击新建的Parameters，并再次新建一个名称为“Application”的子键，数据类型为“REG_SZ”，数值为希望作为服务运行的程序的所在位置，如OE的程序位置就是C:\Program Files\Outlook Express\msimn.exe ，把这个路径添入数值中。
+            在Mail服务下建立一个名为Description的子键，数据类型同样为REG_SZ，数值可以写一些你对这个服务的描述，这个我们在后面可以看到。 (这里的这一步是说明用的，可以省略，不过能让添加的服务看起来更专业。)     
+           
+3、对服务做一些额外的设置：直接运行“Services.msc”，或到控制面板里打开“服务”，找到新添加的“Mail”服务项目。
+    在“General”选项卡上，有“自动（Automatic）”，“手动（Manual）”和“禁止（Disabled）”三种启动类型，按照需要，我们一般设置成自动就可以了。
+    在“Logon”选项卡下，可以设置以什么身份运行这个服务，一般可以不用理会，按照默认的设置。
+    在“Recovery”选项卡下，则是进行恢复设置的，你可以指定，在服务第一次，第二次和第三次出错之后分别采取什么措施。
+    在“Dependencies”则显示了服务之间的依存关系，可以让你察看这个服务的运行依赖哪些其它服务，以及还有什么服务依赖于这个服务。这后面几个对我们一般用户没有什么意义。
+经过这些设置，你的服务已经完全可以正常工作了。
+
+4、删除添加的服务：
+  先：在服务里停止运行；
+  再：使用Instsrv.exe程序删除：“c:\instsrv.exe Mail remove”，然后回车就可以了。
+ 
+
+-------------------------------------------
+以下是网上搜索到的另一个很方便的批处理程序
+
+一懒到底——轻松注册Exe程序为Windows系统服务
+
+为了方便和我有同样想法的人，干脆写了个批处理脚本，一步实现停止->删除->注册->启动的功能，包括生成注册表文件并导入。
+脚本内容如下：
+@echo off
+ 
+::设置服务名称
+set service_name=smtpsvr
+ 
+::设置服务描述
+set service_description=1st smtp server 服务
+ 
+::设置服务程序路径
+set prog_path=D:\\Green Programs\\fstsmtp\\smtpserver.exe
+ 
+::设置服务的启动方式 auto:自动 demand:手动 disabled:禁用
+set strt=auto
+ 
+echo                    EasyService 一键服务
+echo ===========================================================
+::pause
+::======================以下部分勿随意修改==========================
+set s32=%windir%\system32
+set reg_file=EasyService.reg
+ 
+net stop %service_name% 2>nul
+copy instsrv.exe %s32%
+copy srvany.exe %s32%
+ 
+%s32%\instsrv.exe %service_name% remove 2>nul
+%s32%\instsrv.exe %service_name% %s32%\srvany.exe >nul
+ 
+::设置服务的启动方式 auto:自动 demand:手动 disabled:禁用
+sc config %service_name% start= %strt%
+sc description %service_name% "%service_description%"
+ 
+echo 生成注册表文件...
+echo Windows Registry Editor Version 5.00 > %reg_file%
+echo [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\%service_name%\Parameters] >> %reg_file%
+echo "Application"="%prog_path%" >> %reg_file%
+ 
+echo 导入注册表文件...
+%reg_file%
+ 
+net start %service_name%
+echo ===========================完成============================
+pause
+使用方法：
+修改脚本中service_name、service_description、prog_path、strt这4个变量的内容，分别设置为服务名、功能描述、程序路径、启动方式，保存后运行脚本，弹出是否导入注册表，选是，大功告成，已在winxp及win2k下测试通过。
+
+最后提供文中用到的几个文件，包括批处理程序。

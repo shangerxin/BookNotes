@@ -1,0 +1,100 @@
+﻿window 核心编程第五版;Note=Erxin
+
+## 简介
+- 64位, 32位系统, 大多数情况下只要注意指针和句柄, 很多其他类型长度都一样
+- 自定义自己的错误代码
+    * 常见的window函数调用返回值
+        + VOID, 用于测试返回值为0或非零, 尽量只测试FALSE
+        + BOOL, 同VOID
+        + HANDLE, 失败返回NULL, 否则标示一个可操作的对象, 某些函数可能会返回INVALID_HANDLE_VALUE的句柄, 值为-1
+        + PVOID, 如果函数调用失败, 则返回NULL, 否则将标示一个数据块的内存地址
+        + LONG/DWORD, 这类函数要仔细阅读函数说明文档
+    * window函数检测到错误时会使用线程本地存储区的机制将错误代码与主线程关联, 使用
+    DWord GetLastError()
+    应尽快处理每次的错误, 处理后, 成功调用的函数使用ERROR_SUCCESS改写此值
+    * WinError.h, 头文件定义了Microsoft定义的所有错误代码列表
+    如果两次抛出同样的错误, CreateEvent函数, 则会得到ERROR_ALREADY_EXISTS返回值
+    * 使用VS的Watch查看函数返回值, 输入变量名为$err, hr, 查看当前线程的上一个错误
+    * VS的工具, Error Lookup
+    * Window 提供了一个函数将错误代码转换为相应的文本描述
+    DWord FormatMessage(
+        DWord dwFlags,
+        LPCVOID pSource,
+        DWord dwMessageId,
+        DWord dwLanguageId,
+        PTSTR pszBuffer,
+        va_list *Arguments);
+    使用时首先翻译消息, 将翻译好的内容嵌入到dll, exe中, 再使用函数调用
+    * 错误代码格式
+    位   31-30   29              28      27-16               15-0
+    内容  严重性 Microsoft/客户  保留    Facility代码      异常代码
+    含义  0=成功    0=微软        必须0  前256微软保留       自定义
+          1=信息    1=客户
+          2=警告
+          3=错误
+    * 动态载入dll
+    HMODULE hDll = LoadLibraryEx(Text(libraryName), NULL, FLAGS);
+    ...
+    FreeLibrary(hDll);
+    * 自定义错误, 错误信息已经存在hDll指向的dll中
+    HMODULE hDll = LoadLibraryEx(Text(libraryName), NULL, FLAGS);
+    if(hDll != NULL)
+    {
+       fOk = FomartMessage(
+             FORMAT_MESSAGE_FROM_HMODULE|FORMAT_MESSAGE_IGNORE_INSERTS|FORMAT_MESSAGE_ALLOCATE_BUFFER,
+             hDll, dwError, systemLocal,
+             (PTSTR)&hlocal, 0, NULL);
+    }
+    FreeLibrary(hDll);
+    FORMAT_MESSAGE_IGNORE_INSERTS, 说明消息中可以有占位符, 每个dll和exe都可以有自己的一套错误代码, 向自己的模块添加错误代码, 使用Message Compiler(MC.exe), 创建一个消息资源并添加到Dll(exe)中, 可以使用Error Lookup工具的Module对话框完成
+    
+## 字符和字符串处理
+- 所有代码尽量使用Unicode
+- 字符编码
+    * vista中统一使用UTF-16
+    * .net中始终使用UTF-16, 所以在托管和非托管代码之间通信尽量使用UTF-16编码
+    * UTF-8对于值大于0x0800的编码时不如UTF-16高效
+- ANSI字符和Unicode字符与字符串数据类型
+    * char, 8位
+    * wchar_t, 16位的UTF-16, 为ms编译器内建对象
+    等效的定义为
+    typedef unsigned short wchart_t;
+    * 声明Unicode字符
+    wchart_t c = L'A';
+    * WinNT.h 头文件中定义了一些微软使用的类型
+    typedef char CHAR;
+    typedef wchart_t WCHAR;
+    其中VS企业版支持 /analyze开关编译来检查参数, 需要定义时使用
+    typedef __nullterminated WCHAR *NWPSTR, *LPWSTR, *PWSTR
+    __nummterminated, 称为头部注释
+    * 字符宏
+    _T(string_define)
+    * window 定义的函数接受Unicode为参数,一般在最后加W, ANSI则加A
+    * window API中还有很多只支持ANSI的函数, 例如winExec, Openfile, 应该避免使用, 尽量使用支持Unicode的函数替换, CreateProcess, CreateFile
+    * COM中统一使用Unicode通信
+- C运行库中的Unicode函数和ANSI函数
+    * strlen, wcslen
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

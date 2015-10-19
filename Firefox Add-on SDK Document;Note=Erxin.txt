@@ -1,0 +1,3849 @@
+﻿Firefox Add-on SDK Document;Note=Erxin
+
+# jpm 
+- installation 
+$ npm instll jpm --global 
+
+- commands 
+jpm init, create a skeleton add-on as a starting point for your own add-on 
+jpm run 
+jpm test, runs your add-on's unit test 
+jpm post, package your add-on as an xpi file then post it to some url 
+jpm watchpost, package your add-on as an xpi file whenever there is a file changed and post that to some url 
+
+- jpm init will create package.json file include fields 
+title 
+name 
+version 
+description 
+entry point 
+author 
+engines 
+license 
+
+- jpm run support options 
+b, binary, binary version path to firefox 
+binary-args, extra arguments to firefox, need to quote mutiple arguments 
+debug 
+o, overload, use the specify module instead of sdk modules
+p, profile, by default jpm use clean profile, specify profile path to help debugging 
+v, verbose 
+no-copy, disables the copying of the profile which allows one to reuse a profile, works with -p option
+
+- jpm test, run add-on unit test
+    + look for a directory called "test" under add-on root 
+    + open every file start with test-*.js 
+    + calls every function start with test 
+    
+    + options include the options of run command and additional options 
+filter file[test], only run tests whose filenames match file and optionally test method 
+stop-on-error
+tbpl, print test output in treeHerder format 
+times NUMBER, run tests number of times 
+
+- jpm xpi, package add-on 
+- jpm post, package add-on and post to url 
+post-url URL 
+
+- jpm watchpost, package post add-on whenever file in the current directory changed 
+- .jpmignore to ignore files, it is similar to .gitignore 
+- profile specify data 
+extra add-on 
+history 
+data stored using simple-storage API 
+- developing without browser restarts 
+    + using extension auto-installer, https://addons.mozilla.org/en-US/firefox/addon/autoinstaller/
+    
+    make a change to your add-on 
+    post to install 
+    $ jpm post --post-url http://localhost:8888/ to make a xpi and post it 
+    
+    or use a sime script 
+    $ jpm watchpost --post-url http://localhost:8888/
+
+- firefox profile path 
+C:\Users\shange\AppData\Local\Mozilla\Firefox\Profiles
+
+# Unit testing 
+- unite test with sdk/test module 
+- example 
+    + init a add-on 
+$ jpm init 
+    + create base64.js 
+//base64.js 
+const { atob, btoa } = require("chrome").Cu.import("resource://gre/modules/Services.jsm", {});
+ 
+exports.atob = a => atob(a);
+exports.btoa = b => btoa(b);
+
+    + add content to index.js, and add a icon file called icon-16.png in to the add-on folder 
+//index.js 
+var base64 = require("./base64");
+
+var button = require("sdk/ui/button/action").ActionButton({
+  id: "base64",
+  label: "base64",
+  icon: "./icon-16.png",
+  onClick: function() {
+    encoded = base64.btoa("hello");
+    console.log(encoded);
+    decoded = base64.atob(encoded);
+    console.log(decoded);
+  }
+});
+
+    + testing the base64 module 
+    + navigate to test directory and create test-base64.js add content 
+//test-base64.js 
+var base64 = require("../base64");
+ 
+exports["test atob"] = function(assert) {
+      assert.ok(base64.atob("aGVsbG8=") == "hello", "atob works");
+}
+ 
+exports["test btoa"] = function(assert) {
+  assert.ok(base64.btoa("hello") == "aGVsbG8=", "btoa works");
+}
+ 
+exports["test empty string"] = function(assert) {
+  assert.throws(function() {
+                  base64.atob();
+                },
+                "empty string check works");
+}
+ 
+require("sdk/test").run(exports);
+
+    + execute test 
+$ jpm -v test 
+
+- the implementation is used the CommonJS unit testing specification 
+http://wiki.commonjs.org/wiki/Unit_Testing/1.1
+
+
+# using third party module 
+- with nodejs support add third party library 
+    + navigate to the root of your add-on 
+    + install thirdy party library 
+    $ npm install menuitem --save 
+    
+    + use the library, add code to index.js 
+//index.js 
+var menuitem = require("menuitem");
+
+var menuitem = menuitem.Menuitem({
+  id: "clickme",
+  menuid: "menu_ToolsPopup",
+  label: "Click Me!",
+  onCommand: function() {
+    console.log("clicked");
+  },
+  insertbefore: "menu_pageInfo"
+});
+
+
+# test/assert API
+- test/assert is a low level api from sdk 
+- global constructor 
+Assert(logger)
+- methods 
+assert.ok(expression, "message")
+assert.equal(value0, value1, "message");
+assert.notequal
+assert.deepEqual, define in http://wiki.commonjs.org/wiki/Unit_Testing/1.0#Assert, 
+    + all identical values are equivalent  ===
+    + all owned properties have same values 
+assert.notDeepEqual
+assert.strictEqual, equal use ===
+assert.notStrictEqual
+assert.throws(block, error, message), expected exception 
+
+# disable firefox add-on signature check 
+- goto about:config 
+- type xpinstall
+- set xpinstall.signatures.required to false 
+
+
+# package.json 
+- reference, https://developer.mozilla.org/en-US/Add-ons/SDK/Tools/package_json
+
+
+# siging and distrbuting add-on 
+https://developer.mozilla.org/en-US/Add-ons/Distribution
+
+# run sdk unit test 
+$ jpm testall 
+
+
+# Create userinterface 
+- add a add-on button, with action button, https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/ui_button_action
+    + add necessary icon files 
+    + modify index.js 
+//index.js 
+var buttons = require('sdk/ui/button/action');
+var tabs = require("sdk/tabs");
+
+var button = buttons.ActionButton({
+  id: "mozilla-link",
+  label: "Visit Mozilla",
+  icon: {
+    "16": "./icon-16.png",
+    "32": "./icon-32.png",
+    "64": "./icon-64.png"
+  },
+  onClick: handleClick
+});
+
+function handleClick(state) {
+  tabs.open("https://www.mozilla.org/");
+}
+
+you can't set the initial location for the button 
+The id attribute is mandatory, and is used to remember the position of the button, so you should not change it in subsequent versions of the add-on.
+
+all the properties of the button could be updated except the id 
+
+    + attaching a panel
+    use the toggle button(https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/ui_button_toggle)
+
+    + create more complex content use a panel 
+    https://developer.mozilla.org/en-US/Add-ons/SDK/Tutorials/Adding_a_Button_to_the_Toolbar
+
+- add a menu item to firefox, doesn't support provide a built-in API to add new menu items to Firefox. But it's extensible by design 
+
+such as use third-party menuitem module, https://developer.mozilla.org/en-US/Add-ons/SDK/Tutorials/Using_third-party_modules_%28jpm%29
+
+- display a popup 
+    + use panel module, the script code of the panel need to use message to communicate the add-on code 
+    
+    + consists of demo addon files 
+index.js 
+get-text.js 
+text-entry.html, the panel content 
+icon-16.png,...
+
+//index.js 
+var data = require("sdk/self").data;
+// Construct a panel, loading its content from the "text-entry.html"
+// file in the "data" directory, and loading the "get-text.js" script
+// into it.
+var text_entry = require("sdk/panel").Panel({
+  contentURL: data.url("text-entry.html"),
+  contentScriptFile: data.url("get-text.js")
+});
+
+// Create a button
+require("sdk/ui/button/action").ActionButton({
+  id: "show-panel",
+  label: "Show Panel",
+  icon: {
+    "16": "./icon-16.png",
+    "32": "./icon-32.png",
+    "64": "./icon-64.png"
+  },
+  onClick: handleClick
+});
+
+// Show the panel when the user clicks the button.
+function handleClick(state) {
+  text_entry.show();
+}
+
+// When the panel is displayed it generated an event called
+// "show": we will listen for that event and when it happens,
+// send our own "show" event to the panel's script, so the
+// script can prepare the panel for display.
+text_entry.on("show", function() {
+  text_entry.port.emit("show");
+});
+
+// Listen for messages called "text-entered" coming from
+// the content script. The message payload is the text the user
+// entered.
+// In this implementation we'll just log the text to the console.
+text_entry.port.on("text-entered", function (text) {
+  console.log(text);
+  text_entry.hide();
+});
+
+//get-text.js 
+// When the user hits return, send the "text-entered"
+// message to main.js.
+// The message payload is the contents of the edit box.
+var textArea = document.getElementById("edit-box");
+textArea.addEventListener('keyup', function onkeyup(event) {
+  if (event.keyCode == 13) {
+    // Remove the newline.
+    text = textArea.value.replace(/(\r\n|\n|\r)/gm,"");
+    self.port.emit("text-entered", text);
+    textArea.value = '';
+  }
+}, false);
+// Listen for the "show" event being sent from the
+// main add-on code. It means that the panel's about
+// to be shown.
+//
+// Set the focus to the text area so the user can
+// just start typing.
+self.port.on("show", function onShow() {
+  textArea.focus();
+});
+
+//text-entry.html 
+<html>
+<head>
+    <style type="text/css" media="all">
+      textarea {
+        margin: 10px;
+      }
+      body {
+        background-color: gray;
+      }
+    </style>
+  </head>
+<body>
+    <textarea rows="13" cols="33" id="edit-box"></textarea>
+  </body>
+</html>
+
+//file structure 
+addon/
+      data/
+           get-txt.js 
+           icon-16.png 
+           icon-32.png 
+           ..
+           text-entry.html 
+      index.js 
+     
+- add a context menu item 
+//index.js 
+var contextMenu = require("sdk/context-menu");
+ var menuItem = contextMenu.Item({
+  label: "Log Selection",
+  context: contextMenu.SelectionContext(),
+  contentScript: 'self.on("click", function () {' +
+                 '  var text = window.getSelection().toString();' +
+                 '  self.postMessage(text);' +
+                 '});',
+  onMessage: function (selectionText) {
+    console.log(selectionText);
+  }
+});
+
+you don't need to manually added the context menu, it will be automatic added based on the configured context 
+
+    + adding a image 
+
+var menuItem = contextMenu.Item({
+...
+  image: self.data.url("icon-16.png"),
+...
+});
+
+    + adding an access key 
+var menuItem = contextMenu.Item({
+...
+  accessKey: "key", 
+...
+});    
+
+support from chrome 35
+
+
+# Interact with the browser 
+- open a web page 
+
+    + open a new webpage, you can use the tabs module 
+var tabs = require("sdk/tabs");
+tabs.open(str_url);
+
+//the require("sdk/tabs") is a asynchronous function you don't immediately get back a tab object 
+// you could use callback to make sure the tabs are getten 
+tabs.open({
+  url: "http://www.example.com",
+  onReady: function onReady(tab) {
+    console.log(tab.title);
+  }
+});
+
+    + to access tab content you need to attach a script to the tab 
+tab.attach({
+    contentScript:"document.body.style.border = '5px solid red';"
+});
+
+- get the list of open tabs 
+    + example add an action button that logs the urls of open tabs when the user clicks it 
+    
+require("sdk/ui/button/action").ActionButton({
+  id: "list-tabs",
+  label: "List Tabs",
+  icon: "./icon-16.png",
+  onClick: listTabs
+});
+
+function listTabs() {
+  var tabs = require("sdk/tabs");
+  for (let tab of tabs)
+    console.log(tab.url);
+}
+
+- listen for page load 
+    + get notification from pages loading using the tabs module 
+//log url of each tab as the user loads it 
+require("sdk/tabs").on("ready", logURL);
+ 
+function logURL(tab) {
+  console.log(tab.url);
+}
+
+- run scripts in the context of web pages whose url matches a given pattern 
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScript: 'window.alert("Page matches ruleset");'
+});
+    + content script can be 
+        * a string literal 
+        * separate files supplied in your add-on's data directory 
+        
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: data.url("my-script.js")
+});
+
+//array of content scripts 
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: [data.url("jquery-1.7.min.js"),
+                      data.url("my-script.js")]
+});
+
+//start from firefox 34 you can use ./*.js as an alias for self.data.url(*.js);
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: "./my-script.js"
+});
+
+    + communicate with content script 
+var tag = "p";
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: data.url("element-getter.js"),
+  onAttach: function(worker) {
+    worker.port.emit("getElements", tag);
+    worker.port.on("gotElement", function(elementContent) {
+      console.log(elementContent);
+    });
+  }
+});
+
+// file /data/element-getter.js
+self.port.on("getElements", function(tag) {
+  var elements = document.getElementsByTagName(tag);
+  for (var i = 0; i < elements.length; i++) {
+    self.port.emit("gotElement", elements[i].innerHTML);
+  }
+});
+
+    + To stop a page-mod from making any more modifications, call its destroy() method.
+
+    + mapping worker to tabs, worker has a tab property which returns the tab associated with this worker 
+var pageMod = require("sdk/page-mod");
+var tabs = require("sdk/tabs");
+
+pageMod.PageMod({
+  include: ["*"],
+  onAttach: function onAttach(worker) {
+    console.log(worker.tab.title);
+  }
+});
+
+    + destroying workers, workers generate a detach event when their associated document is closed or associated window's unload event occurs 
+    
+//attach to page 
+var workers = [];
+
+var pageMod = require("sdk/page-mod").PageMod({
+  include: ['*'],
+  contentScriptWhen: 'ready',
+  contentScriptFile: data.url('pagemod.js'),
+  onAttach: function(worker) {
+    workers.push(worker);
+  }
+});
+
+//remove worker 
+var workers = [];
+
+function detachWorker(worker, workerArray) {
+  var index = workerArray.indexOf(worker);
+  if(index != -1) {
+    workerArray.splice(index, 1);
+  }
+}
+
+var pageMod = require("sdk/page-mod").PageMod({
+  include: ['*'],
+  contentScriptWhen: 'ready',
+  contentScriptFile: data.url('pagemod.js'),
+  onAttach: function(worker) {
+    workers.push(worker);
+    worker.on('detach', function () {
+      detachWorker(this, workers);
+    });
+  }
+});
+
+    + cleaning up on add-on removal, content script receive a detach message when the add-on that attached them is disabled or removed 
+
+//attach script to every page user load 
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*",
+  contentScriptFile: data.url("eaten.js")
+});
+
+//replaces the page content, but restores the original contents when it receive detach 
+// eaten.js
+
+var oldInnerHTML = window.document.body.innerHTML;
+
+window.document.body.innerHTML = "eaten!";
+
+self.port.on("detach", function() {
+  window.document.body.innerHTML = oldInnerHTML;
+});
+
+    + detaching content scripts to tabs, use attach method you can attach a set of content scripts to a particular tab. the scripts are executed immediately 
+    
+require("sdk/ui/button/action").ActionButton({
+  id: "highlight-divs",
+  label: "Highlight divs",
+  icon: "./icon-16.png",
+  onClick: function() {
+    require("sdk/tabs").activeTab.attach({
+      contentScript:
+        'var divs = document.getElementsByTagName("div");' +
+        'for (var i = 0; i < divs.length; ++i) {' +
+          'divs[i].setAttribute("style", "border: solid red 1px;");' +
+        '}'
+    });
+  }
+});
+
+    + if you add-on has not opted into private browsing then your page-mods will not attach content script to documents loaded into private window 
+    private browsing, https://developer.mozilla.org/en-US/Add-ons/SDK/High-Level_APIs/private-browsing
+
+
+- modify web pages bases on url 
+
+    + use page-mod module 
+    
+    + communicate with content script, sender calls port.emit() and receiver listens using port.on()
+    
+        * in content script port is property of the global self object 
+        * in add-on script you need to listen for the onAttach event to get passed a worker object that contains port 
+        
+        https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/content_worker
+        
+        worker is similar to web worker defined by w3c, difference is these workers run in the same process as web content and browser chrome, so worker code can block UI 
+        http://www.w3.org/TR/workers/#worker
+//content script 
+// "self" is a global object in content scripts
+// Listen for a message, and replace the document's
+// contents with the message payload.
+self.port.on("replacePage", function(message) {
+  document.body.innerHTML = "<h1>" + message + "</h1>";
+});
+
+//add-on script 
+// Import the page-mod API
+var pageMod = require("sdk/page-mod");
+// Import the self API
+var self = require("sdk/self");
+ 
+// Create a page-mod
+// It will run a script whenever a ".org" URL is loaded
+// The script replaces the page contents with a message
+pageMod.PageMod({
+  include: "*.org",
+  contentScriptFile: self.data.url("my-script.js"),
+  // Send the content script a message inside onAttach
+  onAttach: function(worker) {
+    worker.port.emit("replacePage", "Page matches ruleset");
+  }
+});        
+        
+    + inject css by setting the contentStyle option of the page-mod 
+var pageMod = require("sdk/page-mod").PageMod({
+  include: "*",
+  contentStyle: "body {" +
+                "  border: 5px solid green;" +
+                "}"
+});
+
+or use 
+contentStyleFile: require("sdk/self").data.url("my-style.css")
+
+//for firefox32+ 
+contentStyleFile: "./my-style.css"
+
+- modify the active web page 
+require("sdk/tabs").activeTab.attach({
+...
+});
+
+
+# Development techniques 
+- logging 
+console.log(msg);
+
+- listening for load and unload 
+
+add-on define function main(), onUnload() and expose them, then they will automatically called 
+
+    + main, executed as soon as it is loaded, evaluated after load and run after all the dependency module loaded 
+exports.main = function (options, callbacks) {};
+
+options.loadReason
+    install 
+    enable 
+    startup 
+    upgrade 
+    downgrade 
+    
+    + onUnload, called when add-on is unloaded 
+exports.onUnload = function (reason) {};exports.onUnload
+
+reason 
+    uninstall
+    disable
+    shutdown
+    upgrade
+    downgrade
+
+- creating reusable modules, load custom module by require() statement 
+    + reference, https://developer.mozilla.org/en-US/Add-ons/SDK/Tutorials/Creating_reusable_modules
+    + a hashing add-on demo for seperate module, MD5 is a commonly used hash function: although it's no longer considered secure, it works fine outside a security context.
+    
+    use XPCOM interface 
+var {Cc, Ci} = require("chrome");
+
+function promptForFile() {
+  const nsIFilePicker = Ci.nsIFilePicker;
+
+  var fp = Cc["@mozilla.org/filepicker;1"]
+           .createInstance(nsIFilePicker);
+
+  var window = require("sdk/window/utils").getMostRecentBrowserWindow();
+  fp.init(window, "Select a file", nsIFilePicker.modeOpen);
+  fp.appendFilters(nsIFilePicker.filterAll | nsIFilePicker.filterText);
+
+  var rv = fp.show();
+  if (rv == nsIFilePicker.returnOK || rv == nsIFilePicker.returnReplace) {
+    var file = fp.file;
+    // Get the path as string. Note that you usually won't
+    // need to work with the string paths.
+    var path = fp.file.path;
+    // work with returned nsILocalFile...
+  }
+  return path;
+}
+
+...
+
+    + create module directory lib in the add-on root directory 
+
+    + create seperate module file filepicker.js in lib 
+//filepicker.js 
+var {Cc, Ci} = require("chrome");
+
+function promptForFile() {
+  var window = require("sdk/window/utils").getMostRecentBrowserWindow();
+  const nsIFilePicker = Ci.nsIFilePicker;
+
+  var fp = Cc["@mozilla.org/filepicker;1"]
+           .createInstance(nsIFilePicker);
+  fp.init(window, "Select a file", nsIFilePicker.modeOpen);
+  fp.appendFilters(nsIFilePicker.filterAll | nsIFilePicker.filterText);
+
+  var rv = fp.show();
+  if (rv == nsIFilePicker.returnOK || rv == nsIFilePicker.returnReplace) {
+    var file = fp.file;
+    // Get the path as string. Note that you usually won't
+    // need to work with the string paths.
+    var path = fp.file.path;
+    // work with returned nsILocalFile...
+  }
+  return path;
+}
+
+exports.promptForFile = promptForFile;
+
+    + create md5.js in lib 
+//md5.js 
+var {Cc, Ci} = require("chrome");
+
+// return the two-digit hexadecimal code for a byte
+function toHexString(charCode) {
+  return ("0" + charCode.toString(16)).slice(-2);
+}
+
+function md5File(path) {
+  var f = Cc["@mozilla.org/file/local;1"]
+          .createInstance(Ci.nsILocalFile);
+  f.initWithPath(path);
+  var istream = Cc["@mozilla.org/network/file-input-stream;1"]           
+                .createInstance(Ci.nsIFileInputStream);
+  // open for reading
+  istream.init(f, 0x01, 0444, 0);
+  var ch = Cc["@mozilla.org/security/hash;1"]
+           .createInstance(Ci.nsICryptoHash);
+  // we want to use the MD5 algorithm
+  ch.init(ch.MD5);
+  // this tells updateFromStream to read the entire file
+  const PR_UINT32_MAX = 0xffffffff;
+  ch.updateFromStream(istream, PR_UINT32_MAX);
+  // pass false here to get binary data back
+  var hash = ch.finish(false);
+
+  // convert the binary hash data to a hex string.
+  var s = [toHexString(hash.charCodeAt(i)) for (i in hash)].join("");
+  return s;
+}
+
+exports.hashFile = md5File;
+
+    + import two custom module and use them in the index.js 
+var filepicker = require("./filepicker.js");
+var md5 = require("./md5.js");
+
+require("sdk/ui/button/action").ActionButton({
+  id: "show-panel",
+  label: "Show Panel",
+  icon: {
+    "16": "./icon-16.png"
+  },
+  onClick: function() {
+    console.log(md5.hashFile(filepicker.promptForFile()));
+  }
+});
+
+    + all the custom module could be published through npm, and other add-on developers could use the module 
+
+- using third party modules check previous node 
+- unit testing 
+- localization, supports localization of strings appearing in
+    + reference, https://developer.mozilla.org/en-US/Add-ons/SDK/Tutorials/l10n
+    + main add-on's javascript cde 
+    + html files packaged with your add-on 
+    + title and description field of your add-on's preference 
+    
+translated strings are kept in a directory called "local" under your main add-on directory, one file for each locale 
+    + use the .properties format, https://en.wikipedia.org/wiki/.properties 
+    
+# You are reading the ".properties" entry.
+! The exclamation mark can also mark text as comments.
+# The key and element characters #, !, =, and : are written with
+# a preceding backslash to ensure that they are properly loaded.
+website = http\://en.wikipedia.org/
+language = English
+# The backslash below tells the application to continue reading
+# the value onto the next line.
+message = Welcome to \
+          Wikipedia!
+# Add spaces to the key
+key\ with\ spaces = This is the value that could be looked up with the key "key with spaces".
+# Unicode
+tab : \u0009
+    
+    + named "xx-XX.properties", check the name of the location from, https://wiki.mozilla.org/L10n:Locale_Codes
+    + contain one entry for each string you want to localize, consisting of an identifier for the string and its translation in that locale as 
+    identifier=translation
+
+    + download a property editor will help editing 
+    + demo add two files to the local directory 
+my-addon/
+    data 
+    lib
+    locale/ 
+            en-US.properties 
+            fr-FR.properties 
+
+//en-US.properties
+hello_id = Hello!
+
+//fr-FR.properties 
+hello_id = Bonjour!
+
+    + using localized strings in html, to reference a localize strings from html by data-l10n-id 
+<html>
+    <body>
+        <h1 data-l10n-id="hello_id"></h1>
+    </body>
+</html>
+
+you can localize certain attributes of elements with an l10n-id by setting its value with l10n-id 
+hello_id.accesskey= H 
+
+supported attributes 
+accesskey 
+alt 
+label 
+title 
+placeholder 
+
+    + using localized strings in javascript
+var _ = require("sdk/l10n").get;
+console.log(_("hello_id!"));
+
+    + Plurals, ...
+
+- chrome authority, most powerful low-level modules are run with "chrome privileges", which give access to the infamous Components object(https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_Bindings/Components_object)
+
+Components object is work through XPConnection from javascript. it's a native instance of nsIXPCComponents 
+
+var {Cc, Ci} = require("chrome");
+the usual Components.* aliases:
+Cc, An alias for Components.classes.
+Ci, An alias for Components.interfaces.
+Cu, An alias for Components.utils.
+Cr, An alias for Components.results.
+Cm, n alias for Components.manager.
+components, an alias for Components itself 
+
+components object should not be accessed from modules 
+
+    + manifest generation, is a list included in the generated XPI to specifies which modules have request require() access to which other modules 
+
+- mobile development 
+    + reference, https://developer.mozilla.org/en-US/Add-ons/SDK/Tutorials/Mobile_development
+    
+    + firefox for Android use the native Android widgets instead of XUL 
+    
+    + use Androd Debug Bridge (adb) to communicate between the add-on sdk and device 
+    http://developer.android.com/tools/help/adb.html
+    + setup development environment 
+    ...
+    
+    + android developer website, http://developer.android.com
+- creating event targets 
+- add-on debugger, required boostraped add-on 
+
+- creating event targets, expect to make incompatible changes to the API in the future 
+
+for example you can listen to the tabs modules's ready event 
+
+    + tutorial to use the browser's Places API with SDK's standard event API 
+    
+//create bookmark add-in with jpm init  
+//index.js 
+var {Cc, Ci, Cu} = require("chrome");
+Cu.import("resource://gre/modules/XPCOMUtils.jsm", this);
+var bookmarkService = Cc["@mozilla.org/browser/nav-bookmarks-service;1"]
+                          .getService(Ci.nsINavBookmarksService);
+ 
+var bookmarkObserver = {
+  onItemAdded: function(aItemId, aFolder, aIndex) {
+    console.log("added ", bookmarkService.getBookmarkURI(aItemId).spec);
+  },
+  onItemVisited: function(aItemId, aVisitID, time) {
+    console.log("visited ", bookmarkService.getBookmarkURI(aItemId).spec);
+  },
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsINavBookmarkObserver])
+};
+ 
+exports.main = function() {
+  bookmarkService.addObserver(bookmarkObserver, false);   
+};
+ 
+exports.onUnload = function() {
+  bookmarkService.removeObserver(bookmarkObserver);
+}
+
+//separte code into different module with event/core module, https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/event_core, it is used to emit module level events 
+
+    * create lib folder and create file bookmarks.js 
+//bookmarks.js 
+var { emit, on, once, off } = require("sdk/event/core");
+ 
+var {Cc, Ci, Cu} = require("chrome");
+Cu.import("resource://gre/modules/XPCOMUtils.jsm", this);
+var bookmarkService = Cc["@mozilla.org/browser/nav-bookmarks-service;1"]
+                          .getService(Ci.nsINavBookmarksService);
+ 
+var bookmarkObserver = {
+  onItemAdded: function(aItemId, aFolder, aIndex) {
+    emit(exports, "added", bookmarkService.getBookmarkURI(aItemId).spec);
+  },
+  onItemVisited: function(aItemId, aVisitID, time) {
+    emit(exports, "visited", bookmarkService.getBookmarkURI(aItemId).spec);
+  },
+  QueryInterface: XPCOMUtils.generateQI([Ci.nsINavBookmarkObserver])
+};
+ 
+bookmarkService.addObserver(bookmarkObserver, false);
+ 
+exports.on = on.bind(null, exports);
+exports.once = once.bind(null, exports);
+exports.removeListener = function removeListener(type, listener) {
+  off(exports, type, listener);
+};   
+
+//change code coresponding to the index.js 
+var bookmarks = require("./bookmarks");
+ 
+function logAdded(uri) {
+  console.log("added: " + uri);
+}
+ 
+function logVisited(uri) {
+  console.log("visited: " + uri);
+}
+ 
+exports.main = function() {
+  bookmarks.on("added", logAdded);
+  bookmarks.on("visited", logVisited);
+};
+ 
+exports.onUnload = function() {
+  bookmarks.removeListener("added", logAdded);
+  bookmarks.removeListener("visited", logVisited);
+}
+
+    + classes as event target, emit events at the level of individual object rather than the level of module 
+    
+    we need to inherit from SDK's event target and then implement the on(), once(), and removeListener() 
+    
+    + adjust the previous codes to add a BookmarkManager and add emits add and visited events 
+//replace bookmarks.js content to 
+var { emit } = require("sdk/event/core");
+var { EventTarget } = require("sdk/event/target");
+var { Class } = require("sdk/core/heritage");
+var { merge } = require("sdk/util/object");
+ 
+var {Cc, Ci, Cu} = require("chrome");
+Cu.import("resource://gre/modules/XPCOMUtils.jsm", this);
+var bookmarkService = Cc["@mozilla.org/browser/nav-bookmarks-service;1"]
+                          .getService(Ci.nsINavBookmarksService);
+ 
+function createObserver(target) {
+   var bookmarkObserver = {
+     onItemAdded: function(aItemId, aFolder, aIndex) {
+       emit(target, "added", bookmarkService.getBookmarkURI(aItemId).spec);
+     },
+     onItemVisited: function(aItemId, aVisitID, time) {
+       emit(target, "visited", bookmarkService.getBookmarkURI(aItemId).spec);
+     },
+     QueryInterface: XPCOMUtils.generateQI([Ci.nsINavBookmarkObserver])
+   };
+   bookmarkService.addObserver(bookmarkObserver, false);
+}
+ 
+var BookmarkManager = Class({
+  extends: EventTarget,
+  initialize: function initialize(options) {
+    EventTarget.prototype.initialize.call(this, options);
+    merge(this, options);
+    createObserver(this);
+  }
+});
+ 
+exports.BookmarkManager = BookmarkManager;    
+
+//use the new created event target
+//index.js 
+var bookmarks = require("./bookmarks");
+var bookmarkManager = bookmarks.BookmarkManager({});
+ 
+function logAdded(uri) {
+  console.log("added: " + uri);
+}
+ 
+function logVisited(uri) {
+  console.log("visited: " + uri);
+}
+ 
+exports.main = function() {
+  bookmarkManager.on("added", logAdded);
+  bookmarkManager.on("visited", logVisited);
+};
+ 
+exports.onUnload = function() {
+  bookmarkManager.removeListener("added", logAdded);
+  bookmarkManager.removeListener("visited", logVisited);
+}
+
+    + implementing "onEvent" options, event targets accpet options of the form "onEvent", the event is the capitalized form of the event type 
+//listen events for specific object 
+myPanel.on("show", listenerFunction);
+or 
+var myPanel = require("sdk/panel").Panel({
+  onShow: listenerFunction,
+  contentURL: "https://en.wikipedia.org/w/index.php"
+});
+
+
+# Guides 
+- contribute to add-on SDK, reference https://github.com/mozilla/addon-sdk/blob/master/CONTRIBUTING.md
+
+- private properties, no built-in but two common way to achieve, reference https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Contributor_s_Guide/Private_Properties
+    + using prefixes not restrictive enough
+    function foo(){
+        this._p = value;
+    }
+    
+    foo.prototype.getP = function(){
+        return this._p;
+    };
+    + closures, too restrict 
+    function foo(){
+        var _p;
+        this.getP = function(){
+            return _p;
+        };
+    }
+    
+    + another solution solve the problems, use WeakMap but not support by all implementation yet, introduce in ECMAScript 2015 and implemented in SpiderMonkey 
+    WeakMap benefit 
+        * use ordinary objects as keys 
+        * does not maintain a strong reference to its values 
+let thumbnails = new WeakMap();
+
+function getThumbnail(image) {
+    let thumbnail = thumbnails.get(image);
+    if (!thumbnail) {
+        thumbnail = createThumbnail(image);
+        thumbnails.set(image, thumbnail);
+    }
+    return thumbnail;
+}
+
+    + use namespace, WeakMap will become cumbersome if the number of the properties become large  
+        * store all private properties on a single object called a namespace then store the private property on the original object. 
+let map = new WeakMap();
+
+let internal = function (object) {
+    if (!map.has(object))
+        map.set(object, {});
+    return map.get(object);
+}
+
+function Point(x, y) {
+    internal(this).x = x;
+    internal(this).y = y;
+}
+
+Point.prototype.getX = function () {
+    return internal(shape).x;
+};
+
+Point.prototype.setX = function (x) {
+    internal(shape).x = x;
+};
+
+Point.prototype.getY = function () {
+    return internal(shape).y;
+};
+
+Point.prototype.setY = function () {
+    internal(shape).y = y;
+};
+    
+the objects of Pointer can access the other isntances of pointer by the namespace internal 
+
+        * namespaces in add-on SDK The Add-on SDK is built on top of XPCOM, the interface between JavaScript and C++ code. Add-on SDK use namespace internally to makesure the private c++ member could not be access through the outside of the javascript. ns is the helper function 
+const { ns } = require("./core/namespace");
+
+var internal = ns();
+
+function Point(x, y) {
+    internal(this).x = x;
+    internal(this).y = y;
+}
+
+Point.prototype.getX = function () {
+    return internal(shape).x;
+};
+
+Point.prototype.setX = function (x) {
+    internal(shape).x = x;
+};
+
+Point.prototype.getY = function () {
+    return internal(shape).y;
+};
+
+Point.prototype.setY = function () {
+    internal(shape).y = y;
+};   
+    
+- modules, it's a self-contained unit of code, these things using the built-in components object provided by xulrunner 
+
+module system used by the SDK is based on CommonJS specification 
+
+SDK uses its own internal loader Cuddlefish, you could also create your custom loader 
+
+    + loading subscripts, xulrunner adds a built-in object known as components, use it load script from other location 
+const {
+    classes: Cc
+    interfaces: Ci
+} = Components;
+
+var instance = Cc["@mozilla.org/moz/jssubscript-loader;1"];
+var loader = instance.getService(Ci.mozIJSSubScriptLoader);
+
+function loadScript(url) {
+    loader.loadSubScript(url);
+}
+
+//after loaded, it is evaluated in the global scope 
+///index.js:
+loadScript("www.foo.com/a.js");
+foo; // => 3
+ 
+///a.js:
+foo = 3;
+
+    + exporting names, script loader don't support relative url and evaluate all the script in the same global scope 
+    
+//prevent the limitation by loaded into their own global scope 
+function loadScript(url) {
+    let global = {};
+    loader.loadSubScript(url, global);
+    return global;
+}
+
+    + importing names, we could also exporting properties from script being loaded to the loading scripts 
+function loadScript(url, imports) {
+    let global = {
+        imports: imports,
+        exports: {}
+    };
+    loader.loadSubScript(url, global);
+    return global.exports;
+}
+
+//this allows us to import loadScript to scripts being loaded and allowing them to load further scripts 
+///index.js:
+loadScript("www.foo.com/a.js", {
+    loadScript: loadScript
+}).foo; => 5
+ 
+///a.js:
+exports.foo = imports.loadScript("www.foo.com/b.js").bar;
+ 
+///b.js:
+exports.bar = 5;
+
+    + sandboxes and compartments 
+    sandbox is a global object that lives in a separate compartment 
+    
+    Compartment is recent addition to spiderMonkey, can be seen as a separate memory space. object living in one compartment can only be access by wrapper. Compartment can be set to different privileges, such as chrome privilege and content privilege 
+    
+    content privilege can only access the ordinary website 
+    chrome privilege can access the host platform 
+
+    sandbox constructor pass xul url will get chrome privilege, otherwise is content privilege 
+function loadScript(url, imports) {
+    let global = Components.utils.Sandbox(url);
+    global.imports = imports;
+    global.exports = {};
+    loader.loadSubScript(url, global);
+    return global.exports;
+}    
+
+    the return value is a wrapper of the real sandbox item which add additional premission checking 
+    
+///index.js:
+let a = loadScript("www.foo.com/a.js", {
+    Components: Components
+});
+ 
+// index.js has chrome privileges
+Components.utils; // => [object nsXPCComponents_Utils]
+ 
+///a.js:
+// a.js has content privileges
+imports.Components.utils; // => undefined
+
+    + modules in the add-on sdk, CommonJS module defines three global variable, require, loadScript, exports 
+    the require function have extra features solve the resolving relative urls and provides a caching mechanism 
+const {Loader} = require('toolkit/loader');
+
+//Loader contructor allows you create custom loader with options argument 
+let loader = Loader({
+    paths: ["./": "http://www.foo.com/"]
+});
+
+//CommonJS defines the notion of a main module which is the first to be loaded, it don't contain requiring module and use main function to load 
+const { Loader, main } = require('toolkit/loader');
+ 
+let loader = Loader({
+    paths: ["./": "http://www.foo.com/"]
+});
+ 
+main(loader, "./main.js");
+
+//the main module define a property on require to allows check if they have been loaded as the main module 
+function main(){
+    ...
+}
+
+if(require.main === module)
+    main();
+    
+    + Cuddlefish loader, Cuddlefish loader is created using the Loader constructor 
+
+    use custom resolve function to control the how the module ids be resolved 
+    
+const { Loader, main } = require('toolkit/loader');
+ 
+let loader = Loader({
+    paths: ["./": "http://www.foo.com/"],
+    resolve: function (id, requirer) {
+        // Your code here
+        return id;
+    }
+});
+main(loader, "./main.js");
+
+//this function takes the id to be resolved and the requiring module as an argument and return the resolved id as its result 
+//the custom resolve function could be used to implement a form of access control, simple similar code to the SDK to expose the Components object as a module called chrome 
+const {
+    classes: Cc,
+    Constructor: CC,
+    interfaces: Ci,
+    utils: Cu,
+    results: Cr,
+    manager: Cm
+} = Components;
+ 
+let loader = Loader({
+    paths: ["./": "http://www.foo.com/"],
+    resolve: function (id, requirer) {
+        // Your logic here
+        return id;
+    },
+    modules: {
+        'chrome': {
+            components: Components,
+            Cc: Cc,
+            CC: bind(CC, Components),
+            Ci: Ci,
+            Cu: Cu,
+            Cr: Cr,
+            Cm: Cm
+        }
+    }
+});
+
+//any module that wants access to Components has to explicitly express its intent via a call to require("chrome"). 
+
+- content processes 
+content process and add-on communicate with content script. content script use event emitter. content workers combine these and allow you inject a content script into content process 
+
+    + content script, Add-on sdk is design multiprocess in mind. it is a script that is injected into a content process by the main script running in the add-on process. content script is different from the script run in the page itself, it provide a message API to communicate with the add-on process 
+    
+    + even for single process firefox, think add-on code and content run in different process is good for security 
+    
+    + event emitters, use to send json message between scripts in different process 
+
+    methods: on, removeListener, 
+    
+    emitter have wo associaet emite function, once is fire the event another is create a method and when call the method could emit the event. it could be pass to another event emitter 
+
+    + content workers, is an object that is used to inject content scripts into content process and to provide a pip between each content script and the main add-on script. 
+    
+    it could load multiple content scripts into to the content process 
+    
+    port property of the worker also support message API 
+    
+    could use single content worker for each content process 
+    
+    each content script is load into sandbox 
+    
+    + accessing the dom, content script access the window object is a wrapper. content script always show built-in property of window object even when they are override by another page script. the page script also could not see any properties that added by content script. this is where xray wrapper come in 
+    
+    to access the real window object, use the window.wrappedObject property in the content script 
+    
+    + security, use message will avoid use wrapper to access different privileges sandbox 
+    
+- classes and inheritance 
+    + javascript use prototype inherite to simulate the class inheritance 
+    + SDK use a special constructor internally known as Class to create constructors 
+    
+    + Constructors function in javascript 
+function Shape(x, y) {
+    if (!this)
+        return new Shape(x, y);
+    this.x = x;
+    this.y = y;
+}
+
+    + Prototypes, propery find process object-itself -> object-prototype -> ... -> found/fail
+    
+    + inheritance and constructors, the base class function should be called after the subclass constructor called in javascript 
+function Circle(x, y, radius) {
+   if (!this)
+       return new Circle(x, y, radius);
+   Shape.call(this, x, y);
+   this.radius = radius;
+}
+
+//use the contrcutor function by 
+let shape = new Shape(1,2);
+
+    + inheritance and prototypes, to implement method override 
+    Circle.prototype = Object.create(Shape.prototype);
+    
+    + inheritance and instanceof. every prototype has a constructor property, it is reference to the constructor for objects with this prottype
+    
+    instanceof operator compare prototype chain with right hand side 
+    Circle.prototype.constructor == Circle //true 
+    
+    the construtor property is automatic set for the prototype property but not for Object.create function 
+    
+    to currect create the prototype object we need to use 
+Circle.prototype = Object.create(Shape.prototype, {
+    constructor: {
+        value: Circle
+    }
+});
+
+    + classes in the add-on sdk, the Class function is a helper method for create previous of class inheritance in javascript 
+const { Class } = require('sdk/core/heritage');
+
+    Class is a meta-constructor, it creates constructors that behave properly with respect to inheritance. the single argument is an object which properties will be defined on the prototype of the resulting constructor 
+    
+//define an equivalent Shape class by, initialize is a special property, the call to constructor will foward to it 
+//another special property is extends, it specify the base class from which this class inherits 
+//the last special property is implements, specifies a list of objects which properties are to be copied to the prototype of the constructor. only copy the direct property. it used to simulate parts of the multi inherits. but it will not work with instanceof, only the extends property make up the prototype chain 
+let Shape = Class({
+    initialize: function (x, y) {
+        this.x = x;
+        this.y = y;
+    },
+    draw: function () {
+        throw new Error("not yet implemented");
+    }
+});
+
+var Circle = Class({
+    extends: Shape,
+    initialize: function(x, y, radius) {
+        //still require to explicity call initialize method of base class 
+        Shape.prototype.initialize.call(this, x, y); 
+        this.radius = radius;
+    },
+    draw: function (context) {
+        context.beginPath();
+        context.arc(this.x, this.y, this.radius,
+                    0, 2 * Math.PI, false);
+        context.fill();
+    }
+});
+
+- testing the add-on sdk, jpm use the new toolkit/loader 
+    + reference https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Testing_the_Add-on_SDK
+    
+    + with jpm use gulp, a javascript module 
+        * install gulp 
+        $ npm install --global gulp 
+        
+        * gulpscript.js is provided in the add-on sdk repo 
+        * run tests 
+    $ gulp test:examples --filter <addon_example_folder_name>
+    $ gulp test:addons --filter <addon_folder_name>
+    $ gulp test:modules --filter <file_name>:<test_name>
+
+    + from mozilla-central repository, use mach command, https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/mach
+        * cd addon-sdk/source 
+
+    ./mach jetpack-addon <optional_addon_path>:  This runs the test add-ons mentioned for cfx testaddons and gulp test:addons with the older sdk/loader/cuddlefish used with cfx.
+    ./mach jetpack-package <optional_file_path>:  This runs the module unit tests mentioned for cfx testpkgs and gulp test:modules but in this case with the newer toolkit/loader used with jpm.
+
+    mach(german for do), refernce https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/mach
+    + with try server 
+    
+- develop firefox with mozilla build vm 
+https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Using_the_VM
+    
+source control, mercurial for mozillians 
+http://mozilla-version-control-tools.readthedocs.org/en/latest/hgmozilla/index.html
+
+
+# SDK infrasructure 
+- module structure of the SDK, CommonJS is the underlying infrastructure for both the SDK and the add-ons you build using the SDK
+
+    + an object called exports which contains all the objects which a module want to export 
+    
+    + a function called requrie which a module can use to import the exports object of another module 
+    
+    + demo 
+//module_b
+var ma = require("module_a");
+module_a.foo();
+
+//module_a 
+exports.foo = foo;
+
+function foo(){
+
+}
+- the module require to interactive with content will need to use content script 
+
+- otherwise use CommonJS module structure 
+- add-ons include 
+    + sdk modules 
+    + local modules, js file under your lib directory 
+    + external module, reusable modules developed and maintained outside the sdk 
+    
+- sdk modules 
+    + high-level modules like panel and page-mode,simple stable apis for the most common add-on development tasks 
+    
+    + low-level modules like heritage and namespace provide more powerful functionality less table and more complex 
+    
+use sdk modules you can pass require() a complete path starting with sdk to the module you want to use 
+
+// load the high-level "tabs" module
+var tabs = require("sdk/tabs");
+
+// load the low-level "uuid" module
+var uuid = require('sdk/util/uuid');
+
+when use jpm run to execute an add-on, it use the built-in sdk in the firefox 
+to use another version use the option -o --overload 
+
+- local modules, at a minimum an add-on sdk-based add-on consists of a single module named main.js 
+
+you could seperate your code into different CommonJS modules into "lib" directory 
+
+to import a local module specify a path relative to the importing module 
+
+    + demo add-on directory structure 
+my-addon 
+    /lib 
+        /main.js 
+        /password-dialog.js 
+        /secrets 
+            /hash.js 
+        /storage
+            /password-store.js 
+            
+to import module into main.js 
+// main.js code
+var dialog = require("./password-dialog");
+var hash = require("./secrets/hash");
+
+to import moduels into password-store 
+// password-store.js code
+var dialog = require("../password-dialog");
+var hash = require("../secrets/hash");
+
+- external modules, use the module outside the developed outside the sdk 
+
+    + a list of community developed modules, https://github.com/mozilla/addon-sdk/wiki/Community-developed-modules
+    
+    + using external modules to add menu items to firefox, download the module and copy them to the lib directory
+    
+    + for example add a dependencies directory to the lib to contain all the external modules 
+    
+my-addon 
+    /lib 
+        /main.js 
+        /dependencies 
+            /geolocation.js 
+            
+load the external library in main.js 
+// main.js code
+var geo = require("./dependencies/geolocation");
+
+- freezing, sdk freezes the exports object returned by require. so you can't change the proeprteis of the object returned
+
+this is achieve by call the javascript Object.freeze() method, prevent new properties from being added to it 
+https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
+
+use Object.isFrozen(obj) to check a object is freezed or not 
+
+self = require("sdk/self");
+// Attempting to define a new property
+// will fail, or throw an exception in strict mode
+self.foo = 1;
+// Attempting to modify an existing property
+// will fail, or throw an exception in strict mode
+self.data = "foo";
+
+
+# Program ID 
+- it is a unique identifier for your add-on, when you package your add-on for distribution using jpm xpi, it will become the ID field in the add-ons's install manifest 
+    
+- it is used to distinguish between new add-ons and updates to existing add-ons and used by simple-storage module to figure out which sotred data belongs to which add-on 
+
+- when you create an xpi with jpm xpi 
+    + if the package.json does not include an id field, then the id written into the install.rdf is the value of the name field prepended with "@"
+    
+    + if the package.json does include an id field, and it contains "@", then this is written into the install.rdf as the add-on ID.
+    
+    + if the package.json does include an id field, and it does not contain "@", then jpm xpi raises an error and the XPI will not be built.
+    
+    
+# SDK API lifecycle 
+- the API lifecycle aims to balance the how far developer can trust a given API will not change in future 
+
+    + stability index, defines how stable each module is 
+    + deprecation process that defines when and how stable SDK apis can be changed or removed from future versions of the SDK while giving developers enough time to update their code 
+    
+- stability index is adopted from node.js, the SDK only use four of the six values 
+
+    + experimental, the module is not yet stable. it will be change or remove in future version without pass through a formal deprecation process 
+    + unstable, the api is in the progress of settlin. Backwards-compatibility will be maintained if reasonable and not guarantee the module will go through the formal deprecation process 
+    + stable, the module is a fully-supported part of the sdk 
+    + deprecated, plan to change the module, and backwards compatibility should not be expected, don't strat using it and plan to migrate away 
+
+- deprecation process 
+    + update the modules stability index to be deprecated 
+    + include a deprecation notice in the release notes, add-ons blog and jetpack google group 
+    
+- migration, the deprecation period defaults to 18 weeks( that is three release), it might be shorter than this 
+
+sdk team will track usage of deprecated modules on addons.mozilla.org, continue provide 
+    + API documentation will inform users the deprecation 
+    + use a deprecated module at runtime will log an error to the error conolse 
+    + AMO validator will throw errors when deprecated modules are used, then will fail review 
+    
+- removal, the target removal date is 18 weeks after deprecation. 
+    
+    
+# Firefox compatibility 
+- promise of the sdk make is to maintain compatibility for "supported" or "high-level" APIs
+
+- sdk and firefox release cycle are both 6 weeks, sdk release three weeks before firefox, will mark compatible with two version of firefox 
+
+    + the current 
+    + the beta 
+    
+- add-ons built using a particular version of the sdk are marked as being compatbile with those two versions of firefox 
+
+targetAppliction field of the add-ons's install.rdf  
+
+the minVersion is set to the currently shipping Firefox
+the maxVersion is set to the current Firefox Beta
+
+- compatible by default, From Firefox 10 onwards, Firefox treats add-ons as "compatible by default": that is, even if the Firefox installing the add-on is not inside the range defined in targetApplication, Firefox will happily install it.
+    
+- changing minVersion and maxVersion, are written into add-ons generated with the SDK are taken from the template file found at 
+
+app-extension/install.rdf 
+    
+- repacking add-ons, if the new release of firefox makes some incompatible changes, then the add-on will on longer work 
+    + download and install a new version of the sdk 
+    + rebuild their add-on using this version of the sdk 
+    + update their xpi on the https://addons.mozilla.org with the new version 
+    
+- future plans, the reason of repacked is that the sdk module is packaged as part of the add-on rather than part of firefox, in the fureture will start shipping sdk modules in firefox and repacking will not be needed any more 
+
+
+# SDK idioms, Working with Events
+- Objects emit events on state changes that might be of interest to add-on code,
+- two main ways you will interact with the EventEmitter framework 
+    + listening to built-in events emitted by objects in the SDK such as tabs opening pages loading, mouse click 
+    
+    + sending and receiving user-defined events between content scripts and add-on code 
+    
+- adding liteners, you can add a listener to an event emitter by calling its on(type, listener) method 
+
+type, type of the event, identified by a string 
+listener, listener itself, is a function 
+
+- demo register a listener with the tabs module 
+var tabs = require("sdk/tabs");
+
+tabs.on("ready", function () {
+  console.log("tab loaded");
+});
+
+It is not possible to enumerate the set of listeners for a given event.
+
+The value of this in the listener function is the object that emitted the event.
+
+- listening to all events, listening to all events, by pass the wildcard "*" 
+
+var ui = require("sdk/ui");
+var panels = require("sdk/panel");
+var self = require("sdk/self");
+
+var panel = panels.Panel({
+  contentURL: self.data.url("panel.html")
+});
+
+panel.on("*", function(e) {
+  console.log("event " + e + " was emitted");
+});
+
+var button = ui.ActionButton({
+  id: "my-button",
+  label: "my button",
+  icon: "./icon-16.png",
+  onClick: handleClick
+});
+
+function handleClick(state) {
+  panel.show({
+    position: button
+  });
+}
+
+wildcard doesnot work for the tabs and windows modules 
+
+- adding listeners in constructors, event emitters may be modules. the options object passed to the constructor typically defines properties whose names are the names of supported event types prefixed with "on" for example, "onOpen", "onReady" and so on 
+    
+then in constructor you can assign a listner function to this property as an alternative to calling the object's on() method 
+
+    + example add onClick property in the constructor of ActionButton 
+require("sdk/ui/button/action").ActionButton({
+  id: "visit-mozilla",
+  label: "Visit Mozilla",
+  icon: "./icon-16.png",
+  onClick: function() {
+    require("sdk/tabs").open("https://developer.mozilla.org/");
+  }
+});
+
+equal to 
+var button = require("sdk/ui/button/action").ActionButton({
+  id: "visit-mozilla",
+  label: "Visit Mozilla",
+  icon: "./icon-16.png"
+});
+
+button.on("click", function() {
+  require("sdk/tabs").open("https://developer.mozilla.org/");
+});
+
+- removing event listeners, calling removeListener(type, listener), 
+var tabs = require("sdk/tabs");
+
+function listener1() {
+  console.log("Listener 1");
+  tabs.removeListener("ready", listener1);
+}
+
+function listener2() {
+  console.log("Listener 2");
+}
+
+tabs.on("ready", listener1);
+tabs.on("ready", listener2);
+
+tabs.open("https://www.mozilla.org");
+tabs.open("https://www.mozilla.org");
+
+listeners will be removed automatically when the add-on is unloaded 
+
+    
+# Two types of scripts 
+- if you want to access dom you need content script 
+- there are two distinct sort of javascripts you might include in your add-on and they have access to different set of APIs 
+    + add-on code 
+    + content scripts 
+    
+- your add-on is implement as a collection of one or more CommonJS modules. each module is supplied as a script stored under the lib directory under your add-on's root directory 
+
+minimally you'll have a single module implemented by a script called main.js, you could custom module too and load by require() 
+
+- content script, content scripts are injected into web pages using APIs defined by some of the SDK's modules such as page-mod and panel 
+
+content script may be supplied as literal strings or maintained in separate files and referenced by filename, if they are stored in separate files you should store them under the data directory under your add-on's root 
+
+- API access for add-on code and content scripts 
+API                     Add-on code         Content Script 
+javascript object       y                   y 
+require and exports     y                   n 
+console supplied by sdk y                   y 
+html5 specification     n                   y 
+self global             n                   y 
+
+
+# Content Script Guide 
+- how to develop and implement content scripts 
+    + add-on's main code, including 'main.js' and other modules in 'lib' can use the SDK high-level and low-level APIs, but can't access web content directly 
+    
+    + content scripts can't use the SDK's APIs, no access to globals exports, require but can access web content 
+    
+    + SDK apis that use content scripts like page-mod and tabs, provide functions that enable the add-on's main code to load content scripts into web pages 
+    
+    + content scripts can be loaded in as strings, more often store as separate files under the add-on's 'data' directory. jpm doesn't make a data directory by default 
+    
+    you must add it and put your content script in there 
+    
+    + a messsage-passing API allows the main code and content script to communicate with each other 
+    
+- use "main.js" attaches a content script to the current tab using the tabs module 
+// main.js
+var tabs = require("sdk/tabs");
+var contentScriptString = 'document.body.innerHTML = "<h1>this page has been eaten</h1>";'
+
+tabs.activeTab.attach({
+  contentScript: contentScriptString
+});
+
+- sdk high-level modules that can be used content scripts to modify web pages 
+page-mode, attach content script to web page that match a specific url pattern 
+tabs, exports a tab object for working with a browser tab, use attach() 
+page-worker, lets you retrieve a web page without displaying it, you can attach content scripts to the page and manipulate the page's dom 
+context-menu, use a content script to interact with the page in which the menu is invoked 
+
+- sdk user interface components, panel, frame and sidebar are specified using html and use separate scripts to interact with this content. they are like content scrpits 
+
+- loading content scripts 
+    + content-script example 
+    https://github.com/mdn/addon-sdk-content-scripts
+    
+    + demo load content script 
+// main.js
+
+var pageMod = require("sdk/page-mod");
+var contentScriptValue = 'document.body.innerHTML = ' +
+                         ' "<h1>Page matches ruleset</h1>";';
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScript: contentScriptValue
+});
+
+The contentScriptFile option treats the string as a resource:// URL pointing to a script file stored in your add-on's data directory. 
+
+    + point to content-script.js in the data directory 
+my-addon 
+    /data 
+        /content-script.js 
+        
+    /lib 
+        /main.js 
+        
+// main.js
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: data.url("content-script.js")
+});
+
+From Firefox 34 onwards, you can use "./content-script.js" as an alias for self.data.url("content-script.js"). So you can rewrite the above main.js code like this
+var pageMod = require("sdk/page-mod");
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScriptFile: "./content-script.js"
+});
+
+    + load multiple scrpits in content-script. You can also use contentScript and contentScriptFile together. If you do this, scripts specified using contentScriptFile are loaded before those specified using contentScript. 
+    
+// main.js
+var data = require("sdk/self").data;
+var pageMod = require("sdk/page-mod");
+
+var contentScriptString = '$("body").html("<h1>Page matches ruleset</h1>");';
+
+pageMod.PageMod({
+  include: "*.mozilla.org",
+  contentScript: contentScriptString,
+  contentScriptFile: data.url("jquery.js")
+});
+   
+- controlling when to attach the script, the option contentScriptWhen is used to control when to load the script 
+start, load the script immediately after the document element for the page is inserted into the dom 
+
+ready, lad the scripts after the dom for the page has been loaded 
+
+end, load the scripts after all (dom, js, css, image) for the page has been loaded, at the time window.onload event fires 
+
+tab.attach() doesn't accept contentScriptWhen, it is generally called after the page has loaded 
+
+- passing configuration options, contentScriptOpotions is JSON object that is exposed to content scripts as a read-only value under the self.options property 
+// main.js
+var tabs = require("sdk/tabs");
+
+tabs.on('ready', function(tab) {
+  tab.attach({
+      contentScript: 'window.alert(self.options.message);',
+      contentScriptOptions: {"message" : "hello world"}
+  });
+});
+    
+- accessing the dom, content-script is insulated from the page scripts 
+    + content script don't see any javascript object added to the page by page script 
+    + if a page script has redefine the behavior of some dom object, the content script sees the original behavior 
+    + any content script loaded js module will not influence the page script 
+    + the page script reverse versa 
+    
+- interacting with page scripts, sometimes you may want to share 
+    + two possible cases 
+        * content-script want to access an object defined by page script 
+        * content-script might want to expose an object to a page script 
+        
+    + access objects defined by page scripts use the global unsafeWindow object. With unsafeWindow you can see JavaScript objects that have been defined by page scripts
+    
+    Also, unsafeWindow isn't a supported API, so it could be removed or changed in a future version of the SDK.
+    
+    + expose objects to page scripts 
+// content-script.js
+
+unsafeWindow.contentScriptObject = {"greeting" : "hello from add-on"};
+
+// page-script.js
+
+var button = document.getElementById("show-content-script-var");
+ 
+button.addEventListener("click", function() {
+  // access object defined by content script
+  console.log(window.contentScriptObject.greeting);     // "hello from add-on"
+}, false); 
+    
+    + after firefox 30 you can still do it for primitive value but oo longer for objects, instead you need to use the global cloneInto() function. it create a structured clone of the object in the target context 
+    
+    + structured clone is a new algorithm defined by HTML5 specification, https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
+    
+    it is more capable than JSON, it supprots the serialization of objects that contain cycle graphs. it may more effective than JSON 
+    
+    The algorithm, in essence, walks over all the fields of the original object, duplicating the values of each field into a new object. If a field is, itself, an object with fields, those fields are walked over recursively until every field and sub-field is duplicated into the new object.
+    
+    benefits over JSON 
+        * clone regExp objects 
+        * dupliacte Blob, File, FlieList 
+        * duplicate ImageData, dimensions of the clone's CanvasPixelArray will match the original and have the same pixel data 
+        * support cycle graphs of refeerences obect 
+        
+    this that don't work with structure clones 
+        * Error and Funtion object 
+        * attempting to clone DOM nodes 
+        * the lastIndex field of RegExp objects is not preserved 
+        * property descriptors, setters, and getters are not duplicated, if a object is marked read-onl using a property descriptor it will be read-write in the duplicate 
+        * prototype chain does not get walked and duplicated 
+        
+    + a deep clone method 
+function clone(objectToBeCloned) {
+  // Basis.
+  if (!(objectToBeCloned instanceof Object)) {
+    return objectToBeCloned;
+  }
+
+  var objectClone;
+  
+  // Filter out special objects.
+  var Constructor = objectToBeCloned.constructor;
+  switch (Constructor) {
+    // Implement other special objects here.
+    case RegExp:
+      objectClone = new Constructor(objectToBeCloned);
+      break;
+    case Date:
+      objectClone = new Constructor(objectToBeCloned.getTime());
+      break;
+    default:
+      objectClone = new Constructor();
+  }
+  
+  // Clone each property.
+  for (var prop in objectToBeCloned) {
+    objectClone[prop] = clone(objectToBeCloned[prop]);
+  }
+  
+  return objectClone;
+}
+
+    + expose functions to page scripts, use method exportFunction()
+// main.js
+var tabs = require("sdk/tabs");
+var self = require("sdk/self");
+
+tabs.open({
+  url: self.data.url("page.html"),
+  onReady: attachScript
+});
+
+function attachScript(tab) {
+  tab.attach({
+    contentScriptFile: self.data.url("content-script.js")
+  });
+}
+
+// content-script.js
+var salutation = "hello, ";
+function greetme(user) {
+  return salutation + user;
+}
+ 
+exportFunction(greetme, unsafeWindow, {defineAs: "greetme"});
+
+//page.html call the function by 
+<html>
+  <head>
+  </head>
+  <body>
+    <input id="test" type="button" value="Click me"/>
+    <script>
+      var test = document.getElementById("test");
+      test.addEventListener("click", function() {
+        alert(window.greetme("page script"));
+      }, false);
+    </script>
+  </body>
+</html>
+
+exportFunction() works by structured cloning the arguments and return vaue of the function from one scope to another scope. So you can't export functions take functions as arguments(such as callback) or return functions 
+
+    + create objects in page script scope,  createObjectIn() function to create an object in the page script's scope.
+// content-script.js
+var salutation = "hello, ";
+function greetme(user) {
+  return salutation + user;
+}
+ 
+var foo = createObjectIn(unsafeWindow, {defineAs: "foo"});
+exportFunction(greetme, foo, {defineAs: "greetme"});
+
+this will create a new object foo in the page script scope and exports greetme() as memeber of foo. the page script can call the function as foo.greetme()
+<html>
+  <head>
+  </head>
+  <body>
+    <input id="test" type="button" value="Click me"/>
+    <script>
+      var test = document.getElementById("test");
+      test.addEventListener("click", function() {
+        alert(window.foo.greetme("page script"));
+      }, false);
+    </script>
+  </body>
+</html>
+
+    + reverting to old behavior, switch firefox back to the old behavior which content script coud expose objects and functions to page scripts using unsafeWindow 
+
+this is a temporary migration aid, will be removed eventually 
+
+//package.json 
+"permissions": {
+  "unsafe-content-script": true
+}
+
+    + communicating with page scripts 
+        * DOM postMessage() API 
+    suppose we have a page called listen.html hosted at my-domain.org 
+    
+    in the main add-on code web have a page-mod that attaches the content scripts talk.js to the right page 
+//main.js 
+var data = require("sdk/self").data;
+
+var pageMode = require("sdk/page-mod");
+pageMod.PageMode({
+    include: "http://my-domain.org/listen.html",
+    contentScriptFile: data.url("talk.js")
+});
+
+// talk.js
+window.postMessage("Message from content script", "http://my-domain.org/");
+
+if the second argument is "*" means any domain 
+
+//listen.html use addEventListener to listen for messages from the content script 
+<!DOCTYPE html>
+<html>
+  <head></head>
+  <body>
+    <script>
+      window.addEventListener('message', function(event) {
+        window.alert(event.data);  // Message from content script
+      }, false);
+    </script>
+  </body>
+</html>
+    
+for the add-on run on before firefox 31 need to use document.defaultView 
+
+            *using custom DOM events 
+    
+    + dom custom event, CustomEvent interface represents events intitialized by an appication for any purpose 
+
+        * Properties 
+CustomEvent.detail, any data passed when intializing the event 
+
+        * methods 
+CustomEvent.initCustomEvent()
+
+        * restriction 
+fire a CustomEvent from privileged code(extension) to non-privileged code(webpage) you must take security into consideration. Gecko restrict an object created in one context from being directly used from another 
+
+when create a CustomEvent you must create the object from the same window as your're going to fire against 
+// doc is a reference to the content document
+function dispatchCustomEvent(doc) {
+  // This will not work. CustomEvent will be created from the chrome window and will not be seen by the content.
+  // var myEvent = new CustomEvent("mytype");
+  // Create CustomEvent from the content window
+  var myEvent = doc.defaultView.CustomEvent("mytype");
+  doc.dispatchEvent(myEvent);
+}
+
+the detail attribute of your CustomEvent will be subject to the same restritions, string and array values will be readable by the content without restrictions. Custom object will required to use __exposedProps__ to expose the property to the content script. 
+
+// doc is a reference to the content document
+function dispatchCustomEvent(doc) {
+  var eventDetail = {foo: 'bar', __exposedProps__ : { foo : "r"}};
+  var myEvent = doc.defaultView.CustomEvent("mytype", eventDetail);
+  doc.dispatchEvent(myEvent);
+}
+
+expose a function will allow the content script to run it with chrome privileges which can open a security vulnerability 
+
+        * before Firefox 30 require these steps to use content script to page script, https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Content_Scripts/Interacting_with_page_scripts
+    
+        * after Firefox 30, clone the message object this is an additional step required by the new version of Firefox 
+//main.js     
+var tabs = require("sdk/tabs");
+var mod = require("sdk/page-mod");
+var self = require("sdk/self");
+
+var pageUrl = self.data.url("page.html")
+
+var pageMod = mod.PageMod({
+  include: pageUrl,
+  contentScriptFile: self.data.url("content-script.js"),
+  contentScriptWhen: "ready"
+})
+
+tabs.open(pageUrl);
+
+//page.html 
+<html>
+  <head>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <input id="message" type="button" value="Send a message"/>
+    <script type="text/javascript" src="page-script.js"></script>
+  </body>
+</html>
+
+//content-script.js 
+var messenger = document.getElementById("message");
+messenger.addEventListener("click", sendCustomEvent, false);
+
+function sendCustomEvent() {
+  var greeting = {"greeting" : "hello world"};
+  var cloned = cloneInto(greeting, document.defaultView);
+  var event = new CustomEvent("addon-message", { bubbles: true, detail: cloned }); 
+  document.documentElement.dispatchEvent(event);
+}
+
+//page-script.js listens for the message 
+var messenger = document.getElementById("message");
+messenger.addEventListener("click", sendCustomEvent, false);
+
+function sendCustomEvent() {
+  var greeting = {"greeting" : "hello world"};
+  var event = new CustomEvent("addon-message", { bubbles: true, detail: greeting });
+  document.documentElement.dispatchEvent(event);
+}
+
+when send message from Page script to content script is almost the same but don't require to clone the message 
+
+- EventListeners, you can listen to dom event in content script, but there are two different 
+    + if you define an event listener by passing it as a string into setAttribute the listener is evalued in the page's context which will not able to access the context of content script
+    
+var theMessage = "Hello from content script!";
+anElement.setAttribute("onclick", "alert(theMessage);"); //this will fail 
+    
+        * setAttribute, https://developer.mozilla.org/en-US/docs/Web/API/Element/setAttribute, adds a new attribute or changes the value of an existing attribute on the specified element 
+        
+        element.setAttribute(name, value);
+        
+<button>Hello World</button>
+var b = document.querySelector("button"); 
+b.setAttribute("disabled", "disabled");
+
+        called on an HTML element in an HTML document, setAttribute lower-cases its attribute name argument
+
+        to remove attribute you need to call removeAttribute(), set with elt.setAttribute(attr, null)  the null will be coerce to string value "null"
+        
+    + if you define a an event listener by direct assignement to a global event handler like onclick. the the assignment might be overridden by the page 
+    
+var myScript = "window.onclick = function() {" +
+               "  console.log('unsafewindow.onclick: ' + window.document.title);" +
+               "}";
+
+require("sdk/page-mod").PageMod({
+  include: "*",
+  contentScript: myScript,
+  contentScriptWhen: "start"
+});
+
+//this will works on most case but will not work on the page which also assign to onclick 
+<html>
+  <head>
+  </head>
+  <body>
+    <script>
+    window.onclick = function() {
+      window.alert("it's my click now!");
+    }
+    </script>
+  </body>
+</html>
+
+for this reason, it's better to add event listeners using addEventListener() method 
+var theMessage = "Hello from content script!";
+
+anElement.onclick = function() {
+  alert(theMessage);
+};
+
+anotherElement.addEventListener("click", function() {
+  alert(theMessage);
+});
+
+- communicating with the add-on, to enable add-on scripts and content scripts to communicate with each other, need to access to a port object. the communication is asynchronous 
+    + send message from port.emit()
+    + receive message by port.on()
+    + demo 
+//main.js, add-on script 
+// main.js
+
+var tabs = require("sdk/tabs");
+var self = require("sdk/self");
+
+tabs.on("ready", function(tab) {
+  worker = tab.attach({
+    contentScriptFile: self.data.url("content-script.js")
+  });
+  worker.port.emit("alert", "Message from the add-on");
+});
+
+tabs.open("http://www.mozilla.org");
+
+//content-script.js 
+// content-script.js
+
+self.port.on("alert", function(message) {
+  window.alert(message);
+});
+
+    + the content-menu require to use postMessage and content-script to communicate with content script, https://developer.mozilla.org/en-US/Add-ons/SDK/High-Level_APIs/context-menu
+    
+- accessing port in the content script, in the content script the port object is available as a property of the global self object(https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Content_Scripts/self). it is different from the self module 
+
+    + self, global object, different with self module. it provides 
+        * access to the options object, content script API such as tab.attach(), page-mod, and page-worker let you pass read-only data(JSON) to the content script, the data is available to the content script in the options property 
+        
+// main.js
+
+const tabs = require("sdk/tabs");
+
+tabs.open({
+  url: "./page.html",
+  onReady: function(tab) {
+    tab.attach({
+      contentScriptFile: "./content-script.js",
+      contentScriptOptions: {
+        a: "blah"
+      }
+    });
+  }
+});
+
+// content-script.js
+alert(self.options.a);
+
+        * access to the port object, you can use port to receive messages from and send messages to the main add-on code, https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Content_Scripts/port
+        the content-script has access to a port via the global self property 
+        
+        the main add-on code via a worker object, which is a SDK module, https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/content_worker, it enable content scripts and add-on code to exchange message using port or postMessage APIs. it runs under the same process as web content 
+        
+        Worker is composed with EventEmitter and addtional functions 
+        postMessage(data), asynchronous emits "messages"
+        
+        destroy(), destroy the worker by remove the content-script from the page 
+        
+        propertys: 
+        port, allows you to send/receive customized message 
+        url, url of the content 
+        tab, attached to a content document, returns the related tab 
+        
+        events:
+        message, receive message from associated content-script, it use self.postMessage() to emit the message event 
+        error, runtime script error 
+        detach, the document assocaite with the worker is unload or destroy() method is called 
+        
+        port.emit() send message from one side to another 
+        // content-script.js from content-script to main.js 
+        var myMessagePayload = "some data";
+        self.port.emit("myMessage", myMessagePayload);
+        
+        // main.js, from main to content 
+        var myMessagePayload = "some data";
+        worker.port.emit("myMessage", myMessagePayload);
+        
+        port.on() register a function as a listener for a particular message 
+// content-script.js, listen for "myMessage" sent frm the main add-on 
+self.port.on("myMessage", function handleMyMessage(myMessagePayload) {
+  // Handle the message
+});
+
+// main.js, listen from a content script 
+worker.port.on("myMessage", function handleMyMessage(myMessagePayload) {
+  // Handle the message
+});
+        port.once() is used to register listener just once then stop listening 
+        port.removeListener(event-type, callback) to stop a listener 
+        
+        JSON-serializable values, the message data is automatically serialized, you can't send functions, if object contain function they won't be encoded 
+        
+        * acess to a mostly deprecated messaging API 
+        
+- high-level, self module, access data that is bundled with the add-on and add-on metadata, it is complete different from the global self object which is used by content-script to communicate with the add-on code 
+
+properties:
+uri, represents an add-on associated unique uri string, this uri can be used for APIs which require a valid uri string, such as the passwords module 
+id, printable string unique for each add-on, set in package.json 
+name, add-on's short name 
+version, contains the add-on's version string 
+loadReason, contains of the following strings describing the reason your add-on was loaded 
+    install 
+    enable 
+    startup 
+    upgrade
+    downgrade 
+isPrivateBrowsingSupported, indicates whether or not the add-on supports private browsing, it comes from the private-browsing key in the inte add-on's package.json file 
+data, is used to access data that was bundled with the add-on. lives in the add-on's data/ directory, immediately below the package.json file. all files in this directory will be copied into the xpi file and available through the data object 
+
+methods: 
+data.load(name) returns the content of an embedded data file 
+data.url(name), returns a resource:// url that points at an embedded data file, it can be display directly in a content frame 
+    var self = require("sdk/self");
+
+    var myPanel = require("sdk/panel").Panel({
+      contentURL: self.data.url("myFile.html")
+    });
+
+    myPanel.show();
+    
+- Communicating using "postMessage", https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/Content_Scripts/using_postMessage", port object is prefer to message event, context-menu modules does not support port. 
+
+    + send message from context-menu need to use postMessage, the message can be any JSON-serializable value 
+    
+self.postMessage(contentScriptMessage);
+    
+    + receive message from the add-on script 
+self.on("message", function(addonMessage) {
+  // Handle the message
+});
+
+    + handling message events in the add-on script, page and panel integrate panel directly 
+// Post a message to the panel's content scripts
+panel.postMessage(addonMessage);
+
+//for page-mod objects you need to listen to the onAttach event and use the worker supplied to that 
+var pageMod = require('sdk/page-mod').PageMod({
+  include: ['*'],
+  contentScript: pageModScript,
+  onAttach: function(worker) {
+    worker.postMessage(addonMessage);
+  }
+});
+    
+    + receive message from a content script, use the work's on function also could add onMessage property as a argument to the constructor 
+panel = require("sdk/panel").Panel({
+  onMessage: function(contentScriptMessage) {
+    // Handle message from the content script
+  }
+});
+    
+    + message events versus user-defined events, use message events as an alternative to user-defined events 
+var pageModScript = "window.addEventListener('mouseover', function(event) {" +
+                    "  self.postMessage(event.target.toString());" +
+                    "}, false);";
+
+var pageMod = require('sdk/page-mod').PageMod({
+  include: ['*'],
+  contentScript: pageModScript,
+  onAttach: function(worker) {
+    worker.on('message', function(message) {
+      console.log('mouseover: ' + message);
+    });
+  }
+});
+    
+//but if need to send several kinds of event types, user-define event is more clearly. message event require to use switch case to handle different kinds of messages 
+var pageModScript = "window.addEventListener('mouseover', function(event) {" +
+                    "  self.port.emit('mouseover', event.target.toString());" +
+                    "}, false);" +
+                    "window.addEventListener('mouseout', function(event) {" +
+                    "  self.port.emit('mouseout', event.target.toString());" +
+                    "}, false);";
+
+var pageMod = require('sdk/page-mod').PageMod({
+  include: ['*'],
+  contentScript: pageModScript,
+  onAttach: function(worker) {
+    worker.port.on('mouseover', function(message) {
+      console.log('mouseover :' + message);
+    });
+    worker.port.on('mouseout', function(message) {
+      console.log('mouseout :' + message);
+    });
+  }
+});
+
+- password module, high-level, https://developer.mozilla.org/en-US/Add-ons/SDK/High-Level_APIs/passwords, interact with Firefox to retrieve and remove stored credentials 
+    + search for credentials which have been stored in the password manager 
+    + store credentials in the password manager 
+    + remove stored credentials 
+   
+- Accessing port in the add-on script, add-on code and a particular content script context is encapsulated by the worker object. worker is not exposed to add-on code in quite the same way in all modules 
+    + from page-worker, it integrates the worker API directly 
+// main.js
+
+var pageWorkers = require("sdk/page-worker");
+var self = require("sdk/self");
+
+var pageWorker = require("sdk/page-worker").Page({
+  contentScriptFile: self.data.url("content-script.js"),
+  contentURL: "http://en.wikipedia.org/wiki/Internet"
+});
+
+pageWorker.port.on("first-para", function(firstPara) {
+  console.log(firstPara);
+});
+
+//emit user-defined messages from your add-on you can just call pageWorker.port.emit 
+// main.js
+
+var pageWorkers = require("sdk/page-worker");
+var self = require("sdk/self");
+
+pageWorker = require("sdk/page-worker").Page({
+  contentScriptFile: self.data.url("content-script.js"),
+  contentURL: "http://en.wikipedia.org/wiki/Internet"
+});
+
+pageWorker.port.on("first-para", function(firstPara) {
+  console.log(firstPara);
+});
+
+pageWorker.port.emit("get-first-para");
+
+// content-script.js
+
+self.port.on("get-first-para", getFirstPara);
+
+function getFirstPara() {
+  var paras = document.getElementsByTagName("p");
+  if (paras.length > 0) {
+    var firstPara = paras[0].textContent;
+    self.port.emit("first-para", firstPara);
+  }
+}
+
+    + from page-mod, page-mod object might attach its scripts to multiple pages, each with its own context in which the content script are executing, it needs a separate channel(worker) for each page. page-mod doesnot integrate the worker API directly. instead, each tme a content script is attached to a page, the page-mod emits a attach event. whose listener is passed the worker for that context. 
+    you need to supply a listener to attach to access the port object of the worker 
+    
+// main.js
+
+var pageMods = require("sdk/page-mod");
+var self = require("sdk/self");
+
+var pageMod = pageMods.PageMod({
+  include: ['*'],
+  contentScriptFile: self.data.url("content-script.js"),
+  onAttach: startListening
+});
+
+function startListening(worker) {
+  worker.port.on('click', function(html) {
+    worker.port.emit('warning', 'Do not click this again');
+  });
+}
+
+// content-script.js
+
+window.addEventListener('click', function(event) {
+  self.port.emit('click', event.target.toString());
+  event.stopPropagation();
+  event.preventDefault();
+}, false);
+
+self.port.on('warning', function(message) {
+  window.alert(message);
+});
+
+    + from tab.attach() returns the worker you can use to communicate with the content scripts you attached
+//main.js
+
+var tabs = require("sdk/tabs");
+var buttons = require("sdk/ui/button/action");
+var self = require("sdk/self");
+
+buttons.ActionButton({
+  id: "attach-script",
+  label: "Attach the script",
+  icon: "./icon-16.png",
+  onClick: attachScript
+});
+
+function attachScript() {
+  var worker = tabs.activeTab.attach({
+    contentScriptFile: self.data.url("content-script.js")
+  });
+  worker.port.on("my-script-response", function(response) {
+    console.log(response);
+  });
+  worker.port.emit("my-addon-message", "Message from the add-on");
+}
+
+// content-script.js
+
+self.port.on("my-addon-message", handleMessage);
+
+function handleMessage(message) {
+  alert(message);
+  self.port.emit("my-script-response", "Response from content script");
+}
+
+- the postMessage API, before port object was added, add-on code and content scripts communicated using a different API 
+    + content script call self.postMessage() to send and self.on() to receive 
+    + add-on script called worker.postMessage() to send and worker.on() to receive 
+    
+suggest to use port object instead of the postMessage and context-menu module still only support postMessage
+
+- content script to content script. only if they have been loaded into the same context, for example tab.attach() with two content scripts then OK. if call twice then the two scripts can't communicate each other. the communicate is just like tow page script loaded in same web page 
+
+- cross domain content scripts, by default it is not enabled. you can enable these features for specific domains by adding them to your add-on's package.json. which lives under the permission key 
+
+"permissions": {
+    "cross-domain-content": ["http://example.org/", "http://example.com/"]
+}
+the domains list must include the scheme
+wildcard is not allowed 
+only available for content scripts 
+
+    + cross-domain iframes 
+        * addon create a add-on and load a local html 
+//main.js
+var data = require("sdk/self").data;
+
+var pageWorker = require("sdk/page-worker").Page({
+  contentURL: data.url("page.html"),
+  contentScriptFile: data.url("page-script.js")
+});
+
+pageWorker.on("message", function(message) {
+  console.log(message);
+});
+        * the page.html embedded a iframe whose content is served from another server such as wikipedia.org 
+<!doctype html>
+<!-- page.html -->
+<html>
+  <head></head>
+  <body>
+    <iframe id="wikipedia" src="http://en.m.wikipedia.org/"></iframe>
+  </body>
+</html>
+        * content script want to access the content of the iframe
+// page-script.js
+var iframe = window.document.getElementById("wikipedia");
+var todaysFeaturedArticle = iframe.contentWindow.document.getElementById("mp-tfa");
+self.postMessage(todaysFeaturedArticle.textContent);
+        * need to add permission into the package.json 
+"permissions": {
+  "cross-domain-content": ["http://en.m.wikipedia.org/"]
+}
+   
+    + cross domain XMLHttpRequest
+        * create a panel 
+        * add a butto to show the panel 
+        
+// main.js
+var data = require("sdk/self").data;
+
+var forecast_panel = require("sdk/panel").Panel({
+  height: 50,
+  contentURL: data.url("panel.html"),
+  contentScriptFile: data.url("panel-script.js")
+});
+
+forecast_panel.on("show", function(){
+  forecast_panel.port.emit("show");
+});
+
+require("sdk/ui/button/action").ActionButton({
+  id: "get-forecast",
+  label: "Get the forecast",
+  icon: "./icon-16.png",
+  onClick: function() {
+    forecast_panel.show();
+  }
+});
+
+        * panel.html jsut includes a <div> block for the forecast 
+<!doctype HTML>
+<!-- panel.html -->
+
+<html>
+  <head></head>
+  <body>
+    <div id="forecast_summary"></div>
+  </body>
+</html>
+
+        * call the XMLHttpRequest to fetch the service result 
+// panel-script.js
+
+var url = "http://datapoint.metoffice.gov.uk/public/data/txt/wxfcs/regionalforecast/json/500?key=YOUR-API-KEY";
+
+self.port.on("show", function () {
+  var request = new XMLHttpRequest();
+  request.open("GET", url, true);
+  request.onload = function () {
+    var jsonResponse = JSON.parse(request.responseText);
+    var summary = getSummary(jsonResponse);
+    var element = document.getElementById("forecast_summary");
+    element.textContent = summary;
+  };
+  request.send();
+});
+
+function getSummary(forecast) {
+  return forecast.RegionalFcst.FcstPeriods.Period[0].Paragraph[0].$;
+}
+
+//add permission into the package.json 
+"permissions": {
+  "cross-domain-content": ["http://datapoint.metoffice.gov.uk"]
+}
+
+    + content permissions and unsafeWindow, if you use "cross-domain-content" then javascript values in content scripts will not be available from pages. 
+    
+// content-script.js:
+unsafeWindow.myCustomAPI = function () {};
+
+then the relative page-script will not be able to access the myCustomAPI 
+
+
+# XUL Migration Guide 
+- relative url 
+https://developer.mozilla.org/en-US/Add-ons/SDK/Guides/XUL_Migration_Guide
+- main tasks involved in migration 
+    + content scripts 
+    + sdk's supported APIs 
+    + beyond the supported APIs 
+        * using third party modules 
+        * using the SDK's low-level APIs 
+        * getting direct access to XPCOM 
+        
+- user interface components, XUL based add-on use XUL overlays and XUL windows 
+    + XUL overlays is used to modify existing window, this could be replace by sdk ad community developed modules, https://github.com/mozilla/addon-sdk/wiki/Community-developed-modules
+    with low level API, we could directly modify the chrome window 
+    
+    + XUL windows used to define completely new windows to host user interface elements specific to the add-on 
+    
+        * sdk generally expects to specify your user interface using HTML not XUL, you can include a chrome.manifest file in your add-on and it will be included in the generated XPI 
+my-addon 
+    /chrome 
+        /content 
+        /locale 
+        /skin 
+    /chrome.manifest 
+    /data 
+    /lib 
+    package.json 
+    
+        there are limitation you can do in this manifest
+        you can't register overlays, resource:URIs, components 
+        you can register a chrome:URI with a skin and locale. you can include XUL windows in a SDK-based add-on 
+        
+        with this directory structure, you could use "chrome.manifest" to refer objects using a relative path, like "chrome/content"
+        
+- content scripts, 
+add-on scripts can use sdk api but not able to interact with web pages 
+content scripts, can access web pages, but do not have access to the SDK's API 
+- use high level api with third party module 
+- use low level api 
+- use xpcom, it is good practice to encapsulated code which uses XPCOM in its own module 
+
+example:
+var {Cc, Ci} = require("chrome");
+
+var promptSvc = Cc["@mozilla.org/embedcomp/prompt-service;1"].
+                getService(Ci.nsIPromptService);
+
+require("sdk/ui/button/action").ActionButton({
+  id: "xpcom-example",
+  label: "Hello from XPCOM",
+  icon: "./icon-16.png",
+  onClick: function() {
+    promptSvc.alert(null, "My Add-on", "Hello from XPCOM");
+  }
+}); 
+
+this is equal to these packages 
+//package the xpcom into its own module 
+var {Cc, Ci} = require("chrome");
+
+var promptSvc = Cc["@mozilla.org/embedcomp/prompt-service;1"].
+            getService(Ci.nsIPromptService);
+
+exports.alert = function(title, text) {
+    promptSvc.alert(null, title, text);
+};  
+
+//reference the module 
+require("sdk/ui/button/action").ActionButton({
+  id: "xpcom-example",
+  label: "Hello from XPCOM",
+  icon: "./icon-16.png",
+  onClick: function() {
+    require("./alert").alert("My Add-on", "Hello from XPCOM");
+  }
+});
+- example porting the library detector 
+    
+    
+# New in JavaScript 1.7 
+- reference https://developer.mozilla.org/en-US/docs/Web/JavaScript/New_in_JavaScript/1.7#Destructuring_assignment_%28Merge_into_own_page.2Fsection%29
+
+- using javascript 1.7 
+<script type="application/javascript;version=1.7"></script>
+
+- enable from shell by -version 170 or use the version(170) function 
+
+- the features do not introduce new keywords will not required to do the version declaration 
+
+- new features in JavaScript 1.7 
+    + iterator and generators 
+//create iterator object 
+function makeIterator(array){
+    var nextIndex = 0;
+    
+    return {
+       next: function(){
+           return nextIndex < array.length ?
+               {value: array[nextIndex++], done: false} :
+               {done: true};
+       }
+    }
+}
+
+var it = makeIterator(['yo', 'ya']);
+console.log(it.next().value); // 'yo'
+
+        * iterables  collections 
+//map javascript ES6 standard 
+var myMap = new Map();
+
+var keyObj = {},
+    keyFunc = function () {},
+    keyString = "a string";
+
+// setting the values
+myMap.set(keyString, "value associated with 'a string'");
+myMap.set(keyObj, "value associated with keyObj");
+myMap.set(keyFunc, "value associated with keyFunc");
+
+myMap.size; // 3
+
+// getting the values
+myMap.get(keyString);    // "value associated with 'a string'"
+myMap.get(keyObj);       // "value associated with keyObj"
+myMap.get(keyFunc);      // "value associated with keyFunc"
+
+//for...of statement The for...of statement creates a loop Iterating over iterable objects (including Array, Map, Set, arguments object and so on)
+for (variable of object){
+    statement 
+}
+
+//difference between for ... of and for ... in 
+let arr = [3, 5, 7];
+arr.foo = "hello";
+
+for (let i in arr) {
+   console.log(i); // logs "0", "1", "2", "foo"
+}
+
+for (let i of arr) {
+   console.log(i); // logs "3", "5", "7"
+}
+
+//in order to be iterable, an object must implement the @@iterator method must have a Symbol.iterator key (https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/iterator)
+
+//user define iterables 
+var myIterable = {}
+myIterable[Symbol.iterator] = function* () {
+    yield 1;
+    yield 2;
+    yield 3;
+};
+[...myIterable] // [1, 2, 3]
+
+        * syntaxes expecting iterables 
+for(let value of ["a", "b", "c"]){
+    console.log(value)
+}
+// "a"
+// "b"
+// "c"
+
+[..."abc"] // ["a", "b", "c"]
+
+function* gen(){
+  yield* ["a", "b", "c"]
+}
+
+gen().next() // { value:"a", done:false }
+
+[a, b, c] = new Set(["a", "b", "c"])
+a // "a"
+        * generators 
+function* idMaker(){
+  var index = 0;
+  while(true)
+    yield index++;
+}
+
+var gen = idMaker();
+
+console.log(gen.next().value); // 0
+
+//using next(x) to restart the sequence:
+var reset = yield index++;
+if(reset){
+    index = 0;
+}
+
+//generator comprehensions, 
+(for (x of iterable) x)
+(for (x of iterable) if (condition) x)
+(for (x of iterable) for (y of iterable) x + y)
+
+//an iterator it with array comprehensions will create a large array in memory 
+var doubles = [for (i in it) i * 2]
+        
+//generator comprehensions version will create a new double generator 
+var it2 = (for (i in it) i * 2);
+
+if it is used as a function parameter then the parenthese could be omitted 
+    + array comprehensions 
+    [for (x of iterable) x]
+    [for (x of iterable) if (condition) x]
+    [for (x of iterable) for (y of iterable) x + y]
+    + let statement, create a block scope value and optional initialized. the var variable is the entire enclosing function:
+let var1 [= value1] [, var2 [= value2]] [, ..., varN [= valueN]];
+    
+you could also use let with for You can use the let keyword to bind variables locally in the scope of loops instead of using a global variable (defined using var) for that.
+for(let i = 0; i < 10; i ++)
+
+    + destructuring assignement, makes it possible to extract data from arrays or objects using a syntax that mirrors the construction of array and obect literals 
+[a, b] = [1, 2]
+[a,,b] = [1,2,3]
+[a, b, ...rest] = [1, 2, 3, 4, 5]
+{a, b} = {a:1, b:2}
+{a, b, ...rest} = {a:1, b:2, c:3, d:4}  //ES7
+
+//assignment without declaration 
+var a, b;
+({a, b} = {a:1, b:2});
+
+//nested object and array destructuring 
+var metadata = {
+    title: "Scratchpad",
+    translations: [
+       {
+        locale: "de",
+        localization_tags: [ ],
+        last_edit: "2014-04-14T08:43:37",
+        url: "/de/docs/Tools/Scratchpad",
+        title: "JavaScript-Umgebung"
+       }
+    ],
+    url: "/en-US/docs/Tools/Scratchpad"
+};
+
+var { title: englishTitle, translations: [{ title: localeTitle }] } = metadata;
+
+console.log(englishTitle); // "Scratchpad"
+console.log(localeTitle);  // "JavaScript-Umgebung"
+
+- rest parameters 
+function foo(...args){
+    for (let i of args) {
+       console.log(i); // logs "3", "5", "7"
+    }
+}
+
+
+# Multiprocess Firefox and the SDK     
+- SDK contract, high and low 
+- Compatibility shims, firefox provides add-ons with compatibiltity shims for many APIs. Currently don't have a complete list of low-level API that are not multiprocess cmpatible. If found will be added into the document page 
+
+- testing, use the "multiprocess permission", it require used the jpm. sdk/selection is a high-level API but it is still not work with multiprocess because its a but 
+
+- using frame scripts 
+frame script, it is different from the content script in SDK. it is more like a part of the main add-on code. that just happens to be running in the content process. difference points 
+    + environment for frame scripts and environment for content scripts are different 
+    content script have similar environment load by the web page plug the self global 
+    
+    frame script also have access to web conetnt, but have a different set up APIs for communicating with the chrome process. and access to the compnents object, which enables them to use privileged XPCOM APIs and JSMs 
+    
+    + content script are reloaded when a new document is loaded, frame scripts aren't. when a frame script is load it remains in the tab until the tab is closed 
+- firefox, JSMs, https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules
+- accessing a message manager 
+to access the global message manager you load the nsIMessageListenerManager service. before you can do this in an SDK add-on you have to require("chrome") to get access to the components object 
+    
+window message manager is available as the messageManager property of a chrome window 
+    + content window is window object familiar to wweb developers as the global object for javascript loaded from an html document 
+    
+    + a chrome window, also called a browser window. is a firefox application window. this is the global for traditional overlay based add-onds. 
+    
+    + an sdk window, high level windows module each maps to a chrome window, but omits most of the chrome window's properties, including messageManager 
+    
+    if you have an sdk window you can convert it to a chrome window using viewFor 
+    
+- get window message manager from sdk you have couple of options 
+    + use the window/utils 
+// Note that although this code uses window/utils,
+// it's safe to run in the chrome process because
+// it only accesses chrome objects.
+
+// get the active chrome window
+var browserWindow = require("sdk/window/utils").getMostRecentBrowserWindow();
+
+var windowMM = browserWindow.messageManager;
+
+    + use viweFor to convert an SDK window to a chrome window 
+// get the active SDK window
+var windows = require("sdk/windows").browserWindows;
+var activeWindow = windows.activeWindow;
+
+// convert it to a chrome window
+var browserWindow = require("sdk/view/core").viewFor(activeWindow);
+
+var windowMM = browserWindow.messageManager;
+
+- browser message manager, is the messageManager property of an XUL browser 
+    + in sdk you get a browser for a given tab you can use the tabs/utils module's getBrowserForTab function. convert it to an XUL tab using viewFor 
+    
+// get the active SDK tab
+var tab = require("sdk/tabs").activeTab;
+// convert it to an XUL tab
+var xulTab = require("sdk/view/core").viewFor(tab);
+// get the XUL browser for this tab
+var xulBrowser = require("sdk/tabs/utils").getBrowserForTab(xulTab);
+
+var browserMM = xulBrowser.messageManager;
+
+althougth this code sues tabs/utils, it's safe to run in the chrome process 
+
+- loading frame scripts, load frame script using the message manager chrome:// or resource://url 
+
+    + with sdk the simplest approach is to keep frame scripts under your add-on's data directory and pass in a resource://uri 
+    
+const self = require("sdk/self");  
+messageManager.loadFrameScript(self.data.url("frame-script.js"), false)
+    
+you can only load a single frame script here 
+
+- migrate direct access content to use frame script example 
+
+//direct access content by low-level API in add-on script 
+function logContent() {
+  var contentDocument = require("sdk/window/utils")
+    .getMostRecentBrowserWindow().content.document;
+  console.log(contentDocument.body.innerHTML);
+}
+
+require("sdk/ui/button/action").ActionButton({
+  id: "log-content",
+  label: "Log Content",
+  icon: "./icon-16.png",
+  onClick: logContent
+});
+
+//for multiprocessCompatible, you need to rewrite the add-on to use frame script 
+/*
+frame-script.js is in the "data" directory, and has this content:
+
+sendAsyncMessage("sdk-low-level-apis-e10s@jetpack:got-content",
+                 content.document.body.innerHTML);
+
+*/
+
+const self = require("sdk/self");
+
+function logContentAsync() {
+  var tab        = require("sdk/tabs").activeTab;
+  var xulTab     = require("sdk/view/core").viewFor(tab);
+  var xulBrowser = require("sdk/tabs/utils").getBrowserForTab(xulTab);
+
+  var browserMM  = xulBrowser.messageManager;
+  browserMM.loadFrameScript(self.data.url("frame-script.js"), false);
+  browserMM.addMessageListener("sdk-low-level-apis-e10s@jetpack:got-content",
+                               logContent);
+}
+
+function logContent(message) {
+  console.log(message.data);
+}
+
+require("sdk/ui/button/action").ActionButton({
+  id     : "log-content",
+  label  : "Log Content",
+  icon   : "./icon-16.png",
+  onClick: logContentAsync
+});
+
+
+# Message manager
+## message manager overview
+
+in multiprocess Firefox there are two processes 
+    + chrome process, also called parent process, runs the browser UI(chrome) code and code inserted by extensions 
+    + the content process, also called the child process, runs all web content. in future versions of multiprocess firefox different tabs may run in different processes, but for now all content tabs share a single content process 
+    
+- message manager are designed to enable chrome-privileged javascript code in one process to communicate with chrome-privileged javascript code in a different process 
+
+- there are two diffferent sorts of message manager 
+    + frame message manager, enable chrome process code to load a script into a browser frame(a single browser tab) in the content process. called frame script. they are scoped to a specific browser frame 
+    
+    if chrome code wants to run code in the content process so it can access web content 
+    
+    + process message managers, enable code in chrome to commnicate with content process. FF38+ allowed load process scripts into the child process. these are like frame scripts, except they are global to the child process 
+    
+    process script is useful for extension want to run some code only once  
+
+- frame message managers, in multiprocess firefox when chrome code needs to interact with web content. it needs to 
+    + seperate directy access the content code into frame scripts 
+    + use a frame message manager to load these frame scripts into content process 
+    + use frame message manager API to communicate with the frame script 
+    
+frame message manager enable chrome code to 
+    + load script into a frame in the content process
+    
+    + communicate with frame scripts using message-passing API 
+    
+- chrome process, there is a hierarchy of frame message manager
+global frame message manager 
+    /window message managers 
+        /browser message managers 
+        
+    + global frame message manager, GFMM, there is a single one in chrome process. it operates on all frames. if you load a frame script using GFMM, it loaded separately into every open tab three times according to the hierarchy. 
+    
+    if you send a messgae from GFMM, it received by all content tabs and delivered to any frame scripts that are litening for it 
+    
+        * useful functions 
+childCount : contains the number of children (typically, browser windows)
+
+getChildAt() : get the child at the given index
+
+loadFrameScript() : load a frame script into every tab in the browser
+
+broadcastAsyncMessage() : send a message to frame scripts
+
+addMessageListener() : start listening to a specific message from all frame scripts
+
+removeMessageListener() : stop listening to a specific message
+
+        * how to access 
+// chrome script
+let globalMM = Cc["@mozilla.org/globalmessagemanager;1"].getService(Ci.nsIMessageListenerManager);
+
+    + window message manager, WMM, for every browser window. it operates on all content tabs in a given window. 
+    
+        * useful functions 
+childCount : contains the number of children (typically, browser tabs)
+
+getChildAt() : get the child at the given index
+
+loadFrameScript() : load a frame script into every tab in this window
+
+broadcastAsyncMessage() : send a message to all frame scripts in this window
+
+addMessageListener() : start listening to a specific message from frame scripts
+
+removeMessageListener() : stop listening to a specific message
+
+        * how to access
+//access as a property of the browser window 
+let windowMM = window.messageManager;
+
+    + browser message manager, BMM, for every open content tab. this corresponds one to one with a content tab 
+    
+    you can mix and the manager such as load script with GFMM and send message from BMM to a single tab 
+
+        * useful functions 
+loadFrameScript() : load a frame script into this browser frame (tab)
+
+sendAsyncMessage() : send a message to all frame scripts in this browser frame
+
+addMessageListener() : start listening to a specific message from frame scripts
+
+removeMessageListener() : stop listening to a specific message
+
+        * how to access, accessed as a property of the XUL element 
+// chrome script
+let browserMM = gBrowser.selectedBrowser.messageManager;
+
+- content process, content frame message manager for every open tab. it's the content side end of frame message maanger frame scripts are loaded into the content frame message manager scope and messages from chrome message manager end up here 
+
+content script provides the global object for frame scripts. frame script can use this object to send and receive message from chrome process 
+
+    + useful attributes and functions 
+    
+content : access the DOM window hosted by the tab
+
+docShell : access the top-level docshell
+
+Components : access privileged objects and APIs
+
+addEventListener() : listen to DOM events
+
+addMessageListener() : receive messages from the chrome process
+
+sendAsyncMessage() : send asynchronous messages to the chrome process
+
+sendSyncMessage() : send synchronous messages to the chrome process
+
+- process message manager, correspond to process boundaries, multiprocess Firefox has the concept of 
+    + a parent process, chrome process, there is a child-in-process message manager(CIPMM). there is also a global parent process message manager(GPPMM). have multiple parent process message manager(PPMM) each map to a CPMM. there is also a parent-in-process message manager(PIPMM)
+    
+    + child process, which are processes spawned by the parent process, content process, each child process have a single child process message manager (CPMM), t
+    
+From Firefox 38 onwards, you can also use a parent process message manager to load a script into a child process. This is the recommended way to load a script that executes just once per child process
+
+- parent process
+    + the global parent process message manager GPPMM is global to the parent process 
+
+        * Messages sent using the GPPMM get sent to all CPMMs in all child processes.
+        * Process scripts loaded using the GPPMM get loaded in all child processes.
+        
+        * useful functions 
+childCount : contains the number of children (child processes, plus the in-content child)
+
+getChildAt() : get the child at the given index
+
+loadProcessScript() : load a process script into every content process
+
+broadcastAsyncMessage() : send a message to all process scripts
+
+addMessageListener() : start listening to a specific message from process scripts
+
+removeMessageListener() : stop listening to a specific message
+
+    + parent process message manager, each CPMM have a PPMM 
+        * message sent using the PPMM are received only by the corresponding CPMM 
+        * scripts loaded using the PPMM are loaded only into the corresponding child process 
+        
+        * useful function 
+loadProcessScript() : load a process script into the content process
+
+broadcastAsyncMessage() : send a message to process scripts
+
+addMessageListener() : start listening to a specific message from process scripts
+
+removeMessageListener() : stop listening to a specific message
+
+- child process message manager, one CPMM in each child process. Message sent using the CPMM are sent to the correponding PPMM and are also relayed to the GPPMM 
+
+    + useful function 
+Components : access privileged objects and APIs
+
+addMessageListener() : receive messages from the parent process
+
+sendAsyncMessage() : send asynchronous messages to the parent process
+
+sendSyncMessage() : send synchronous messages to the parent process
+
+
+## Frame script environment 
+- frame script's global is a ContentFrameMessageManager, giving it the following envirnoment.  
+content 	            The DOM window of the content loaded in the browser. may be null (see below)
+docShell 	            The nsIDocShell associated with the browser.
+addEventListener() 	    Listen to events from content.
+removeEventListener() 	Stop listening to events from content.
+addMessageListener() 	Listen to messages from chrome.
+removeMessageListener() Stop listening to messages from chrome.
+sendAsyncMessage() 	    Send an asynchronous message to chrome.
+sendSyncMessage() 	    Send a synchronous message to chrome.
+dump() 	                Print a message to the console.
+atob() 	                Base64 decode.
+btoa() 	                Base64 encode.
+Components 	            The usual Components object.
+
+    + frame script access the DOM window using content not window 
+// frame script
+var links = content.document.getElementsByTagName("a");
+
+    + all the frame scripts running in a tab share this global. however any top-level variables defined by script are not stored on the global. instead store in a special per-script object that delegates to per-tab global to avoid conflicting. But you can still access the global directly via this
+
+    + frame scripts run with system principals. if you want other principle, you can use a sandbox, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_Bindings/Components.utils.Sandbox
+    
+    have access to Components object, enabling them to use XPCOM and JSMs. some API works in chrome process will not work in a frame script 
+    
+- events, besides the regular DOM events being catured/bubbling. there are additional events get fired 
+    + unload, when frame script environment is shutdown 
+    + DOMWindowCreated, if a framescript needs to interact with individual DOM window instead of simple listening for evenets bubbling up from content. it is long before DOMContentLoaded event is fired 
+    
+    
+## Fame script loading and lifetime 
+- loading frame scripts. use loadFrameScript() function 
+
+// chrome script
+var mm = gBrowser.selectedBrowser.messageManager;
+mm.loadFrameScript('data:,dump("foo\\n")', true);
+
+    + loadFrameScript take two mandatory paremeters 
+    a url pointing to the frame script you want to load 
+    a boolean flag allowDelayedLoad,  for message manager is a global frame message manager or a window message manager then:, if true the script will be loaded whenever new frames opened after loadFrameScript() called. otherwise it will only loaded into the open tabs when loadFrameScript() called 
+    if the message manager is browser message manager then the value must be true. because it is one correponding to one tab 
+    
+- chrome:URLs, use a chrome://URL to refer to frame scripts. use a chrome.manifest file to register a chrome URL 
+
+// chrome.manifest
+content my-e10s-extension content.js
+// chrome script
+mm.loadFrameScript("chrome://my-e10s-extension/content/content.js", true);
+
+    + cancel it using removeDelayedFrameScript, it will not remove the already loaded scripts 
+var mm = window.messageManager;
+mm.removeDelayedFrameScript("chrome://my-e10s-extension/content/frame-script.js");
+
+- Frame script lifetime, frame script are loaded as soon as loadFrameScript() is called. if allowDelayedLoad is true then the script is loaded into a new tab as soon as it is created 
+
+frame script is associated with a browser tab so once you load them they loaded until the tab is closed. even you reload the document or navigate 
+
+if you want a frame script to do something whenever a new document is loaded you need to listen for DOMWindowCreated, DOMContentLoaded or load event 
+
+- unloading frame scripts, currently the only way to unload them is close the tab. listen the unload event. 
+//bootstrap.js 
+Services.mm.addMessageListener(
+    'my-addon-id',
+    {
+        receiveMessage: function() {
+            console.log('incoming message from frame script:', aMsg.data);
+        }
+    },
+    true // must set this argument to true, otherwise sending message from framescript will not work during and after the unload event on the ContentMessageManager triggers
+);
+
+//frame script listen for the unload event 
+var gContentFrameMessageManager = this;
+
+addEventListener('unload', function(aEvent) {
+    if (aEvent.target == gContentFrameMessageManager) {
+        sendAsyncMessage('my-addon-id', 'framescript-died'); // if you did not set third argument of `Services.mm.addMessageListener` to `true`, then this will fail to send a message
+    }
+}, false);
+
+- unload during uninstallation/upgrade, when your add-on is uninstalled or disabled, you should 
+    + if you used allowDelayedLoad cancel it by calling removeDelayedFrameScript
+    
+    + disable any frame scripts that are already loaded, you need to create a disable logic in the frame script 
+    
+    + the process is no race condition. message manager guarantees that loadFrameScript and broadcastAsyncMessage are affect frame scripts in the order that they called there will no condition like 
+        * your add-on is disabled for an upgrade 
+        * your add-on broadcase "disable" to your frame scripts 
+        * your add-on is upgraded and the new code loads new frame scripts 
+        * the new frame scripts receive the "disable" message and stop working 
+        
+    + a wall around for the frame script caching is randomize the url of the frame script 
+    
+    
+## limitations of frame scripts 
+- frame script run with system privileges and have access to Components object, enable to use XPCOM and JSMs during content process. 
+
+- File I/O is not work. File I/O should all be done in the chrome process 
+nsIFileInputStream
+nsIFileOutputStream 
+Constructing a file from a string or nsIFile 
+HTMLInputElement.mozSetFileNameArray (alternative: mozSetFileArray)
+
+- XUL and browser UI will not work 
+
+- Services some of them will not work 
+Services.search
+Services.downloads
+
+- Chrome windows any thing use chrome window will not work such as 
+nsISessionStore
+nsIWindowMediator
+
+- Places API can't be used 
+- Observers in the content process, most observers should be registered in the chrome process. the exceptions are 
+
+content-document-global-created
+document-element-inserted
+outer-window-destroyed
+inner-window-destroyed
+dom-window-destroyed
+
+these can be register on the content process 
+
+- QI from content window to chrome window, there is a particular pattern used to get from a content window to the associated chrome window 
+window.QueryInterface(Ci.nsIInterfaceRequestor)
+                     .getInterface(Ci.nsIWebNavigation)
+                     .QueryInterface(Ci.nsIDocShellTreeItem)
+                     .rootTreeItem
+                     .QueryInterface(Ci.nsIInterfaceRequestor)
+                     .getInterface(Ci.nsIDOMWindow);
+
+- nsIAboutModule, custom about: pages registered using nsIAboutModule are loaded in the chrome process 
+
+- Javascript code module, JSMs, the module load into the content process will not shar any state with same JSM loaded into the chrome process 
+
+
+## Communicating with frame scripts 
+- chrome code and frame scripts communicate using a messaging API 
+
+frame scripts can send asynchronous or synchronous messages to chrome, but chrome can only send asynchronous messages to content. prevent content code making chrome code unresponsive 
+
+frame script can pass wrappers called Cross Process Object Wrappers CPOWs to chrome, example send a message named "my-e10s-extension-message" with a data payload containing details and tag properties and expose the event.target object as CPOW 
+
+// frame script
+addEventListener("click", function (event) {
+  sendAsyncMessage("my-addon@me.org:my-e10s-extension-message", {
+    details : "they clicked",
+    tag : event.target.tagName
+  },
+  {
+     target : event.target
+  });
+}, false);  
+
+receive messages from content, chrome script needs to add a message listener using the message manager's addMessageListener() 
+
+// chrome script
+messageManager.addMessageListener("my-addon@me.org:my-e10s-extension-message", listener);
+function listener(message) {
+  console.log(message.name);
+  console.log(message.sync);
+  console.log(message.data);
+  console.log(message.target);
+  console.log(message.objects);
+}
+
+the listener code could access the window of the browser that sent the message with message.target.ownerDocument.defaultView 
+
+- synchronous messaging 
+
+// frame script
+sendSyncMessage("my-addon@me.org:my-e10s-extension-message");
+
+// chrome script
+messageManager.addMessageListener("my-addon@me.org:my-e10s-extension-message", listener);
+
+function listener(message) {
+  return "value from chrome";
+}
+
+because the message can be listen by multiple listener, then the return value of sendSyncMessage is an array of all the values return from every listeners 
+// frame script
+addEventListener("click", function (event) {
+  var results = sendSyncMessage("my-addon@me.org:my-e10s-extension-message", {
+    details : "they clicked",
+    tag : event.target.tagName
+  });
+  content.console.log(results[0]);    // "value from chrome"
+}, false);
+
+- removeMessageListener to stop listening for messages from content 
+// chrome script
+messageManager.removeMessageListener("my-addon@me.org:my-e10s-extension-message", listener);
+
+- chrome to content, to send message from chrome you have to know what kind of message manager you're using 
+
+    + browser message manager, you can use sendAsyncMessage
+// chrome script
+browser.messageManager.sendAsyncMessage("my-addon@me.org:message-from-chrome")
+
+    + window/global messageManager you need to use the broadcastAsyncMessage
+// chrome script
+window.messageManager.broadcastAsyncMessage("my-addon@me.org:message-from-chrome");
+
+you have to ensure the message name is unique. if you're using the message maanger in an add-on, a good way to do that is prefix messages with your add-on'ID 
+
+the detail data can be a JSON object 
+// chrome script
+messageManager.sendAsyncMessage("my-addon@me.org:message-from-chrome", {
+  details : "some more details"
+});
+
+- receive message from chrome in frame script by using the global addEventListener
+// frame script
+function handleMessageFromChrome(message) {
+  var payload = message.data.details;      // "some more details"
+}
+
+addMessageListener("my-addon@me.org:message-from-chrome", handleMessageFromChrome);
+
+- message-manager disconnect, if you are using a message manager to communicate with a script that may be running in a different process, you can listen for message-manager-disconnect oberserver notification to known when the message manager has disconnected 
+
+    + example load a script into the current <browser> on some event, and keep the browser message manager in an array  
+var messageManagers = [];
+
+...
+
+// on some event
+var browserMM = gBrowser.selectedBrowser.messageManager;
+browserMM.loadFrameScript("chrome://my-addon@me.org/content/frame-script.js", false);
+messageManagers.push(browserMM);
+console.log(messageManagers.length);
+
+//we can listen for message-manager-disconnect to update the array. use the observer service to monitor the event 
+function myObserver() {
+}
+
+myObserver.prototype = {
+  observe: function(subject, topic, data) {
+    var index = messageManagers.indexOf(subject);
+    if (index != -1) {
+      console.log("one of our message managers disconnected");
+      mms.splice(index, 1);
+    }
+  },
+  register: function() {
+    var observerService = Cc["@mozilla.org/observer-service;1"]
+                          .getService(Ci.nsIObserverService);
+    observerService.addObserver(this, "message-manager-disconnect", false);
+    console.log("listening");
+  },
+  unregister: function() {
+    var observerService = Cc["@mozilla.org/observer-service;1"]
+                            .getService(Ci.nsIObserverService);
+    observerService.removeObserver(this, "message-manager-disconnect");
+  }
+}
+
+var observer = new myObserver();
+observer.register();
+
+
+## Process scripts 
+- it is new in firefox 38, it is used to supply a way for register some observer or service such as content policy nsIContentPolicy only once. it can't be done by frame scrpit because it may be registered multiple times 
+
+- load a process script by accessing a parent process message manager and calling its loadProcessScript() 
+
+//load a script into chrome process and any child processes 
+// chrome code
+let ppmm = Cc["@mozilla.org/parentprocessmessagemanager;1"].getService(Ci.nsIProcessScriptLoader);
+ppmm.loadProcessScript("chrome://whatever/process-script.js", true);
+ppmm.addMessageListener("Hello", function(msg) { ... });
+
+the process script's global is a child process message manager. it enables the receive message from the chrome side and send messages to the chrome side 
+// chrome code
+let ppmm = Cc["@mozilla.org/parentprocessmessagemanager;1"].getService(Ci.nsIProcessScriptLoader);
+ppmm.loadProcessScript("chrome://whatever/process-script.js", true);
+ppmm.addMessageListener("Hello", function(msg) { ... });
+
+// content side, child process message manager  
+// process-script.js
+// the process type is define in https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIXULRuntime#Process_type_constants
+// the Services is JPMs module, https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Services.jsm
+if (Services.appinfo.processType == Services.appinfo.PROCESS_TYPE_CONTENT) {
+  dump("Welcome to the process script in a content process");
+} else {
+  dump("Welcome to the process script in the main process");
+}
+
+// Message is sent using ContentProcessMessageManager
+sendAsyncMessage("Hello");
+
+- using process scripts is like using frame scripts 
+    + you can pass the allowDelayedLoad to loadProcessScript(), if you do you must call removeDelayProcessScript() when your extension is disabled or removed 
+    
+    + sendAsyncMessage() is in both directory, while sendSyncMessage is available from content to chrome only 
+    
+    + process script are system-privilege and have access to the components object. it also have the limitation as frame scripts 
+    
+    + process script stay loaded until their host process is closed 
+    
+    + environment for process script is similar to frame scripts. However can't access to web content or DOM 
+    
+- retrieving the content frame message. when an observer notification in a process script contains a content document or window, it's useful to not use talk through the child/parent process message manager but through the window's content frame message manager 
+
+    + example response should be processed by a frame script instead of the process script. it can be achieved by traversing the docshell tree 
+function contentMMFromContentWindow(window) {
+  let tree  = window.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIDocShellTreeItem);
+  let top   = tree.sameTypeRootTreeItem;
+  let iface = QueryInterface(Ci.nsIDocShell).QueryInterface(Ci.nsIInterfaceRequestor);
+  return iface.getInterface(Ci.nsIContentFrameMessageManager);
+}
+    
+if it is not work try this 
+function contentMMFromContentWindow_Method2(aContentWindow) {
+    return aContentWindow.QueryInterface(Ci.nsIInterfaceRequestor)
+                         .getInterface(Ci.nsIDocShell)
+                         .QueryInterface(Ci.nsIInterfaceRequestor)
+                         .getInterface(Ci.nsIContentFrameMessageManager);
+}
+
+
+## Performance best practice 
+- performance pitfalls related to frame scripts/message manager usage and alternative approaches to avoid them 
+
+key points in mind 
+    + scripts registered during addon startup get executed during session restore. 
+    
+    + frame scripts also get executed on non-restored tabs. all their overhead is thus not just incurred by active tabs but by the total number of tabs in a session 
+    
+- performance best practices, declaring stateless functions once per process 
+
+    + BAD, Because declared functions are also objects. And since frame scripts get evaluated for each tab this means new function objects get instantiated, new constants get computed, block scopes must be set up etc.
+// addon.js
+Services.mm.loadFrameScript("framescript.js", true)
+
+// framescript.js
+const precomputedConstants = // ...
+
+function helper(window, action) {
+  // ...  do some work on the window
+}
+
+function doSomething(message) {
+  result = helper(content, message.data)
+  sendAsyncMessage("my-addon:response-from-child", {something: result})
+}
+
+addMessageListener("my-addon:request-from-parent", doSomething)
+    
+    + BETTER, Javascript modules are per-process singletons and thus all their objects are only initialized once, which makes them suitable for stateless callbacks.
+// framescript.js
+Components.utils.import("resource://my-addon/processModule.jsm", {}).addFrame(this)
+
+// processModule.jsm
+const EXPORTED_SYMBOLS = ['addFrame'];
+
+const precomputedConstants = // ...
+
+function helper(window, action) {
+  // ... do some work on the window
+}
+
+function doSomething(message) {
+  frameGlobal = message.target
+  result = helper(frameGlobal.content, message.data)
+  frameGlobal.sendAsyncMessage("my-addon:response-from-child", {something: result})
+}
+
+function addFrame(frameGlobal) {
+  frameGlobal.addMessageListener("my-addon:request-from-parent", doSomething)
+}
+
+- store heavyweight state once per process 
+
+    + BAD,  a separate object is kept for each tab. Not only does that increase memory footprint but the deserialization also has to be executed seperately for each tab, thus requiring more CPU time.
+// addon.js
+var main = new MyAddonService();
+
+main.onChange(stateChange);
+
+function stateChange() {
+  Services.mm.broadcastAsyncMessage("my-addon:update-configuration", {newConfig: main.serialize()})
+}
+
+// framescript.js
+var mainCopy;
+
+function onUpdate(message) {
+   mainCopy = MyAddonService.deserialize(message.data.newConfig);
+}
+
+addMessageListener("my-addon:update-configuration", onUpdate)
+
+
+// mainCopy used by other functions
+
+    + BETTER 
+// addon.js
+var main = new MyAddonService();
+
+main.onChange(stateChange);
+
+function stateChange() {
+  Services.ppmm.broadcastAsyncMessage("my-addon:update-configuration", {newConfig: main.serialize()})
+}
+
+// processModule.jsm
+const EXPORTED_SYMBOLS = ['getMainCopy'];
+
+var mainCopy;
+
+Services.cpmm.addMessageListener("my-addon:update-configuration", function(message) {
+  mainCopy = message.data.newConfig;
+})
+
+funtion getMainCopy() {
+  return mainCopy;
+}
+
+// framescript.js
+Components.utils.import("resource://my-addon/processModule.jsm")
+
+// getMainCopy() used by other functions
+
+- don't register observers and other callback to global services in a frame script 
+
+    + BAD 
+//framescript.js
+Services.obs.addObserver("document-element-inserted", {
+  observe: function(doc, topic, data) {
+     if(doc.ownerGlobal.top != content)
+        return; // bail out if  this is for another tab
+     decorateDocument(doc);
+  }
+})
+
+    + BETTER
+
+content-document-global-created notifications
+    can be substituted with DOMWindowCreated events
+other observers and services
+    should be registered in a process script or JSM instead 
+    
+- load frame scripts on demand 
+    + BAD 
+// addon.js
+Services.mm.loadFrameScript("framescript.js", /*delayed:*/ true)
+
+// stuff communicating with the framescript
+
+// framescript.js
+function onlyOnceInABlueMoon() {
+   // we only need this during a total solar eclipse while goat blood rains from the sky
+   sendAsyncMessage('my-addon:paragraph-count', {num: content.document.querySelectorAll('p').length})
+}
+addMessageListener("my-addon:request-from-parent", onlyOnceInABlueMoon)
+
+    + BETTER 
+// addon.js
+function onToolbarButton(event) {
+  let tabMM = gBrowser.mCurrentBrowser.frameLoader.messageManager;
+  let button = event.target;
+  let callback = (message) => {
+    tabMM.removeMessageListener("my-addon:paragraph-count", callback)
+    decorateButton(button, message.data.num)
+  }
+  tabMM.addMessageListener("my-addon:paragraph-count", callback);
+  tabMM.loadFrameScript("data:,sendAsyncMessage('my-addon:paragraph-count', {num: content.document.querySelectorAll('p').length})", false)
+}
+
+function decorateButton(button, count) {
+  // do stuff with result
+}
+
+- beam down information in advance to avoid sychronous calls to the parent 
+
+    + BAD, content policy which gets triggered for every network request in a child process to either allow or deny the request. Since the code calls to the parent process to check whether a specific request can be allowed it would slow down all page loads, as web pages generally issue dozens of requests.
+// processscript.js
+
+function ContentPolicy() {
+  // ...
+}
+
+Object.assign(ContentyPolicy.prototype, {
+    classDescription: ..., classID: ..., contractID: ...,
+    QueryInterface: XPCOMUtils.generateQI([Ci.nsIContentPolicy]),
+
+    shouldLoad: function(type, location, origin, context) {
+
+       let resultList = Services.cpmm.sendSyncMessage("my-addon:check-load", {destination: location, source: origin}) // <=== SYNC MESSAGE!
+
+       if(resultList.every((r) => r == true))
+           return Ci.nsIContentPolicy.ACCEPT;
+
+       return Ci.nsIContentPolicy.REJECT_REQUEST;
+    }
+});
+
+// more boilerplate code here
+
+    + BETTER, instead of only keeping the state in parent an addon can employ a master-slave architecture where the parent ahs the authoritative state and replicates it to the child process in advance so they can act based on their local copy 
+    
+- clean up on addon upload 
+    + BAD 
+if your addon is restartless or uses the SDK then updates or user turning it offf and on will load to unload/reload events 
+
+    + BETTER 
+// addon.js
+function onUnload() {
+  Services.mm.removeDelayedFrameScript("resources://my-addon/framescript.js");
+  Services.ppmm.removeDelayedProcessScript("resources://my-addon/processcript.js");
+  Services.mm.broadcastAsyncMessage("my-addon:unload");
+  Services.ppmm.broadcastAsyncMessage("my-addon:unload");
+}
+
+in the frame/processs script 
+
+remove all kinds of listeners
+remove observer notifications
+remove custom categories and services
+nuke sandboxes, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_Bindings/Components.utils.Sandbox#Freeing_the_sandbox
+unload JSMs
+restore content DOM states where necessary, e.g. remove interactive UI elements that would be inert with the addon
+
+
+- observer application start up messages 
+https://developer.mozilla.org/en-US/docs/Observer_Notifications#Application_startup
+
+
+## Debugging frame scripts 
+- The Browser Content Toolbox is only available in Firefox Nightly, and only if you're running Firefox in multiprocess mode.
+
+
+## Mozilla debugging 
+- reference documents, https://developer.mozilla.org/en-US/docs/Mozilla/Debugging
+
+- javascript debugging 
+https://developer.mozilla.org/en-US/docs/Debugging_JavaScript
+
+ue web console in the web developer menu 
+
+- browser console lets you see all javascript errors and logging in the browser. enable it by about:config in the url bar and set devtools.chrome.enabled to true, or set the "Enable chrome and add-on debugging" option in the developer tool settings
+
+or start firefox with 
+$ /path/to/firefox --jsconsole
+
+log in to browser console by 
+let console = (Cu.import("resource://gre/modules/devtools/Console.jsm", {})).console;
+console.log("log message");
+
+- browser debugger, built-in, js debugger 
+devtools.chrome.enabled: true
+devtools.debugger.remote-enabled: true 
+from the about:config page 
+
+- strict code checking set the javascript.options.strict to true 
+
+- console.log in browser console 
+- dump() function allows you to print text on the natvie console 
+- log.jsm(formerly log4moz), a partial implementation of the Log4* interfaces 
+Components.utils.import("resource://gre/modules/Log.jsm");
+
+- debugger keyword, this also dumps a stack trace to the console in extensions you can print the callstack using the Components.stack 
+function getStackDump() {
+  var lines = [];
+  for (var frame = Components.stack; frame; frame = frame.caller) {
+    lines.push(frame.filename + " (" + frame.lineNumber + ")");
+  }
+  return lines.join("\n");
+}
+
+- scratchpad 
+
+- debug IE, run IE in single process mode 
+To run Internet Explorer in a single process add a DWORD registry value to HKEY_CURRENT_USER\Software\Microsoft\Internet Explorer\Main called TabProcGrowth and set it to 0.
+
+## control sidebar width 
+- http://stackoverflow.com/questions/22241388/controlling-firefox-add-on-sdk-sidebar-width
+
+## Addon manager
+- reference, https://developer.mozilla.org/en-US/Add-ons/Add-on_Manager/AddonManager
+
+## RequireJS
+- reference, http://www.requirejs.org/
+
+## Prevent memory leak 
+https://developer.mozilla.org/en-US/docs/Extensions/Common_causes_of_memory_leaks_in_extensions
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Avoiding_leaks_in_JavaScript_components
+
+
+## Javascript XPCOM solution 
+https://developer.mozilla.org/en-US/Add-ons/SDK/Low-Level_APIs/platform_xpcom
+- XPCOM module makes it simpler to perform three main tasks 
+    + implement XPCOM object interface 
+    + implement and register XPCOM fatories 
+    + implement and register XPCOM services 
+    
+- all you need to do is use XPCOM and that someone else has implemented then you juse use require("chrome") to get access to the Components and access XPCOM objects
+
+- implementing XPCOM interfaces, nsISupports is the fundamental interface by subclassing Unknown 
+
+- example add-on implements the nsIObserver interface to listen for and log all topic notification 
+var { Class } = require('sdk/core/heritage');
+var { Unknown } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome')
+var observerService = Cc['@mozilla.org/observer-service;1'].
+                        getService(Ci.nsIObserverService);
+
+var StarObserver = Class({
+  extends:  Unknown,
+  interfaces: [ 'nsIObserver' ],
+  topic: '*',
+  register: function register() {
+    observerService.addObserver(this, this.topic, false);
+  },
+  unregister: function() {
+    observerService.removeObserver(this, this.topic);
+  },
+  observe: function observe(subject, topic, data) {
+    console.log('star observer:', subject, topic, data);
+  }
+});
+
+var starobserver = StarObserver();
+starobserver.register();
+
+- implementing XPCOM factories, xpcom module exports a class called Factory which implements the nsIFactory interface, you can use it to register factories for your custom XPCOM 
+
+var { Class } = require('sdk/core/heritage');
+var { Unknown, Factory } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome');
+
+var contractId = '@me.org/helloworld';
+
+// Define a component
+var HelloWorld = Class({
+  extends: Unknown,
+  get wrappedJSObject()  {return this;},
+  hello: function() {return 'Hello World';}
+});
+
+// Create and register the factory
+var factory = Factory({
+  contract: contractId,
+  Component: HelloWorld
+});
+
+// XPCOM clients can retrieve and use this new
+// component in the normal way
+var wrapper = Cc[contractId].createInstance(Ci.nsISupports);
+var helloWorld = wrapper.wrappedJSObject;
+console.log(helloWorld.hello());
+
+- using class ID, specify a class ID for the factory, if you don't specify one the factory will generate one and it could accessed by the id property of the factory. 
+
+the XPCOM user also support use the factory id to lookup factory 
+var { Class } = require('sdk/core/heritage');
+var { Unknown, Factory } = require('sdk/platform/xpcom');
+var { Cc, Ci, components } = require('chrome');
+
+// Define a component
+var HelloWorld = Class({
+  extends: Unknown,
+  get wrappedJSObject() this,
+  hello: function() {return 'Hello World';}
+});
+
+// Create and register the factory
+var factory = Factory({
+  Component: HelloWorld
+});
+
+var id = factory.id;
+
+// Retrieve the factory by class ID
+var wrapper = components.classesByID[id].createInstance(Ci.nsISupports);
+var helloWorld = wrapper.wrappedJSObject;
+console.log(helloWorld.hello());
+
+- replacing factories, if the factory you create has the same contract ID as an existing registered factory, then your factory will replace the existing one. However the Components.classes object will not updated at run time. to access the replacement factory you need to do 
+
+var id = Components.manager.QueryInterface(Ci.nsIComponentRegistrar).
+  contractIDToCID('@me.org/helloworld');
+var wrapper = Components.classesByID[id].createInstance(Ci.nsISupports);
+
+xpcom module support helper method to do the same 
+var wrapper = xpcom.factoryByContract('@me.org/helloworld').createInstance(Ci.nsISupports);
+
+factories are automatic register and unregistered
+
+- implementing XPCOM services 
+
+xpcom module exports a class called Service you can use to define XPCOM services, making them available to all XPCOM users 
+
+var { Class } = require('sdk/core/heritage');
+var { Unknown, Service } = require('sdk/platform/xpcom');
+var { Cc, Ci } = require('chrome');
+
+var contractId = '@me.org/timestampedlogger';
+
+// Implement the service by subclassing Unknown
+var TimeStampedLogger = Class({
+  extends: Unknown,
+  get wrappedJSObject() this,
+  log: function(message) {
+    console.log(new Date().getTime() + ' : ' + message);
+  }
+});
+
+// Register the service using the contract ID
+var service = Service({
+  contract: contractId,
+  Component: TimeStampedLogger
+});
+
+// Access the service using getService()
+var wrapper = Cc[contractId].getService(Ci.nsISupports);
+var logger = wrapper.wrappedJSObject;
+logger.log('a timestamped message');
+
+- register and unregister. factories and serice are registered with XPCOM automatically when they are created and unregister when they unloaded 
+
+use register and unregister options to override this 
+
+var xpcom = require('sdk/platform/xpcom');
+
+var factory = xpcom.Factory({
+  contract: contractId,
+  Component: HelloWorld,
+  register: false,
+  unregister: false,
+});
+
+manual register by 
+xpcom.register(factory);
+xpcom.unregister(factory);
+
+check if a factory required manually register by 
+if (xpcom.isRegistered(factory))
+  xpcom.unregister(factory);
+
+- reference, building XPCOM component in javascript 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Building_components_in_JavaScript
+http://mxr.mozilla.org/mozilla-central/source/js/xpconnect/loader/XPCOMUtils.jsm
+https://developer.mozilla.org/en-US/docs/wrappedJSObject
+
+- compile binary xpt file need gecko sdk 
+https://developer.mozilla.org/en-US/docs/Gecko_SDK
+
+
+# Directory and file operations 
+- nsIFile 
+    + constant 
+NORMAL_FILE_TYPE 	0 	A normal file.
+DIRECTORY_TYPE 	1 	A directory/folder.
+DELETE_ON_CLOSE 	0x80000000 	Optional parameter used by openNSPRFileDesc
+
+    + create file 
+create 
+
+# Firefox addon debug in test, need check 
+- jsdebugger xpcom interface 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/IJSDebugger
+https://developer.mozilla.org/en-US/docs/Tools/Debugger-API
+
+# CTypes conversion 
+https://developer.mozilla.org/en-US/docs/Mozilla/js-ctypes/Using_js-ctypes/Working_with_data

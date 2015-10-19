@@ -1,0 +1,1072 @@
+﻿.NET Internals and Advanced Debugging Techniques=Mario Hewardt;Note=Erxin
+
+# CLR internals 
+- Peeling hte .net onion 
+    + what you learn in this course is applicable to all .net technologies 
+    + lays the foundation for sbusequent modules 
+    + don't worry about the tools, focus on the concepts 
+    + introduction and overview 
+    + CLR process 
+    + assemblies 
+    + value types 
+    + reference types 
+    + lots of demos using the debugger to introspection on the state of the clr 
+    
+- overview 
+    + virtual runtime environment 
+    common language runtime, CLR 
+    + a number of supported languages 
+    c#/vb/c++(cli)/ironPython/IronRuby 
+    + microsoft inermediate language 
+    + clr provides benefits such as 
+        * automatic memory management 
+        * rich security subsystem 
+        * code verification 
+        * and much more 
+        
+    + oview view 
+.net application 
+|
+V
+.net framework 
+|
+V
+common language runtime (microsoft/mono)
+|
+V
+ecma common language infrastructure 
+
+    + execution process 
+    source code -> compiler -> .net assembly -> clr jit -> machine code and execute 
+    
+- loading clr images 
+    + uses the Portable Executable file format(PE)
+        * same format that has been around for years 
+        * includes metadata about the image 
+        
+    + start address point to mscoree.dll 
+        * minimal clr shim to bootstrap the runtime 
+        * initialize right version of the clr 
+        * loads and initializes the clr 
+    + loading clr images 
+    on windows 200 image contains a JMP instruction to _CORExeMain
+    + on windows XP and higher, the windows was modified to "know" about the CLR 
+    JMP instruction no longer necessary 
+
+- CLR process 
+    + application domain 1
+        assembly type, type, ...
+        assembly type, type, ...
+    + application domain 2 
+        ...
+    + application domain 3 
+
+- application domains 
+    + improves the stability and reliability of .net applications 
+    + isolation boundary 
+    security 
+    resources and cross domain marshalling 
+    general bugs 
+    + often transparent to developers 
+    API's to create and tear down application domains 
+    some technologies such as iis exposes settings to control application domains 
+    + clr always creates 3 application domains 
+    system 
+    shared 
+    default 
+    
+    + system application domains tasks 
+        * creates the shared and default application domains 
+        * loads mscorlib.dll 
+        * application domain book keeping 
+        * book keeping of string literals 
+        * Precreation of exception instances, the exception instance is created for accelerate the application execution 
+        
+    + shared application domain contains 
+        * contains mscorlib.dll 
+        * contains some basic types form the system namespace(string, enum, array, etc)
+        * contains non user mode code 
+             CLR hosts can inject into this domain, such as use COM host CLR 
+            
+    + default application domain contains 
+        * all user code and resources 
+        * resources are only valid within this application down 
+        
+    + demo 
+    $ ntsd *.exe 
+    to start debugging 
+    $ ntsd
+    > .symfix
+    > .reload 
+    > g 
+    > .load sos mscorwks 
+    > !DumpDomain
+        
+    get data from percific application domain by 
+    > !DumDomain address_domain
+    
+    + for .net 4.0+ application should use 
+    > .loadby sos clr 
+    instead of 
+    > .loadby sos mscorwks 
+    
+- Assemblies 
+    + primary building block 
+    + primary deployment unit 
+    + assemblies are self describing 
+        * reflection can be used to access all the data 
+
+    + contains one or more modules 
+    + two different types of assemblies 
+        * private 
+        * shared 
+        
+    + assembly and modules 
+    Single File 
+    +---------+
+    |manifest |
+    |-------- |
+    |module 1 |
+    |-------- |
+    |module 2 |
+    |-------- |
+    |...      |
+    |module X |
+    +---------+
+    
+    modules is where the code is in, could be anywhere or internet 
+    
+    + shared assemblies 
+    used by multiple applications 
+    typically stores in the global assembly cache 
+    commonly uses strong names for identification 
+    
+    + private assemblies
+        * provide to one application or component 
+        * common deployed to the same folder(or subfolder) where the application resides 
+        
+- global assembly cache 
+    + collection of shared assemblies avaliable 
+    + located under %windir%\assembly 
+    + assemblies located by its identity 
+        * strong names and signing required 
+        
+    + assemblies 
+        * assembly identity consists of the following 
+        * assembly name 
+        * version (major, minor, build, revision)
+        * culture 
+        * public key 
+        * processor architecture 
+        
+    + shared assemblies installed into the GAC must be signed 
+    + assembly manifest has versions and public key to know which assembly to bind to 
+    + can be overridden by policy 
+    
+- demo looking at assemblies, use ntsd 
+>!DumpAssembly address
+>.load sos mscorwks
+>!eeheap -loader #dump all the modules the application load 
+>!DumpDomain
+
+this is a common problems, in runtime .net could create dynamic assemblies 
+while(true)
+{
+    ...
+    XmlSerializer se = new XmlSerializer(typeof(Person), root);
+    ...
+}
+some of the xml serializer constructor create new module instance at each time, which will be loaded into applicaton domain 
+when a module is loaded into app domain, you could not unload it until application exit
+
+- assembly manifest 
+    + resides in either 
+    PE image of the assembly 
+    separate PE image in case of multi module assembly 
+    + assembly manifest contain 
+    dependent assemblies 
+    version 
+    public key 
+    resources 
+    
+- demo 
+looking at assembly manifest(ILDASM), ship with part of .net sdk 
+- modules 
+    + assemblies are logical constructs 
+    + modules are physical contructs, relative your codes 
+    + must be part of an assembly 
+    + build string 
+    csc /target:module 
+    normally visual studio will automatic do it 
+    + adding modules to assemblies 
+    csc /addmodule 
+    
+- types overview 
+    + fundamental unit of programmability 
+    for example, the c# class construct is a type 
+    
+    + custom defined types 
+    new types defined by developer
+    
+    + built in types 
+    .net framework classes 
+    
+    + two primary categories 
+    values types 
+    reference types 
+    
+- value types 
+    + stored on a threads stack 
+    + characteristics of value types 
+    small in size 
+    primitive types(bool, int, enums etc)
+    
+    + do not occur the same overhead as reference types 
+    as long as they are not used as reference types 
+    boxing/unboxing incurs overhead, create serious performance issue 
+
+- reference types 
+    + stored on the managed heap
+    + managed by the garbage collector 
+    + types 
+                      thread stack 
+    local variable -> value data 
+    
+                      managed heap 
+    local variable -> reference type data 
+    
+- demo 
+    + looking at value types 
+    $ ntsd *.exe 
+    > g
+    > .symfix 
+    > .reload 
+    > .load sos mscorwks 
+    > ~0s //switch to thread 0 
+    > !ClrStack 
+    > dq address_local_variables 
+    
+- types 
+    + reference types carry additional metadata 
+    ...|Syncblck|Handle|object instance|...
+    
+    two fields relative to the objects on the heap 
+    Syncblk contains axillary metadata about instance 
+    Type handle contains the self describing nature of types 
+    
+    + types 
+    sync blocks contains axillary data such as 
+        * lock information 
+        * interoperability 
+        * hash code 
+        
+    can take the form of one of the following, sync block is small just several bits 
+        * data stored directly in the field if there is space 
+        * an index into a sync block table when there is not enough space to save sync block information by the clr 
+    
+    + sync block demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > .load sos mscorwks 
+    > !syncblk 
+    index, syncblock, monitorHeld, recursion, owning threa info, sync block ower 
+    
+    monitorHeld, some on has a lock on this object 
+    recursion, how many time a thread is request this block 
+    owning thread info and id and debugger id 
+    sync block owner address and full qualified object id 
+    
+    this is useful to debug lock issue 
+    
+- method tables 
+    + also known as a type handle 
+    can be used interchangeable
+
+    + contains information that describes the type 
+    methods 
+    virtual methods 
+    interfaces 
+    size 
+    
+    compare to native code, we can't get all the type information in the memory 
+    
+    + demo method tables 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > ~0s //switch to thread 0 
+    > !ClrStack -a //display thread stack 
+    > !do object_address  //dump object command
+    MT, Field, offset, type, VT, attr
+    MT, is the method table 
+    
+- method descriptors 
+    + additional information that completes the descriptive nature of types 
+    + type handle contains basic information about method on the type 
+    + method descriptor augments that information 
+        * JIT status 
+        * address of JIT'ed code 
+
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > ~0s //switch to thread 0 
+    > !ClrStack -a //display thread stack 
+    > !do object_address  //dump object command
+    MT, Field, offset, type, VT, attr
+    MT, is the method table 
+    > !DumpMT -md method_table_address 
+    MethodDesc,     Table,      JIT,    Name 
+    
+    JIT, PreJIT
+    MethodDesc, address 
+    
+- summary 
+    + clr internals is the foundation for successful .net debugging 
+    + dissected .net 
+        * clr images 
+        * applicatoin domains 
+        * assemblies 
+        * types (reference and value types)
+    + you will see these CLR internal constructs over and over again in subsequent modules 
+    
+   
+# Core Debugging Tasks 
+- outline 
+    + introduction and overview 
+    + running the debuggers 
+    + debugger commands 
+    including clr specific extensions 
+    + postmortem debugging 
+    + managed debug assistants(MDA)
+    
+    + fundamentals 
+    how is it different from native debugging? 
+        * native debuggers don't "understand" manage code 
+        * need help in the form of debugger extensions 
+    + internals of the clr is just native code written by c++ 
+        * JIT
+        * managed heap 
+        * garbage collector 
+    + we'll cover everyday commands in this module 
+        
+- primary debugger extensions 
+    + sos 
+    son of strike, strick is used by microsoft to debug but expose to much information of .net 
+    ships as part of the core 
+    supports CLR 4.0 
+
+    + sosex 
+        * 3rd party extension 
+        * authored by Steve Johnson 
+        * adds powerful commands 
+        * supports CLR 4.0 
+        * http://www.stevestechspot.com
+
+    + PSSCOR2/PSSCOR4 
+        * superset of SOS 
+        * originally developed for iis debugging 
+        * http://www.microsoft.com/downloads/en/details.aspx?FamilyID=5c068e9f-ebfe-48a5-8b2f-0ad6ab454ad4&displayLang=en
+
+- launching the debuggers 
+    + attaching to a running process 
+    find the process identifier using TLIST(tool in debug package)
+    use the -p <process identifier> switch 
+    for example, $ntsd -p 1438 
+
+    + launching the process under the debugger 
+    $ntsd notepad.exe 
+    
+    + make sure to use the right debugger architecture, 32, 64, otherwise will display the wrong content or fail 
+    
+- symbols 
+    + less important due to the self describing nature of .net, native code required symbols 
+    + private symbols gives additional information 
+        * source line numbers 
+        * local variable names 
+        
+- command categories 
+    + object inspection, check the information from the object in the heap 
+    + code and threads, get management code call stack 
+    + diagnostics, walk object by object in the heap 
+    + CLR data structures 
+    
+- loading the extensions 
+    + SOS 
+    .load full_path_off_assembly
+    .load sos mscorwoks //this is a shortcut, will load the sos with same location as mscorworks 
+    CLR 4.0: loadby sos clr //for 4.0 use clr, microsoft change the mscorwks to clr 
+    
+    + SOSEX 
+    .load sosex //to the extension to the path 
+    + PSSCOR2 
+    .load psscor2 //for .net 2
+    + PSSCOR4 
+    .load psscor4 //for .net 4
+
+- object inspection 
+    + object inspection 
+    !DumpObject, dumps a single reference object 
+    !DumpArray, Dumps an array object 
+    
+    why difference DumpObject, DumpArray, array is fist class citizens, first is int32 not the real object array 
+    !GCRoot: Dumps the reference chain of an object, if you looking at managed heap, find why object still being reference and not released 
+    
+    !mdv, display local variables 
+    !strings: dump out all the strings 
+    + illustrates the power of the self describing nature of the CLR 
+    + when an exception is thrown it can be displayed as any other reference type 
+    use the !do command to dump a single one 
+    dump the whole managed heap to check all the exception
+    + other useful exception command 
+    !threads, shows the last exception thrown on any given thread 
+    !PrintException, shows the exception information of the specified exception 
+    Exceptions are first class type citizens 
+    when should you use !do vs !PrintException?
+        * all exceptions should derive from the top most exception class of .net, contains members and error code and call stacks 
+
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g
+    //break in by ntdll!DbgBreakPoint
+    > .loadby sos mscorwks 
+    > !DumpHeap 
+    Address         MT(method table)      Size
+    total #objects 
+    Statistics:
+    
+    MT              Count           TotalSize       Class   Name 
+    0007feefad58f8  209             17688           System.Collection.ArrayList+SyncArrayList
+    > !DumpHeap -type  TypeName 
+    //wll only dump the information about the particular type  
+    > !do object_address  //id used with array will display the array information 
+    > !da array_address //will display all the elements of the array
+    > !threads //dump all the managed threads 
+    PreEmptive                                                           Lock
+    ID  OSID    ThreadOBJ   State    GC  GC Alloc Context        Domain          Count APT Exception  
+    
+    the exception will be print out for each thread 
+    
+    ntdll!ZwTerminateProcess is the end of a process, ntsd will break all the time at the end of a process 
+    > .restart // to restart the process 
+    > sxe exception_code 
+    //any exception will be display with a exception code use .restart and sex exception_code to break the process
+    //whenever the specify exception acuroed 
+    > g
+    // resume the execution whenever encounter the exception will stop the execution 
+    //use !thread to display the thread information and check the exception detail 
+    > !thread 
+    > !do exception_address
+    // to dump the exception detail information 
+    
+- Code and Threads
+!U, disassembles the code at the specific address 
+!IP2MD, returns the method descriptor for the given code address, whenever a exception happen in managed code will 
+    display the relative native machine code, to get the original managed code will required to use the !IP2MD command, which is IP to method descriptor 
+!threads, displays all managed threads in the process 
+!ClrStack, displays the managed call stack of the current thread, which is different from the native call stack command 
+    + -l show local variables 
+    + -p shows the arguments 
+     
+~*e!ClrStack, displays all managed threads their callstack, this is a shortcut, which is a composite command, ~*e is means execute a command for every single thread, ClrStack is the command 
+
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > .loadby sos mscorwks 
+    > ~0s //switch to thread 0 is the primary thread 
+    > k //native get call stack is 
+    Child-SP            RetAddr             Call Site 
+    xxxxxxxxx           xxxxxxxxx           mscorworks!IEE+0xd193         
+    > !ClrStack // will display the relative managed call stack. 
+    
+- Diagnostics command, introspect on field of data 
+!VerifyHeap, validates managed heap integrity, check the managed heap is OK, such as the object on the heap is overlap or not 
+!GCHandles, each .net process have its handle table shows all handles in the process, a pin object represent a handle which contain in the handle. Static object will not go away and will save it into handle tables 
+!GCHandleLeaks, Attempts to find leaked handles 
+!VMStat, virtual memory statistics 
+
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > .loadby sos mscorwks 
+    > !VerifyHeap 
+    //no output means OK 
+    > !GCHandles
+    //check the GC handle 
+    statistics information 
+    
+    Statistic 
+    MT      Count       TotalSize       Class Name 
+    > .load sosex 
+    // will load the sos extension commands which required download the sosex first 
+    > !gch 
+    //display the handle informations 
+    HandleObj   HandleType      Object      Size        Type 
+    000xxx      WeakLong      000xxxx       114         System.RuntimeType+RuntimeTypeCache 
+    ...         Strong 
+    ...         WeakShort 
+                
+    > !GCHandleLeaks 
+    //if not reference to the handle will be a handle leak 
+    
+- CLR data structures 
+    + we've already seen examples of this 
+    + !DumpDomain, dumps out the application domains 
+    + !ThreadPool, dumps out information on the CLR thread pool 
+    + !DumpIL, Dumps the IL for the specified address also other data structure, the finalize queue in garbage collection module 
+
+- Post-mortem debugging, the ability to debug a problem offlines 
+    + one way attach debugger when problem happens
+    
+    + works on the basis of static process snapshots 
+        * known as crash dumps 
+        * managed code debugging requires full memory information 
+        * limited functions in debugger 
+        can't control execution during debugging, you could only check the process states 
+        
+    + how are crash dumps generated?
+    + several tools exist
+        * debugger using .dump command 
+        * adplus.vbs, more powerful tool that monitors for events 
+        * DebugDiag, crash dump generator and analysis engine 
+        * window error reporting 
+
+- analyzing crash dumps 
+    + use the debugger /z switch to specify crash dump file 
+    $ntsd /z *.dmp 
+    
+    + managed code caveat 
+        * the exact same version of the framework must be installed on the debugging machine 
+        * managed code debugging requires parts of the CLR to run(namely data access layer)
+
+    + data access layer 
+        * implemented in mscordacwks.dll to require target process for data 
+        * version specific 
+        * most versions of mscordackws(99%) are indexed on the MS public symbol server 
+        
+        * as long as you do a .symfix you are good to go, point the debugger to the microsoft symbol version to pull the right symbol file 
+        
+    + what happens if the version you need is not indexed? 
+        * ask the person on the faulty machine to send you the mscordackwks.dll 
+        * set the symbol path to where you stored the file 
+        * force reload symbols 
+
+    + if that is not enough you need to match the bitness! 
+        * 32bit crash dump needs to be debugged on 32/64bit machine 
+
+
+    + demo 
+    > .dump /ma save_path
+    
+- managed debug assistants (MDA)
+    + little known debugger helper 
+    + similar to application verifier, when application running it will check the application, when error happen it will do error logging or break into debugger in native code 
+    
+    + provides extended instrumentation to catch tough bugs 
+    + enabled via the registry and config files 
+        * HKLM\software\microsoft\.netframework\MDA="1"
+        
+        create a configuration file named as 
+        <appname>.exe.dma.config
+        example
+        myapp.exe.dma.config 
+        http://blogs.msdn.com/b/thottams/archive/2006/10/20/managed-debugging-assistants-mda-s.aspx
+        this is used to MDA whats specific feature you want to enable 
+        example 
+        <mdaConfig>
+          <assistants>
+            <pInvokeStackImbalance enable="true"/>
+          </assistants>
+        </mdaConfig> 
+        
+        Category            Description 
+        P/Invoke            Platform invocation bugs, managed have type code convention, native have many calling convention
+        COM Interop         COM interop bugs 
+        Loader              Loader related problems 
+        Threading           Threading issues 
+        Miscellaneous       Misellaneous debugging issues 
+        
+    + Demo, managed debug assistants
+        * add register key 
+        HKLM\software\microsoft\.netframework\
+        create a string key, named MDA and value to 1
+
+        * create a mda configuration file 
+        app.exe.mda.config
+
+        * run the application in debug 
+        during the go mda will display warning message about any relative things happens
+
+
+# Garbage Collection 
+- Outline 
+    + introduction and ovewview 
+    + deep dive on garbage collection internals 
+        * memory architecture 
+        * generations 
+        * roots 
+        * finalization 
+        * large object heap 
+        * pinning problems 
+        
+    + CLR 4.0 enhancements 
+    + lots of demos throughout 
+
+- C vs. C# 
+C code 
+BYTE* p = new BYTE[200];
+delete[] p;
+
+C# code 
+BYTE[] P = new BYTE[200];
+    
+    + background 
+    automated memory manager implemented as a garbage collector 
+    old concept - introduced in 1959 LISP 
+    reduces common programming errors 
+        * memory leaks 
+        * double frees 
+        * dangling pointers 
+    supposed to eliminate memory related bugs 
+        * yet, OutOfMemoryException the most common type of .net bug 
+        
+- memory architecture 
+app 
+||
+|+------------------------->CLR heap manager  
+|                                |
++---> window heap manager        |
+        |------------------------+
+        V                        
+virtual memory manager 
+
+app ask a byte, virtual manager will return a page (4k normally)
+managed code app will not use the window heap manager, instead use the clr heap manager 
+
+process address space 
+Small object heap 
+Ephemeral Seg [......], the objects in short live will end at this segment 
+Segment 2     [......]
+Segment X     [......]
+
+Large object heap 
+Segment 1     [......]
+...
+Segment X     [......]
+
+- workstation vs. server 
+    + Service GC optimized for throughput 
+    When GC need to start garbage collection, will pause all current managed threads go out and do may garbage collection and then resume all the threads 
+    
+    this is the server GC process 
+    + Workstation optimized for minimal lag 
+    GC still pause threads, it will let periodic of intervals and then pause the thread execute again, to let less lag for workstation 
+    
+    + Prior to CLR 2.0 
+        * MSCORWKS.DLL implemented workstation 
+        * MSCORSVR.DLL implemented server 
+        
+    + Server mode has one heap per processor 
+    + Server mode has one dedicated GC thread 
+        * workstation runs GC on thread that caused the GC to occur 
+    
+- Memory allocation process 
+    + what cause a GC? memory allocation
+        * generational threshold breached 
+        
+    + GC.Collect API, to manually trigger, never ever use this function in production code. this will mess the memory managed pattern 
+    
+    + System wide memory pressure such as 80 percent used up the memory for the system 
+    
+    + memory allocation process 
+    alloc.Request -> GC? -yes-> Invoke GC 
+                    |             |
+                    no            |
+                    |-------------+
+                    V
+                Set alloc ptr.
+                    |
+                    V
+                    Clean mem 
+                    |
+                    Done 
+    
+    native heap will window heap, front, back allocator to find free block 
+    
+- Memory allocation process, memory pressure 
+    + demo memory allocation 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g
+    > .loadby sos mscorwks 
+    > !DumpHeap 
+    > !DumpHeap -stat //limit the output just the statistic 
+    > !DumpHeap -type type_name //only output the specify types 
+    
+- Generations, break things into three generations to avoid scan all heap to release object 
+    + generational garbage collector 
+    + generation 0: short lived objects 
+    collected frequently 
+    + generation 1: medium lived objects 
+    collected les frequently 
+    + generation 2: long lived objects 
+    variable size and expensive to collect 
+    + generation 0 and 1 is known as the ephemeral segment 
+    fixed size 
+    
+    object always allocated to generation 0, then object prompt to next generate after each GC collection, if it is still alive 
+    + SOS commands to find out which generation is the object belong to 
+    !eeheap -gc, output all of the segment of the management heap 
+    
+    + SOSEX commands, sosex command may a little lag after each .net framework release 
+    !gcgen <address> 
+    
+- Demo Generations 
+    > ~0s //switch to thread 0 
+    > !ClrStack 
+    > !do <address>
+    > !eeheap -gc //display the gc relative generation information need to compare the variable address to get the generation values 
+    > !gcgen <address> //will directly display the gen 
+- Roots 
+    + GC uses roots to find which objects are alive or dead 
+    + any object with an existing reference to it has a root and is thus considered alive 
+    + roots are determined using the following components, clr make determination 
+        * JIT compiler, knows the reference 
+        * Stack walker
+        * Handle table, handle can be wrap object  
+        * Finalize Queue 
+        
+    + SOS commands 
+    !gcroot <object_address>, get reference chain, 
+- Demo Roots 
+figure out who is holding the reference of a object 
+
+a static definition will not go away which will always in memory, the handle will be pinned 
+a static variable reference point to a large heap object will cause memory leak 
+
+> !gcroot object_address 
+Scan Thread 0 OSTHread 1d08 
+Scan Thread 2 
+...
+RSP:xxx:Root:000xx(System.Threading.ThreadHelper)->xxxx(Advanced.Net.Debugging.Charpter.NName)
+....
+DOMAIN(000xxxxxx):HANDLE(Pinned):1c17f8:Root:000xxxx(System.Object[])->000xxx(Advanced.NET.Debugging.Charpter.Name)
+
+RSP, is the stack pointer register which means the object is on the thread stack normally this is not the leak source, not interested at the thread has some root 
+
+DOMAIN(000xxxx), is the application domain 
+the -> pointed object is the one be referenced 
+- Finalization Overview 
+    + managed world and native world, use inteoperat service to connected native code and managed code 
+
+    + GC only knows about managed objects 
+    Class called Person, one field for age, 64bit, GC will clean 64bit 
+    Class Person have a point to native memory 100mb, GC only collected the 64bit, THE 100mb will be leak 
+    + objects that wrap natie types need a cleanup mechanism 
+        * for example, a class that wraps a file handle 
+        
+    + objects that wrap a native types must 
+        * implement a finalizer 
+        * implement IDisposable, Dispose 
+        * both methods should use same private helper method to make sure that they do the same thing. Finalizer is the destructor of the class 
+    
+        * the native resource is limit, we need to implement Dispose method to clean the resource and then let the GC clean the left managed code 
+        
+        public class File:IDisposable 
+        {
+            private bool isDisposed;
+            private void Dispose(bool isDisposing)
+            {
+                //cleanup 
+            }
+            
+            public void Dispose()
+            {
+                Dispose(true);
+                GC.SuppressFinalize(this);
+            }
+            
+            ~File()
+            {
+                Dispose(false);
+            }
+        }
+    
+- Finalization Internals 
+    + finalizer are the source of many .net bugs 
+    + expensive 
+        * objects are guaranteed to survive longer than necessary 
+        * object have finalizer, is consider have root, so object dead in generation 0 is still alive till generation 1
+    
+    + invocation of the Finalizer method can be tricky 
+        * dedicated finalizer thread sequentially calls each finalize method, it is series. if one of the finalizer of a class throw exception and cause hang, this will stop the thread to call the rest finalizer methods 
+    
+    + two axillary data structures track finalizable objects in clr, 
+        * finalize queue, all object have a finalizer method is put in this queue 
+        * f-reachable queue, when a object is consider dead, is get move to the f-reachable queue this is the thread finalizer picking object from 
+    
+    + finalization best practices 
+        * whenever possible do not rely on finalization rather always explicity dispose finalizable objects 
+        * if you implement a finalizer you should also implement IDisposable 
+        Dispose suppress the object finalization 
+        * in c# the using {} pattern automatically invokes the Dispose method 
+    
+    + Demo 
+    >! FinalizeQueue
+    ...
+    SyncBlocks to ...
+    generation 0 has ...
+    generation 1 has ..
+    generation 2 has ..
+    Ready for finalization 0 object xxx, this is the F-Reachable queue 
+    Statistics:
+    //contain the information what objects in the finalize queue and F-reachable queue 
+    MT          Count           TotalSize   Class Name 
+    ...
+    
+    > dq <generation_item_address> 
+    //the item in the generation queue is not .net object, so required use raw dump command 
+    xxxx xxx xxxx 
+    //each of the address is relative to a .net object 
+    > !do <object_address> 
+    > !threads
+    Hosted  Runtime:no          PreEmptive                                  Lock
+    ID  OSID   threadObj    State GC    GC Alloc Context        Domain      Count APT Exception
+    the finalizer thread will be mark with (finalizer) at the Exception column
+    the finalizer thread is not a managed thread, it is native thread 
+    > ~#s //switch to the finalizer thread 
+    //use native stack dump command to check the statck 
+    > k 
+    Clild-SP            RetAddr         Call Site 
+    > bp <return_address> 
+    //this bp command will set breakpoint on the return address 
+    > g 
+    //after stop at the break point of the finzalizer return address, check the finalize heap again 
+    > !FinalizeQueue 
+    
+- reclaiming memory 
+    + allocation bursts can cause generation 2 to grow with many segments 
+    + once memory pressure subdues, GC decommits segments on generation two and decommit it again 
+    + the second point can lead to virtual memory fragmentation 
+        * VM_HOARDING flag available to hosts, start with .net 2+ to prevent this 
+        * keeps segments on a free list for reuse, then .net don't have to allocate and free 
+        * you have to the clr host to change the VM_HOARDING, iis have utilize the value because it's the clr host 
+        
+- large object heap 
+    + GC also compaction during garbage collection, make busy memory together 
+    + objects greater than 85,000 bytes 
+    + key different is that LOH is not compacted 
+        * very common cause of memory fragmentation 
+        * move a bigger is a expensive operation 
+    + introduced to avoid the cost of compaction 
+        * reason is memory copy for the large object 
+        
+- pinning, gc compact the small object heap, object is move around 
+a class have a pointer, point to a bit array or int 100k, this byte array is populated by a native call, further more let's say the native call pop the data by async method, will write the data to the pointer value. when the native thread return from populate code, during that, the GC happened, as part of the gc compassion happened if the poplated data before the GC move the object, then you will get a corrupted heap 
+
+    + as part of compaction the GC may move an object around 
+    + problem for objects passed to native code 
+        * for example, a buffer to async native operation 
+    + pinning tells the GC that is not allowed to move the object, then your memory start getting gaps in your heaps, memory fragment could be a big issues 
+    
+- memory fragmentation 
+    + enough overall memory but not enough contiguous free memory 
+    free | busy | free | busy | free | busy 
+    
+    if you want to get two size of the free memory, then you will get running out of memory, the memory have to continuous to meat the required 
+    
+    + if you have to pin an object make sure the pinning is as short lived as possible
+    + large object heap fragmentation very common due to no compaction 
+    + suspect memory fragment happening in SOS is 
+    !GCHandles, will how many handle do you have 
+    !DumpHeap 
+    
+    redesign and break object up and to keep the object on the small object heap 
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > .loadby sos mscorwks 
+    //run lots of memory first check the heap 
+    > !eeheap -gc 
+    ...
+    segement        begin           allocated           size 
+    ...
+    Total Szie 0xxxxx 
+    GC Heap size 0xxxxx(size_of_heap)
+    
+    > !DumpHeap -stat 
+    //get statistic of the heap, which is sort by total size 
+    //check the max number of the objects and the free space the type mark with Free is free space. 
+    //if have lots of objects and lots of free space instance means have memory fragmentation issues 
+    //check the pin handle next 
+    > !GCHandles 
+    ...
+    Pinned Handled: xxxx, //if normally it is less than 1 thousands 
+    ...
+    Statistics
+    MT          Count           TotalSize       Class Name 
+    000xxxxx   000xxxx     0
+    ...
+    // check the number and compare with pinned object number 
+    // use !DumpHeap command to check the object layout on the heap 
+    > !DumpHeap 
+    //each type is unique identify by its method table(MT), check the address of the big number instance if they are all in the pinned handled address range, then it means the memory fragmention happened 
+    
+- clr 4.0 enhancements 
+    + in clr 2.0 a GC always meant pausing of threads 
+    + in CLR 4.0 the background GC was introduced 
+        * large memory foot print application let to workstation GC reverting behavior to blocking behavior 
+        * during a full GC allows ephemeral collection to occur 
+        * only available in workstation mode 
+        
+- summary 
+    + even tough garbage collection is supposed to make life easier for us its not a silver bullet 
+    + plenty of ways to get yourself into trouble 
+    + understanding the garbage collector makes it less likely to fall into these traps 
+    + effectively utilize the debuggers to do advanced root cause analysis on memory problems 
+
+    
+# Thread Synchronization 
+- Introduction and overview 
+    + synchronization problems represent a large category of software defects 
+    + surface level thread analysis is usually not sufficient 
+    + a deep understanding of the underlying runtime helps reduce time to resolution 
+    + utilizing the powerful debuggers and extensions aids greatly in root cause analysis
+    
+- monitors 
+    + basic and fundamentally rooted locking mechanism in .net 
+    lock(obj)
+    {
+        ...
+    }
+    
+    only a thread is allowed to get into the scope, the other thread will waiting 
+    
+    when c# compiler translate this codes, there is no IL lock, c# compiler transfter the code to use the monitor pattern 
+    
+    + lock information stored as part of the object itself, the object instance somewhere on the heap will relative to the object to save the lock information 
+    
+    + lock informatoin sotred as part of the object 
+    + lock information is either 
+        * a thinlock or 
+        * a sync table index 
+        
+    + monitors - syncBlk, every single object have a auxiliary meta data attach to it, the object reference is point to the object data area, but right prior to it 
+    
+    Object Header   Obj Reference 
+                    A
+                    |
+    0x08000002      Object data 
+    |
+    V               
+    Index Block 
+    ...
+    2     [] -> lock information 
+    ...         //other information 
+    
+    0x08 is means the index is point to the syncBlk table the lower part is the index number 
+    Obj Reference-0x4 = Start of Object Header 
+    
+    this will seems a little overhead to get the lock information for the object so the Thinlock is introduced, in .net 2.0 + 
+
+    + Monitors, Thinlock, will directly save the lock information at the header, but there are limit bytes for the object header, when the data is exceed the size, clr will use syncBlk instead of the Thinlock 
+    Thread ID     | Object Data 
+    Object Header   |
+                    V object reference 
+                    
+    Obj Reference-0x4 = Start of Object Header                 
+    
+    + demo 
+    $ ntsd *.exe 
+    > .symfix 
+    > .reload 
+    > g 
+    > .loadby sos mscorwks 
+    > ~0s //switch to thread 0 
+    > !ClrStack -a //get the call stack 
+    //the first frame is the main method, get a local variable address 
+    > !do variable_address
+    ...
+    > !syncblk 
+    //check the sync block 
+    Index   SymcBlock       MonitorHeld     Recursion   Owning    Thread  Info   SymcBlock Owner 
+    ...
+    Index, the index of sync block 
+    MonitorHeld 
+    Recursion, how many time the thread reenter the lock, beware reenter a lock on the same thread 
+    Owning, pointer to the thread 
+    Thread, thread id
+    Info, debugger thread id 
+    SyncBlock 
+    Owner 
+    
+    //check the object header information by raw dump the memory 
+    > dd <address>-0x4 <length>   //raw memory dump example dd 0x257800c-0x4 l1
+    //-0x4 is used to reference the object header 
+    02578008  0800001
+    //the 0800001 is reflect it is a syncblk header and the index 
+    //dd ouput start with 0000001 this means it is a thinlock the 1 is the clr thread id
+    //use the !threads to check the relative thread information 
+    
+    > !threads //will output the thread id 
+                                            PreEmptive  GC  Alloc       Lock 
+        ID  OSID    ThreadObj       State   GC   Context   Domain    Count  APT Excpetion
+    0   1   2378    007879c0        a020    Enabled 0257a0f:0257bfe8     3  MTA  
+    ...
+    
+    the first id 0 is the debugger thread id 
+    the second id 1 is the clr thread id 
+    the third id 2378 is the OS thread id 
+    //the !do command will also display the thin lock information 
+    > !DumpHeap -thinlock //is a shortcut to check the heap about the whole thinlock information 
+    
+- Demo, Deadlock 
+ntsd control keys:
+<Ctrl-B><Enter> Quit debugger
+<Ctrl-C>        Break into Target
+<Ctrl-F><Enter> Force a break into debuggee (same as Ctrl-C)
+<Ctrl-\><Enter> Debug Current debugger
+<Ctrl-V><Enter> Toggle Verbose mode
+<Ctrl-W><Enter> Print version information
+
+$ntsd *.exe 
+> .symfix 
+> .reload 
+> g 
+> .loadby sos mscorwks 
+//if suspect a deadlock happen first check the thinlock objects 
+> !DumpHeap -thinlock 
+//check 
+> !syncblk 
+
+- ReaderWriter locks 
+- win32 lock constructs, .net contain sine win32 locks 
+- lots of demos 
+
+
+# Interoperability 
+- 
+    
+    
+    
+    
+    
+    
+    
+    
+    

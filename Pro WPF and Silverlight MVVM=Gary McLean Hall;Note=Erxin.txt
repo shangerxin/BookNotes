@@ -1,0 +1,951 @@
+﻿Pro WPF and Silverlight MVVM=Gary McLean Hall;Note=Erxin
+
+# Overview of wpf and silverlight
+- subsystems that comprise wpf
+    +------------------------+
+    |Presentation Framework  |
+    +------------------------+
+    |Presentation Core       |
+    +------------------------+
+    |Common Language Runtime |
+    +---------+--------------+
+    |         |MIL Core      |
+    |User 32  +--------------+ 
+    |         |Direct X      |
+    +---------+--------------+
+    |Kernel                  |
+    +------------------------+
+
+The Graphics Device Interface (GDI) API is contained within the GDI32.dll that ships with the Windows operating system
+
+GDI+, which is a C++ implementation of a similar primitive graphics layer but adds support for extra features such as gradient shading and for JPEG and PNG graphics files
+
+- Media
+- Layout
+- Style
+- Control template styles can change only properties on controls, control templates can change the structure of a control
+
+<ControlTemplate TargetType="Button"> 
+    <Border BorderThickness="1"> 
+        <ContentPresenter Margin="2" HorizontalAlignment="Center" VerticalAlignment="2" /> 
+    </Border> 
+</ControlTemplate> 
+
+- Data template, Data templates are similar to control templates in that they allow you to define an underlying structure. 
+<DataTemplate DataType="{x:Type local:Customer}"> 
+    <Label Content="Customer Name:" /> 
+    <TextBlock Text="{Binding FullName}" /> 
+</DataTemplate>
+
+- silverlight
+xaml
+presentation core
+.net framework for silverlight
+web browser
+
+- partial class, targeting wpf and silverlight by using partial classes
+
+- extension methods
+- compiler directives
+    #if DEBUG 
+    System.Diagnostics.Debug.Write(e.Exception.Message); 
+    #else 
+    MessageBox.Show(e.Exception.Message); 
+    #endif 
+
+- test silverlight or wpf
+#if SILVERLIGHT 
+// Silverlight-specific code goes here 
+#else 
+// WPF-specific code goes here 
+#endif
+- xaml property element
+- xaml collections
+- xaml content
+- markup extensions
+<Button Style="{StaticResource myButtonStyle}"/>
+
+- type converter
+- attached properties, attached properties is for the children of container controls to inform their parent of a certain value.
+<DockPanel> 
+    <Button DockPanel.Dock="Left"/> 
+    <Button DockPanel.Dock="Right" /> 
+</DockPanel> 
+
+ OwnerType.AttachedProperty
+- namespace
+xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+
+
+# data binding
+- the power of databinding with xaml
+System.Windows.DependencyObjectand System.Windows.DependencyProperty, to handle to extra functionality required of objects and properties
+    + dependency objects, Dependency objects differ from Plain Old CLR Objects (POCOs)
+ 
+- dependency property hosting, Only DependencyObjectscan host a DependencyProperty
+Method          Purpose
+ClearValue      Clears the local value of the supplied DependencyProperty
+CoerceValue     Invokes the CoerceValueCallbackon the supplied DependencyProperty. 
+GetValue        Returns the current value of the supplied DependencyPropertyas an object instance. 
+InvalidateProperty  Requests a re-evaluation of the supplied DependencyProperty. 
+ReadLocalValue  Reads the local value of the supplied DependencyProperty. If there is no local value, DependencyProperty.UnsetValueis returned. 
+SetValue        Sets the value of the supplied DependencyProperty.
+ 
+- attached property hosting, Once a DependencyPropertyis registered as an attached property using the DependencyProperty.RegisterAttachedmethod, that property can be set on any DependencyObject subclass.
+ 
+- dependency property metadata, specific use of the DependencyProperty
+Property                Purpose
+CoerceValueCallback     Used to inspect and/or change the value of a DependencyProperty whose value is dependent on other property values. Dependency properties are set in an undefined order. 
+DefaultValue            The default value of the DependencyProperty, or DependencyProperty.UnsetValueif no DefaultValueis present. 
+IsSealed                Returns the immutable status of the PropertyMetadataobject: true means immutable, false means mutable. 
+PropertyChangedCallback Returns the delegate that is called when the DependencyProperty’s value changes.
+ 
+It could also have been set after registration with the OverrideMetadatamethod.
+ 
+- dispatcher object, DependencyObjectsderive from System.Threading.DispatcherObject. associates each instance with a Dispatcher object, which manages a queue of work items associated with a single thread
+UI thread owns all of the controls and, because they derive from DispatcherObject, they can’t be accessed directly from other threads.
+ 
+- dependency property, DependencyPropertiesautomatically enable a number of services that are not available to plain properties. 
+    + declared public, static, and readonly
+    + registered via the static DependencyProperty.Register method, inside the static constructor
+    public class MyDependencyObject : DependencyObject 
+    { 
+        public static MyDependencyObject() 
+        { 
+            MyDependencyProperty = DependencyProperty.Register("MyProperty", typeof(string),
+            typeof(MyDependencyObject)); 
+        } 
+        public static readonly DependencyProperty MyDependencyProperty; 
+        public string MyProperty 
+        { 
+            get { (string)GetValue(MyDependencyProperty); } 
+            set { SetValue(MyDependencyProperty, value); } 
+        }
+    } 
+    + register require string name and type of an instance property and host type
+    + there is an instance property that provides a façade for accessing the dependency property as if it were a plain property
+ 
+- xaml integration, 
+<MyDependencyObject MyProperty="Test!" />
+The dependency property MyDependencyPropertyis also set to the value “Test!”.
+ 
+dependency objects and dependency properties are not prerequisites for XAML integration: POCOs and vanilla properties exhibit this same level of XAML integration
+ 
+- databinding, Dependency properties can be set indirectly via databinding.
+<Button Content="{Binding Source=myBindingSource, Path=myContent}" />
+ 
+- property value inheritance, Dependency objects are organized in a tree structure, either directly via XAML markup or indirectly via the Visual Studio designer.
+Whenever a child is assigned to a parent, attached properties that are marked as inheritable are automatically assigned from the parent to the child.
+ 
+example:
+public class MyDependencyObject : DependencyObject 
+{ 
+    public static MyDependencyObject() 
+    { 
+        MyDependencyProperty = DependencyProperty.RegisterAttached("MyProperty",
+        typeof(string), typeof(MyDependencyObject), new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.Inherits)); 
+    } 
+    public static readonly DependencyProperty MyDependencyProperty; 
+    public string MyProperty 
+    { 
+        get { (string)GetValue(MyDependencyProperty); } 
+        set { SetValue(MyDependencyProperty, value); } 
+    } 
+} 
+ 
+FrameworkPropertyMetadataOptions are also added to the dependency property, indicating that this property should be inherited by child elements
+
+- styling, property/value paires that act on the target control
+<Style x:Key="myButtonStyle">
+    <Setter Property="Control.Background" Value="Blue" />
+</Style>
+...
+<Button Style="{StaticResource myButtonStyle}" />
+
+- binding sources, they must be DependencyProperties hosted by DependencyObjects, what types of objects can we bind from?
+    + POCOs, plain old clr object, vanilla properties are perfectly acceptable binding sources although added functionality will be required to support features like change notification
+    databinding is acceptable on the properties subproperties and indexers of objects
+    
+    + dynamic objects, IDynamicMetaObjectProvider
+
+    .net framework XSD.exe applicaiton can be used to parse an XML document output a compatbile XSD file
+    
+    + ado.net objects
+    user <-> wpf/sivlerlight <-> table module <-> record sets <-> ado.net data tables <-> data store
+    
+    + xml objects, data-binding layer and binding directly to the data source is possible when using xml
+    user <-> reporting interaction wpf/silverlight view <-> xml data store
+    
+    + dependency objects and dependency properties
+    
+- binding modes
+one-way, 
+two-way, 
+one-way-to-source, the target control of the binding updates the source property
+one-time
+
+- advanced databinding, binding to collections
+    + binding parameters, they can be used in conjunction with each other to generate the specific binding behavior
+    + BindingGroupName, you can group binding together end encapsulate the access a number of different
+    <TextBox Text="{Binding Path=myTextProperty, BindingGroupName=myBindingGroup}" />
+
+    + BindsDirectlyToSource, when using a derivative of DataSourceProvider, you can binding to the underlying data via a provider
+    
+    + converter and converter parameter
+    <TextBox Text="{Binding myTextProperty}" Visibility="{Binding Path=isTextVisible,Converter={StaticResource myBooleanToVisibilityConverter}}" /> 
+
+    + ElementName, used to help binding from one control to another control
+    <TextBox Text="Hello!" Name="textBox1" /> 
+    <TextBox Text="{Binding ElementName=textBox1, Path=Text}" /> 
+
+    + FallbackValue, use this to display a grace error information
+    <TextBox Text="{Binding Path=myTextProperty, FallbackValue='No value found'}" />
+
+    Wrapping your FallbackValuein single quotes (' ') allows you to insert otherwise restricted characters, such as commas (,) and spaces.
+    
+    + IsAsync, set to true allowing a long-running process to proceed without blocking the rest of the view from binding
+    
+    + NotifyOnSourceUpdated and NotifyOnTargetUpdated, notify value update by
+    first, register an event handler for SourceUpdated, TargetUpdated, or both; then, set the NotifyOnSourceUpdatedor NotifyOnTargetUpdated(or both) binding property to true.
+ 
+    <TextBox Text="{Binding Path=myTextProperty, NotifyOnSourceUpdated=true}"    SourceUpdated="OnSourceUpdated" /> 
+    <TextBox Text="{Binding Path=myTextProperty, NotifyOnTargetUpdated=true}"    TargetUpdated="OnTargetUpdated" /> 
+ 
+    + NotifyOnValidationError, binding property is one method of handling validation in WPF/Silverlight using the MVVM architecture.
+ 
+    <TextBox Text="{Binding Path=myTextProperty, NotifyOnValidationError=true}"
+    Validation.Error="OnValidationError" /> 
+    
+    private void OnValidationError(object sender, ValidationErrorEventArgs args) 
+    { 
+    } 
+ 
+    + Path, binding path parameter relative to current datacontext
+        * direct to data context
+        <TextBox Text="{Binding}" />
+        
+        * binding to a property of datacontext
+        <TextBox Text="{Binding myTextProperty}" />
+        
+        * binding to indexed property
+        <TextBox Text="{Binding Path=myIndexedProperty[2]}" />
+        
+        * collection views, binding to current item using the slash notation
+        <TextBox Text="{Binding Path=myCollectionView/}" /> 
+ 
+    + Source and RelativeSource, DataContext is the default Source, but it is common to bind to a separate object with Source parameter
+    <Window.Resources> 
+        <viewModel:BusinessObject x:Key="myObject" /> 
+    </Window.Resources> 
+    <TextBox Text="{Binding Path=MyTextProperty, Source={StaticResource myObject}}" /> 
+ 
+    Source, is used to reference a object absolutely
+    RelativeSource, is used to reference a object relative to the binding target, most common use is to bind to itself
+    
+    <TextBox Text="{Binding Path=Foreground, RelativeSource={x:Static RelativeSource.Self}}" /> 
+ 
+    + StringFormat,  StringFormatapplies a string formatting expression to the binding value before rendering the whole string to the view
+    <TextBlock Text="{Binding Path=CurrentPrice, StringFormat='{0:c}'}" />
+    
+    + TargetNullValue, TargetNullValueis used when the source of the binding is null. It is useful for specifying default display values for null inputs. 
+    
+    <TextBox Text="{Binding Path=FirstName, TargetNullValue='Please enter your first name…'}" /> 
+ 
+    + UpdateSourceExceptionFilter, NotifyOnValidationError, UpdateSourceExceptionFilteris used in data validation scenarios
+    <TextBox> 
+        <TextBox.Text> 
+            <Binding Path="FirstName" UpdateSourceExceptionFilter="ExceptionHandler"> 
+                <Binding.ValidationRules> 
+                    <ExceptionValidationRule /> 
+                </Binding.ValidationRules> 
+            </Binding> 
+        </TextBox.Text> 
+    </TextBox>
+ 
+    private object ExceptionHandler(object bindingExpression, Exception exception) 
+    { 
+    … 
+    } 
+    
+    + UpdateSourceTrigger, there are three possible
+        + PropertyChanged updates as soon as the target property's value changed
+        + LostForcus
+        + Explicit, need to manually call the UpdateSource method on the binding expression
+    <TextBox Text="{Binding Path=FirstName, UpdateSourceTrigger=PropertyChanged}" />
+ 
+    + Validation, the ValidationRules and ValidateOnDataErrors and ValidateOnExceptions option
+    + XPath, if you are binding directly to xml data, the path property is replaced by the XPath property
+    <TextBox Text="{Binding XPath=/Author[@FirstName='Gary' and @LastName='Hall']}" /> 
+    
+- Data Conversion
+    + IValueConverter Interface
+    + There is a built in System.Windows.Controls.BooleanToVisibilityConverter that provides two way conversion. 
+    <Window x:Class="BooleanToValueConverterExample.MainWindow" 
+            xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" 
+            xmlns:system="clr-namespace:System;assembly=mscorlib" 
+            xmlns:local="clr-namespace:BooleanToValueConverterExample;assembly=" 
+            xmlns:windows="clr-namespace:System.Windows;assembly=PresentationCore" 
+            Title="MainWindow" Height="350" Width="525"> 
+        <Window.Resources> 
+        <local:DomainObject x:Key="myDomainObject" /> 
+        <local:MyBooleanToVisibilityValueConverter x:Key="myBooleanToVisibilityConverter" /> 
+        </Window.Resources> 
+        <StackPanel>
+            <TextBlock Text="This is some sample text..." 
+                Visibility="{Binding Source={StaticResource myDomainObject}, 
+                             Path=ShowText, 
+                             FallbackValue={x:Static windows:Visibility.Visible}, 
+                             Converter={StaticResource myBooleanToVisibilityConverter}, 
+                             ConverterParameter={x:Static windows:Visibility.Collapsed}}" /> 
+            <TextBlock Text="Text below" /> 
+        </StaticPanel>
+    </Window>
+    the fallbackvalue property used general syntax 
+    {x:Static prefix:typeName.staticMemberName} 
+    WindowsXML namespace, which references the System.WindowsCLR namespace.
+    The typeNameis Visibility, which is the enumeration we are using, and staticMemberNameis the enumeration value
+    
+    + IMultiValueConverter, Convertmethod, we have pluralized the value parameter, taking an array of objects instead of a single one. 
+    
+- ObjectDataProvider, declaratively instantiated domain objects as local resource have jeopardize its viability
+    + object must be default constructible
+    + only bind to public properties, methods can't be bound
+    + long-running processes will block the rest of the view's bindings
+    
+    ObjectDataProvider has a permission requirement, the underlying domain object that is being wrapped must be accessible via reflection
+    + object construction, accept values on construction
+    public class DomainObject 
+    { 
+        public DomainObject(string month, decimal balance) 
+        { 
+            Month = month; 
+            Balance = balance; 
+        } 
+        public string Month 
+        { 
+            get; 
+            private set; 
+        } 
+        public decimal Balance 
+        { 
+            get; 
+            private set; 
+        } 
+    } 
+    
+    <Window.Resources> 
+        <ObjectDataProvider x:Key="myDomainObject" ObjectType="{x:Type local:DomainObject}"> 
+            <ObjectDataProvider.ConstructorParameters> 
+                <system:String>September</system:String> 
+                <system:Decimal>-100.00</system:Decimal> 
+            </ObjectDataProvider.ConstructorParameters> 
+        </ObjectDataProvider> 
+        <local:BalanceQuarterColorConverter x:Key="myBalanceQuarterColorConverter" /> 
+    </Window.Resources> 
+    
+    + method binding, add method name property to ObjectDataProvider to support method binding
+    public class DomainObject 
+    { 
+        public Color ConvertQuarterAndBalanceToColor(string month, decimal balance) 
+        { 
+        }
+        
+        private int ConvertMonthNameToQuarter(string month) 
+        { 
+        }
+    }
+    
+    <ObjectDataProvider x:Key="myDomainObjectMethod" ObjectType="{x:Type local:DomainObject}" MethodName="ConvertQuarterAndBalanceToColor"> 
+        <ObjectDataProvider.MethodParameters> 
+            <system:String>April</system:String> 
+            <system:Decimal>-150.00</system:Decimal> 
+        </ObjectDataProvider.MethodParameters> 
+    </ObjectDataProvider>
+    
+    <TextBlock Text="{Binding Source={StaticResource myDomainObjectMethod},BindsDirectlyToSource=True, Path=MethodParameters[1]}"> 
+        <TextBlock.Foreground> 
+            <SolidColorBrush Color="{Binding Source={StaticResource myDomainObjectMethod}}" /> 
+        </TextBlock.Foreground> 
+    </TextBlock> 
+    ObjectDataProvidersimplicitly pass bindings on to their underlying objects, so we override this behavior by setting BindsDirectlyToSourceto True. We pass the Balance in as the second parameter
+    
+    + asynchronous methods set IsAsynchronous property to True to call method async in ObjectDataProvider
+    
+    + binding to enumerations
+    <ObjectDataProvider x:Key="visibilityValues" ObjectType="{x:Type system:Enum}" MethodName="GetValues">
+        <ObjectDataProvider.MethodParameters>
+            <x:Type TypeName="windows:Visibility" />
+        </ObjectDataProvider.MethodParameters>
+    </ObjectDataProvider>
+
+    <ListBox ItemsSource="{Binding Source={StaticResource visibilityValues}}"
+    
+- debugging databinding
+    + check the debug window
+    + TraceSources, are setup in application configuration, app.config file., save trace message into file
+    <?xml version="1.0" encoding="utf-8" ?> 
+    <configuration> 
+        <system.diagnostics> 
+            <sources> 
+                <source name="System.Windows.Data" switchName="SourceSwitch"> 
+                    <listeners> 
+                        <add name="textFileListener" /> 
+                    </listeners> 
+                </source> 
+            </sources> 
+            <switches> 
+                <add name="SourceSwitch" value="All" />
+            </switches> 
+            <sharedListeners> 
+                <add name="textFileListener" type="System.Diagnostics.TextWriterTraceListener" initializeData="DebugTrace.txt" /> 
+            </sharedListeners> 
+            <trace autoflush="true" indentsize="4" /> 
+        </system.diagnostics> 
+    </configuration> 
+    
+    System.Diagnostics.TextWriterTraceListener, which will output errors to the DebugTrace.txt file. you can also have  ConsoleTraceListener and XmlWriterTraceListener, respectively
+    
+- PresentationTraceSources,  System.Diagnostics namespace provides an attached property called PresentationTraceSources.TraceLevelthat can be used on your bindings to generate a complete picture of the steps taken by the binding
+xmlns:diagnostics="clr-namespace:System.Diagnostics;assembly=WindowsBase"
+
+<TextBlock Text="{Binding Source={StaticResource myDomainObject}, Path=ErroneousProperty, diagnostics:PresentationTraceSources.TraceLevel=High}" /> 
+    
+- Value Converter, use value converter to help debugging the binding value, create a PassThroughValueConverter to help set break point
+public class PassThroughValueConverter : IValueConverter 
+{ 
+    public object Convert(object value, Type targetType, object parameter,    System.Globalization.CultureInfo culture) 
+    { 
+        return value; 
+    } 
+    public object ConvertBack(object value, Type targetType, object parameter,    System.Globalization.CultureInfo culture) 
+    { 
+        return value; 
+    } 
+} 
+
+- Templating, much of this capability comes from ControlTemplates
+    + the logic and visual trees
+    logical tree, made up of the xaml elements
+    
+    + there are lots of other elements need to help render logical tree which is called visual tree, all of these derive from System.Windows.Media.Visual, such as UIElement and FrameworkElement
+    
+- Control template
+<Button>
+    <Button.Template>
+        <ControlTemplate>
+            <Ractangle>
+            ...
+            </Ractangle>
+        <ControlTemplate>
+    </Button.Template>
+</Button>
+
+It's more easy to apply the button template into style to help limit the xaml file size
+
+- Data template, can provide a visual structure for our good friend, the Plain Old CLR Object, whenever bind to an object a data template is used to tell the control how to present the object or the toString method will be called
+
+
+# Model-View Separation
+- Separation of concerns,SoC, 
+- Model, View Model, View structure
+View
+|
+V
+View Model
+|
+V
+Model
+
+in the visual studio solution, create each view, view model and model in separate projects
+
+- MVVM Alternatives
+- encapsulation
+- DRY
+- YAGNI, you can't gonna need it, implement only what you need, nothing more
+string compare with ignore case
+emailAddressString.Equals(otherEmailAddress.emailAddressString, StringComparison.InvariantCultureIgnoreCase);
+- the law of demeter, given method of an object may only access the public properties methods, or fields of certain objects available to it
+    + the object to which method belongs and its fields, properties and methods
+    + the parameters that are passed to the method
+    + constructed within the method
+    
+    for example, calculate the tax, Stock Keeping Unit(SKU)
+    salesTax += this.CurrentLocale.Taxes.SalesTaxPercentage * sku.Price;
+    changed to 
+    salesTax += this.CurrentLocale.CalculateSalesTax(sku.Price);
+    
+    will reduce the dependency, if Tax change, only need to change the function in one place
+    
+- test drive development, and especially extreme programming(XP)
+    + unit tests are proof that code works
+    + regression tests are built-in
+    + unit test are first-class clients
+    + unit tests are first-class clients
+    + retrofitting unit test is difficult, "put it off until later" is a synonym for never
+    + why many do not test first
+
+- the view
+    + user input
+    + events
+    + databinding
+    + separating model from view
+        * the mediator pattern
+        <<interface>>           <<interface>>
+        Mediator <-----------------Colleague
+        ^                               ^ ^
+        |                               |                
+        ConcreateMediator  1---->*   ConcreteColleague
+
+    + coupling and cohension
+    
+- other model-view-x implementation
+    + mvp, model view presenter
+    + mvc, model view controller
+    + mvvm basic rule
+        * view must not call methods directly on the model or event bind to data on the model, interaction must be delegated through the view model
+        * the view must not compute values manually
+        * the data exposed by the model must not include formatting inforamtion
+
+# The view model
+- separate the view, viewmodel and model into different project
+- the model
+- the view
+- .net framework interfaces and classes
+    + observer pattern, define a one to many dependency between objects so that when object changes state, all it's dependants are notified and updated
+
+    subscriber --<> Publisher
+    +Notify         + RegisterSubScriber(int subscriber:Subscriber)
+                    + UnregisterSubscriber(int subscriber:Subscriber)
+                    + NotifySubscribers()
+    foreach(var s in sbuscribers)
+    {
+        s.Notify();
+    }
+
+    + INotifyPropertyChanged interface, is part of implementation of the Observer pattern for a specific purpose
+    
+    public PropertyChangedEventArgs(string propertyName);
+    
+    it's not ordinarily recommended to implement INotifyPropertyChanged, or any other observer pattern interfaces within the model
+    
+- observable collections, INotifyCollectionChanged
+public delegate void NotifyCollectionChangedEvetHandler(Object sender, NotifyCollectionChangedEventArgs e)
+
+    + the values of the notifyCollectionChangedAction enumeration and their respective meanings
+    Add, Remove, Replace, Move, Reset (collection changed significantly, consider a full refresh)
+    
+    + ObservableCollection<T>, use this generic type to prevent manually implement the INotifyCollectionChanged interface
+
+    you can also subclass it to make specified type
+    public class ObservableProductsCollection:ObservableCollection<Product>{}
+    
+    + ReadOnlyObservableCollection<T>, you can also wrap anordinary observableCollection<T> in a read only one to expose only the read-only collection
+    
+    + CollectionViewSource, provide more functionality with collections such as to group, sort, filter or select the underlying data
+    
+        * grouping, the CollectionViewSource's GroupDescription property accepts a list of, predictable, GroupDescription which is a name of a property that belongs to the source list items
+        CollectionViewSource appointmentByDate = new CollectionViewSource();
+        appointmentsByDate.Source = appointments;
+        appointmentsByDate.GroupDescriptions.Add(new PropertyGroupDescription("Date"));
+        return appointmentsByDate;
+        
+    + sorting, implemented in a vary similar way to grouping
+    CollectionViewSource appointmentsByDate = new CollectionViewSource(); 
+    appointmentsByDate.Source = appointments; 
+    appointmentsByDate.SortDescriptions.Add(new SortDescription("Location", ListSortDirection.Ascending)); 
+    appointmentsByDate.SortDescriptions.Add(new SortDescription("AttendeeSurname", ListSortDirection.Descending)); 
+    return appointmentsByDate; 
+    
+    the underlying property must implement IComparable in order to be sortable
+    
+    + IComparable
+    + Filtering, implemented in the CollectionViewSource is the reason that it is included as part of the ViewModel, Filter property is an event that requires a FilterEventHandler delegate, which accepts a FilterEventArgs object
+    
+    private void AppointmentsWithinTheNextMonth(object sender, FilterEventArgs e)
+    {
+        Appointment appointment = e.Item as Appointment;
+        if(appointment)
+        {
+            e.Accepted = DateTime.Now.AddMonths(1) > appointment.Date;
+        }
+    }
+    
+- constructing viewModels, the entry point is the view in a WPF or silverlight application, register a application start_up event for ApplicationViewModel
+<Application x:Class="MvvmWpfApp.App" 
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" 
+    xmlns:viewModel="clrnamespace:MvvmWpfApp.ViewModel;assembly=MvvmWpfApp.ViewModel" 
+    Startup="Application_Startup"> 
+    <Application.Resources> 
+        <viewModel:ApplicationViewModel x:Key="applicationViewModel" /> 
+    </Application.Resources> 
+</Application> 
+
+register the start up event and pass the event to the view model by Startup() function
+    
+using MvvmWpfApp.ViewModel; 
+namespace MvvmWpfApp 
+{ 
+    public partial class App : Application 
+    { 
+        private ApplicationViewModel _appViewModel; 
+        private void Application_Startup(object sender, StartupEventArgs e) 
+        { 
+            _appViewModel = Resources["applicationViewModel"] as ApplicationViewModel; 
+            if(_appViewModel != null) 
+            { 
+                _appViewModel.Startup(); 
+            } 
+        } 
+    } 
+} 
+    
+- main window, main window will split into a number of different sections, 
+    
+MainViewModel mainViewModel = _appViewModel.CreateMainViewModel(); 
+MainWindow mainWindow = new MainWindow(); 
+mainWindow.DataContext = mainViewModel; 
+this.MainWindow = mainWindow; 
+this.MainWindow.Show(); 
+    
+- dialogs, create dialog view model for dialog which is a subclass of ChildWindow class
+    
+DialogView dialogView = new DialogView(); 
+dialogView.DataContext = dialogViewModel; 
+bool? dialogResult = dialogView.ShowDialog(); 
+if (dialogResult) 
+{ 
+// handle dialog OK 
+} 
+    
+- handling concurrency, pitfalls of race conditions, deadlocking and livelocking, using the shared memory threading model is included
+    + threading, run a timeslice before move to a next process 
+    in a single processor, in single core machine, there is never any true concurrency
+    
+    + alleviating bound tasks
+    cpu speed, input/output resource network console cpu cache
+    
+    + example tcp server
+    IPAddress ipAddress = IPAddress.Parse("127.0.0.1"); 
+    int portNumber = 1500; 
+    TcpListener server = new TcpListener(ipAddress, portNumber); 
+    try 
+    { 
+        server.Start(); 
+        // This call blocks until a client is received 
+        TcpClient client = server.AcceptTcpClient(); 
+        Console.WriteLine("Client connected!"); 
+        client.Close(); 
+    } 
+    catch(SocketException ex) 
+    { 
+        Console.WriteLine("Socket Exception caught: {0}", ex); 
+    } 
+    finally 
+    { 
+        server.Stop(); 
+    }
+    
+    non block version
+    static void Main
+    {
+        IPAddress ipAddress = IPAddress.Parse("127.0.0.1"); 
+        int portNumber = 1500; 
+        TcpListener server = new TcpListener(ipAddress, portNumber); 
+        try 
+        { 
+            server.Start(); 
+            // This call returns immediately, but there is no guarantee when a client 
+            connects 
+            server.BeginAcceptTcpClient(new AsyncCallback(ClientConnected), server); 
+        } 
+        catch(SocketException ex) 
+        { 
+            Console.WriteLine("Socket Exception caught: {0}", ex); 
+            server.Stop(); 
+        } 
+        Console.ReadKey(); 
+    } 
+    
+    private static void ClientConnected(IAsyncResult asyncResult) 
+    { 
+        TcpListener server = asyncResult.AsyncState as TcpListener; 
+        TcpClient client = server.EndAcceptTcpClient(asyncResult); 
+        Console.WriteLine("Client connected!"); 
+        server.Stop(); 
+    } 
+    
+- Increased Complexity, hard to debug
+    + shared memory, memory shared by two or more threads which is mutable
+    + race conditions
+    + deadlock
+    + thread problem in WPF and silverlight, dispatcher and dispatcherObjects, a vast majority of the classes in the system.windows namespace inherit from System.Windows.Threading.DispatcherObject which tie a System.Object to a specific Dispatcher, only the the thread that the dispatcher was created on can access this object
+    
+    wpf have two threads running, one for rendering and one for handling the UI
+    
+    normally the background code is automatically marshal, sometimes it still need manually marshal
+    
+    + updating the UI, execute code on the dispatcher is simple, but a reference to the UI dispatcher is needed
+    _uiDispatcher.Invoke((Action)delegate{Message.Add("Timer fired");});
+    
+    if the viewMode need to update UI, the viewModel need to accept a Dispatcher as parameter for the constructor, but this is not good for testing
+    
+    factor out view functionality
+    public ViewModel(IView view) 
+    { 
+        _view = view; 
+    } 
+    void TimerElapsed(object sender, ElapsedEventArgs e) 
+    { 
+        _view.AddMessage("Timer fired!"); 
+    } 
+    
+    the IView interface exposes a method per operation that requires running on the UI dispatcher
+    public partial class MainWindow : Window, IView 
+    { 
+        public MainWindow() 
+        { 
+            InitializeComponent(); 
+        } 
+        public void AddMessage(string message) 
+        { 
+            ViewModel viewModel = DataContext as ViewModel; 
+            Dispatcher.Invoke( 
+                (Action)delegate 
+                { 
+                    viewModel.Messages.Add(message); 
+                } 
+            ); 
+        } 
+    } 
+    unit test is still possible
+    
+    using a mediator, is the best answer, dispatcher should stay in the view layer, only one implementation is required for the entire view, interface is passed into all viewModels that requires cross-thread marshalling
+    Aspect Oriented Programming, decorated the method with an attribute that do the required logic such as logging, marshal
+    using System.Windows.Threading; 
+    using PostSharp.Aspects; 
+    namespace DispatcherFailure 
+    { 
+        [Serializable] 
+        public class ExecuteOnUIThreadAttribute : MethodInterceptionAspect 
+        { 
+            public static Dispatcher Dispatcher { get; set; } 
+            public override void OnInvoke(MethodInterceptionArgs args) 
+            { 
+                if (Dispatcher != null && !Dispatcher.CheckAccess()) 
+                { 
+                    Dispatcher.Invoke((Action)delegate { args.Proceed(); }); 
+                } 
+                else 
+                { 
+                    args.Proceed(); 
+                } 
+            } 
+        } 
+    } 
+    [ExecuteOnUIThread]
+    void TimerElapsed(object sender, ElapsedEventArgs e) 
+    { 
+        Messages.Add("Timer fired!"); 
+    } 
+    the static Dispatcher can be set at application startup
+    
+    
+# events and commands
+- events in .net, assign event before check it is null to eliminate race condition
+public static readonly RoutedEvent MyRoutedEvent = EventManager.RegisterRoutedEvent( "MyEvent", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(MyClass)); 
+
+WPF and silverlight don't use plain CLR event, instead use routed event, the difference is CLR events directly inovke the handler on the event subscriber, routed events may be handled by another ancestor in the element tree
+
+there should be one instance of each event per class, so it is stored in a static variable
+
+public event RoutedEventHandler Tap 
+{ 
+    add { AddHandler(MyRoutedEvent, value); } 
+    remove { RemoveHandler(MyRoutedEvent, value); } 
+} 
+The AddHandlerand RemoveHandlermethods are inherited from the UIElementclass, which is an ancestor of all WPF and Silverlight control classes
+
+routing strategies
+    + bubbling
+    + tunneling, starts at the root and tunnels down
+    + direct, circumvented but other routedEvent functionality is still supported
+    
+- event limitations, they must be handled by an instance method on the code-behind class, use attached properties and adapters to force an event to behandle by a separate class
+
+<TextBox Text="{Binding Source={StaticResource myDomainObject}, Path=StringProperty}" TextChanged="TextBox_TextChanged" /> 
+update binding when text changed
+<TextBox Text=”{Binding Source={StaticResource myDomainObject}, Path=StringProperty, UpdateSourceTrigger=PropertyChanged}” /> 
+
+handle the event from the viewModel
+
+private void TextBlock_MouseEnter(object sender, MouseEventArgs e) 
+{ 
+    MyViewModel viewModel = DataContext as MyViewModel; 
+    if (viewModel) 
+    { 
+        viewModel.ProcessMouseEnter(e.LeftButton); 
+        e.Handled = true; 
+    }
+} 
+
+- comments, command pattern, the action it performs while separating the invoker and the receiver of the command
+        Invoker 1<>--->*<<interface>>
+                        Command
+                        + Execute()
+                            A
+                            |
+client 1-->* Receiver *<--1 Command
+                            +Execute()
+
+command pattern
+
+- ICommandSource
+public interface ICommandSource
+{
+    ICommand Command { get; }
+    object CommandParameter { get; }
+    IInputElement CommandTarget { get; }
+}
+
+CommandParameter is a plain object, CommandTarget of type IInputElement
+each class that implements ICommandSource can expose only a single command. This explains why we must rely on events much of the time
+IInputElement is used only when Command is a RoutedCommand
+
+- ICommand Interface
+public interface ICommand
+{
+    event EventHandler CanExecuteChanged;
+    bool CanExecute(object parameter);
+    void Execute(object parameter);
+}
+
+- Routed Command Implementation, WPF and silverlight provide two implementation of ICommand
+    + RoutedComamnd
+    + RoutedUICommand, this have an additional string text property, this enables the command's binding targets, this enables the command's binding targets or source of the command to display the same textual name, RoutedUICommand inheriting directly from RoutedCommand
+    
+    routed command ---<>---- Command Execution Handler
+                      |
+                      |
+                      Command binding
+                      
+    can't directly supply a RoutedCommand into view model, because Executed method will be called by whatever ICommandSource this command is bound to. Which need to supply a UI element as parameter
+    public static void AddExecutedHandler(UIElement element, ExecutedRoutedEventHandler handler);
+
+- the RelayCommand
+    + keep separation between controls as command invokers
+    + declared as instance members of viewModel classes
+    + response to a RelayCommand is normally handled in the same class or the handler will be accessible from the instance via properties or filed
+    
+- attached command behavior, which adapts and event and exposes it as a command taht can be databound just same as any other
+<ListView ItemsSource="{Binding Names}">
+    <ListView.ItemContainerStyle>
+        <Style>
+            <Setter Property="acb:AttachedCommand.Behaviors">
+                <Setter.Value>
+                    <acb:BehaviorBinding Event="MouseDoubleClick" Command="{Binding ShowPersonCommand}" CommandParameter="{Binding}" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </ListView.ItemContainerStyle>
+</ListView>
+
+avoiding events using dependency injection, view provides services that the viewModel needs to use, such as open a save file dialog in view model, do not create dialog directly in side the ViewModel
+make view implement a IUIServiceInterface, and add the interface as a parameter of the viewModel constructor
+<ObjectDataProvider x:Key="mainWindowViewModel" ObjectType="{x:Type viewModel:MainWindowViewModel}"> 
+    <ObjectDataProvider.ConstructorParameters> 
+        <view:FilePathProvider /> 
+    </ObjectDataProvider.ConstructorParameters> 
+</ObjectDataProvider> 
+
+
+# Validation
+- validation data 
+    + type
+    + range
+    + acceptable characters
+    + specific length
+    
+- validation process, binding's validation rules are filed when the source of the binding is updated
+    + binding engines collates all validationRule objects whose validationStep value is RawProposedValue calling their validate method
+    + execute the converter attached to the binding
+    + binding engine then collates all attached ValidationRules whose validationStep value is set to ConvertedProposedValue, calling the validate method and halting on an error
+    + binding engine set the binding source value
+    + binding engine collates all the attached validationRules whose validationStep value is set to UpdateValue, calling their Validate method and halting on an error, any DataErrorValidationRules attached with a default ValidationStep value are collection and tested
+    + the final step is to call the validate method on ValidationRules, should a validationRule fail at any point during this process, the binding engine constructs a validationError instance and adds it to the Validation.Errors collection of the target Control, then the Validation.HasError property is set to true, then the if NotifyOnValidationError property is true the error event is raise on the target control
+
+- binding validation rule, objects have a validationRules property that accepts a list of ValidationRule objects
+
+example to add a exception handing validation rule to a binding
+<TextBox> 
+    <TextBox.Text> 
+        <Binding> 
+            <Binding.ValidationRules> 
+                <ExceptionValidationRule /> 
+            </Binding.ValidationRules> 
+        </Binding> 
+    </TextBox.Text> 
+</TextBox> 
+
+- validationRule class
+    + validate method is an abstract method
+    public abstract ValidationResult Validate(object value, CultureInfo cultureInfo)
+    
+    the ValidationResult contain two different values, a boolean signifying value and an object constructor typically accepts a 'true, null' pair
+    ValidationResult.ValidResult static property is used as a shortcut for new ValidationResult(true, null)
+
+    + example, implement a validation rule
+    public override ValidationResult Validate(object value, CultureInfo cultureInfo) 
+    { 
+        ValidationResult result = new ValidationResult(false, "An unknown validation error 
+        occurred"); 
+        if(value is string) 
+        { 
+            int integerValue = int.MinValue; 
+            if(int.TryParse(value as string, out integerValue)) 
+            { 
+                result = ValidationResult.ValidResult; 
+            } 
+            else 
+            { 
+                result = new ValidationResult(false, "The string provided could not be parsed as an integer value"); 
+            } 
+        } 
+        else 
+        { 
+            result = new ValidationResult(false, "The value provided is not a string"); 
+        } 
+        return result; 
+    } 
+
+    + constructors, have two constructor the default one and specify two property of validation rule
+    ValidationStep, define which step the rule will be executed
+    ValidationOnTargetUpdate, define if the the validate runs during the binding is updated
+
+    the default constructor with property could work with xaml
+    public ValidationRule()
+    {
+        ValidationStep = ValidationStep.RawProposedValue;
+        ValidatesOnTargetUpdated = false;
+    }
+
+    alternative validationRule constructor
+    public ValidationRule(ValidationStep validationStep, bool validatesOnTargetUpdated)
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    

@@ -1,0 +1,768 @@
+﻿Developing OData Clients=Matt Milner;Note=Erxin
+
+# Understanding OData clients 
+- OData protocol, client libraries, security 
+- Open Data Protocol
+    + Open:HTTP, ATOMPub, JSOn
+    + Querying & updating 
+    + Protocol, data format, uri, constrains, metadata 
+    Request:
+    GET http://localhost/TaskService.svc/Tasks
+    Accept: application/json
+    
+    Response:
+    HTTP/1.1 200 OK
+    DataServiceVersion ...
+    Content-Length:876
+    Content-Type:application/json;charset=utf-876
+    {"xxx":xxx}
+
+- Query options
+    + system query options 
+    options         Description                             Example
+    $filter         filters the result set                  /movie?$filter=title eq 'start wars'
+    $orderby        sort the target resources               /movie?$orderby=title desc 
+    $top            return only the top n resources         /movie?$top=10
+    $skip           skip the first n resources              /movie?$skip=100&$top=10
+    $select         create a project                        /movie?$select=rating,reviewer 
+    $inlinecount    includes the total count                /movie?$top=100&$inlinecount=allpages
+    $value          retrieve a value without any surrounding /movie?title/$value 
+    $expand         eager loading of specified elements      /movie?$expand=reviews
+
+    get particular element by 
+    /movie(id)
+
+- client libraries 
+    + abstractions over http 
+    + programming language specific 
+    + simplify features such as batching 
+
+    + odata clients 
+        * windows    
+        .net
+        silverlight
+        power pivot    
+
+        * browsers 
+        atom 
+        javascript
+        jquery 
+        
+        * open source 
+        ruby, jave, php
+        
+        * mobile 
+        window phone, iphone, android 
+
+
+- operations
+
+Options Descriptions 
+expand  Request set of related entities to be retrieved. 
+orderby Indicates the sequence entity to be retrieved  
+skip    Skip number of data items. 
+top     At most returns top number of data items 
+filter  Applies the filtering condition 
+
+Options Descriptions 
+eq  Equal 
+ne  Not Equal  
+gt  Greater Than 
+ge  Greate than or equal to 
+lt  Less than 
+le  Less than or equal to 
+and Logical AND 
+or  Logical OR 
+not Logical NOT 
+
+Math Operators
+Operators Descriptions 
+add add 
+sub Subtract 
+mul multiply 
+div Division 
+mod remainder 
+
+- Security
+    + http native 
+    basic    NTLM   Digest  Certificate 
+    
+    Layered protocols 
+    Cookie(e.g. Forms authentication)       Header(e.g. OAuth and other token models)
+    
+- Other consideration 
+    + data consideration 
+    paging continuations 
+    
+    the odata message contains next page link in the return message 
+    + batching
+    
+    + exceptions, use fiddler to managing request for services 
+- summary 
+
+
+# Building OData client in .net 
+- library benefits 
+    + add service reference support 
+    + generated data context and linq support 
+    + databinding support 
+    + batching, for sending back multiple request at one time, use transaction in the back end 
+    + paging continuation  
+    + client library classes 
+    DataServiceContext, give the server access, for linq query 
+        * Querying
+        DataServiceQuery 
+        QueryOperationResponse
+        
+        * Updates
+        DataServiceRequest
+        DataServiceResponse 
+        
+    + linq translation 
+    var tasks = from t in ctx.Tasks 
+                where t.DueDate DateTime.Now
+                select new {Description = t.Description}
+    
+    the linq expression will be transform to odata query 
+    TaskService.svc/Tasks()?$filter=DueDate gt datetime'2011-07-20'
+    
+- demo, .net client libraries 
+use *.svc/$metadata to check the data context of the odata service 
+
+    + reference odata service by *.svc/$metadata will auto generate the odata proxy for us 
+    
+    + query the service by 
+    TaskSVC.TaskDbContext ctx = new TaskSVC.TaskDbContext(new Uri("http://localhost:44301/odata/"));
+    
+    //two way to get Tasks set 
+    DataServiceQuery<TaskSVC.Task> query = ctx.CreateQuery<TaskSVC.Task>("Tasks");
+    //another way to get Tasks set 
+    DataServiceQuery<TaskSVC.Task> query = ctx.Tasks;
+    
+    QueryOperationResponse<TaskSVC.Task> response = query.Execute() as QueryOperationResponse<TaskSVC.Task>;
+    
+    foreach(var item in response)
+    {
+        Console.Write(item.Description);
+    }
+    
+    we could also add query options befor execute the query 
+    query.AddQueryOption("$top", 2);
+    query.AddQueryOption("$inlinecount", "allpages");
+    
+    + we could also use the data context by linq query which is upper level uses 
+    
+    var query = from t in ctx.Tasks
+                select t;
+
+- security 
+    + HTTP security
+        * ClientCredentials property on the ServiceContext it self, when we set the property it will automatic set the http security 
+        * SendingRequest event(certs), this is used to manipulate http security 
+        
+    + HTTP headers or cookies 
+        * SendingRequest event, access to HttpWebRequest object 
+        
+- Demo basic Authentication 
+    + use https uri to access service with SSL access and helper method to set the 
+    TaskService.TaskDbContext context = new TaskService.TaskDbContext(new Uri("https//localhost:44302/odata/"));
+
+    context.Credentials = new NetworkCredential(name, password);
+
+    + to let the server side start use SSL identity the user by set the project property SSL Enable to True for the OData wcf service 
+
+    + you have to browser to the odata service first and trust the authentication service uri otherwise the client will failed because by default the browser will not trust the authentication
+
+- Demo forms/cookies authentication
+    + client codes with https uri and cookie authentication
+    
+    RetrieveFormsCookie();
+    context.SendingRequest += (s, e) => {
+        e.RequestHeaders.Add(HttpRequestHeader.Cookie, FormsCookie);
+    };
+
+    private void RetrieveFormsCookie()
+    {
+        string loginUri = string.Format("{0}/{1}/{2}", 
+                                        "https://localhost:44302",
+                                        "Authentication_JSON_AppService.axd",
+                                        "Login");
+                                        
+        WebRequest request = HttpWebRequest.Create(loginUri);
+        request.Method = "POST";
+        request.ContentType = "applicatioin/json";
+        
+        string authBody = string.Format("{{\"userName\":\"{0}\", 
+                                            \"password\":\"{1}\", 
+                                            \"createPersistentCookie\":false}}", 
+                                          username, 
+                                          password);
+        request.ContentLength = authBody.Length;
+        StreamWriter w = new StreamWriter(request.GetRequestStream());
+        w.Write(authBody);
+        w.Close();
+        
+        WebResponse res = request.GetResponse();
+        if(res.Headers["Set-Cookie"] != null)
+        {
+            FormsCookie = res.Headers["Set-Cookie"];
+        }
+        else 
+        {
+            throw new SecuritySystem("Invalid user name or password");
+        }
+    }
+    + service cookies setting
+    configure the server 
+    <webServices>
+        <authenticationService enabled="true" requireSSL="false"/>
+    </webServices>
+    
+- Demo, access control service 
+    + swt token, microsoft access control services 
+    go to the access control token 
+    
+    RetrieveSWTToken();
+    context.SendingRequest += (s, e) => {
+        e.RequestHeaders.Add(HttpRequestHeader.Authorization, String.Format("Bearer {0}", SWT_Token));
+    };
+
+
+    private void RetrieveSWTToken()
+    {
+        WebClient client = new WebClient();
+        client.BaseAddress = string.Format("https://{0}.{1}", ClientSecurityConfiguration.Service);
+        
+        NameValueCollection values = new NameValueCollection();
+        values.Add("wrap_name", ClientSecurityConfiguration.OAuthUserName);
+        values.Add("wrap_name", ClientSecurityConfiguration.OAuthPwd);
+        values.Add("wrap_scope", ClientSecurityConfiguration.RelyingPartyRealm);
+        
+        try
+        {
+            byte[] responseBytes = client.UploadValues("WRAPv0.9/", "POST", value);
+            
+            string response = Encoding.UTF8.GetString(reponseBytes);
+            
+            SWT_Token = HttpUtility.UrlDecode(response
+                                              .Split('&')
+                                              .Single(value => value.StartsWith("wrap_access_token", StringCompare.OriginalIgnoral)
+                                              .Split("=")[1];
+        }
+        catch(Exception ex)
+        {
+        }
+    }
+
+- paging and continuations 
+    + QueryOperationResponse and DataServiceCollection 
+        * access to continuation details 
+        * NOT null = more data available 
+        
+    + DataServiceContext.Execute(continuation), if continuation is available, then will return null 
+    
+    + the response message will contain the continuation link, if not which means it the end of the collection 
+    
+    + for .net code 
+    var TaskDbContext = new TaskDbContext(service_uri);
+    
+    DataServiceQuery<Task> query = TaskDbContext.Tasks.AddQueryOption("$inlinecount", "allpages");
+    
+    QueryOperationResponse<Task> response = query.Execute() as QueryOperationResponse<Task>;
+    
+    response.TotalCount; //will get the total response entity count 
+    DataServiceQueryContinuation<Task> cont = response.GetContinuation();
+    
+    while(cont != null)
+    {
+        response = ctx.Execute(cont);
+    }
+    
+    + another example use DataServiceCollection which is a data binding aware collection 
+    var context = new TaskDbContext(new Uri("https://..."));
+    
+    var tasks = context.Tasks;
+    taskCollection = new DataServiceCollection<TaskService.Task>(context);
+    
+    this.DataContext = taskCollection;
+    try
+    {
+        taskCollection = taskCollection.Load(tasks);
+    }
+    
+    taskCollection.Load(context.Execute<Task>(taskCollection.Continuation));
+    
+- batching and errors 
+    + Save options(ContinueOnError, None, Batch, ReplaceOnUpdate)
+        * pass options when saving 
+        * set default on context
+    + Handle batch response 
+        * DataServiceResponse includes batch level details 
+        * Iterate on the responses to get details for each operation 
+        
+    + Handling errors, .net translate http response code to .net exception 
+        * DataServiceQueryException(when querying)
+        response property QueryOpertionReponse 
+        
+        * DataServiceRequestException(when saving )
+        status code outside the 200-299 range 
+        Response property DataServiceReponse
+        
+        * DataServiceClientExecption 
+        statusCode 
+    
+    + Demo check a response to decide if it is a batch operation 
+    
+    DataServiceResponse response = context.SaveChanges(SaveChangesOptions.Batch);
+    if(response.IsBatchResponse)
+    {
+        string statusCode = response.BatchStatusCode.ToString();
+    }
+    
+    foreach(var item in response)
+    {
+        item.StatusCode;
+    }
+    
+    if a error occurred on server, all the batch operation will be revered 
+    
+    + SaveChangesOptions
+    Batch, error then ignore all 
+    None, error then throw exception on client 
+    ContinueOnError, error a operation may failed in a batch operation but others may success 
+- summary 
+
+
+# Silverlight and window phone clients 
+- library benefits, using the library, security 
+    + add service reference support 
+    + databinding support 
+    + generated data context and linq support 
+    + batching 
+    + async 
+    
+    + silverlight clients 
+    all network access must be async in silverlight 
+    impacts loading data and handling exceptions 
+    
+    + asynchronous querying and updating 
+    DataServiceCollection.LoadAsync + LoadCompleted event 
+    
+    + handling exceptions 
+    LoadCompleted event fires regardless of success or failure 
+    
+    + cross domain access 
+        * requires policy file on the server when silverlight execute in browser 
+        * not required for windows phone or out of browser 
+        
+- demo silverlight clients 
+public class MainViewModel:INotifyPropertyChanged 
+{
+    private TaskService.TaskDbContext context;
+    
+    public MainViewModel(TaskService.TaskDbContext ctx){...}
+    
+    public void LoadAsync()
+    {
+        Users.LoadAsync(context.Users);
+        Priorities.LoadAsync(context.Priorities);
+        Status.LoadAsync(context.Statues);
+        Tasks.LoadAsync(context.Tasks.Expand("Status,Priority,AssignedTo"));
+    }
+    
+    
+    public DataServiceCollection<TaskPriority> Priorities {get;set;}
+    public DataServiceCollection<TaskStatus> Status {get;set;}
+    public DataServiceCollection<Task> Tasks {get;set;}
+    public DataServiceCollection<Users> Users {get;set;}
+    
+}
+
+in the view class, inject the DataContext at the UserControl_Load event 
+private void UserControl_Loaded(object sender, RoutedEvent args e)
+{
+    context = new TaskService.TaskDbContext(new Uri("http://localhost:44301/odata/"));
+    
+    context.UseDefaultCredentials = false;
+    context.Credentials= new NetworkCredential("bob", "password");
+    
+    mode = new MainViewModel(context);
+    mode.Tasks.LoadCompleted += new EventHandler<LoadCompletedEventArgs>(taskCollection_LoadCompleted);
+    
+    mode.LoadAsync();
+    this.DataContext = model;
+    
+}
+
+private void saveChanges_Click(object sender, RoutedEventArgs e)
+{
+    context.BeginSaveChanges(SaveChangesOptions.Batch, new AsyncCallback(SaveChanges_Complete), null);
+}
+
+private void taskCollection_LoadCompleted(object sender, LoadCompletedEventArgs e)
+{
+    if(e.Error != null)
+    {
+        model.StatusMessage = e.Error.Message;
+    }
+    else 
+    {
+        model.StatusMessage = String.Format("Loaded {0} of {1}", mode.Tasks.Count, e.QueryOperationResponse.TotalCount);
+    }
+    
+    if(mode.TasksContinuation == null)
+    {
+        nextPage.IsEnable = false;
+    }
+    model.Tasks.LoadedCompleted -= taskCollection_LoadCompleted;
+}
+
+private void nextPage_Click(object sender, RoutedEventArgs e)
+{
+    if(model.Tasks.Continuation != null)
+    {
+        model.Tasks.LoadCompleted += new EventHandler<LoadCompletedEventArgs>(taskCollection_LoadCompleted);
+        model.Tasks.LoadNextParitialSetAsync();
+    }
+    else
+    {
+        nextPage.IsEnable = false;
+    }
+}
+
+use Dispatcher to access the UI thread from other thread 
+Dispatcher.BeginInvoke(()=>{
+    model.StatusMessage = statusText;
+});
+
+the data context collection load event handler don't required to use dispatcher to marshal the data to UI thread, it will automatically do the marshal 
+
+- Security 
+    + silverlight & window phone 7 
+        * DataServiceContext credentials property for HTTP authentication, we could set user name password of set if to false we could use use our own credentials
+        * SendingRequest event for manipulating headers 
+        
+    + Silverlight in the browser 
+        * leverage browser credentials for site of origin requests 
+        * DataServiceContext credentials property for HTTP authentication
+        * SendingRequest event for manipulating headers 
+
+    silverlight has two http stacks, the standard one and leverage browser, credentials, odata switch automatically for silverlight in most of the time 
+    
+- Demo silverlight security, access with a cross domain request 
+private void UserControl_Loaded(object sender, RoutedEventArgs e)
+{
+    var context = new TaskDbContext(new Uri(...));
+    context.UseDefaultCredentials = false;
+    context.Credentials = new NetworkCredential(user, password);
+}
+
+- Window phone 7 considerations 
+    + managing state("Tombstoning")
+        * DataServiceState class provides ability to (de) serialize context 
+        * Serialize DataServiceCollection<T> as part of view model(MVVM)
+        
+    + Compress (manual process)
+        * DataServiceContext.ReadingResponse 
+        * DataContext.WritingRequest 
+        
+- Demo write window phone 7 client 
+public static MainViewModel ViewModel
+{
+    get 
+    {
+        if(viewModel == null)
+        {
+            var context = new DBContext(new Uri("..."));
+            
+            viewModel.LoadAsync();
+        }
+        return viewModel;
+    }
+}
+
+use application active and deactive event to save and restore the data 
+private void Application_Activate(object sender, ActiveEventArgs e)
+{
+    DataServiceState state = DataServiceState.Deserialize(
+        PhoneApplicationService.Current.State["taskData"].ToString());
+    viewModel = new MainViewModel(
+        state.Context as TaskService.TaskDbContext,
+        state.RootCollections["Tasks"] as DataServiceCollection<Tasks>,
+        state.RootCollections["Users"] as DataServiceCollection<Users>
+    );
+}
+
+private void Application_Deactivate(object sender, DeactiveEventArgs e)
+{
+    PhoneApplicationService.Current.State["taskData"] = DataServiceState.Serialize(
+        viewModel.context,
+        new Dictionary<string, object>
+        {
+            {"Tasks", viewModel.Tasks},
+            {"Status", viewModel.Statuses},
+            {"Priorities", viewModel.Priorities},
+            {"Users", viewModel.Users}
+        });
+    )
+}
+
+enable compression by add event handler for the WritingRequest event of the context 
+context.WritingRequest += (o, rwea) =>
+{
+    rwea.Headers["Accept-Encoding"] = "gzip";
+};
+
+context.ReadingResponse += (o, rwea) =>
+{
+    if(rwea.Headers.ContainsKey("Content-Encoding") && 
+       rwea.Headers["Content-Encoding"].Contains("gzip")
+   {
+        rwea.Content = new GZipStream(rwea.Content, SharpComress.Compressor.CompressionModel.Decompress);
+   }
+};
+required the SharpComress nuget package
+
+
+# JavaScript OData Client 
+- Introduction 
+    + requests 
+    + libraries 
+    + security 
+    + benefits of using javascript 
+    dynamic type system 
+    browser support 
+    json format 
+    async 
+    
+- using raw HTTP/JSON requests 
+    + use odata URI query syntax 
+    + build request payloads in JSON(including batches)
+    
+- javascript libraries 
+    + jquery 
+    http://jquery.com 
+    simplifies HTTP(ajax) calls 
+    
+    + datajs, beyond odata 
+    http://datajs.codeplex.com 
+    javascript library for data oriented applications 
+    odata, storage, caching 
+    provides consistent client object model 
+    
+- demo jquery 
+jquery-template
+<script id="taskTemplate" type="text/x-jquery-tmpl">
+    <tr>
+        <td>${Description}</td>
+        <td>${formatDate(StartDate)}</td>
+    </tr>
+</script>
+    
+call service method 
+$.getJSON(taskServiceBaseAddress + "Tasks?$expand=AssignedTo,Status,Priories", processResult);
+$.getJSON(taskServiceBaseAddress + "Tasks?$expand=AssignedTo,Status,Priories", function(data){
+    $("#dropDownListTemplate").tmpl(data.d).appendTo("#taskPriorities");
+});
+
+function processResults(data)
+{
+    if(results == null)
+        results = data.d;
+        
+    for more data 
+    if(data.d.__next != null)
+        $.getJSON(data.d.__next, processResult);
+}
+
+var newTask = {
+"Description": "xxx",
+"Priority":{"__metadata":{"uri":taskServiceBaseAddress + "Priorities(id)"}}
+};
+
+$.ajax(
+    {
+        url:"/odata/Tasks",
+        type:"post",
+        contentType:"application/json",
+        dateType:"json",
+        processData:false,
+        data:JSON.stringify(newTask).replace(/[\/]/g, "\\/"])
+    }
+).error(functoin (data){
+    ...
+}).success(function (data){
+    ...
+})
+
+the __metadata property is a built in link property which will be query the relative uri to the server to get a value and replace the previous value 
+
+- Demo, datajs 
+$(function())
+{
+    OData.read(uri, result);
+    OData.read(uri, callback);
+}
+
+with DataJs we don't required to to datetime and string manipulation to make the value fit for json transformation, such as replace the "\/" to "\\/"
+
+OData.request({
+    requestUri:...,
+    method:"POST",
+    data:javascript_object
+},
+callback);
+
+- Security 
+    + leverage browser credentials
+        * same server only, most common 
+        * reuse of headers and cookies in the network stack 
+        
+    + sending username/password  
+        * xmlHttpRequest(datajs, jQuery, raw)
+        
+    + Manipulating headers for alternate credentials 
+        * OAuth tokens e.g. 
+
+    browser will stop cross site request 
+    
+    JSONP, allow you wrapper json callback, 
+    
+- Demo, JSONP for cross site access 
+JSONP, introduction, JavaScript programs running in web browsers to request data from a server in a different domain, something prohibited by typical web browsers,  JSONP takes advantage of the fact that browsers do not enforce the same-origin policy on <script> tags.
+<!-- Request sent via a script tag -->
+<script src="https://status.github.com/api/status.json?callback=apiStatus"></script>
+<!-- Data received as an execution of the predefined function. -->
+<script> function apiStatus(data) { console.log(data.status); } </script>
+
+$.getJSON("uri&$format=json&$callback=?", callbackMethod)
+when jquery process the request, the ? will be replace with the result callback method
+
+jquery will recognize the query is a JSONP request
+
+enable jsonp functionality for queries 
+OData.defaultHttpClient.formatQueryString = "$format=json";
+OData.defaultHttpClient.callbackParameterName = "$callback"
+OData.defaultHttpClient.enableJsonCallback = true;
+
+- Paging
+result 
+HTTP/1.1 200 OK 
+{
+    "d":{
+        "result":[],
+        "__next":"http://localhost:44301/odata/Tasks?$skiptoken=3"
+    }
+}
+
+$.getJSON(data.d.__next, processResults);
+
+GET http://localhost:44301/odata/Tasks?$skiptoken=3 HTTP/1.1
+- Demo: Paging 
+
+- Batching, create batch request, we have to create batch by ourself 
+POST http://localhost:44301/odata/$batch HTTP/1.1
+Content-Type: multipart/mixed; boundary=batch_a9eb960b-9b11-4b4f-a1f9-78980088cf49
+Host: localhost:44301/odata/
+Accept-Charset:UTF-8
+Content-Length:433
+
+--batch_a9eb960b-9b11-4b4f-...
+Content-Type: application/http
+Content-Transfer-Encoding: binary 
+
+GET Tasks HTTP/1.1
+Accept: application/json 
+
+--batch_a9eb960b-9b11-4b4f-...
+Content-Type: application/http
+Content-Transfer-Encoding: binary 
+
+Get Users HTTP/1.1
+Accept: applicatioin/json
+
+--batch_a9eb960b-9b11-4b4f-...
+    
+- Demo:Batching with Data JS 
+for(var i = 0; i < tasksBatch.length; i ++)
+{
+    changeRequests.push(
+        {
+            requestUri: "Tasks",
+            method:"POST",
+            data:taskBatch[i]
+        });
+}
+var requestData = {__batchRequests:[{__changeRequests:changeRequests}]};
+
+OData.request({
+    requestUri:..,
+    method:"POST",
+    data:requestData
+}, function(data){ 
+    var errorMessages = [];
+    var errorsFound = false;
+    for(var i = 0; i < data.__batchRequests.length; i ++)
+    {
+        var batchResponse = data.__batchResponses[i];
+        for(var j = 0; j < batchResponse.__changeResponse.length;++j)
+        {
+            var changeResponse = batchResponse.__changeResponse[j];
+            if(changeResponse.message)
+            {
+                errorsFound = true;
+                errorMessages.push(changeResponse.message);
+            }
+        }
+    }
+    if(errorsFound)
+    {   
+        showStatus(errorMessgaes.join(","));
+    }
+    else
+    {
+        showStatus("Batch submitted");
+    }
+ }, 
+  function(err) {...},
+  OData.batchHandler);
+
+- Exceptions, handling exceptions 
+    + standard error functions on various APIs
+    jquery, xmlHttpRequest, datajs 
+    
+    + use http status codes 
+    4xx, standard errors(auth, bad payload, bad request)
+    5xx, general error
+    2xx, success conditions 
+    
+- Demo: Exceptions 
+$.ajax({
+}).error(function(data){
+    var errorObject = $.parseJSON(data.responseText);
+    showStatus(errorObject.error.message.value);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

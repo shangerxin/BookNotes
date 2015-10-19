@@ -1,0 +1,466 @@
+﻿WF4 Workflow Services Fundamentals=Matt Milner;Note=Erxin
+
+# writing workflow service
+- overview
+    + undserstanding workflow services
+    + messageing activities
+- workflow and services
+    + services extend the reach of workflows
+        * Multiple transports
+        * secure communications
+        * open standards
+        
+    + workflow simplify service development
+        * declarativeflow control
+        * model long-running processes
+        * tracking services for visibility
+        * state management
+        
+    + workflows coordinate systems and humans
+        * services provide an interface into systems
+        * workflows coordinate service interactions
+        * allows for data binding between service calls
+        
+    + workflow services integrate other kinds of service
+    
+- WF WCF integration
+    + messaging activities
+        * model communication(send/receive)
+        * define the service contract is different from wcf service
+        
+    + hosting 
+        * service host, behaviors to invoke workflow
+        
+    + message routing
+    correlating incoming messages to existing workflow instances
+    
+- building workflow services, Messaging activities
+    + receive, activity for implementing one-way receive operations
+    + sendReply, activity for sending a reply to a request-response operation
+    + receiveAndSendReply, template combining receive and sendReply
+    + transactedReceiveScope, receiving messages in a Tx scope and including WF steps in that tx
+- message content
+    + messaging activities have a content property
+    use types derived from messageContent
+    
+    + ReceiveMessageContent
+    when you have a single input(data/message contact)
+    
+    + ReceiveParameterContent
+    when you have multiple input parameters to an operation
+  
+    all those parameters are hidden from the workflow designer
+- creating workflow services
+    + visual studio templates
+    web project for declarative service
+    xamlx file, rooted with workflowService
+    body includes implementation
+    
+    + use receive activity properties to define service contract
+    operation name
+    contract namespace
+    SOAP action
+    
+    + define content
+    message based, single object
+    parameter based, define individual parameter names and types
+    response content defined on SendReply activity
+- demo workflow service  
+    + create new project, wcf workflow service application
+    + the service is a asp.net web application
+    + change the service name of the *.xamlx by the property and the file name
+    + set the *.xamlx as the start up page
+    + drag and drop activities from the toolbox
+    + don't directly drag a Messaging|Receive activity directly to the workflow designer
+    + drag sequence activity to the designer then could drag and drop multiple other activity into the sequence activity
+    + drag recieve and sendReply activity
+    + change the activity contract by the property of the activity, OperationName and ServiceContractName which is a unique domain name
+    + check the checkbox CanCreateInstance to allow wcf create new instance of workflow
+    + specify the Action Name optional, wcf will automatic create action name
+    + reference the necessary data contract
+    + specify the input parameter, click the message title and click the variable tab at the bottom of the designer and give the parameter name and the type
+    
+    click the recieve activity and click the content, use message content or parameter content
+    the message data could only be specify one variable and type
+    
+    + add activity as operation
+    
+    + build the service
+- return faults from server
+    + use SendReply activity to send back fault 
+    right-click receive activity to add new SendReply
+    
+    the sendReply need to tide to receive activity, the SendReply can't be added alone without receive activity
+    
+    + content should be FaultException or FaultException<TFault>
+    cause FaultContract to be added to the operation
+    
+    + ensure that only one sendReply activity can be executed
+    control flow must be mutually exclusive
+    
+- demo return faults from server
+    + use control flow and add if activity, the condition could be a expression to check the parameter pass in or other logic
+    + add normal logic to the else position
+    + add then logic to the relative activity
+    
+    + right click the receive message and click the menu Create SendReply activity and drag it to the right position to fit the logic
+    
+    + set the data context for the SendReply, use the message data 
+    New FualtException(Of string)(faultMessage, reason_description);
+- hosting services
+    + workflow service host class for self-hosting, WorkflowServiceHost
+    extended wcf hosting specific to workflow services
+    
+    + iis for managed hosting
+        * automatic hosting of services(xamlx, svc, no physical file)
+        * web.config for configuration
+        * support for multiple transport(tcp, named pipes, http)
+        
+    + AppFabric adds tooling to IIS hosting
+        * simplified configuration tools(IIS manager, powershell)
+        * sql tracking and persistence
+        * autostart services on server 2008 R2
+            
+    
+# hosting workflow services
+- introduction 
+    + WorkflowServiceHost, for self host
+    + managed hosting, iis
+    + workflow service behaviors
+    + workflow control endpoint
+    
+- self hosting services
+    + workflow service host class for self-hosting
+        * extended wcf hosting specific to workflow services
+        * create with activity or workflow service and base addresses
+        * support configuration like standard wcf service
+        
+    + workflow serivce
+        * represents a declarative service
+        * body = activity
+        * endpoints, configurationName and name also available
+        
+- self hosting
+    + create a console app
+    + reference the system.service.model, system.service.activity
+    + add *.xamlx file add x:class and class name
+    <WorkflowService x:Class="ExpendService" ...>...</WorkflowSerivce>
+    
+    the workflow class ExpendService will be automatic created
+    + use the workflow service
+    WorkflowServiceHost host = new WorkflowServiceHost(new ExpenseService(), new Uri("http://localhost:8731/Samples/Expenses"),new Uri("net.tcp://localhost:8732/Sample/Expenses"));
+    
+    //the service host is created as wcf host
+    
+    host.Open(); 
+    Console.ReadLine();
+    host.Close();
+    
+    //base on the setting wcf will automatic add http and tcp endpoints
+    //add meta data for the service
+    //add <system.serviceModel> section into the app.config
+    <system.serviceModel>
+        <behaviors>
+            <serivceBehaviors>
+                <behavior>
+                    <serviceMetadata httpGetEnabled="true"/>
+                </behavior>
+            </serviceBehaviors>
+        </behaviors>
+    </system.serviceModel>
+
+    + open wcfTestClient to test the service
+    
+- managed hosting
+    + hosting your service with iis
+        * automatic hosting of services(xamlx, svc, no physical file)
+        * web.config for configuration
+        * support for multiple transports(tcp, named pips, http)-iis 7.x
+    + appFabric adds tooling to iis hosting
+        * simplified configuration tools(iis manager, powershell)
+        * sql tracking and persistence
+        * autostart services on server 2008 r2, iis 7.5
+        
+- manage hosting with svc or configuration
+    + svc or configuration based activation require correct factory
+        * svc-factory attribute on ServiceHost directive
+        * config-factory attribute on serviceActivations/add element
+        
+    + workflowServiceHostFactory, there are two different types in .net 4
+        * system.SeriveModel.Activities(system.serviceModel.Activation assembly), the new version of activities
+        * not system.workflowServices assembly, this is the old version for workflow 3 or 3.5
+    
+- demo managed hosting
+    
+- workflow related behaviors
+    + sqlWorkflowInstanceStore
+    * controls persistence settings for instances
+    
+    + workflowUnhandledException
+    * defines behavior for unhandled exception
+    
+    + workflowIdle
+    unload and persist timeouts for idle WFs
+    
+    + workflowInstanceManagement
+    creates secure workflow control endpoint
+    
+    + etwTracking, enterprise tracking for windows
+    configure wf tracking for services
+    
+- demo controlling behavior
+    + wcf behavior configuration in web.config
+    <behavior>
+        <serviceBehavior>
+        </serviceBehavior>
+    <behavior>
+    
+    + all the behavior could be set by the wcf configuration tool
+    
+- workflowControlEndpoint
+    + workflowControlEndpoint
+        * standard endpoint(new in wcf 4)
+        * provides control operations -run, resume, suspend, terminate, abandon
+        * add easily with workflowInstanceManagement behavior or manually
+        * Named pipes is default protocol
+        * transaction flow is used
+        
+    + workflowControlClient, in any application to call the workflow service
+        * pre-packaged client proxy for managing services
+    
+- demo use workflow control endpoint
+    + add workflow endpoint, in web.config
+    <services>
+        <service name="ServiceName" behaviorConfiguration="behaviorName">
+            <endpoint kind="workflowControlEndpoint"
+                      binding="basicHttpBinding"
+                      address="Control"
+                      isSystemEndpoint="true"/>
+        </service>
+    </serivces>
+    <behaviors>
+        <serviceBehaviors>
+            <behavior name="behaviorName">
+                <sqlWorkflowInstanceStore connectionStringName="persistenceStore" hostLockRenewalPeriod="30.00:00:00" instanceLockedExceptionAction="..."/>
+            <workflowUnhandledException action="AbandonAndSupend"/>
+        </serviceBehaviors>
+    </behaviors>
+    
+    + use the WorkflowContorlClient class to access the workflow service
+    
+# Workflow Correlation
+- message correlation
+    + correlation is about routing messages to workflow instances
+        * load instances based on ID
+        * may need store that key, or use a related key
+    + different ways to correlate
+        * request/response, used internally by workflow activites
+        * context, sharing cookie/header
+        * callbackContext, for duplex messaging
+        * content, use data elements in the message
+    + image
+    client  -> endpoint -> workflow instance 
+    client                 workflow instance
+    client                 workflow instance
+- message correlation
+    + correlation is configured on send/receive activities
+    correlateWith, reference the correlationHandle is used to hold correlation data, store key/value pairs 
+    correlationOn, references the data or context used
+    correlationInitializer, indicates to populate the CorrelationHandle
+- types of correlation
+- content correlation
+    + use taskid between application and workflow instance
+    application state, use the task id to find the previous workflow instance 
+                                start task123
+                                |
+                                V
+    task#   <- store task123 <- Application -> send    taskid123
+    task#   <- lookup task123               <->receive task123 complete
+                                |
+                                V
+                                complete task123
+    
+- correlation activities, send and receive allowed correlation, there are also other kinds of correlation 
+    + CorrelationScope, an active in this scope and get the correlation handle
+        * provides automatic correlation handle for activities with the scope
+        * eliminates need for explicit correlation settings on messaging activities
+    + InitializeCorrelation
+        * populate dictionary of query values without messaging activity
+- request / reply correlation
+- context based correlation
+    + for example a expend report handle workflow 
+    + create a correlation handle into the workflow variables tab, choose ServiceModel.Activies.CorrelationHandle
+    + set the handle's scope to contain the necessary requests and responses scopes
+    + set the property CorrelationInitializers of SendandReplayToReceive, add the previous created handle, there are four kinds of correlations 
+        * callback correlation initializer
+        * context correlation initializer
+        * request-reply correlation initializer
+        * query correlation initializer 
+        choose query for content relative initializer choose query, set the key and value
+        
+        * choose the next request method and set the correlatesOn property of the receive
+        set the variable which save the correlation value, choose the value ItemIdentifier value 
+        
+        * correlateWith will be the handle 
+    
+    + demo drag the initialize correlation activity before the receive activity 
+        * set the handle variable  to the Correlation
+        * set the key, value, value will be an message variable 
+        
+- Correlation with multiple receives 
+    + have a receive operation
+    + do a parallel foreach method, add multiple receive into the loop 
+    + add an initialize correlation 
+    + add the correlation into a dictionary<string, handle>
+    
+    + from the receive manager of the parallel foreach, the property CorrelateOn is set to handles(correlateVariable) and the id will be the itemIdentifier and other value will be relative variable
+    
+- Request reply correlation
+    + ties receive/send reply or send/receive reply together 
+    not required for simple service hosted in workflowServiceHostFactory
+    + specify correlation handle on receive/send activities 
+    + use correlationScope activity to wrap activity pairs 
+    provides automatic correlation to activities within the scope 
+    + by default correlation is add default handle in workflow 
+    + suggest to use explict correlation to replace the default one 
+    
+- Context correlation, share client and server both known, such as instance id
+    
+client ---no context on request ---> wf service create a workflow instance 
+       <--- context sent with replay--- the instance id 
+       
+       -- context sent with request ----> wcf will use the id with the request to 
+                                          locate the wf instance 
+                                          
+- example context correlation                               
+    + reportCtxHandle, define a variable as correlationHandle 
+    + add correlationInitializer for the first send and replay 
+    + choose context relative correlative 
+    don't need to set additional parameters for correlation 
+    
+    change the other send receives property CorrelatesWith to the previous handler then the two send receive method will be linked and correlative 
+    
+    suggest to create correlation explicitly in large project
+    + add binging to support context correlation
+    <ProtocolMapping>
+        <add scheme="http" binding="basicHttpContextBinding"/>
+    </ProtocolMapping>
+    
+    <basicHttpBinding>
+    </basicHttpBinding>
+    <client>
+        <endpoint address="..." binding="basicHttpBinding" bindingConfiguration="BasicHttpContextBinding_IExpense" contract="ExpenseService.IExpanseService"/>
+    
+    in the client application use the same client instance create by the proxy to send to the same service instance 
+        
+    Workflow client will automatic generate activity for the referenced workflow service     
+    Use CorrelateScope element with the handle to provide the correlation, specify the correlatesWith property for the handle 
+        
+        
+    on the client is also could support send and receive activity manually, this support control detail about the correlation parameter, but you have to manually control the property such as contract name 
+        
+        
+# WF 4 consuming services
+- introduction 
+    + consuming services from workflow
+    + messaging activities
+    + messageing activities 
+    + channel caching 
+    
+- messaging activities 
+    + send, one-way activity for consuming services 
+    + SendAndReceiveReply, template to create send and receiveReply activity pair for request/response operations 
+    + CorrelationScope, for managing correlation of related messages from client side 
+    this could make sure the call is send to the right service instance 
+    
+- consuming services 
+    + manually configure send and receive replay activities 
+        * configure contract related properties to match the service 
+        * configure endpoint(binding, address, etc.)
+        
+    + add service reference 
+        * create custom activity for the service contract, will generate lots of activity for each operation 
+        * includes configuration of endpoint(s)
+        
+    + manual is to programming wcf message as ASR is to generated proxy 
+    
+
+- demo add service reference 
+    + add workflow service 
+    + only when you in the workflow client project, the project type is workflow, then will automatic generate the activity for the service operation
+    
+    + configure the parameter and create variable for the consume the operation 
+
+- using messaging activities 
+    + configure the operation name
+    + service contract
+    + drag the send and replay, will get a sequence and related together, the request operation will be updated when configure the receive
+
+    + add service name, operation name 
+    
+    + you could use the Endpoint property of the sendReceive to configure the configuration to embedded the configuration file 
+
+    known type 
+    impersonation level 
+
+- handing faults 
+    + exception handling, try/catch activity 
+    + for ASR custom activities 
+        * catch fault exception - generic wcf fault 
+    + for send/receiveReply activities
+        * mark send with known types 
+        * wrap receiveReply in try catch
+        * catch faultException<T> to get your detail
+        * also catch faultException for general faults
+        System.FaultException<Contracts.ReportSubmissionFault>
+        
+    + example
+    add send activity property KnownTypes add the fault exception type 
+    add try catch activity 
+
+    generate activity an
+    
+- channel caching, channel is used to communicate with particular service  
+    + sendMessageChannelCache
+        * extension class you can add to the workflwoApplication /WFServicehost
+        * cache factories and /or channel instances
+        * allowUnsafeCaching = true to cache config based endpoints 
+        
+    + caching scope 
+        * share static instance across hosts = process/app domain sharing 
+        * provide cache manager to each instance = instance sharing 
+
+    + workflowServiceHostFactory
+        * add single extension for host sharing, every workflow instance will get the same cache 
+        * use Func<> to provide extension for each instance, will call the function to get that cache, just cache for the perticular instance 
+        
+- demo send message channel cache 
+    + send -> reply 
+    + use same channel cache to get the same instance 
+    + host application 
+    create cache 
+    var cache = new SendMessageChannelCache (new ChannelCacheSettings {MaxItemInCache = 5, LeaseTimeout = TimeSpan.FromMinutes(1),IdelTimeout = TimeSpan.FromMinutes(1)};
+    
+    var invoker = new WorkflowApplication(new workflowClass);
+        
+    use the previous created channel for the previous created channel instance 
+    
+
+        
+        
+        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    

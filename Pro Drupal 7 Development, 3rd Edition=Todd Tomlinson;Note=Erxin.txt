@@ -1,0 +1,367 @@
+﻿Pro Drupal 7 Development, 3rd Edition=Todd Tomlinson;Note=Erxin
+
+# Foreword 
+- authors 
+Todd Tomlinson, example site http://arapahoelibraries.org/ald/.
+
+# Introduction 
+
+# how drupal works 
+- drual is a highly modular, open source web content management 
+drupal can be used to build an inteernet protal a personal department or corporate web site, a e-commerce site, a resource directory, social networking, an image gallary 
+
+- technology stack 
+language php, database abstraction layer 
+database, mysql, postgreSQL/sqlite /...
+web server, apache, lighttpd, iis 
+operation system, linux, bsd, mac, windows,...
+
+- core, lightweight framework makes up the drupal core 
+- modules, 
+image gallaries, e-commerce, adSense, forums, WYSIWYG editing, event calendars, workgroups, basic content management user management, session management, url aliasing, localization, templating, syndication, logging, library of common functions 
+- hooks, internal drupal events
+comment_user_login(), local_user_login(), node_user_login()
+- administrator interface
+basic content management 
+user management 
+session management 
+url aliasing 
+localization 
+templating 
+syndication 
+logging  
+- themes 
+- nodes, content types in drupal are derived from a single base type referred to as a node 
+- fields, content in drupal is composed of individual fields, a node title is a field as is the node body. you can use fields in drupal contruct any content types 
+    + create programmatically 
+    + create from administrator interface by create new content type 
+- blocks information that can be enabled or disabled in a specific location on your web site's template 
+- file layout of drupal site 
+includes folder contain libraries of common functions 
+misc folder stores javascript and miscellaneous icons and images 
+modules, contains the core modules and each module in its own folder 
+profiles folder, contains different installation profiles 
+scripts, contains scripts for checking syntax 
+sites directory, contains your modifications to drupal in the form of settings, modules and themes . the default configuration file for your durpal site, default.settings.php 
+sites/default/files, included in the base installation of drupal by default 
+theme 
+cron.php, is used for executing periodic tasks
+index.php, is the main entry point of the drupal installer 
+update.php, updates teh database shema after a drupal version update 
+xmlrpc.hp, receives xml-rpc requests    
+robots.txt, default implementation of the robot exclusion standard 
+
+- serving a request, http://exaple.com/foo/bar
+    + the mod_rewrite rule in drupal's .htaccess file looks at the incoming url and separate the base url from the path is foo/bar
+    + the path is assigned to the url query parameter q 
+    + result rul is http://exmple.com/index.php?q=foo/bar 
+    + drupal treats foo/bar as the internal drupal path and processing begins in index.php 
+    
+- the bootstrap process 
+configuration, sets global variables 
+databsae 
+variables, loads system variables and all enabled boostrap modules 
+session, initializes session handling 
+page header, invokes hook_boot()
+language, initializes all the defined language types 
+full, final phase, final phase, drupal is fully loaded by now 
+
+
+# writing a modules 
+- two general categories of drual modules, core and contributed 
+http://drupal.org/project/modules 
+- creating the files 
+    + contribute modules are store at 
+    /sites/all/modules directories, each module stored in its own directory use the name of the module 
+    
+    /sites/all/modules/custom to create a module named custom 
+    + create the annote files for drupal to reconize the module by annoate.module and annoate.install files
+    name = Annotate 
+    description = "Allows users to annotate nodes." 
+    package = Pro Drupal Development 
+    core = 7.x 
+    files[] = annotate.module 
+    files[] = annotate.install 
+    files[] = annotate.admin.inc 
+    configure=admin/config/content/annotate/settings 
+
+    
+    //anootate.module file, check the drupal api module at http://drupal.org/project/api, the @file is a drupal annotation mark 
+    <?php 
+    /** 
+    * @file 
+    * Lets users add private annotations to nodes. 
+    * 
+    * Adds a text field when a node is displayed 
+    * so that authenticated users may make notes. 
+    */
+
+- implementing a hook,  hook_menu()function. 
+/** 
+* Implementation of hook_menu(). 
+*/ 
+function annotate_menu() { 
+$items['admin/config/annotate'] = array( 
+'title' => 'Node annotation', 
+'description' => 'Adjust node annotation options.', 
+'position' => 'right', 
+'weight' => -5, 
+'page callback' => 'system_admin_menu_block_page', 
+'access arguments' => array('administer site configuration'), 
+'file' => 'system.admin.inc', 
+'file path' => drupal_get_path('module', 'system'), 
+); 
+$items['admin/config/annotate/settings'] = array( 
+'title' => 'Annotation settings', 
+'description' => 'Change how annotations behave.', 
+'page callback' => 'drupal_get_form', 
+'page arguments' => array('annotate_admin_settings'), 
+'access arguments' => array('administer site configuration'), 
+'type' => MENU_NORMAL_ITEM, 
+'file' => 'annotate.admin.inc', 
+); 
+return $items; 
+} 
+- adding module specific settings Drupal to look for our settings form in the annotate.admin.incfile
+<?php 
+/** 
+* @file 
+* Administration page callbacks for the annotate module. 
+*/ 
+/** 
+* Form builder. Configure annotations. 
+* 
+* @ingroup forms 
+* @see system_settings_form(). 
+*/ 
+function annotate_admin_settings() { 
+// Get an array of node types with internal names as keys and 
+// "friendly names" as values. E.g., 
+// array('page' => ’Basic Page, 'article' => 'Articles') 
+....
+
+
+# hooks actions and triggers 
+- understand events and triggers 
+    + events 
+    creation of a node 
+    deletion of a node 
+    viewing of a node 
+
+    + hooks user login event by 
+ implementing hook_user_login()in our module: 
+/** 
+* Implementation of hook_user_login(). 
+*/ 
+function beep_user(&$edit, $account) { 
+beep_beep(); 
+} 
+
+- event used in the generic programming sense, as a message sent from one component of a system to other components 
+- hook, programming technique 
+- trigger, specific combination of a hook 
+
+- actions 
+promoting a node to the front page 
+changing a node from unpublished to published 
+deleting a user 
+
+- enable the trigger module in the module menu 
+- using the context in actions 
+$object, many actions act on one of drupal's built-in objects nodes, users, taxonomy terms and so on 
+$context, an action can be called in many different context, actions declare which triggers they support by defining the hooks key in hook_action_info()
+
+examining user.module
+/** 
+* Implements hook_action_info(). 
+*/ 
+function user_action_info() { 
+return array( 
+'user_block_user_action' => array( 
+'label' => t('Block current user'), 
+'type' => 'user', 
+'configurable' => FALSE, 
+'triggers' => array(), 
+), 
+); 
+} 
+
+- how actions are stored, Actions are functions that run at a given time. Simple actions do not have configurable parameters. For example, the “Beep” action we created simply beeped.
+When an instance of an advanced action is created by the administrator, the information that is entered 
+in the configuration form is serialized and saved into the parameters field of the actions table.
+
+- action id, a numeric action ID (tracked in the actions_aiddatabase table) is used instead. 
+
+- calling an Action Directly with actions_do() 
+actions_do($action_ids, $object = NULL, $context = NULL, $a1 =NULL, $a2 = NULL)
+
+- Defining Your Own Triggers with hook_trigger_info()   
+
+- Adding Triggers to Existing Hooks     
+/** 
+* Implementation of hook_trigger_info(). 
+*/ 
+function archive_trigger_info() { 
+return array( 
+'node' => array( 
+'archive_nodes' => array( 
+'label' => t('Archive old nodes'), 
+) 
+) 
+); 
+} 
+
+# the menu system 
+- Essential code for the menu system is in includes/menu.inc
+- creating a menu item, use the hook_menu(), 
+- page callback arguments 
+function menufun_hello($first_name = '', $last_name = '') { 
+return t('Hello @first_name @last_name', 
+array('@first_name' => $first_name, '@last_name' => $last_name)); 
+} 
+
+- adding a link to the navigation block
+
+
+# working with database 
+-  build the $databases array in your settings.phpfile. 
+- db_query(), which keeps the business logic databaseagnostic
+- simple queries 
+$result = db_query('SELECT name FROM {role} WHERE rid = :rid', array(':rid' => 2));
+
+$nid = db_insert('joke') 
+->fields(array( 
+'nid' => '4', 
+'vid' => 1, 
+'punchline' => 'And the pig said oink!', 
+)) 
+->execute(); 
+
+- retrieving query result 
+$nbr_records = db_query("SELECT count(nid) FROM {joke}")->fetchField(); 
+
+- getting multiple rows 
+$type = 'page'; 
+$status = 1; 
+$result = db_query("SELECT nid, title FROM {node} WHERE type = :type AND status = :status", 
+array( 
+':type' => $type, ':status' => 1, 
+)); 
+foreach ($result as $row) { 
+echo $row->title."<br/>"; 
+} 
+
+- paging 
+$query = db_select('node', 'n'); 
+$query 
+->condition('type', 'page') 
+->fields('n', array('title')) 
+->range(0,100); 
+$result = $query->execute();
+
+- other common queries 
+$query 
+->condition('type', 'page') 
+->fields('n', array('title')) 
+->orderBy('title', 'ASC'); 
+
+$query 
+->condition('type', 'page') 
+->fields('n', array('title', 'changed')) 
+->orderBy('changed', 'DESC') 
+->orderBy('title', 'ASC') 
+->distinct(); 
+
+- using module.install files to create database table for a module 
+$schema['tablename'] = array( 
+// Table description. 
+'description' => t('Description of what the table is used for.'), 
+'fields' => array( 
+// Field definition. 
+'field1' => array( 
+'type' => 'int', 
+'unsigned' => TRUE, 
+'not null' => TRUE, 
+'default' => 0, 
+'description' => t('Description of what this field is used for.'), 
+), 
+), 
+// Index declarations. 
+'primary key' => array('field1'), 
+); 
+
+- using the schema module 
+http://drupal.org/project/schemaand enable it on your site. 
+
+- field type mapping from schema to database 
+varchar 
+char
+text 
+numerical
+integer 
+serial, A serial field keeps a number that increments. 
+float 
+numeric,  allows you to specify the precision and scale of a number
+datetime
+blob, binary large object data 
+- declaring a specific column type with mysql_type 
+
+- connecting to multiple databases with drupal 
+In the settings.phpfile, $databasesis an array composed of multiple database connection strings. 
+Here’s the default syntax, specifying a single connection:
+
+array( 
+'driver' => 'mysql', 
+'database' => 'databasename', 
+'username' => 'username', 
+'password' => 'password', 
+'host' => 'localhost', 
+'port' => 3306, 
+'prefix' => 'myprefix_', 
+); 
+
+define two database 
+$databases = array ( 
+'default' => 
+array ( 
+'default' => 
+array ( 
+'driver' => 'mysql', 
+'database' => 'd7', 
+'username' => 'username', 
+'password' => 'userpassword', 
+'host' => 'localhost', 
+'port' => '', 
+'prefix' => '', 
+), 
+), 
+'legacy' => 
+array ( 
+'default' => 
+array ( 
+'driver' => 'mysql', 
+'database' => 'legacydatabase', 
+'username' => 'legacyusername', 
+'password' => 'legacyuserpassword', 
+'host' => '122.185.22.1', 
+'port' => '6060', 
+), 
+), 
+); 
+
+- using a temporary table, db_query_temporary() 
+- writing your own database driver 
+First, we make a copy of includes/database/pgsql/database.incand rename it as 
+includes/database/dnabase/database.inc. Then we change the logic inside each wrapper function to 
+map to DNAbase’s functionality instead of PostgreSQL’s functionality.
+
+http://drupal.org/node/310087
+
+
+    
+    
+    
+    
+
+
+

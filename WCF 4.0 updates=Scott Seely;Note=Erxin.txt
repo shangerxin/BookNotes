@@ -1,0 +1,1190 @@
+﻿WCF 4.0 updates=Scott Seely;Note=Erxin
+
+# Outline
+- Wcf configuration mode update
+    * default endpoints, have multiple base address to fix to multiple data entry points
+    * default bindings, a binding don't have a name
+    * default behaviors, for services or endpoints
+    * standard endpoints
+    * file-less activation
+- updates to REST
+    * automatic help
+    * http caching
+    * message format selection
+    * webFaultException
+    * integration with asp.net routes in service mode
+    * new project templates
+- discovery services
+    * OASIS, formalizing the servies discovery 
+    * good for scenario where services come and go at runtime(e.g. devices)
+    * two types of services discovery
+        + ad-hoc
+        clients can discover services, broad cast message
+        + mananged
+        client discover throw a discovery proxy
+- message routing   
+    + what is message routing, based on properties of a message send to appropriate destination through intermediary
+    + support check into the message 
+    + what properties to route on?
+    action header
+    receive address
+    address prefix
+    message header contents
+    + WS-* messaging allows for transport neutral messaging
+    security, transaction, all in headers
+    + use case for routing
+    deploy on DMZ
+    bridge protocol 
+    well know public for services
+    load balancing for service call
+    handle failover
+    multicast one-way messages to well know receivers
+    
+# Configuration model updates
+- default endpoints
+    + in wcf 3.x the service at lease one end points
+    + one default endpoint per contract/base address combination
+    + when manually specify endpoint, all the manual will need to manually define
+    + default protocol mapping
+    <system.serviceModel>
+        <protocolMapping>
+            <add scheme="http" binding="basicHttpBinding" bindingConfiguration=""/>
+            <add scheme="net.tcp" binding="netTcpBinding"/>
+        </protocolMapping>
+    ...
+    + demo create a wcf service
+    //Service Contract interface
+    [ServiceContract]
+    public interface i0
+    {
+        [OperationContract]
+        int EchoInt(int value);
+    }
+    [ServiceContract]
+    public interface i1
+    {
+        [OperationContract]
+        string EchoString(string value);
+    }
+    //implement the servcie
+    public class SImplementation:i0, i1
+    {
+        public string EchoString(string value)
+        {
+            return value;
+        }
+        public int EchoInt(int value)
+        {
+            return value;
+        }
+    }
+    //app host the service
+    class program
+    {
+        static void Main()
+        {
+            using(var host = new ServiceHost(typeof(SImplementation),
+                                                                 new Uri("net.tcp://localhost/"),
+                                                                 new Uri("http://localhost/demo/")
+            {
+                host.Description.Behaviors.Add(new ServiceMetaDataBehavior{ HttpGetEnable = true});
+                
+                //manual add meta data exchange endpoint
+                host.AddServiceEndpoint(typeof(IMetadataExchange), MetadataExchangeBindings.CreateNewHttpBinding(), "/mex");
+                 //due to add endpoint manually have to add default endpoint by code or in config
+                host.AddDefaultEndpoint();
+                
+                host.Open();
+                foreach(ServiceEndpoint endpoint in host.Description.Endpoints)
+                {
+                    Console.WriteLine("{0}", endpoint.ListenUri);
+                }
+                Console.WriteLine("Press [Enter] to exit");
+                Console.ReadLine();
+            }
+        }
+    }
+    //use security http and config in the app config file
+    <configuration>
+        <startup>
+            ...
+        </startup>
+        <system.serviceMode>
+            <protocalMapping>
+                <remove schema="http"/>
+                <add schema="http" binding="wsHttpBinding"/>
+            </protocalMapping>
+        </system.serviceMode>
+    </configuration>
+- default bindings & default behaviors
+    + you can also define default binding and behavior configurations 
+        * simple define the binding/behavior without a name 
+        * that binding takes effect for anything not assigned a specific binding 
+        * can be defined at different scopes within config(e.g. machine.config)
+        
+    + default binding configuration 
+    <configuration>
+        <system.serviceModel>
+            <bindings>
+                <basicHttpBinding>
+                    <binding messageEncoding="Mtom"/> <!--notice there's no name attribute -->
+                    <!--equivalent to-->
+                    <!-- <binding messageEncoding="Mtom" name=""/> -->
+                </basicHttpBinding>
+            </bindings>
+        </system.serviceModel>
+    </configuration>
+        
+    <configuration>
+        <system.serviceModel>
+            <behaviors>
+                <serviceBehaviors>
+                    <behavior> <!--notice no name attribute-->
+                        <serviceMetadata httpGetEnabled="true"/>
+                    </behavior>
+                    <!--equivalent to-->
+                    <!-- <behavior httpGetEnabled="true" name=""/> -->
+                </serviceBehaviors>
+            </behaviors>
+        </system.serviceMode>
+    </configuration>
+- common behaviors configuration
+    + feature from the start 
+    + additive to other configured behaviors 
+    + only allowed in machine.config 
+    <configuration>
+        <system.serviceModel>
+            <behaviors>
+                <serviceBehaviors>
+                    <serviceMetadata httpGetEnable="true">
+                </serviceBehaviors>
+            <behaviors>
+        <system.serviceModel>
+    </configuration>
+    
+- demo defaults settings for bindings and behaviors, use protocol mapping 
+<bindings>
+    <wsHttpBinding>
+        <binding>
+            <reliableSession enabled="true"/>
+        </binding>
+    </wsHttpBinding>
+</bindings>
+<protocolMapping>
+    <remove schema="http">
+    <add schema="http" binding="wsHttpBinding"/>
+</protocolMapping>
+
+could also configure machine \.config
+- standard endpoints
+    + wcf 4 also comes with several "preconfigured" standard endpoints
+    these cover some of the most common usage scenarios
+    you can simply reuse them as-is without change 
+    
+    + you refer to standard endpints by name using the "kind" attribute
+    make it easier to get up and running in certain scenarios 
+    
+- standard endpoints 
+mexEndpoint, endpoint for MEX configured with IMetadataExchange 
+dynamicEndpoint, dynamicEndpoint, wcf discovery, an address is not required because during the first call, the client will query for a service endpoint automatically without service address 
+discoveryEndpoint, standard endpoint that is pre-configured for discovery operations with  a client application using standard endpoint 
+updDiscoveryEndpoint, standard endpoint that is pre-configured for discovery operations with  a client application
+announcementEndpoint, pre-configured for the announcement functionality of discovery
+workflowControlEndpoint, controlling execution of workflow instances(create, run, suspend, terminates, etc)
+webHttpEndpoint , rest service 
+webScriptEndpoint, expose ajax services
+
+- using a standard endpoints in your wcf application 
+<configuration>
+    <bindings>
+    ...
+    </bindings>
+    <services>
+        <service name="WcfConfigDemo.HelloWorldService">
+            <endpoint kind="mexEndpoint" contract="WcfConfigDemo.IHelloWordService"/>
+            <endpoint kind="mexEndpoint" address="/mex">
+        </service>
+    </services>
+
+- File-less activation, add service configuration for no svc, can host without svc file 
+<system.serviceModel>
+    <serviceHostingEnvironment multipleSiteBindingsEnabled="true">
+        <serviceActivation>
+            <add service="WcfConfigDemo.NoSvcFile" relativeAddress="Nosvc.svc"/>
+        </serviceActivation>
+    </serviceHostingEnvironment>
+    
+    <behaviors>
+    ...
+    </behaviors>
+</system.serviceModel>
+
+
+# Wcf 4.0 REST updates
+- automatic help, tell version and actions 
+    + wcf 4 provide automatic help page for rest services 
+    configure the <webHttp> behvior with helpEnabled="true"
+    <system.serviceModel>
+        <standardEndpoints>
+            <webHttpEndpoint>
+                <standardEndpoint helpEnabled="true" automaticFormatSelectionEnabled="true"/>
+            </webHttpEndpoint>
+        </standardEndpoints>
+    </system.serviceModel>
+    <services>
+        <service name="WcfRestupdates.HelloWordService">
+            <endpoint kind="webHttpEndpoint" contract="wcfRestUpdates.HelloWorldService"/>
+        </service>
+    </services>
+    
+    the webHttpEndpoint configuration of the service will reference the webHttpEndpoint section in the service
+    
+    get a help information by 
+    url/*.svc/help/
+- http caching 
+    + wcf 4 provides a simpler model for managing http caching 
+    they built on the asp.net caching profile architecture 
+    + you define a [AspNetCacheProfile] for your GET operations 
+    + shields you from dealing with http caching headers yourself 
+    
+    [AspNetCacheProfile("CacheFor10Seconds")]
+    [WebGet(UriTemplate=XmlItemTemplate)]
+    [OperationContract]
+    public Counter GetItemInXml()
+    {
+        return HandleGet();
+    }
+    
+    + enable the caching support from service configuration 
+    <configuration>
+        <system.web>
+            <compilation debug="true" targetFramework="4.0"/>
+            <caching>
+                <outputCacheSettings>
+                    <outputCacheProfiles>
+                        <add name="CacheFor10Seconds" duration="10" varyByHeader="Accept" varyByParam=""/>
+                    </outputCacheProfiles>
+                </outputCacheSettings>
+            </caching>
+        <system.web>
+        <system.serviceModel>
+            ...
+        </system.serviceModel>
+    </configuration>
+- message format selection 
+    + wcf 4 also provides automatic format selection for xml/json
+    this feature is built on the http "Accept" headers 
+    
+    <system.serviceModel>
+        <standardEndpoints>
+            <webHttpEndpoints>
+                <standardEndpoint helpEnabled="true" automaticFormatSelectionEnabled="true"/>
+            <webHttpEndpoints>
+        </standardEndpoints>
+    </system.serviceModel>
+    
+    the return data type will dependent on the request data type 
+- webFaultException, easy to return http status code 
+    + since REST isn't SOAP, you no longer have SOAP "faults" at your disposal 
+        * this has made managing errors more difficult in REST services 
+    + using the WebFaultException with resources 
+    [OperationContract]
+    [WebGet(UriTemplate="value/{name}")]
+    public int GetValue(string name)
+    {
+        throw new WebFaultException<string>(string.Format("Key {0} does not exist.", name), HttpStatusCode.NotFound);
+    }
+    
+- Wcf and asp.net routes, this feature is used to hide the *.svc file from the REST http request 
+    + wcf 4 provides the ability to integrate with the asp.net routing engine( via system.serviceModel.activation.dll )
+        * you implement registerRoutes in Global.asax add ServiceRoute mappings 
+        * serviceRoute allows you to map a URL to a WCF 4 service class 
+        
+    + ultimately this gives you a URL space that maps to multiple WCF classes 
+    private void RegisterRoutes()
+    {
+        WebServiceHostFactory facotry = new WebServiceHostFactory();
+        RouteTable.Routes.Add(new ServiceRoute("Bookmarks", factory, typeof(BookmarkService)));
+        RouteTable.Routes.Add(new ServiceRoute("Users", factory, typeof(TypeofService)));
+    }
+    
+    //ultimately this gives you a URL space that maps to multiple WCF classes 
+    protected void Application_Start(object object, EventArgs e)
+    {
+        RegisterRoutes();
+    }
+    
+    add service configuration 
+    <system.serviceModel>
+        <serviceHostingEnvironment aspNetCompatibilityEnable="true">
+            <serviceActivation>
+                <add service="WcfRestupdates.HelloWorldService" relativeAddress="HelloWorld.svc">
+            </serviceActivation>
+        </serviceHostingEnvironment>
+        <standardEndpoints>
+            <webHttpEndpoints>
+                <standardEndpoint helpEnabled="true" automaticFormatSelectionEnabled="true"/>
+            <webHttpEndpoints>
+        </standardEndpoints>
+        <services>
+            <service name="WcfRestupdates.HelloWorldService">
+                <endpoint kind="webHttpEndpoint" contract="WcfRestUpdates.HelloWorldService"/>
+            </service>
+        </services>
+    </system.serviceModel>
+    
+    then could directly use the http://localhost:port/url to access any web services method 
+- REST Templates 
+download the new rest project templates via the visual studio manager
+
+
+# WCF 4.0 Discovery 
+- service discovery 
+    + good for scenarios where services come and go at runtime(e.g. devices)
+    + the ideas have been around for a while but are now formalizing(OASIS)
+    
+    + wcf 4.0 provides two types of service discovery 
+        * adhoc
+        clients can discover services on a local subnet(UDP-based)
+        * managed 
+        clients can discover services on a larger "managed" network (beyond the local subnet) through a discovery proxy 
+        
+- ad-hoc discovery 
+    + services must first expose a discovery endpoint 
+    + client will be able to discover it over udp
+    
+    + client can then use the standard "dynamicEndpoint" to find it 
+        * in code the client uses the DiscoveryClient class 
+        * it's also possible to provide FindCriteria(scopes) to narrow results, for named perticular endpoint 
+        * if the service expose a metadataExchange endpoint, the client can discover that too and dynamically bind to the endpoint 
+- recommendations to speed locating services 
+    + default time based scope resolution of 20 seconds 
+    + just find first service that responds 
+    findCriteria.MaxResult = 1 
+    + find all services that can respond "quickly"
+    FindCriteria.Duration = TimeSpan.FromSeconds(1)
+    + findCriteria may also appear in configuration
+    
+- binding dynamically 
+    + different services exposed on different protocols 
+        * may be any wcf transport 
+        * on local network, call authentication done using network credentials(safe assumption)
+    + create findCriteria that uses metadataExchange to discover binding 
+        * FindCdertria.CreateMetadataExchangeEndpointCriteria(Type)
+        * Finds MetadataExchange endpoint that expose an endpoint of the named type 
+    + metadataResolver to find the metadata and binding 
+    + channelFactory to create the proxy 
+    
+- Discovery scopes 
+    + clients can narrow discovery result by searching based on "scopes"
+        * a scope is a URI that has meaning to the caller and service 
+        * services associate themselves with scope while announcing, client use scope the reduce the set of service come back 
+        * clients can then discover based on scope information 
+        * all of this can be specified in configuration(both service & client)
+    + clients can narrow discovery results by searching based on "scopes"
+        * services associate themselves with scopes while announcing 
+        * clients can then discover based on scope information 
+        * all of this can be specified in configuration (both service & client)
+        
+    <system.serviceModel>
+        <client>
+            <endpoint name="discovery" kind="dynamicEndpoint" binding="wsHttpBinding" contract="IHelloWorld">
+        </client>
+    </system.serviceModel>
+    
+    + configure scopes at service 
+    <endpiontBehaviors>
+        <behavior>
+            <endpointDiscovery>
+                <scopes>
+                    <add scope="ldap:///ou=teachers,o=pluralsight.com"/>
+                </scopes>
+            </endpointDiscovery>
+        </behavior>
+    </endpiontBehaviors>
+    
+    + configure scopes at client 
+    <standardEndpoint name="dynamicEndpointConfiguration">
+        <discoveryClientSettings>
+            <endpoint kind="udpDiscoveryEndpoint"/>
+            <findCriteria maxResults="1">
+                <scopes>
+                    <add scope="ldap:///ou=teachers,o=pluralsight.com"/>
+                </scopes>
+            </findCriteria>
+        </discoveryClientSettings>
+    </standardEndpoint>
+    
+    + using the hoc discovery 
+    [ServiceContract(Namespace="http://www.pluralsight.com/WCF")]
+    public interface IHelloWorld
+    {
+        [OperationContract]
+        string SayHi(string name);
+    }
+    
+    
+    <system.serviceModel>
+        <behaviors>
+            <serviceBehaviors>
+                <behavior>
+                    <serviceMetadata/>
+                    <serviceDiscovery/>
+                </behavior>
+            </serviceBehaviors>
+            <endpointBehaviors>
+                <behavior>
+                    <scopes>
+                        <add scope="ldap:///ou=teacher,o=pluralsight.com"/>
+                    </scopes>
+                </behavior>
+            </endpointBehaviors>
+        </behaviors>
+        <services>
+            <service name="AdHocService.HelloWorldService">
+                <host>
+                    <baseAddresses>
+                        <add baseAddress="http://localhost/Demo"/>
+                    </baseAddresses>
+                </host>
+            </service>
+            <endpoint kind="mexEndpoint">
+            <endpoint kind="udpDiscoveryEndpoint">
+            <endpoint contract="Common.IHelloWorld" address="/Hello" binding="basicHttpBinding"/>
+        </services>
+    </system.serviceModel>
+    
+    var host = new ServiceHost(typeof(HelloWorldService));
+    host.Open();
+    
+    //the client codes
+    call through config 
+    var factory = new ChannelFactory<IHellowWorld>("discovery"); //discovery is a endpiont configuration name
+    var channel = factory.CreateChannel();
+    Console.WriteLine(channel.SayHi("Scott"));
+    
+    //client configuraiton 
+    <system.serviceModel>
+        <client>
+            <endpiont contract="Common.IHelloWorld"
+                      name="discovery"
+                      binding="basicHttpBinding"
+                      kind="dynamicEndpoint"
+                      endpointConfiguration="dynamicEndpointConfiguration"/>
+        </client>
+        <standardEndpionts>
+            <dynamicEndpoint>
+                <standardEndpoint name="dynamicEndpointConfiguration">
+                    <endpoint kind="udpDiscoveryEndpoint"/>
+                    <findCriteria maxResults="1" duration="00:00:02">
+                        <scopes>
+                            <add scope="ldap:///ou=teacher,o=pluralsight.com"/>
+                        </scopes>
+                    </findCriteria>
+                </standardEndpoint>
+            </dynamicEndpoint>
+        <standardEndpionts>
+    </system.serviceModel>
+    
+    //use dynamic bind without client configuration 
+    var discoveryClient = new DiscoveryClient(new UdpDiscoveryEndpoint());
+    var findCriteria = FindCriteria.CreateMetadataExchangeEndpointCriteria(typeof(IHelloWord));
+    findCrtieria.MaxResult = 1;
+    findCriteria.Scope.Add(new Uri("ldap:///ou=treachers,o=pluralsight.com"));
+    var findResutls = discoveryClient.Find(findCriteria);
+    if(findResults.Endpoints.Count > 0)
+    {
+        var endpoiints = MetadataResolver.Resolve(typeof(IHelloWord), findResults.Endpoints[0].Address);
+        if(endpoint.Count > 0)
+        {
+            var factory = new ChannelFactory<IHellowWorld>(endpoint[0].Binding, endpoints[0].Address);
+            var channel = factory.CreateChannel();
+            Console.WriteLine(channel.SayHi("Dynamic"));
+        }
+    }
+    
+- Service Announcements 
+    + WCF 4 also makes it easy for servies to "announce" themselves 
+        * allow clients who are "listening" to learn about new services 
+        * ultimately this reduces the amount of probing/multicast messaging 
+    + the <serviceDiscovery> behavior allows you to define a set of announcement endpoints to use 
+        * do not add announcement to the service endpoints collection: just  doesn't work 
+    + clients host an announcementService to listen for announcements 
+        * OnlineAnnouncementReceived: Indicates a new endpoint is online 
+        * OfflineAnnouncementReceived: Indicate an endpoint went offline
+        
+    + demo Announcements 
+    <system.serviceModel>
+        <behaviors>
+            <serviceMetadata>
+            <serviceDiscovery>
+                <annoucementEndpoint>
+                    <endpoint kind="udpAnnoucementEndpoint"/>
+                </annoucementEndpoint>
+            </serviceDiscovery>
+            </serviceMetadata>
+            <endpointBehaviors>
+                <behavior>
+                    <endpiontDiscovery enable="true">
+                </behavior>
+            </endpiontBehaviors>
+        </behaviors>
+        <services>
+            <service name="AnnounceService.HelloWorldService">
+                <host>
+                    <baseAddress>
+                        <add baseAddress="http://localhost/demo"/>
+                    </baseAddress>
+                </host>
+                <endpoint kind="mexEndpiont"/>
+                <endpoint kind="udpDiscoveryEndpoint"/>
+                <endpoint address="Hello" contract="Common.IHelloWord" binding="basicHttpBinding"/>
+            </service>
+        </services>
+    </system.serviceModel>
+    
+    //init the service 
+    var announcementService = new AnnouncementService();
+    annoucementService.OnlineAnnouncementReceived += OnOnlineEvent;
+    annoucementService.OfflineAnnoucementReceived += OfflineEvent;
+    
+    using(var annoucementServiceHost = new ServiceHost(annoucementService))
+    {
+        annoucementServiceHost.AddServiceEndpoint(new UdpAnnoucementEndpoint());
+        annoucementServicehost.Open();
+        Console.WriteLine("Press <ENTER> to terminate.");
+        Console.ReadLine();
+    }
+    
+    //the configuration of client is empty 
+    <configuration/>
+    static void OnOnlineEvent(object sender, AnnouceServiceEventArgs e)
+    {
+        var contractDescription = ContractDescription.GetContract(typeof(IHellowWorld));
+        var qualifiedName = new XmlQualifiedName(contractDescription.Name, contractDescription.Namespace);
+        var scopeUri = new Uri("uri:"+qualifiedName);
+        var mexContractDescription = ContractDescription.GetContract(typeof(IMetadataExchange));
+        var mexQualifiedName = new XmlQualifiedName(mexContractDescription.Name, mexContractDescription.Namespace);
+        foreach(var name in e.EndpointDiscoveryMetadata.ContractTypeNames)
+        {
+            if(mexQualifiedName == name)
+            {
+                if(scope == scopeUri)
+                {
+                    var endpoints = MetadataResolver.Resolve(typeof(IHelloWorld), e.EndpointDiscoveryMetadata.Address)
+                    {
+                        var factory = new ChannelFactory<IHelloWord>(endpoint[0].Binding, endpoint[0].Address);
+                        var channel = factory.CreateChannel();
+                        Console.WriteLine(channel.SayHi("announcement"));
+                        ((IChannel)channel).Close();
+                    }
+                }
+            }
+        }
+    }
+- managed discovery 
+    + ad-hoc discovery is limited to the local subnet 
+        * to discovery across network you need managed service discovery 
+    + implementing managed service discovery is more involved 
+        * you must implement a complete discovery proxy 
+        * wcf 4 comes with a DiscoveryProxy to provide the structure 
+        
+    + your implementation must define how to 
+        * save( and cache) discovery announcements 
+        * respond to incoming discovery probes 
+        
+    + use case 
+        * allow discovery to span subnets 
+        * limit broadcast on network 
+        * make service discoverable on the internet 
+
+    + service side managed discovery 
+        * for announcing new services, service uses annoucementEndpoint(Binding, Address) to talk to DiscoveryProxy 
+        * no standard endpoint(yet)
+        * no need for DiscoveryEndpoint on Service! 
+    + demo create a DiscoveryProxy 
+    service configuration 
+    <system.serviceModel>
+        <behaviors>
+            <endpointBehaviors>
+                <behavior>
+                    <endpointDiscovery>
+                        <scopes>
+                            <add scope="ldap:///out=teacher,o=pluralsight.com">
+                        </scopes>
+                    </endpointDiscovery>
+                </behavior>
+            </endpointBehaviors>
+        </behaviors>
+        <services>
+            <service name="DiscoverableService.HellowWorldService">
+                <host>
+                    <baseAddress>
+                        <add baseAddress="http://localhost/Demo/DiscoverableService">
+                    </baseAddress>
+                </host>
+            </service>
+        </services>
+    </system.serviceModel>
+    var host = new ServiceHost(new PluralsightDiscoveryProxy(), new Uri("http://locahost/Demo"));
+    try
+    {
+        host.AddServiceEndpoint(new WSHttpBinding(), new EndpointAddress(host.BasedAddresses[0] + "/Probe");
+        host.AddServiceEndpoint(new AnnouncementEndpiont(new WSHttpBinding(), new EndpointAddress(hots.BaseAddresses[0] + "/Announcement");
+        host.Open();
+    }
+    
+    //client
+    [ServiceBehavior(instanceContextModel = InstanceContextModel.Single, ConcurrentModel=ConcurrencyModel.Multiple)]
+    public class PluralsightDiscoveryProxy:DiscoveryProxy
+    {
+        readonly Dictionary<EndpointAddress, EndpointDiscoveryMetadata> _onlineServices = new Dictionary<EndpointAddress, EndpointDiscoveryMetadata>();
+        
+        protected override IAsyncResult OnBeginOnlineAnnoucement(DiscoveryMessageSequence, EndpointDiscoveryMetadata)
+        {
+            AddOnlineService(endpointDiscoveryMetaData);
+            return new OnOnlineAnnoucementAsyncResult(callback, state);
+        }
+        
+        protected override void OnEndOnlineAnnoucement(IAsyncResult result)
+        {
+            OnOnlineAnnoucementAsyncResult.End(result);
+        }
+        
+        protected override IAsyncResult OnBeginOfflineAnnoucement(DiscoveryMessageSequence messageSequence, EndpointMetaData)
+        {
+            RemoveOnlineService(endpointDiscoveryMetadata);
+            return new OnOfflineAnnoucementAsyncResult(callback, state);
+        }
+    }
+    
+# WCF 4.0 Basic Routing 
+- Introduction
+    + what is routing 
+    based on properties of a message, send to appropriate destination through intermediary 
+    
+    + what properties to route on? 
+        * action header 
+        * receive address 
+        * address prefix 
+        * message header contents 
+        
+    + WS-* messaging allows for transport neutral messaging 
+        * security, transactions, addressing all in headers 
+        
+    + Uses cases for Routing 
+        * deploy server in DMZ, route to infrastructure within enterprise 
+        * bridge protocols(ex. http-> net.tcp)
+        * well known public face for services, abstract deployment of other services 
+        * load balancing of service calls 
+        * handle failover 
+        * BizTalk seems to be too heavy of a solution
+            * watch for when BizTalk starts making sense 
+- hosting and Configuring the Wcf RoutingService 
+    + just a Microsoft provide WCF class 
+    + hosted in a serviceHost available in EXEs, windows service, or IIS
+    + completely configurable
+        <system.serviceModel>/<routing>
+    + Imperative(code) model matches configuration
+    + configure like every other service 
+    address,binding,contract
+    
+    + listens with MEPs
+        * one-way, ISimplexDatagramRouter 
+        * one-way with session, ISimplexSessionRouter 
+        * request-reply IRequestReplyRouter
+        * Duplex IDuplexSessionRouter 
+        
+    <services>
+        <service behaviorConfiguration="routingData">
+            <endpoint address="/helloWorld" binding="wsHttpBinding" name"helloWorld" contract="System.ServiceModel.Routing.IRequestReplyRouter"/>
+            <endpoint address="/oneway" binding="basicHttpBinding" name="oneWay" contract="System.ServiceModel.Routing.ISimplexDatagramRouter"/>
+            <endpoint address="/duplex" binding="wsDualHttpBinding" name="duplex" contract="System.ServiceModel.Routing.IDuplexSessionRouter"/>
+        </service>
+    </services>
+    
+    + Ending routing 
+        * endpoint needs a <routing> behavior on the endpoint 
+        <routing filterTableName="routingTalbe"/>
+    + point to a filter table in the <routing> section of config 
+    <routing>
+        <filters>
+            <filter name="HelloWorld" filterType="EndpointName" filterData="helloWorld"/>
+            <filter name="OneWay" filterType="EndpointName" filterData="oneWay"/>
+            <filter name="Duplex" filterType="EndpointName" filterData="duplex"/>
+        </filters>
+        <filterTables>
+            <!--routingTable will be set through the behavior-->
+            <filterTable name="routingTable">
+                <!--this endpiontName is map to the client configuration endpoint name >
+                <add filterName="HelloWorld" endpointName="HelloWorldService"/>
+                <add filterName="OneWay" endpointName="OnewayService"/>
+                <add filterName="Duplex" endpointName="DuplexService"/>
+            </filterTable>
+        </filterTables>
+    </routing>
+    
+    endpointName point to client configuration 
+    other filters exists, action, xpath, endpointAddress,prefixEndpointAddress, matchAll
+    any filter you wrote for messageLogging works here 
+    
+    + Forwarding Endpoint Configuration 
+        * contrac tis always "*" for all message 
+        allows routing to be 'blind' to contents 
+        
+    <client>
+        <endpoint name="HelloWorldService" address="http://localhost:58941/HelloWorld.svc" binding="basicHttpBinding" contract="*" />
+        <endpoint name="OnewayService" address="net.msmq://localhost:58941/HelloWorld.svc" binding="netMsmqBinding" bindingConfiguration="onewaydemo" contract="*" />
+        <endpoint name="DuplexService" address="net.tcp://localhost:58941/HelloWorld.svc" binding="netTcpBinding" contract="*" />
+    </client>
+    
+- Demo: Using the Routing Service 
+//service 
+[ServiceContract(Namespace="http://www.pluralsight.com/Demo/OneWay")]
+class OneWayService
+{
+    [OperationContract(IsOneWay=true)]
+    void PrintHi(string name)
+    {
+        Console.WriteLine("hello from {0}", name);
+    }
+}
+
+//duplex service 
+[ServiceContract(Namespace="http://www.pluralsight.com/Demo/Duplex", 
+                 CallbackContract=typeof(ICallbackDuplex),
+                 SessionModel=SessionModel.Required)]
+[ServiceBehavior(ConcurrentMode = ConcurrencyModel.Multiple, InstanceContextModel = InstanceContextMode.PerSession)]                 
+class DuplexService
+{
+    [OperationContract(IsOneWay=true)]
+    void GetMessage(string name)
+    {
+        var callback = OperationContract.Current.GetCallbackChannel<ICallbackDuplex>();
+        Console.WriteLine("Asking client for the time");
+        return string.Format("You think the time is {0}", callback.GetTime());
+    }
+}
+
+//wcfrouting project contain no code only *.svc file, the web configure of the service is 
+<system.serviceModel>
+    <behaviors>
+        <serviceBehaviors>
+            <behavior name="routingData">
+                <routing filterTableName="routingTable"/>
+            </behaivor>
+        </serviceBehaivors>
+    </behaviors>
+    <bindings>
+        <netMsmqBinding>
+            <binding name="onewaydemo" useActivityDirectory="false" exactlyOnce="false">
+                <security mode="None"/>
+            </binding>
+        </netMsmqBinding>
+    </bindings>
+    <services>
+        <service beahviorConfiguration="routingData" name="System.ServiceModel.Routing.RoutingService">
+            <endpoint address="/helloWorld" binding="wsHttpBinding" name="helloWorld" contract="System.ServiceModel.Routing.IReqeustReplyRouter"/>
+            <endpoint address="/oneway" binding="basicHttpBinding" name="oneWay" contract="System.ServiceModel.Routing.ISimpleDatagramRouter"/>
+            <endpoint address="/duplex" binding="wsDualHttpBinding" name="duplex" contract="System.ServiceModel.Routing.IDuplexSessionRouter"/>
+        </service>
+    </services>
+    <client>
+        <endpoint name="HelloWorldService" address="http://localhost:58941/HelloWorld.svc" binding="basicHttpBinding" contract="*"/>
+        <endpoint name="OnewayService" address="http://localhost:58941/OnewayService.svc" binding="netMsmqBinding" contract="*"/>
+        <endpoint name="DuplexService" address="http://localhost:58941/DuplexService.svc" binding="netTcpBinding" contract="*"/>
+    </client>
+    <routing>
+        <filters>
+            <filter name="HelloWorld" filterType="EndpointName" fitlerData="helloWorld">
+            <filter name="OneWay" filterType="EndpointName" fitlerData="oneWay">
+            <filter name="Duplex" filterType="EndpointName" fitlerData="duplex">
+        </filters>
+        <filterTables>
+            <add filterName="HelloWorld" endpointName="HelloWorldService"/>
+            <add filterName="OneWay" endpointName="OnewayService"/>
+            <add filterName="Duplex" endpointName="DuplexService"/>
+        </filterTables>
+    </routing>
+</system.serviceModel>
+the interface ISimpleDatagramRouter is used to map to the oneway service method which don't have session on it 
+
+IDuplexSessionRouter, this handle all message changes 
+
+this router also bridge different protocol of the services 
+
+//client code 
+var client = new HelloWorldRef.HelloWorldClient("HelloWorld");
+client.SayHi("router");
+client.Close();
+
+var oneway = new OneWayRef.OneWayServiceClient("OneWay");
+oneway.PrintHi("Oneway")
+oneway.Close();
+
+var duplex = new DuplexRef.DuplexServiceClient(new InstanceContext(new DuplexCallback()));
+duplex.GetMessage();
+
+//client configuration file 
+<system.serviceModel>
+    <client>
+        <endpoint address="http://localhost:62363/router.svc/helloWorld" binding="wsHttpBinding" contract="HelloWorldRef.HelloWorld" name="HelloWorld"/>
+        <endpoint address="http://localhost:62363/router.svc/oneway" binding="basicHttpBinding" contract="OneWayRef.OneWayService" name="OneWay"/>
+        <endpoint address="http://localhost:62363/router.svc/duplex" binding="wsDualHttpBinding" contract="DuplexRef.DuplexService" name="Duplex"/>
+    </client>
+</system.serviceModel>
+
+- Summary 
+
+
+# WCF 4.0 Advance Routing 
+- Introduction
+    + using routing filters to define destination 
+    + creating custom filters 
+    + handling failover 
+    + one-way multicast 
+    
+    + routing filter types 
+    <routing>
+        <filters>
+            <filter name="HelloWorld" filterType="TypeofFilter"/>
+        </filters>
+    </routing>
+    
+    format is 
+    name, used to build a routing table 
+    filterType, type of filter 
+    filterData, string to pass to the constructor of the filter 
+    filter1/filter2, only used with the 'And' filter (more in a moment!)
+    custom, type name that implements messageFilter 
+   
+- Built-in Wcf Message Filters 
+    + matches all messages arriving on the RoutingService for a gien endpoint 
+    + fairly useful to map 1:1 from endpoint to service 
+    <services>
+        <service behaviorConfiguration="routingData" name="System.ServiceModel.Routing.RoutingService">
+            <endpoint address="/helloWorld" binding="wsHttpBinding" name="helloWorld" contract="System.ServiceModel.Routing.IRequestReplyRouter"/>
+        </service>
+    </services>
+    <filter name="EndpointAddress" filterType="EndpointAddress" filterData="http://localhost:30866/router.svc/helloWorld"/>
+     
+    filterData could be set to a endpoint name or a endpoint uri
+    when you move a service to other location the filter will be inactive if the filterData is set with uri 
+    
+    + PrefixEndpointAddress
+        * matches all messages arriving at a base URL
+        * useful for mapping a family of prefixes for contracts implementing one or more MEPs to a single location 
+    <filter name="PrefixEndpointAddress" filterType="PrefixEndpointAddress" filterData="server_uri"/>
+    
+    the filter could only routing base on the message header, if you want to routing base on the message content, then choose buztalk(http://www.microsoft.com/en-us/server-cloud/products/biztalk/)
+    + XPath
+        * matches all messages based on XPath expression 
+        * useful for mapping messages based on Header information 
+        * never get access to message body, so no CBR on body 
+    <namespaceTable>
+        <add prefix="soap" namespace="http://www.w3.org/2003/05/soap-envelope"/>
+        <add prefix="wsa" namespace="http://www.w3.org/2003/05/soap-envelope"/>
+    </namespaceTable>
+    <filter name="XPath" fitlerType="XPath" filterData="/soap:Envelope/soap:Header/wsa:Action = 'http://www.pluralsight.com/WCF/HelloWorldService/SayHello'"/>
+    
+    other, and combine 2 named filters, and-ing them to get a result
+    <filter name="And" filterType="And" filter1="XPath" filter2="HelloWorld"/>
+    
+    match all message that come through
+    <filtername="MatchAll" filterType="MatchAll"/>
+    
+    action, match when the ws-addressing action header has a set value, this is just handle the action information 
+    <filtername="Action" filterType="Action" filterData="http://www.pluralsight.com/WCF/HelloWorldService/SayHello"/>
+    
+    filter priority
+    each filter in a filterTable has a priority 
+    big priority == earlier evaluation 
+    same priority only one should evaluate to true 
+    <add filterName="HelloWorld" endpointName="HelloWorldPrimary" priority="0"/>
+    
+- Demo: Using the WCF Message Filters 
+[ServiceContract(Namespace="http://www.pluralsight.com/WCF")]
+{
+    [OperationContract]
+    //action name :http://www.pluralsight.com/WCF/IHelloWorldService/SayHello 
+    string SayHello(string name);
+}
+
+[ServiceBehavior(ConcurrencyMode = ConcurrencyMode.Multiple, InstanceContextMode = InstanceContextMode.Single)]
+public class HelloWorldService:IOneWayService, IHelloWordService
+{
+    private readonly string _instanceName;
+    public HelloWorldService(string instanceName)
+    {
+        _instanceName = instanceName;
+    }
+    
+    public string SayHello(string name)
+    {
+        return string.Format("Hello to {0} from {1}", name, _instanceName);
+    }
+    
+    pubic void WriteInfo(string info)
+    {
+        Console.WriteLine("Write info {0} at {1}", info, _instanceName);
+    }
+}
+
+//host two service instance 
+var host = new ServiceHost(new HelloWorldService("HelloPrimary"), new Uri("http://localhost/Demo/Primary"));
+host.Open();
+
+var host = new ServiceHost(new HelloWorldService("HelloBackup"), new Uri("http://localhost/Demo/Backup"));
+host.Open();
+
+//client only configure to connect to the router service 
+<client>
+    <endpoint address="http://localhost:30866/router.svc/helloWorld"/ binding="wsHttpBinding" contract="HelloService.IHelloWorldService" name="HelloWorld"/>
+    <endpoint address="http://localhost:30866/router.svc/oneway"/ binding="basicHttpBinding" contract="HelloService.IOneWayService" name="OneWayService"/>
+</client>
+
+//client code 
+var client = new HelloService.HelloWorldServiceClient("HelloWorld");
+client.SayHello("Pluralsight");
+client.Close();
+
+var onewayClient = new HelloService.OneWayServiceClient("OneWayService");
+onewayClient.WriteInfo("Oneway");
+onewayClient.Close();
+
+//service configuration 
+<serviceHostingEnvironment>
+    <serviceActivation>
+        <add service="System.ServiceModel.Routing.RoutingService, System.ServiceModel.Routing, Version=4.0.0.0, Culture=netural" relativeAddress="router.svc"/>
+    </serviceActivation>
+</serviceHostingEnvironment>
+<behaviors>
+    <serviceBehaviors>
+        <behavior name="routingData">
+            <routing filterTableName="routingTable"/>
+            <serviceDebug includeExceptionDetailInFaults="False"/>
+        </behaivor>
+    </serviceBehaviors>
+</behaviors>
+<services>
+    <service behaviorConfiguration="routingData" name="System.ServiceModel.Routing.RoutingService">
+        <endpoint address="/helloWorld" binding="wsHttpBinding" name="helloWorld" contract="System.ServiceModel.Routing.IRequestReplyRouter"/>
+        <endpoint address="/oneway" binding="basicHttpBinding" name="oneway" contract="System.ServiceModel.Routing.ISimplexDatagramRouter"/>
+    </service>
+</services>
+
+the router.svc is the service endpoint address name 
+
+- Custom Filters 
+    + Custom, when wcf doesn't provide the filter you want, write your own
+    + derive from System.ServiceModel.Dispatcher.MessageFilter
+    + implement 
+    bool Match(Message);
+    bool Match(MessageBuffer), only called for buffered messages. good for message logging, not routing 
+    
+    + do dynamically load extra filters implement CreateFilterTable
+        * created filterTable shared by all instance of type in a parent filterTable 
+        * can read from your own data store 
+        * be careful you may be pushing into territory better served by learning BizTalk 
+        
+- Demo:Building a custom Message Filter
+public class CustomFilter:MessageFilter 
+{
+    private string _filterData;
+    
+    public CustomFilter(string filterData)
+    {
+        _filterData = filterData;
+    }
+    
+    pulbic override bool Match(MessageBuffer buffer)
+    {
+        var message = buffer.CreateMessage();
+        return Match(message);
+    }
+    
+    public override bool Match(Message message)
+    {
+        return string.Equals.(message.Headers.To.Host, _filterData);
+    }
+    
+    protected override IMessageFilterTable<TFilterData> CreateFilterTable<TFilterData>()
+    {
+        return new CustomFilterTable<TFilterData>();
+    }
+    
+    public class CustomFilterTable<TFilterData>:Dictionary<MessageFilter, TFilterData>, IMessageFilterTable<TFilterData>
+    {
+        public bool GetMatchingValue(Message message, out TFilterData value)
+        {
+            value = default(TFilterData);
+            var matchingFilter = Keys.FirstOrDefault(key => key.Match(message));
+            if(matchingFilter == null)
+            {
+                return false;
+            }
+            value = this[matchingFirst];
+            return true;
+        }
+    }
+    
+}
+
+<filter name="Custom" filterType="Custom" customType="WcfRouting.CustomFilter, wcfRouting" filterData="localhost"/>
+<add fitlerName="Custom" endpointName="HelloWorldPrimary" priority="1"/>
+
+- Routing and Failover 
+    + use when you need redundancy 
+    + if service times out or fails, try another and another and, ...
+    + handled by backup lists 
+    + backup list configuration 
+    <filterTables>
+        <filterTable name="routingTable">
+            <add filterName="HelloWorldPrimary" backupList="HelloBackups"/>
+        </fitlerTable>
+    </filterTables>
+    <backupLists>
+        <backupList name="HelloBackups">
+            <add endpointName="HelloWorldBackup"/>
+        </backupList>
+    </backupLists>
+    
+    if a filter endpoint doesn't response then send the message to the back up list until some one response or failed 
+- Demo: Configuring a backupList
+- Multicast Event 
+    + you can't multicast for messages received ISimplexDatagramRouter endpoints 
+    + for each filter in the filter table that matches the target endpoint get a message 
+    + priority still in play! every table have the same level priority will get a message 
+    
+    <filterTable name="routingTable">
+        <add filterName="oneWayEndpointName" endpointName="OnewayPrimary" priority="2" />
+        <add filterName="oneWayEndpointName" endpointName="OnewayBackup" priority="2" />
+    </filterTable>
+    
+    + why multicast works on ISimpleDatagramRouter, 
+- Demo Configure routing for multicast events, have to need a contract only implement the IsOneWay =true 
+[ServiceContract(Namespace = "http://www.pluralsight.com/WCF")]
+public interface IOneWayService
+{
+    [OperationContract(IsOneWay=true)]
+    void WriteInfo(string info);
+}
+
+[SerivceContract(Namespace="http://www.pluralsight.com/WCF")]
+public interface IHelloWorldService
+{
+    [OperationContract]
+    //Action name = http://www.pluralsight.com/WCF/IHelloWorldService/SayHello
+    string SayHello(string name);
+}
+
+[ServiceBehavior(ConcurrentMode=ConcurrencyMode.Multiple, InstanceContextMode=InstanceContextMode.Single)]
+public class HelloWorldService:IOneWayService, IHelloWordService
+{
+    private readonly string _instanceName;
+    
+    public HelloWorldService(string instanceName)
+    {
+        _instanceName = instanceName;
+    }
+    
+    public string SayHello(string name)
+    {
+        return string.Format("Hello to {0} from {1}", name, _instanceName);
+    }
+    
+    public void WriteInfo(string info)
+    {
+        Console.WriteLine("Write info: {0} at {1}", info, _instanceName);
+    }
+}
+
+//client 
+var onewayClient = new HelloService.OneWayServiceClient("OnewayService");
+onewayClient.WriteInfo("OneWay");
+onewayClient.Close();
+
+
+//configuration
+<routing>
+    <filters>
+        <filter name="oneWayEndpointName" filterType="EndpointName" filterData="oneway" filterData="http://www.pluralsight.com/WCF/IHelloWorldService/SayHello"/>
+    </fitlers>
+</routing>
+<services>
+    <service behaviorConfiguration="routingData" name="System.ServiceModel.Routing.RoutingService">
+        <endpoint address="/helloWorld" binding="wsHttpBinding" name="helloWorld" contract="System.ServiceModel.Routing.IRequestReplyRouter"/>
+        <endpoint address="/oneway" binding="basicHttpBinding" name="oneway" contract="System.ServiceModel.Routing.ISimplexDatagramRouter"/>
+    </service>
+</services>
+<filterTables>
+    <add filterName="oneWayEndpointName" endpointName="OnewayPrimary" priority="2" />
+    <add filterName="oneWayEndpointName" endpointName="OnewayBackup" priority="2" />
+</filterTables>
+<client>
+    <endpoint name="OneWayPrimary" address="http://localhost/Demo/Primary" binding="basicHttpBinding" contract="*"/>
+    <endpoint name="OneWayBackup" address="http://localhost/Demo/Backup" binding="basicHttpBinding" contract="*">
+</client>
+
+
+# Wcf binding 
+- basic binding 
+This binding is provided by the BasicHttpBinding class. It is an ASMX web service it uses Http protocol for transport and encodes the message in UTF - 8 text for-mat. You can also use Https with this binding.
+
+- Web binding 
+This binding is provided by the WebHttpBinding class. HTTP-GET, HTTP-POST. It is used with REST based services which may give output as an XML or JSON format for implementing a syndication feed.
+
+- Web Service (WS) binding 
+This binding is provided by the WSHttpBinding class. It is like as Basic binding and uses Http or Https protocols for transport. But this is designed to offer various WS - * specifications such as WS – Reliable Messaging, WS - Transactions, WS - Security
+wsHttpBinding= basicHttpBinding + WS-* specification
+
+- WS Dual binding
+This binding is provided by the WsDualHttpBinding class. It is like as wsHttpBinding except it sup-ports bi-directional communication means both clients and services can send and receive messages.
+
+- TCP binding 
+This binding is provided by the NetTcpBinding class. It uses TCP protocol for communication be-tween two machines with in intranet (means same network). It encodes the message in binary format. This is faster and more reliable binding as compared to the Http protocol bindings. It is only used when communication is WCF - to – WCF means both client and service should have WCF.
+
+- IPC binding 
+This binding is provided by the NetNamedPipeBinding class. It uses named pipe for Communication between two services on the same machine. This is the most secure and fastest binding among all the bindings.
+
+- MSMQ binding 
+This binding is provided by the NetMsmqBinding class. It uses MSMQ for transport and offers sup-port to disconnected message queued. to provide service and client connected at different time
+
+- Federated WS binding 
+This binding is provided by the WSFederationHttpBinding class. It is a specialized form of WS binding and provides support to federated security.
+
+- Peer Network binding 
+This binding is provided by the NetPeerTcpBinding class. It uses TCP protocol but uses peer net-working as transport. In this networking each machine (node) acts as a client and a server to the other nodes. 
+- MSMQ Integration binding 
+This binding is provided by the MsmqIntegrationBinding class. This binding offers support to communicate with existing systems 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

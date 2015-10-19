@@ -1,0 +1,648 @@
+Wcf pluralsight;Note=Erxin
+
+# introduction to wcf services
+- connected system services overview, is new simbol for distribute system, the traditional framework use different framework and only fit for window
+	+ dcom/com+ +/ES
+	component-oritented(RPC) distributed transactions, DCOM infrastructure
+	+ .net remoting
+	component-oriented simple&highly extensible CLR infrastructure
+	+ MSMQ
+	message-oriented asynchronous/durable/reliable, MSMQ infrastructure install on every machine
+- the move towards "services"
+	+ standard protocols and message formats
+	xml, rss, soap, jason
+- services design philosophies
+	+ soap, xml messaging using soap as the format enhance with the WS-* protocols
+	define a complete protocol stack for services
+	transport -> xml -> soap(is xml syntax) -> Security, RM, Tx
+											Meta-data
+		* soap structure
+		<soap:Envelope xmlns:soap="...">
+			<soap:Header> //could have addition xml headers such as to implement security...
+				<!--security, rm, tx -->
+				...  
+			</soap:Header>
+			<soap:Body>
+				<Invoice>...</Invoice>
+			</soap:Body>
+		</soap>
+		* typically implement with RPC-based toolkits, feel a lot like COM+
+	+ rest, design paradigm focused how to identify, represent and operation resource
+		* typically embrace the HTTP, is commonly use protocol
+		* HTTP defines a uniform service contract: GET, POST, PUT, DELETE, HEAD
+		* resource can be represented as XML, JSON, ETC
+		* services are modelled as "resource" with unique identifiers(URI's)
+		* ex. http protocol
+		PUT http://pluralsight.com/service/invoice/123
+		GET http://pluralsight.com/service/invoice/123
+		DELETE http://pluralsight.com/service/invoice/123
+- what is a connected system
+app that distribute multiple computer nodes
+- service orientation
+	+ design principles help achieve a service oriented architecture(SOA), SOAP or REST
+- microsoft's first attempts as "services", both of these two are limited
+	+ asp.net web services, ASMX, basicXml over http, simple support for  SOAP 1.1/1.2
+	+ web services enhancements, WSE, added support for WS-Security etal and tcp servies
+- ideal communication framework
+	+ unified model fit for
+		* design option, SOAP, REST, dist, objects, etc
+		* transport protocol, http, tcp, msmq, etc
+		* message format, xml, mtom, json, binary, etc
+		* message protocols, WS-*, none, etc
+		* additional flexibility via extensibility
+	+ result windows communication foundation
+- introducing WCF
+	+ WPF is default choice for current window app
+- just one way to write the wcf code
+	+ references need
+	system.runtime.serialization, system.serviceModel
+	+ defines communication contracts via attributes
+	[ServiceContract]
+	public interface IInvoiceServices		//is used to expose to the clicent
+	{
+		[OperationContract(IsOneWay=true)]
+		void SomeMethod(Invoice invoice);
+	}
+	[DataContract]
+	public class Invoice							//is used to define the communicate data structure
+	{
+		[DataMember]
+		public string CustomerId;
+		[DataMember]
+		public string InvoiceDate;
+	}
+	public class InvoiceServices: InvoiceServices{}
+	+ configure endpoints to define different communication options
+	<configuration>
+		<system.serviceModel>
+			<services>
+				<service name="InvoiceService">  //when end write wcf server don't forget to update the servie name
+					<host>
+						<baseAddresses>
+							<add baseAddress="http://localhost:8080/invoiceservice">
+						</baseAddresses>
+					</host>
+					<endpoint									//REST over HTTP
+						address="http://server/invoiceservice"		//the address could also use relative path by set base 
+						binding="webHttpBinding"
+						contract="IInvoiceService"/>
+					<endpoint									//SOAP+WS-* over msmq
+						address="net.msmq://server/invoiceservice"
+						binding="netMsmqBinding"
+						contract="IInvoiceService"/>
+					<endpoint									//HTTP, basic http binding
+						address="basic"
+						binding="basicHttpBinding"
+						contract="IInvoiceService"/>
+					<endpoint									//SOAP+WS-* over tcp
+						address="net.tcp//server:8081/invoiceservice"
+						binding="netTcpBinding"
+						contract="IInvoiceService"/>
+				</service>
+			<services>
+		</system.serviceModel>
+	</configuration>
+- Hosting a wcf services
+	+ write a app
+	+ host in iis
+	+ test wcf host app in vs for development
+- WCF test client to test the services
+- What is endpoint
+	+ endpoints tell WCF how to build the runtime communication channels
+	contains three things: address, binding, contract
+	+ WCF's built-in bindings
+	WebHttpBinding, interoperable restful communication via http
+	BasicHttpBinding, offering the basic WS-basic profile via http
+	WSHttpBinding, SOAP via HTTP, the full range of SOAP+WS-*protocols
+	NetTcpBinding, Cross-machine WCF communication via TCP
+	NetPeerTcpBinding, Cross-machine WCF communication via P2P
+	NetNamedPipesBinding, Same-machine WCF communication via IPC
+	NetMsmqBinding, Disconnected/asynchronous WCF communication via MSMQ
+	+ Support custom binding 
+- Consuming services with WCF
+	+ clients need to know several things, address, binding, contract
+	+ with WCF consume services via channels base on endpoints
+	client retrieve endpoint definitions from service metadata(typically wsdl)
+	metadata import tool to import server endpoint into to the client
+	client will create channel and send the message to server
+	+ use the wcf service host tool (taskbar corner after run the wcf service) in vs right click the service name and copy the metadata
+	add client project and past the metadata info to the reference service dialog
+	view object to the server reference will display the auto generate code
+	the client side app.config will add the service endpoint definition automatic
+	+ create a service reference
+	+ add a class name for the reference
+	+ create a object of the reference class
+	+ call the method
+- specify the debug option
+	+ in the solution property, select debug tab|start options and working directory to change the client app
+- WS-* protocols
+	+ more WS-* protocols there is only big 4 
+	microsoft, IBM, oracle, SAP
+	+ integrates with other framework
+	com+/es, asmx/wse3, msmq are full migration simple and mechanical
+	.net remoting is not supported
+	
+# programming wcf service
+- program wcf service steps
+	* define data contract
+	* define service contract
+	* implement service
+	* host service
+	* configure endpoints & behaviors
+- wcf message, system.serviceModel.Channels.Message
+	* can be encode with xml, mtom, json, binary, etc
+	* message instance can be (optionally) mapped to/from .net object
+	* services can be designed in terms of the generic message type
+	* also could type message by defining .net types then map them to 
+		+ annotate the attributes
+		+ runtime will use serializer map the .net object to message
+- datacontract basic
+	+ datacontractSerializer is the default serializer
+	+ reference the system.runtime.serialization
+- service constract
+	+ isOneWay mean the method will not response to the client
+- implement the service
+	+ add serviceBehavior attribute and operation behavior
+	[ServiceBehavior( InstanceContextMode=InstanceConextMode.Single, ConcurrencyMode=ConcurrencyMode.Multiple)]
+	public class Servie:IService
+	{
+		[OperationBehavior(Impersonation=ImpersonationOption.Required)]
+		public void someFunction{}
+	}
+	* InstanceContentMode
+	percall, every call will get new instance service
+	single, only have one instance
+	perSession, each session have unique session have one instance
+	* ConcurrencyMode
+	single, single thread
+	multiple, multiple thread
+	reentrant, like single but if use reentrance will at new thread
+	* ImplersonationOption
+- hosting servies
+	+ any 3.x app above
+		* simple use servieHost cass, called self host
+		* ex. host in console app
+		static void Main(string[] args)
+		{
+			ServieHost host = new ServiceHost(typeof(WcfServiceClassName));
+			try
+			{
+				host.Open();
+				Console.ReadLine(); //prevent the app stop
+				host.Close();
+			}
+			catch(Exception e)
+			{
+				Console.WriteLine(e);
+				host.Abort();
+			}
+		}
+	+ host in iis/asp.net, called managed host
+	<%@ServiceHost Servies="WcfServiceClassName"%>
+	+ before start the host app you should config the service
+		* all the configuration could be set in code or config file
+		* configure endpoints and behavior
+		* use the tool SvcConfigEditor.exe
+		* ex. config in code
+		host.AddServiceEndpoint(
+			typeof(IServieContract),
+			new BasicHttpBinding(),
+			"http://serviceUIL");
+		host.Open();
+		* ex. config in config file reference the above note, add a app.config file from the VS
+		use the wcf config tool, right click the app.config file and chose "edit wcf configuration"
+- address and binding
+	+ each endpoint need a unique address
+		except, binding configuration only differ is the contract expose then multiple endpoints could share same entrance 
+	+ each endpoint specify an address (URI) for the time to listen on
+	+ binding, tells three things
+	transport protocol, message format, protocol
+- configuring binding
+	+ the binding section is isolate with service element is due to multiple service may use the same security setting
+	+ BasicHttpBinding b = new BasicHttpBinding();
+	b.Security.Mode = BasicHttpSecurityMode.Transport; //means use SSL
+	b.Security.Transport.ClientCredentialType = HttpClientCredentialType.Basic;
+	host.AddServiceEndpoint(typeof(IInvoiceService), b, "http://server/inoviceservice");
+	+ add binding section for the service in config file
+	<configuration>
+		<system.serviceModel>
+			<service>
+			</service>
+			<binding>
+			...
+			</binding>
+		</system.serviceModel>
+	</configuration>
+	+ use the wcf config tool for the binding
+		* NoSecurityPlusRM
+		change secrity mode from the security tab to none
+		reliable sessionProperties turn on the reliable 
+- Apply service behaviors, service behavior is a kind of service actions, create and add a behavior to a service host.
+	+ ex.
+	ServiceHost host = new ServiceHost(typeof(CustomServiceName));
+	ServiceMetadataBehavior smb = new ServiceMetadataBehavior();
+	smb.HttpGetEnabled = true;
+	host.Description.Behaviors.Add(smb);
+	+ use the wcf config tool
+	advanced section add service behavior, create a behavior and apply the behavior for a service
+	+ svcutil.exe, a VS tool to get WCF service metadata and generate relative *.cs, *.config code for the client
+	this tool could
+- Publishing service metadata
+	+ wcf can automatically publish service metadata(WSDL) for you
+	enable via serviceMetadataBehavior
+	+ also easy to implement WS-MetadataExchange(MEX)
+		* standard service contract for discovering other endpoint
+		* enable adding IMetadataExchange endpoints
+		* choose one of the build-in MEX bindings for HTTP, TCP, pipes
+		* add endpoints for MEX
+- Service Exceptions
+	+ genericSOAP fault message
+	+ including unhandled exception, use ServiceBehavior, ServiceDebug
+	<behaviors>
+		<behavior name="Default">
+			<serviceDebug includeExceptionDetailFaults="true"/> //allowed exception to flow
+		</behavior>
+	</behaviros>
+	+ Fault Exception
+		* throw in a service operation to return a SOAP fault
+		* wcf client could catch the FaultException to handle it
+		* there are also some typical faults could be handle by client
+		* ex.
+		throw new FaultException("Somthing bad happend");
+
+# programming wcf client
+- wcf client-side architecture
+	+ when work with wcf client, create channel base on endpoints
+- retrieving endpoints definitions
+	+ client could automatic genterate endpoint from wsdl return from the service
+		* generate *.cs contract and *.config configuration file
+	+ SvcUtil.exe is a metadata import tool for producing wcf client code
+	svcutil.exe service_endpoint_url
+	+ add reference from the project, this feature added since vs2008
+		* make sure the service host is running
+		* use the endpoints address to add service dialog
+		* add namespace for the reference service contract
+	+ use the object browser to check the class in the service
+	+ show all files will show all the auto generate codes
+- client-side programming experience
+	+ programming wcf channel steps
+		* create and configure a channelFactory
+		* create a channel
+		* make method calls through channel
+		* close or abort the channel
+		* ex.
+		ChannelFactory<ICustomServiceContractType> cf = new ChannelFactory<ICustomServiceContractType>(bindingType, endpointsAddress);
+		* there is a client side configuration file just like the service file
+		<system.serviceModel>
+			<client>
+				<endpoint name="httpEndpoint" address="http..." binding="..." contract="..."/> //the httpEndpoint will refer to in the client code
+			</client>
+		</system.serviceModel>
+- channel lifetime invocations
+	+ simple make method calls(on service contract) to invoke service
+	+ call close or abort(on IClientChannel) to close 	the channel
+	+ ex.
+	ChannelFactory<IType> fc = new ChannelFactory<IType>("clientEndpointName");
+	IType channel = fc.CreateChannel();
+	channel.MethodName(arguments);
+	((IClientChannel)channel).Close();			//graceful close the channel
+	+ diff between close with abort
+		* close will wait for all the service operation finished before closed, can be a lengthy process(async version exists) closes throw communicationException & timeoutException
+		* abort tears-down the client channel immediately, abort in progress calls and close channel
+		* you must call abort on faulted channels
+	+ IClientChannel is the client channel interface, normally the service contract need to case to this interface to use the close method. To work around this by create a new interface inherit from service contract and IClientChannel
+	public interface ICustomServiceContractInterface:IServiceContract, IClientInterface{}
+	+ The return collection type could be configure in the service reference property, change the combox	Collection type. There are several kinds of type such as
+	System.Array, System.Collection.ArrayList, System.Collection.Generic.LinkedList
+- AVoid channelFactory<T>, the import tools generate a proxy class for each service contract type
+	* Proxy class name = service contract name( minus the "I" ) + "Client"
+	* Replace the change factory relative codes from the client and use
+	IServiceContractNameClient client = new IServiceContractNameClient("ClientEndpointName");
+	client.MethodName(arguments);
+	client.Close();
+- Configuring client channels
+	+ client channels can be configured via the binding & behaviors
+		* binding, use the binding by <client bindingConfiguration="bindingName" ... />
+		send timeout value, transport/protocol specific settings
+		* behaviors,  <client behaviorConfiguration="behaviorName" ... />
+		clientViaBehavior is one example or auto-routing, security
+- Handling exception, prepare to handle two main exception
+	+ CommunicationException
+		* various runtime exception
+		* FaultException
+	+ TimeoutException, throw by underlying transport channel
+	+ ex. catching sequence
+		* FaultException, means service code fault
+		* CommunicationException
+		* TimeoutException
+		* all these exception to abort the channel
+		* ex.
+		try{}
+		catch(FaultException fe){}
+		catch(CummunicationException ce){}
+		catch(TimeoutException te){}
+- Invoking services asynchronously
+	+ use async switch when generating the client code, then the Begin/End invocation methods
+	+ wcf 3.5 added a simplified asynchronous programming model, use async/targetClientVersion:Version35 simply hookup event and call the asynchrous 
+		* configure the wcf by right click the reference icon
+		* check the generate async operations
+	+ using the async
+		* begin method
+		* add complete event handler
+- sharing contract assembles
+	+ benefit, save time to rewrite the constructor helper functions on both client and service side
+	+ easy to write test method
+	+ Add server side reference and set the reusable library to the specify library to make it resuable for both side
+- programming MEX, wcf provide official support for MEX
+	+ MetadataResolver, MetadataExchangeClient
+	+ allow you to programmatically retrieve metadata at runtime
+	+ client can dynamic choose endpoints to use
+	+ ex.
+	ServiceEndpointCollection endpoints = MetadataResolver.Resolve(typeof(ICustomServiceContract),
+																			new EndpointAddress("http://..."));
+	foreach(ServiceEndpint se in endpoints)
+	{
+		ServiceContractClient channel = new ServiceContractClient(se.Binding, se.Address);
+		
+		...//same as the above code to use the service client proxy class
+	}
+	
+# RESTful Services
+- web programming models
+	SOAP, POX, REST
+- WCF 3.5 support to build REST 
+- web data formats
+	+ RSS/Atom(syndication)
+	+ Json
+- some time believe SOAP is overkill at times
+	+ when the basic profile is enough
+	+ when https is enough for security (no need for WS-Security)
+	+ use SOAP without WS-*
+		* Often refer to a simple tool
+		* Framework tool to generate WS-*
+- POX, just exchange xml messages over http( without SOAP )
+	+ referred to as plain-old XML(POX)
+	+ interoperability is virtually guaranteed
+	+ requires direct XML/HTTP coding
+	+ POX application can also be design in a REST-ful way
+		* action define by HTTP verbs
+- 2000, R.Fielding introduce REpresentation State Transfer
+	+ Referred to a REST for short
+	+ An architecture for build services that build on HTTP
+	+ fundamentally different from SOAP
+		* SOAP defines a transport- neutral model
+		* REST defines a transport-specific(HTTP) model focused
+	+ builds on a uniform interface and common data formats
+		* HTTP mehods, GET, POST, PUT, DELETE, etc
+		* data formats, html, xml, JSON, rss, etc
+- REST vs SOAP
+	+ SOAP, emphasize verbs
+	defining actions for the service actions, use http protocol will aways use POST
+	+ REST, emphasizes nous and resources
+	define a uniform interface to operate on them(HTTP verbs), 
+	GET, retrieve resource
+	POST, create new one
+	PUT, update resource
+	DELETE, delete resources
+	each action have a uniform identifer to reference from the client side
+- Resource orientated architecture
+	+ with REST you build resource-oriented architecture(ROA)
+		* focus on define identifying & named resources(URIs)
+		* how to represent them 
+		* how to navigate between them
+		* use a uniform interface interaction with them
+	+ http defines the uniform interface(http verbs)
+	+ primary benefits
+		* widespread interoperability
+		* scalability!
+- importance of GET
+	+ the web is primary build on GET
+	+ REST naturally embraces the GET, SOAP largely ignored its importance
+- importance of web formats
+	+ XML is widely used. RSS and Atom are two sub set of XML
+	+ JSON in Ajax
+- web programming model comparison
+	+ REST
+	highly scalable web-facing scenarios
+	+ POX/HTTP, in some time is hybirded between REST&SOAP
+	+ SOAP, can be use with any transform, enterprise wide use
+		* need COM+ like capabilities
+		* can be overkill such at high scalable 
+- REST support in WCF
+	+ allow you to implement any web model
+- WCF programming styles
+	+ SOAP & WS-* is by default
+	+ WCF 3.5 come with a new web (REST) programming model
+		* in system.serviceModel.web.dll
+		* allows you to map HTTP request method via RRI templates
+	+ you enable the web model with new binding and new behavior
+	WebHttpBinding, WebHttpBehavior
+- Configure WCF services for REST
+	+ produce an http transport channel
+	+ custom certain setting(cookies, proxy, security, etc)
+	+ security modeled by webHttpSecurity(http vs https)
+	+ produces a webMessageEncoder
+	+ webHttpBehavior
+	+ ex.
+	ServiceHost host = new ServiceHost(typeof(ServiceContract), new Uri("http://..."));
+	host.AddServiceEndpoints(typeof(IServiceContract), new WebHttpBinding), "");
+	host.Description.Endpoints[0].Behavior.Add(new webHttpBehavior());
+	host.Open();
+	+ use the WebServiceHost class is equal to the above code
+	WebServiceHost host = new WebServiceHost(type, uri);
+	host.Open();
+- wiring-up a web-based service
+	+ webServiceHost simplifers, create a webServiceHost this host adds the web binding & behavior
+- webGetAttribute, maps HTTP GET request to a WCF method
+	+ supply a uritempalte to define URI mapping
+	+ the uriTemplate variable map to method parameters by name
+	+ bodyStyle property control bare with wrapped
+	+ request/responseFormat control body format
+	+ ex.
+	[WebGet(UriTemplate="evals?name={name}&score={score}")]
+	[OperationContract]
+	List<Eval> GetEvals(string name, int score){};
+- webInvokeAttribute, map other http verbs to wcf method except GET
+	+ adds a method property for specifying the verb(default is POST)
+	+ allows mapping UriTemplate variables
+	+ body is deserialized into remaining parameter
+	+ ex.
+	[WebInvoke(UriTemplate="/evals?name={name}", Method="PUT")]
+	[OperationContract]
+	void SubmitEval(string name, Eval eval /*body*/){};
+- UriTemplate syntax
+	+ {variableName}
+	+ wildcard character "*" to match anything
+	+ UriTemplate.Bind fills variable with real 
+	+ UriTemplate.Match verifies match and extract actual values
+	+ ex.
+	/services/evals?name={name}&detailed={detailed}
+- Implement a RESTful service
+	+ ex.
+	[datacontract(namespace="http://...")]
+	public class Eval
+	{
+		[Datamember]
+		public string id;
+		[Datamember]
+		public string Submitter;
+		[Datamember]
+		public Datatime Timesent;
+		[Datamember]
+		public string Comments;
+	} //data model
+	[ServiceContract]
+	public interface IEvalService
+	{
+		[WebInvoke(Method="POST", UriTemplate="evals")]
+		[OperationContract]
+		void SubmitEval(){}
+		
+		[WebGet(UriTemplate="eval/{id}")]  //add system.serviceModel.web, and add namespace
+		[OperationContract]
+		Eval GetEval(string id){}
+		
+		[WebGet(UriTemplate="evals")]
+		[OperationContract]
+		List<Eval> GetAllEvals(){};
+		
+		[WebGet(UriTemplate="evals/{submitter}")]
+		[OperationContract]
+		List<Eval> GetEvalsBySubmitter(string submitter)
+		
+		[WebInvoke(Method="DELETE", UriTemplate="eval/{id}")]
+		[OperationContract]
+		void RemoveEval(string id){}
+	}
+	
+	public EvalService: IEvalService{...}
+	//Configure the app.config file
+	<service name="EvalServiceLibrary.EvalService" behaviorConfiguration="Default">
+		<host>
+			<baseAddress>
+				<add baseAddress="http://localhost:8080/evalservice"/>
+			</baseAddress>
+			<endpoint address="" 
+							binding="webHttpBinding" 	//set with this binding 
+							contract="EvalServiceLibrary.IEvalService"
+							behaviorConfiguration="Web"/>
+		</host>
+	</service>
+	<behaviors>
+		<serviceBehaviors>
+			<behavior name="Default">
+				<serviceMetadata httpGetEnabled="true"/>
+				<serviceDebug includeExceptionDetailInFaults="true">
+			</behavior>
+		</serviceBehaviors>
+		<endpointBehaviors>
+			<behavior name="Web">
+				<webHttp/>
+			</behavior>
+		</endpointBehaviors>
+	</behaviors>
+	+ use the webbrowser or http tool to test the service
+	the Eval data could be present as xml
+	<Eval namespace="http:..."> //the namespace is same as define in the cs data contract
+		<Comments>This is a comment</Comments>
+		<Submitter>Name</Submitter>
+		<Timesent>2008-04-22T20:30:15.674-06:00</Timesent>
+	</Eval>
+- http protocol test tools, microsoft (r) windows script host
+httputil.js, for http post/put utility
+httputil method uri file
+- WebServiceHost/Factory class is easy to use without need to self change the configure file, need to reference the system.serviceModel.web
+	+ Use the WebServiceHost for custom app host WCF
+		* Replace the ServiceHost to WebServiceHost
+		* Remove the behavior and endpoints setting for the service from the config file
+	+ Use the WebServiceHost with IIS
+		* Create a website for wcf website
+		* remove the ServiceMode section from the config file
+		* change the *.svc to the service name and 
+		<%ServiceHost Service="EvalServiceLibrary.EvalService"
+			Factory="System.ServiceModel.Activation.WebServiceHostFactory"%>
+		the web service host factory will automatic create a host and open the wcf service
+	+ the client use the web channel factory for http web service model client
+	WebChannelFactory<IEvalService> cf = new WebChannelFactory(new Uri(address));
+	IEvalService client = cf.CreateChannel();  // the client will be automatic config the endpoints and behavior
+- web operation context class to access specifics within methods
+	+ to retrieved the current context use WebOperationContext.Current
+	+ provide properties for incoming/outgoing request/response context
+	+ each context objects surface most common http details
+	uri, contentLength, contentType, headers, ETag, etc
+- syndication programming model
+	+ syndicationFeed, the logical data model for a feed
+	+ produce/consume feeds in variety of formats
+	+ Use a syndicationFeedFormatter to work with a specific format
+	use Atom10FeedFormatter or RSS20FeedFormatter
+	[ServiceKnownType(typeof(Atom10FeedFormatter))]
+	[ServiceKnownType(typeof(Rss20FeedFormatter))]  
+	[ServiceContract]
+	public interface IEvalService
+	{
+		[ServiceKnownType(typeof(Atom10FeedFormatter))]
+		[ServiceKnownType(typeof(Rss20FeedFormatter))]    //specify the derived class for the return class syndi...
+		[WebGet(UriTemplate="evals/feed")]
+		[OperationContract]
+		SyndicationFeedFormatter GetEvalsFeed();
+	}
+	//implementation in the service class
+	public class EvalService: IEvalService
+	{
+		public SyndicationFeedFormatter GetEvalsFeed()
+		{
+			List<Eval> evals = this.GetEvals();
+			SyndicationFeed feed = CreateSyndicationFeed(evals); //Custom convert evals to syn feed by syn api
+			WebOperationContext ctx = WebOperationContext.Current;
+			string format = ctx.IncomingRequest.UriTemplateMatch.QueryParameters["format"];
+			if(format != null && format.Equals("atom"))
+				return new Atom10FeedFormatter(feed);
+			else
+				return new Rss20FeedFormatter(feed);
+		}
+	}
+- Ajax integration via JSON, async style app and ajax style format
+	+ wcf support xml and json, control the response format
+	[ServiceContract]
+	public interface IEvals
+	{
+		[WebGet(UriTemplate="/evals?name={nameFilter}",
+			ResponseFormat=WebMessageFormat.Json)]
+		[OperationContract]
+		List<Eval> GetCurrentEvals(string nameFilter);
+	}
+	+ use the webScriptEnablingBehavior to Ajax-enable a wcf service
+		* make JSON the default message format
+		* enable ajax-style invocation for each [OperationContract]
+		* don't need [WebGet] or [WebInvoke]
+		* produces a javascript proxy for ajax clients (via base address + "/js")
+	+ use webScriptServiceHostFactory to simplify ajax hosting
+		* automatically adds the webScriptEnablingBehavior
+		* set the *.svc file in the web service website project
+		<%ServiceHost Language="c#" Service="EnableService" Factory="System.ServiceModel.Activation.WebScriptServiceFactory"%>
+		* ex.
+		[WebGet(UriTemplate="eval/{id}") ResponseFomart="WebMessageFormat.JSON"]  //add system.serviceModel.web, and add namespace
+		[OperationContract]
+		Eval GetEval(string id){}
+		//client side use asp:script manager to call the service or jquery ...
+- System.Web limitations today
+	* UriTemplate isn't capable of handling more complex URI's
+	e.g matrix urls with data separated by commas/semicolons
+	* you cannot map UriTemplate variable to [DataContract] fields
+	UriTemplate only currently supports strings
+	* you can't mix the webScriptEnablebindingBehavior with UriTemplate
+	* server faults always return a "400 bad request" to clients
+	there is not way to change this short of a custom behavior
+		
+- 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

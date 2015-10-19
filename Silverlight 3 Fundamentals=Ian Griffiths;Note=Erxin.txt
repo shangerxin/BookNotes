@@ -1,0 +1,1301 @@
+﻿Silverlight 3 Fundamentals=Ian Griffiths;Note=Erxin
+
+# introduction
+- agenda
+    + what is sivlerlight, browser plug-in for building RIAs
+        * vector graphics with transforms and animations
+        * hd video
+        * html integration
+    + versions and platforms
+    + xaml
+    + programmability
+    + tools
+    visual studio and expression blend
+- silverlight 2 and 3, platforms and browsers
+    + browser
+    + silverlight
+    + ironpython, etc
+    + rendering engine
+    + support platform
+    (windows >= xpsp2)
+    IE, Firefox
+    Mac(Intel only), for old machine need to use silverlight 1.0
+    linux, moonlight, eventually, standalone, firefox
+    mobile(eventually)
+    windows mobile 6, symbian
+- silverlight evolution
+    + silverlight 1
+    graphics and video, media, script
+    
+    + silverlight 2
+    .net framework, the first full versoin
+    
+    + silverlight 3
+    LOB-oriented enhancement
+    out of browser applications("SLOOB")
+    general enhancements
+
+- html page
+    + plug-in
+    + optional detection/install UI
+    
+- compiled silverlight application, xaml, .net
+- sdk will add silverlight project template
+- silverlight is 'subset' of wpf xaml
+    + wpf is similar with silverlight
+    + graphics and provide media, animation
+    + layout service, common controls
+    + databinding
+- xaml and code behind
+    + use name of xaml element to reference it
+    + x:Name, there is few of this kind of mark up name
+- xaml and browser script
+    + two main scenarios
+    silverlight 1
+    downloading/splash ui
+- visual studio
+    + silverlight tools for visual studio
+- blend
+- comparing silverlight with WPF
+    + intended for different scenarios
+    + wpf features not in silverlight
+    hardware acceleration, drawing types, flow text
+    
+    + less powerful features
+    layout, resources, template, styles
+
+    + silverlight feature not in wpf
+    browser integration, video brush, deep zoom
+
+    
+# programming silverlight
+- html <object> tag
+compiled silverlight content
+splash/load 
+error handing
+- <object> in html
+<object type="application/x-silverlight-2" data="data:application/x-silverlight,">
+    <para name="source" value="ClientBin/SlContent.xap"/>
+    <param name="onerror" value="onSilverlightError"/>
+    <a href="http://go.microsoft.com/fwlink/?LinkID=115261" style>
+    <img src="..." alt="get microsft silverlight style="border-style"/>
+    </a>
+</object>
+
+the .net version of silverlight which is ok for 2+
+
+the data property is recommanded by microsfot to help load silverlight application from some of the browser
+
+the onerror is a javascript event handler method for display loading or running exception from silverlight application
+- optional parameters
+    + main properties
+        * AutoUpgrade
+        * Background
+        * EnableAutoZoom
+        * EnableGPUAcceleration
+        * InitParams, send string from web page to silverlight application such as player to send source
+        
+        example add load uri from web page
+        add xaml video player element into the xaml
+        <MediaElement x:Name="videoElem"/>
+        
+        add setting code from the code behind
+        videoElem.Source = new Uri(App.VideoUri, UriKind.RelativeOrAbsolute);
+        
+        add video uri string into the app class
+        public static string VideoUri {get;set;}
+        
+        private void Application_Startup(object s, StartupEventArgs e)
+        {
+            VideoUri = e.InitParams["videoUri"];
+            this.RootVisual = new Page();
+        }
+        
+        <object ..>
+            <param name="initParam" value="videoUri=http:/...">
+        </object>
+        * MaxFrameRate, this is used to setting the frames of animation of silvelight application 
+        * MinRuntimeVersion
+        * SplashScreenSource, is a temporary user interface to display when silverlight application to download
+        * Windowless, determine whether the silverlight application run in its own region of browser window or share rendering target well
+        Windowless = true, enable share window space to screen
+        Windowfalse = false, disable overlap 
+    + example to make silverlight application overlap http content by setting two inital params
+    <param name="background" value="Transparent"/>
+    <param name="windowless" value="true"/>
+    
+    + events
+        * OnLoad
+        * OnSourceDownloadComplete
+        * OnSourceDOwnloadProgress
+        
+    + diagnostic Properties, for development
+        * enableRedrawRegions, show redraw regions during display
+        * enableCacheVisualization, this display which area of screen is display from cache
+- silverlight.js
+    + microsfot supply
+    + benefits
+        * silverlight.isinstalled helper
+        * can choose content at runtime
+        * historical interest:solved activitation patent legal fiasco
+        
+    + disadvantages
+    more complex, some web admin don't allow custom js
+    extra file to download
+    moving target of slverlight.js
+- using silverlight.js
+<script type="text/javascript" src="silverlight.js">
+</script>
+<div id="slPlacehoder"></div>
+<script type="text/javascript">
+    Silverlight.createObject(
+        "ClientBin/SlContent.xap",
+        document.getElementById('slPlacehoder'),
+        "slControl",
+        {width:"500", height:"500", version:'2.0'},
+        {onLoad:MyOnLoad}
+    );
+<script>
+
+only use silverlight.js to load silverlight application when there is additional client detection process or just use the normal object tag
+- XAP, compiled silverlight application, it's sould like zip and xaml
+    + just a ZIP
+        * main dll
+        * dependent dlls
+        * resources
+        * manifest, descript content and which dll contain the entry point of application
+    + when file change the property of a file's build action, resource will embeded it into dll, content will make the file copied into the xap file
+    
+    + server config
+    MIME typefor .xap:application/x-silverlight-app
+    
+    + optimization tip:re-ZIP
+
+- download UI
+    + silverlight have to download resource then start
+    + define as xaml
+    + set splashScreenSource <param>, then silverlight will download the specify xaml file first
+    + optionally handle onSourceDownloadProgressChanged, this will begin before xaml download which mean have to handle by javascript, this will also support display the download progress
+    
+    + fiddler have a feature to simulate download from modern speeds
+    Rule|Performance|Simulate Moderm speeds
+    
+    + example, use inline xaml code to create a splash screen
+        * create xaml code in the launch page of the silverlight application
+        <script type="text/xaml" id="xamlSplashContent">
+            <!-- xaml file content -->
+            <?xml version="1.0"?>
+            <Canvas xmlns="http:/...">
+                <TextBlock Canvas.Left="20"/>
+                <Rectangle x:Name="progressRect"/>
+            </Canvas>
+        </script>
+        
+        * add javascript handler to update the download progress
+        <script type="text/javascript">
+            function updateDownload(s, a)
+            {
+                var xamlContent = s.getHost().content;
+                var progressRect = xamlContent.findName("progressRect");
+                var percetage = Math.floor(a.progress * 100);
+                progressRect.Width = percentage;
+            }
+        </script>
+        
+        * add splashScreenSource parameter into the silverlight object tag, the #htmlScriptId is used to tell silverlight plugin the content is embedded xaml codes
+        <object ...>
+            <param name="splashScreenSource" value="#xamlSplashContent"/>
+            <param name="onSourceDownloadProgressChanged" value="updateDownload"/>
+            ...
+        </object>
+        
+- silverlight object model
+xaml element <-> .net object wrapper
+    + in wpf, the xaml is map to a .net object
+    + in silverlight it is a proxy to .net object in the silverlight plugin
+    the relative is already created when the plugin is load into the browser
+    + because of this, sometimes it's fast to load xaml directly in silverlight than write code behind
+    in wpf the xaml code will create the relative object and parse the xaml file, but in silverlight it only need to parse and map
+    
+    + subset of wpf object model
+    + ...mostly, a few small differences, e.g.:
+    videoBrush, Browser integration, Deep zoom
+    
+- code behind    
+    + the named xaml object will automatic wrap to .net object and could be directly used in code behind
+    
+- silverlight event
+    + usual .net event pattern, in silverlight 3 there is not directly way to handle right click
+    
+    + during element load, the element size are not arranged
+    the loaded event is triggered after the xaml parsed complete, than during this time the actual hight and width are ready
+    
+    + recaculate layout changes by book event, LayoutUpdated
+    
+- attaching handlers in xaml/code
+- event bubbling
+    + events bubble up xaml tree, when the event is triggered but there is not handler for the current event source
+    the event do not bubble into html tree
+    
+    + origin indicated by Source property of the event, the sender argument of the event sender don't point to the event source element, which is just the element which the handler is attached.
+    
+    + set event Handled property to true to stop silverlight continue bubbling the event
+    
+    + events bubble up xaml tree, this is similar to wpf, there is not tunnuling event in wpf which is get down to the xaml tree
+    most of the wpf event comes pair with bubble up and tunnel down, each event is bubble but is reprocess with tunneling preview event
+    
+- dynamic UI creation  
+    + just create object in runtime 
+    + xamlReader.Load dynamic
+    xamlString;
+    XamlElement c = (XamleElement)XamlReader.Load(xamlString);
+    LayoutRoot.Children.Add(c);
+    
+    + data binding often better
+    
+- Application Class
+    + entry point of silverlight application
+    private void AppStartup(object sender, StartupEventArgus e)
+    {
+        this.RootVisual = new Page();
+    }
+    this should only be set once
+    
+    + event handler of app exception by book
+    this.UnhandledException += Handler
+    any unhandle event will cause crash to the silverlight plugin
+    
+    + change the display of the main page by changing the content of it rather than replace it
+    
+- Application manifest file specify which dll to download
+- application library caching, package shared assemblies separately
+    + exploit browser caching
+    + turn this feature on by changing the application manifest file and list the shared files at the external part section
+    <Deployment.ExternalParts>
+        <ExtensionPart Source="System.Windows.Controls.Data.zip"/>
+    </Deployment.ExternalParts>
+
+- application extension services
+    + services available at application scope
+    Application.ApplicationLifetimeObjects, contains a list of object
+    
+    + Application extensions could implement IApplicationService, and optionally IApplicationLifetimeAware to make it available for application scope, the event sequence is
+    IApplicationServie.StartService
+    IApplicationLifetimeAware.Starting
+    Application.Startup event
+    IApplicationLifetimeAware.Started
+    IApplicationLifetimeAware.Exiting
+    IApplicationLifetime.ExitEvent
+    IApplicationLifetimeAware.Exit
+    IApplicationService.StopService
+
+- out of browser
+    + silverlight out-of-browser(SLOOB)
+    adds settings to AppMainifest.xaml
+    
+    + runs in browser initially
+    install from content menu from the silverlight application
+    or initial install from input event handler 
+        * change the project property
+        * check enable application out of browser
+        * add addtional setting
+        * install from the content menu of the applicaiton webpage
+        * unintall from the content menu or control panel
+    
+    + design for OOB
+    layout, No hml bridge, runs in trusted zone
+
+- OOB API features
+    + application calss installation memebers
+         * install method
+         * InstallState and IsRunningOutOfBrowser
+         * the install version will not stop browser to be available
+         
+    + application update members, when the application installed could use these method to check if new version is available, which will automatic update the application
+        * CheckAndDownloadUpdateAsync
+        * CheckAndDownloadUpdateCompleted
+        
+    + Check Connectivity of network
+        * NetworkInterface.GetIsNetworkAvailable
+        * NetworkChange.AddressChanged
+        * LocalMessageReceiver to helper silverlight communicate with local computer, this may used to may different silverlight plugin communiate in same webpage
+
+- resources, XAP vs 'Loose'
+    + image, media, etc in silverlight project ends up XAP
+        * application, self-contained
+        * availability guaranteed once application starts
+    + can add to web site instead without resource type
+        * faster startup
+        * easier to change
+
+- resources and UIRs
+    + image and mediaElement refer to resources from the Source property
+    URI style              Location
+       * /img.jpg               In Xap(falls back to site), should change the resource build action to content
+       * img.jpg                In DLL as embedded resource(also falls back to site, relative to .xap location), suggest to put the ../img.jpg in front, or by default it will search from the clientBin\ folder of host website
+       * /AssemblyName;component/img.jpg   In DLL as embedded resource, specified completely, this is a special pattern, this is a relative type resource path which is the only pattern that silverlight support compare to wpf
+       * http://example.com/app/img.jpg      specified location
+ 
+- downloading resources
+    + sue normal .net networking techniques
+    httpWebRequest
+    webClient
+    sockets
+    
+    + BitmapImage intrinsically asynchronous
+    offers download progress event 
+    
+    + cross-domain access supported
+    target sites must opt in: clientaccessplicy.xml or crossdomain.xml
+ 
+ 
+# layout
+- fixed layout
+    + canvas
+    canvas.left and canvas.top
+    
+    + attachable properties
+    <Ellipse Canvas.Left="10" Canvas.Top="12.5" Width="80" Height="80" Fill="Orange"/>
+    set attachable property from the code by helper method 
+    Canvas.SetLeft(myEllipse, 10);
+
+- dynamic layout
+    + adaptable to 
+    quantity of information
+    size of items
+    space available
+
+- two layout strategies
+    + stack panel, the height or width is determine by the largest element
+    
+    + grid, column and row zie
+        * automatic
+        * fixed size, the larger content will be cut
+        * proportional
+        
+    + the grid content will resize with the grid which is different from canvas
+    + elements can span cells
+    + fine control with margin
+- common layout properties
+margin, padding, horizontalAlignment/VerticalAlignment, horizontalContentAlignment/VerticalContentAlignment, min/maxWidth, min/maxHeight
+- constraint and unconstrained layout
+- gridSplitter, works conjunction with grid
+    + add to a cell
+    + set direction
+    + resizes columns/rows when dragged
+    basic it's contain win window.controls.extend namespace
+- scrollviewer
+    + wraps any elment with scrollview with unconstrained layout
+- border
+    + handy for extra padding and margin
+    allowed add margin or padding into border to change the position the content of border
+    + also draws border rounds stuff
+- full screen mode
+    + plug-in can run full-screen
+    + security constraints
+    can only set in input-related event handler
+    always displays message
+- using full screen mode
+using System.Windows.Interop;
+
+var content = Application.Current.Host.Content;
+content.IsFullScreen = !content.IsFullScreen;
+
+hook the full screen changed event to handler resolution changed
+content.FullScreenChanged
+- silverlight and css
+silverlight root element constrained by html/css
+plug-in cannot size to content
+- overlapping content
+    + windowless
+    + z index, the silverlight plugin at the top 
+    the top control will get handle the input event
+    + adjusting html layout base on silverlight 
+    + example
+    add a border and name it as htmlHolder
+    get the current html content element by HtmlPage class in the sivleright
+    
+    HtmlElement htmlOverlay = HtmlPage.Document.GetElementById("htmlOverlay");
+    htmlOverlay.SetStyleAttribute("width", htmlPlaceHodler.ActualWidth.ToString() + "px");
+    
+   
+# controls
+- control types
+    + control is distinct base class in silverlight
+    + rectangle and border is not derive from control in silverlight
+- built in
+    + base class, control, UserControl, ItemsControl
+    + many controls, TextBox, Button, Slider etc
+    + system.Windows.Controls
+    More esoteric controls, e.g: Calender, TabControl
+    
+    + System.WindowsControls.Data
+    DataGrid(covered later)
+    
+    + Silverlight toolkit
+- Buttons
+    + RepeatButton
+    + RadioButton
+    Set GroupName property to RadioButton will make them works together
+    + CheckBox
+    + HyperlinkButton
+- content model, the control could only contain only one content
+    + flexible caption
+        * Text
+        * Arbitrary content
+    + example
+    <Button>
+        <StackPanel>
+            <TextBlock/>
+            <Ellipse>
+        </StackPanel>
+    </Button>
+    
+- Text input
+- Range controls, set Minimum and Maximum value of the property of the control
+    + slider
+    + scrollbar
+- listbox
+    + list box support multi content model
+    + item of list box can be anything
+- calendar and datepicker, System.Windows.COntrols supplied in the silverlight sdk
+    + Calendar, the display mode will control the control's appearence such as year
+    + DatePicker
+    + drag and drop the control will automatic add library references
+    the name space mapping
+    clr-namespace:System.Windows.Controls;assembly=System.Windows.Controls
+    namespace:control;assembly
+- tab control, in the extend set of control in sdk
+    + tab control container TabItem
+    + each tabItem could contain two content model control
+        * header property
+        The header property support the content model 
+        * content property
+    + raise select changed event and select index
+- pop up control
+    + pop up on top of other controls
+    + on top, this is only display in the silverlight plug-in boundary
+    + the pop up will cut when they display near by the border of silverlight plug-in
+- tooltips, silverlight support display tooltip for any control, set tooltip as attached property, the toolTipService class support tooltip, the tooltip support content model
+    + example
+    <Button Content="Click me">
+        <ToolTipService.ToolTip>
+            <TextBlock Text="tool tip"/>
+        </ToolTipService.ToolTip>
+    </Button>
+    
+    + also could directly property in the button property 
+    <Button Content="OK" ToolTipService.ToolTip="Click me"/>
+- Templates
+    + replace visual of control by setting the template
+    + the behavior is implement by code
+    + define the control's appearance 
+    + example
+    <Button >
+        <Button.Template>
+            <ControlTemplate TargetType="Button">
+                <Grid>
+                    <Ellipse Fill="Yellow"/>
+                    <ContentPresenter HorizontalAlignment="Center" Content="{TemplateBinding Content}"/>
+                </Grid>
+            </ControlTemplate>
+        </Button.Template>
+    </Button>
+    the template binding means binding the property of the aim control's property
+    for example the TemplateBinding Content is binding to the content property of the Button
+- templateBinding for properties
+    + template binding for properties
+    + place holders for content
+        * contentPresenter
+        * itemsPresenter
+        * scrollContentPresenter
+    + named parts
+        + significant element
+        + state change animations
+- visual states
+    + controls should respond to mouse input
+    such as button display different state for different user input event
+    + handled via visual states
+        * VisualStateManager
+        * VisualState
+        * VisualStateGroup
+- states and state groups, for example a checkbox may have these three main state groups
+    + Checked, Unchecked, Indeterminate
+    + Normal MouseOver Disable
+    + Focused, Unforcused, ContentFocuses
+defining states
+    + use custom attribute to define state for the checkbox
+    [TemplateVisualStateAttribute(Name="ContentFocused", GroupName="FocusStates")]
+    [TemplateVisualStateAttribute(Name="MouseOver", GroupName="CommonStates")]
+    ...
+    public class CheckBox:ToggleButton ...
+    
+attached property in control template to add states for the state group
+<ControlTemplate>
+    <Grid>
+        <vsm:VisualStateManager.VisualStateGroups>
+        </vsm:VisualStateManager.VisualStateGroups>
+    <Grid>
+</ControlTemplate>
+- per-state animations
+    + grouped by visualStateGroup
+    + inside attached property of the ControlTemplate in the aim control
+    <vsm:VisualStateManager.VisualStateGroups>
+        <vsm:VisualStateGroup x:Name="CommonStates">
+            <vsm:VisualState x:Name="MouseOver">
+                <StoryBoard>
+                    <ColorAnimation Storyboard.TargetName="tickBox"
+                                    Storyboard.TargetPropert="(Rectangle.Fill).(SolidColorBrush.Color)" To="PaleGreen" Duration="0:0:0.5"/>
+                </StoryBoard>
+            </vsm:VisualState x:Name="MouseOver">
+        </vsm:VisualStateGroup x:Name="CommonStates">
+    </vsm:VisualStateManager.VisualStateGroups>
+the target name is reference a control name in the control template
+
+- transition animations
+    <vsm:VisualStateManager.VisualStateGroups>
+        <vsm:VisualStateGroup x:Name="CommonStates">
+            <vsm:VisalTransition From="Pressed" To="Normal" Duration="0:0:0.5">
+                <StoryBoard>
+                    <ColorAnimation Storyboard.TargetName="tickBox"
+                                    Storyboard.TargetPropert="(Rectangle.Fill).(SolidColorBrush.Color)" To="PaleGreen" Duration="0:0:0.5"/>
+                </StoryBoard>
+            </vsm:VisalTransition>
+        </vsm:VisualStateGroup>
+    </vsm:VisualStateManager.VisualStateGroups>
+- The state group could apply different or same events in the same time
+- Styles
+    + move template to the style to make the template could be used in many times
+    + style is a collection of property values
+    + for example
+    <Style x:Key="oldWorld" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Parchment"/>
+    </Style>
+    style normally is save in resource dictionary of project
+    
+    apply style
+    <TextBlock Style="{StaticResource oldWorld}"/>
+- styles and resources, any framework element contain resource property, 
+    + note for wpf develoers, no source property and no merging
+    + silverlight only contain static resource but wpf also support dynamic resource
+    + there is no automatic apply style for silverlight
+- styles as property bags
+    + not just for frameworkElement.Style
+    Calendar DayStyle, MonthStyle
+    DataGrid has 9 Style properties
+    ListBox itemContainerStyle
+    GridSPlitter PreviewStyle
+- template and styles
+    + because template is just a property of a element so it could be set by style
+    + example
+    <Style x:Key="myButton" TargetType="Button">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                    ...
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+
+# graphics
+- canvas
+place control by the specify position
+    + select the aim shapes and group them into canvas
+    blend have this feature to group into canvas
+    
+    + attached property into canvas elements, just like set grid.row grid.column property to the grid elements, the background code is looked like
+    Canvas.SetLeft(childElement, PropertyValue);
+    equal to
+    rect.SetValue(Canvas.TopProperty, value);
+- grouping with canvas, the child contain the canvas could be treat with as group and effect by the canvas setting
+- brushes
+    + solidColorBrush
+    + uniform color brush
+    + radial gradient brush
+- shapes
+    + rectangle
+    + ellipse
+    + line
+    + polyline
+    + polygon
+    + path, let you draw any shape
+    + all the shapes could be changed to path, the original shape behavior will be lost but could control the individual point element separately
+- ship properties
+    + fill
+        * thickness
+        * dash pattern
+        * join style
+        * end caps
+    + stroke
+- path, geometries
+    + path contain a element of PathGeometry
+    + path is represent a shape
+    + geometry is define the point
+    + geometry is also used by cut object 
+    + example
+    <Path>
+        <Path.Data>
+            <PathGeometry>
+                <PathFigure StartPoint="50,0" IsClosed="True">
+                    <LineSegment Point="100,50"/>
+                </PathFigure>
+            </PathGeometry>
+        </Data>
+    </Path>
+- multi-figure pathGeometry, in blend the single path could be compound together from the menu Object|Path|Make Compound Path-
+- PathGeometry Segment types, use the pen tool could draw these segment in blend, click to draw line, click and drag to draw bezier
+    + lineSegment
+    + polyLineSegment
+    + ArcSegment
+    + QuadraticBezierSegment
+    + PolyQuadraticBezierSegment
+    + BezierSegment
+    + PolyBezierSegment
+- simple geometries
+    + line geometry
+    + rectangle geometry
+    + ellipse geometry
+- geometryGroup, let combine several geometries as one geometry
+    <Path>
+        <Path.Data>
+            <GeometryGroup>
+                <PathGeometry>
+                    <PathFigure>
+                        <BezierSegment/>
+                        <BezierSegment/>
+                    </PathFigure>
+                </PathGeometry>
+                <EllipseGeometry/>
+            </GeometryGroup>
+        </Path.Data>
+    </Path>
+- path syntax, the path created in blend is a serials of points 
+    + for example
+    <Path Data="M48, 80, L208 ..."/>
+    
+    C stand for cubic bezier line
+    Z stand for the end of the data
+    
+    + path geometry commands, VML language
+    M, Move
+    L, Line
+    H,Horizontal line
+    V, vertical line
+    c, cubic bezier curve
+    q, quadratic bezier curve
+    s, smooth bezier curve
+    t, smooth qudratic bezier
+    a, elliptical arc
+    z, close path
+    f0, even-odd fill rule
+    f1, nonzero fill rule
+- bitmaps
+    + image 
+    <Image Source="url"/>
+    
+    + image brush, could convert any image into image brush in the blend
+    Tool|Make Brush Resource, use the brush resource property to use the bush, use brush transform to change the shape of the brush
+    <Rectangle>
+        <Rectangle.Fill>
+            <ImageBrush ImageSource=Uri/>
+        </Rectangle.Fill>
+    </Rectangle>
+    
+    + stretch the property of image
+        * None, will keep the size of the image
+        * Uniform, will keep the height and width proportion use the minimal available value to restrict the image size
+        * UniformToFill, will fill the container will uniform size use the maximal available value to restrict the image size
+        * Fill, the image will change the height and width to fit for the container
+- deep zoom
+    + very simple xaml
+    <MultiScaleImage Source="..."/>
+    example website
+    http://memorabilia.hardrock.com/
+    
+    + create deep zoom image by deep zoom composer
+- transforms, silverlight support these types of transforms
+    + scale transform
+    + translate transform
+    + rotate transform
+    + skew transform
+    + matrix transoform
+    
+- render transform by apply the RenderTransform property of a element, which is inherit from wpf
+<Ellipse>
+    <Ellipse.RenderTransform>
+        <RotateTransform Angle="10"/>
+    </Ellipse.RenderTransform>
+</Ellipse>
+
+- Geometry.Transform, use transform and geometry group to combined complex geometry by simple element
+
+- brush transform
+    + relative transform, this will make the transform fit for the container after the transform happen
+    ImageBrush.RelativeTransform
+    
+    + transform, this will transform the image first and keep uniform size of the image
+    ImageBrush.Transform
+- 3d projection transform, after the transform the element will work as normal
+<Element>
+    <Element.Projection>
+        <PlaneProjection ../>
+    </Element.Projection>
+</Element>
+- opacity & clipping
+    + opacity, all element have a opacity property, this will effect entire element 
+    + alpha, change the individual color's alpha property, which is the property of Brush|Fill color, this will only effect the fill color
+        * the group element will also be effect by this property, the element will transparent to each other
+        * change the canvas's property is different from just change the individual group element, the canvas is transparent not means individual element is transparent to each other
+    + opacity mask, this is a brush property effect by the alpha value of the object. this mask works for all the brushes
+    the alpha value is the element's appearance value which is not the fill value's alpha property
+- clipping
+<Element>
+    <Element.Clip>
+        any geometry shape the content overlap the shap will be displayed
+    </Element.Clip>
+</Element>
+    
+- effect
+<Element>
+    <Element.Effect>
+        apply dropShadowEffect or BlurEffect
+    </Element.Effect>
+</Element>
+    
+don't use pixel shader hardware (today), shaderEffect runs custom HLSL pixel shaders in software, for security reasons silverlight use software simulate the effect
+    
+         
+# data binding
+
+# browser integration
+- agenda
+    + silverlight from html's perspective
+    + html from silverlight's perspective
+    + storing data on the client
+
+- silverlight and html, silverlight becomes just another element in the HTML DOM
+    + silverlight is not intended to replace html
+    
+    + use the appropriate technology in the appropriate place
+
+- accessing the DOM
+    + bridge provided through classes in System.Windows.Browser
+    read the script object
+    htmlPage class supply by silverlight
+
+    + for example, define a function in the html script tag
+    <script type="text/javascript">
+    
+    var js = {
+        answer:42,
+        message:"hello",
+        modifyHeading:function(title){...}
+    };
+    </script>
+    
+    call the script from silverlight, the htmlPage's window property give access to the global javascript 
+    ScriptObject js = HtmlPage.Window.GetProperty("js") as ScriptObject;
+    
+    string[] propertyNames = {"answer", "message", "modifyHeading"}
+    foreach(var proertyName in propertyNames)
+    {
+        object value = js.GetProperty(propertyName);
+        Debug.WriteLine("{0}:{1}", propertyName, value);
+    }
+
+    ScriptObject contain the Invoke and InvokeSelf method to help invoke javascript function
+    Invoke, is used to call a function as the property of a object
+    InvokeSelf, is used to call a function that is the object
+
+    + HtmlObject class inherite from ScriptObject this used to handle the event outside the silverlight plugin. another three class inherit from HtmlObject
+    HtmlDocument, handle dom event
+    HtmlElement, handle html element
+    HtmlWindow
+    
+    retrieve the html document object from silverlight code, the common javascript code is equal to the silverlight code behind code
+    //document.getElementById('heading').innerHtml = title
+    HtmlElement h1  = HtmlPage.Document.GetElementById("heading");
+    h1.SetProperty("innerHTML", value);
+    h1.SetCss
+    h1.SetStyleAttribute
+    
+    + provide these class to work with browser in silverlight
+    HtmlPage, BrowserInformationi, HttpUtility, HtmlEventArgs
+    
+- EnableHtmlAccess
+    + containing page DOM may be inaccessble to silverlight
+    + param tag in <object> of the silverlight plugin, then this will deny access from the dom to silverlight
+    
+    if the silverlight control is download from different domain from the host, this param is default to false
+    
+    <param name="enableHtmlAccess" value="false"
+    
+    + properties argument if using silverlight.js to set this property
+    {...
+        enableHtmlAccess:false
+    ..}
+    
+    in createObject property argument
+    
+- calling silverlight from javascript
+    + register objects to make the class accessible to the javascript
+    + annotate members as script-accessbile
+    public parital class Page:UserControl{
+        void Page_Loaded(object sender, RoutedEventArgs e)
+        {
+            HtmlPage.RegisterScriptableObject("MySilverlightObject", this);
+        }
+    
+        [ScriptableMember]
+        public void MySilverlightMethod(object myParam){}
+    }
+    
+    access the object from javascript
+    var slPlugin = $get("SilverlightPluginObjectId");
+    slPlugin.content.MySilverlightObject.MySilverlightMethod(args);
+    
+    + to make text as html is to make them observable to the search engine
+
+- creating silverlight objects in javascript
+    + annotate the type by
+    {ScriptableType} exposes all public members
+    
+    [ScriptableType]
+    public class MySilverlightType
+    {
+        public double Multiply(double x, double y)
+        {
+            return x*y;
+        }
+    }
+    
+    + register type
+    HtmlPage.RegisterCreateableType("SilverlightType", typeof(SilverlightType));
+
+    + create the silverlight object in the javascript
+    var slType = slPlugin.content.services.createObject("SilverlightType");
+    slType.Multiply(1,2);
+
+- Navigation, normal navigate work in the client side silverlight control, silverlight have a common solution for this kinds of problems, the steps are
+    + frame and page, pug a frame element into the page, navigable pages should derive from the page class
+    + initiating navigation by two ways
+        * HyperlinkButton.NavigateUri, use this button to help add silverlight navigate history into browser navigation history
+        * NavigationServcie
+        
+    + URLs by add fragment id in silverlight, silverlight implementation make sure the fragment id will be added into the browser navigation history
+        * FragmentIDs
+        * Frame.UriMapper
+
+    + HTML required for browser navigation history
+    iframe called _sl_historyFrame which is added by visual studio
+    
+- isolate storage
+private user-specific storage
+    + string or binary data
+    + store per application or per-site
+        * host.com/foo.xap and host.com/bar.xamp can have different stores
+        
+        independent of hosting web page
+        
+    + 1mb default limit for silverlight isolate storage
+    can prompt user to increase
+    
+    + cross browser support, like having cookies shared across FF & IE, which enhance browser cookies only could be used by single browser
+
+- writing to isolate storage
+    + isolate storage is introduce by window form application to save data from the internet application
+
+    + example
+    using(IsolateStorageFile isoStore = IsolatedStorageFile.GetUserStoreForApplication())
+    {
+        using(IsolatedStorageFileStream isoStream = new IsolatedStorageFileStream("UserData.txt", FileModel.Create|FileModel.Read, isoStore))
+        {
+            using(StreamWriter writer = new StreamWriter(isoStream))
+            {
+                writer.WriteLine("To isolated storage");
+            }
+            
+            using(StreamReader reader = new StreamReader(isoStream))
+            {
+            }
+        }
+    }
+    
+    GetSiteStore for get storage for per site
+    The isolate storage file is unknown able
+    isolate file is derive from stream, you can use any stream base api
+
+- read isolate file, example
+   using(IsolateStorageFile isoStore = IsolateStorageFile.GetUserStoreApplication())
+   {
+        string fileName = "RunCount.bin";
+        int runCount = 0;
+        if( sioStore.FileExists(fileName))
+        {
+            using(IsolateStorageFileStream isoStream = isoStore.OpenFile(fileName, FileModel))
+            {
+                using (BinaryReader reader = new BinaryReader(isoStream))
+                {
+                    runCount = rdr.ReadInt32();
+                }
+            }
+        }
+   }
+
+   isoStore.DeleteFile(FileName); to delete the isolate storage file
+   the isolate could also be delete file could be delete the silverlight configuration menu
+- increaseing your quota
+    + can request an increase of store quota
+    must be in response to a user initialized event(like a button click) 
+
+    var store = IsolateStorageFile.GetUserStoreForApplication();
+    store.AvailableFreeSpace;
+    store.IncreaseQuotaTo(newQuota)
+    store.Quota, return the current quota
+
+
+# text
+- text block, properties
+fontfamily, arial, times new roman, etc
+fontSize, size in pixels
+fontStrentch, condensed, normal, strentched etc
+fontstyle, normal, italic, oblique
+fontWeight, black, bold
+foreground, any brush
+- run, put text inside of textblock to set it's own fontfamily and font weight
+<TextBlock>
+    <Run Text="hello"/>
+    <Run Text="hello"/>
+</TextBlock>
+- automatic run generation, the plan text will be automatic generate run tag in the textblock by silverlight
+- lineBreak
+    + you could use xml preserve mark to keep the format 
+    + use <LineBreak/> to add line break in the plan text
+- TextBlock content from code
+    + uniform formating
+    text property
+    
+    + mixed(runs) or linebreaks
+    inlines property
+- built-in fonts
+    + several built-in font
+    + downloading fonts
+    use FontFamily="Calibri.ttf#Calibri"
+    
+    + multi-font ZIP, could put the font at same directory of the xap or add into the xap to make the font download from the web server
+- download font from code 
+    + create a fontSource object
+    takes a stream
+    
+    + set textBlock.FontSource
+    
+    + file may be font subset
+- some wpf features not in silverlight
+    + justify
+    + most of the text object model
+    flowDocument, blocks, spans
+    + text effects per character animation
+    + text to geometry
+    use your favorite drawing tool
+    + clear type is not contain in silverlight
+
+
+# animation
+- agenda
+    + declarative, time-based animation
+    + storyboards
+    + keyframes
+    + animations and code
+- declarative animation, in silverlight, the animation independent with the frame rate 
+<Storyboard>
+    <DoubleAnimation
+        Stoaryboard.TargetName="whatToChange"
+        Stoaryboard.TargetProperty="PropertyName"
+        From="1" To="0"
+        Duration="0:0:5"/>
+</StoaryBoard>
+in silverlight it is not possible to set in relative property value to an object, such as animate a horizontal stackpanel to vertical stack panel
+to animate a shape need to set animation to the point of the shape
+
+- Timing
+    + time-based, not frame-based
+    duration string     meaning
+    0:0:2               2 seconds
+    1.14:29:45.6        1 day, 14hours, 29 minutes, 45.6 seconds
+    3                   3 day
+- animation types
+property Type        Example properties          animation type
+double               width, height, opacity      DoubleAnimation
+color                solidColorBrush.Color       ColorAnimation
+point                BezierSegment.Point1,       PointAnimation
+
+- defining animations
+    + typically define in resource section
+    <Canvas.Resources>
+        <Storyboard x:Name="fadeUpHighlight">
+            <DoubleAnimation .../>
+        </Storyboard>
+    </Canvas.Resurces>
+    
+    run the animation by code behind
+    fadeUpHighlight.Begin();
+    + animation can also be put into a visual state element then silverlight will run the animation automatically when the defined state is reached 
+- target property paths, sometime need to specify the property path to the aim element
+for example to animate a color of a gradient brush, but there is no BrushAnimation in silverlight, we need to use ColorAnimation to control the color of GradientStop element to control the color of gradient brush
+
+<Rectangle Name="rectangle">
+    <Rectangle.Fill>
+        <LinearGradientBrush EndPoint=1,0.5 StartPoint="0, 0.5">
+            <GradientStop Color="Black" Offset="0"/>
+            <GradientStop Color="Red" Offset="0.5"/>
+            <GradientStop Color="White" Offset="0"/>
+        </LinearGradientBrush>
+    </Rectangle.Fill>
+</Rectangle>
+    
+<ColorAnimation
+    Storyboard.TargetName="rectangle"
+    Storyboard.TargetProperty="(Shape.Fill).(GradientBrush.GradientStops)[1].(GradientStop.Color)"
+    From="Red"
+    To="Yellow"
+    Duration="00:00:01"/>
+    
+the path (Shape.Fill) means the property of Rectangle.Fill, it could also be used (Rectangle.Fill) because shape is the base class of Rectangle
+(GradientBrush.GradientStops) is point to the LinearGradientBrush.GradientStops property, which is a zero based array
+(GridentBrush.GradientStops)[1].(GradientStop.Color) is point to the second element of the array of GradientStop color
+    
+all of these syntax could created with blend
+    
+- change the layout to animation layout in blend
+Window|Animation workspace layout
+    
+- avoiding property path by directly give a name to the aim element 
+<GradientStop Name="targetStop" Color="Red" Offset="0.5"/>
+
+<ColorAnimation
+    Storyboard.TargetName="targetStop"
+    Storyboard.TargetProperty="Color"
+    From="Red" To="Yellow" Duration="00:00:01"/>
+    
+this will avoid to write a long ambiguousness path property for the animation
+
+- Color vs. Brush
+    + Fills, stroke, etc.use Brush, not Color
+    even simple colors require property path to specify these property of a shape element
+
+- Storyboards, could contain multiple child animations, each animation could specify a BeginTime property and a duration property when call the StoaryBoardObject.Begin() method will call each child animation sequentially 
+
+- To, From and By, the by value is relative to the from value, for example a child animation sequence to use By property in the animation
+<DoubleAnimation From="0" To="100" .../>, indicate the range
+<DoubleAnimation From="0" By="100" .../>, by value is relative to the from value
+<DoubleAnimation By="100" .../>, this is used to start a animation while other animation already in progress, increase the value while the current value
+<DoubleAnimation To="100" .../>, animate from current value to the aim value
+<DoubleAnimation From="100" .../>, animate from this value to the base value, the default value or specify in the xaml
+<DoubleAnimation .../>, this will make the aim property animate from the current value to the default value
+
+- key frame animation, silverlight support key frame animation too
+    + DoubleAnimationUsingKeyFrames, etc.
+    + Still one animation element per property
+    Not exactly a 'frame', is just a shortcut to specify normal animation in storyboard
+    
+    + blend always create key frame animation
+
+- key frames
+- spline key frames, can support different speed in animation
+<DoubleAnimationUsingKeyFrames>
+    ...
+    <SplineDoubleKeyFrame KeyTime="00:00:01.5" Value="112" KeySpline="0.5,0,0.5,0.4"/>
+</DoubleAnimationUsingKeyFrames>
+    
+- Splines and time, spline keyframes warp time use bezier defining function of real time to keyframe time
+the keySpline value define the value point of bezier easing time function, (0,0) start to (0.5,0) and (0.5, 0.4) to the end point (1,1) in the previous example
+this also called easing function
+
+make the shape move along the spline curve, select the x or y coordinate and set relative spline curve to control the move coordinate
+
+- Discrete key frames, will make isolate key frame and define the keyTime property to control the display time of each isolate frame
+    + no interpolation, jumps to value
+    
+    + ObjectAnimationUsingKeyFrames, this only support DiscreteDoubleKeyFrame in the animation
+    for example change the horizontal and vertical property of a stack panel
+
+- you hide a element set the element invisible the element still handle the mouse event and prevent the other element behind them to catch the mouse event
+
+- easing, pre-built animation effects set built-in easing function
+
+- repeating and erversing
+
+<DoubleAnimation RepeatBehavior="0:0:10"/>
+<DoubleAnimation RepeatBehavior="4x"/>
+<DoubleAnimation RepeatBehavior="Forever"/>
+<DoubleAnimation AutoReverse="True"/>
+
+- speedRatio, change the speed Ratio property to control the animation speed
+SpeedRatio more greater more slower
+
+- controlling animations
+    + run by state manager
+    + run by code behind
+    mouseEnterAnimation.Begin()
+    
+    mouseEnterAnimation.Pause();
+    
+    mouseEnterAnimation.Resume();
+    
+    + silverlight don't support trigger as WPF
+
+
+- animation behavior
+    + ControlStoryboardAction behavior, is default introduct by silverlight 3
+    
+    + use asset tab in silverlight
+    
+    + drag and drop relative behvior to the aim element and set the event
+    
+- programmatic animation
+    + create storyboard instance and set the property and call the begin method
+    + create animation in runtime
+        * use dispatcherTimer to check and change the property of element
+        * duration of 0 generates events at the frame rate, silverlight will automatic change the frame rate base on the system hardware
+    
+
+# Video and Audio
+- Media Element to display the media resource
+<MediaElement Source="MyVideo.wmv"/>
+<MediaElmeent Source="MyAudio.wma"/>
+short media could be download as embedded 
+long media should save in server to make it download at runtime
+    + video sizing
+    sizes to media by default
+    
+    + for audio element will resize to zero
+    
+    + fixed size media element
+    
+- MediaElement as UI Element
+    + the media element could be rotate 
+    + the media element could also be cut shape by draw a shape by pencil and select menu Object|Path|Make Clipping Path  to clip the video base on the shape
+    + support rotate, and opacity
+    + support standard mouse input
+- Controlling
+<MediaElement x:Name="videoElement" AuoPlay="False".../>
+media element will download the file but wait for to play
+
+in code behind to call the play method
+videoElement.Play();
+or call Stop(), Pause() method
+
+videoElement.IsPlaying, will return play status
+
+- Position Property
+    + read to discover current position
+    var position = videoElement.Position.TotalSecond;
+    var total = videoElement.NaturalDuration.TimeSpan.TotalSeconds;
+    double percentage = (100 * position) / total;
+    
+    + set to jump to new position
+    Has performance implications, silverlight doesn't directly support this, need server works with this
+    
+- Stream vs Download
+    + seek and pause not always available
+    hard to fast-forward a live a broadcast, use stream video or audio 
+    
+    + check properties of the stream object
+        * CanSeek
+        * CanPause 
+        
+- CurrentState        
+    + Opening, when start downloading the video, during this time the element don't know the given uri is available or if it's a real video
+    + Buffering, when the connection is success and recognize the video
+    + Playing, when the element is set with auto play will automatic get into this state
+    + Pause
+    + Stopped
+    + Closed, when the source is empty
+    + Error, anything got wrong
+    
+- Events
+    + BufferingProgressChanged
+    + DownloadProgressChanged
+    + Status changes event
+        * MediaOpened
+        * MediaFailed
+        * MediaEnded
+        * CurrentStateChanged
+        * MarkerReadched, use to sync in the code      
+        
+- Synchronizing media and code, change text of the video to display the text
+    + Markers, named instants, usually embedded in media
+    add with windows media encoder or expression encoder
+    
+    + xaml allows markers to be added but this doesn't work, can set from code after the media opens
+    
+- TimelineMarker, marker property of TimelineMarkerRoutedEventArgs
+    + properties of TimelineMarkerProperties
+    Text, Time, Type
+    
+    + window media sdk support strick marker
+
+- MarkerReached Event, e.Marker.Text to get the property
+- VideoBrush and MediaElement
+    + xaml implies video source -> mediaElement -> videoBrush
+    + slightly different under the covers
+    video source -> media decode -> mediaElement
+                                 -> videoBrush
+- Formats and protocols
+    + video
+    wmv 7 to 9
+    windows media video advanced profile, non-vc-1
+    h.264/mpeg4
+        
+    + audio
+    wmv7 to 9, mp3, raw pcm, aac
+    
+    + protocols
+    http, https, ms-wmsp(mms and rtsp back to this)
+    
+- DRM
+    + play ready
+    successor to window media DRM
+    compatible with WMDRM10
+    it is same with WMDRM platform
+    
+    client -> content server
+           -> license server
+    + upgradeable DRM client component
+    allows for evolution of DRM mechanisms
+    
+- Encoding
+    + expression media encoder
+        * targets silverlight-supported formats
+        * can encode multiple bitrates for 'smooth streaming'
+        * add markers and metadata
+        * provides xaml player templates
+        * trim video
+        * simple sticking together of multiple clips
+        * resize
+        
+    + use microsoft expression encoder tool to add encoder for the video
+        * the tool support compare different encoding versions
+        
+        Bitrate, Peak bitrate, Peak buffer size
+        
+        * add markers and text for the video 
+        
+        * select job output will given a output frame
+    
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+

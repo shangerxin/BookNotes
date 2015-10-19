@@ -1,0 +1,1110 @@
+﻿CLR Fundamentals=Mike Woodring;Note=Erxin
+
+# outline
+- overview of the .net framework 
+    + elements of the framework 
+    + relevant standards 
+    + implementations 
+    
+- ovewview of the common language runtime(CLR)
+    + implementation overview 
+    + bootstrapping /initialization 
+    + intro to run time services 
+    
+- introduction to a few tools for analysis 
+    + static code analysis
+    + runtime/debugger-based analysis 
+    
+- the .net framework 
+    + the .net framework is a managed execution platform 
+        * an execution engine(EE)
+        AKA virtual machine(VM)
+        incharge of code execution(JIT compilation security, ...)
+        provides runtime services(memory management I/O)
+
+    + a set of class libraries 
+    + a set of standards describing scope of each 
+
+- standards 
++-------------------------------------------------+ 
+|CLI common language infrastructure               |
+|VES, virtual execution system ( AKA EE/VM )      |
+|file format(PE32+)                               |
+|some framework classes                           |
+|ECMA 334/ISO 23271                               |
+|                                                 |
+|+-----------------------------------------------+|
+||CTS common type system |                       ||
+||IL, intermediate language instruction set      ||
+||support types(string, integrals, etc)          ||
+||                                               ||
+||+---------------------------------------------+||
+|||CLS, common language specification           |||
+||| minimum mandatory set of types for          |||
+||| all .net platform such as mini .net mobile  |||
+||+---------------------------------------------+||
+|+-----------------------------------------------+|
++-------------------------------------------------+
+    
+- CLI implementation and derivatives 
+CLI 
+    |----microsoft .net framework (CLR) retail platform for windows 
+    |     |
+    |     +-shared source CLI(SSCLI/"Rotor") a reference implementation of the CLI for education
+    |       for investigate 
+    |-----microsoft .net compact framework(CF), PDAs, smart phone 
+    |       |
+    |       +-----microsoft .net micro framework, super small devices 
+    |-----core CLR, dynamic language rumtime(DLR), silverlight, iron{python, ruby, ...} microsoft 
+    |
+    |---other company also develop kinds of CLI such as mono, targets linux, solaris, mac os/x sponsored by novell nee ximian
+    |
+    +--DotGNU Portable .net, targets GNU/Linux      open source 
+        
+    
+- language support for the CTS 
+    + language support for the CTS can vary 
+        * languages do not have to support 100% of the CTS 
+        each can choose a different subset of the CTS to support 
+        
+        * language do not have to limit themselves to the CTS 
+        * support for the CLS is the only shared requirement
+
+- the common language runtime 
+    + the clr is implementd as a set of in-process dlls 
+    loaded only into processes that run managed code 
+                
++----------------------macihne x--------------------------------------------+
+|+----------process address space---+  +----------process address space---+ |
+||foo.exe                           |  |                                  | |
+||dlls, ...                         |  |                                  | |
+|| thread pool    heap              |  | thread pool  heap                | |
+||clr 1.0                           |  |clr 1.1                           | |
+|+----------------------------------+  +----------------------------------+ |
+|native operation system                                                    |
++---------------------------------------------------------------------------+    
+    
+- from development to execution 
+    + managed execution is characterized by types described using a managed language (c# such as)
+    + compiler produces an assembly 
+        * contains intermediate language(IL) and metadata 
+        
+    source code(.cs, .vb)  --compiler--> assembly(.dll, .exe) IL metadata 
+    
+    window will map the executable image to the process space 
+    clr will bootstrap, and check the application configuration, clr initialize heap and thread pool, loading the .dll and .exe, start from the main entry of the code 
+    code is just in time compiled
+    
+- Getting Started 
+    + each .net program consists of a set of classes (types)
+        * some classes you write 
+        * thousands of existing classes available in the framework class library (FCL)
+        
+    + A static entrypoint is where things get started 
+        * called "main" by default in c# 
+        class Program{
+            static void Main([parameters...])
+            {
+                System.Console.WriteLine("hello world");
+            }
+        }
+    
+        * method can't be global function 
+        * if compiler find several main methods, you need to tell the compiler which on to use 
+        
+    $copy con filename 
+    could create file from command console
+    
+    IL DASH is used to check all the type 
+    $ildasm
+    it is a program to open a IL decompiler to the .net code. it's the machine language for the .net vm 
+    
+    the clr will load the return type and parameter type all included in the IL language 
+    
+- Reflector 
+Reflector.exe .net_exe
+    
+- JIT compilation, just-in-time compilation 
+    + processor-specific code is generated at runtime, benefit
+        * IL is verified to be type safe 
+        * accommodates evolution of types, from other assembly
+        * optimized for target machine, not dev machine 
+        * not interpreted 
+        * by default, on a method-by-method basis 
+        $ ngen.exe supports "preJIT"
+        it is a tool you could run during installation, this will generate the processor-specific instruction to accelerate the first run 
+        
+- JIT compilation illustration 
+c# --dev-time compile --> IL (Idloc is a local variable)
+- JIT compilation under the hood 
+ctrl+shift b, to build a project 
+
+open the unmanaged code debugging by the project property setting page, Debug Tab 
+
+use the immediate window to load the debugger help command 
+$ .load sos 
+type help to check all the commands 
+$ .help
+$ !name2exe xxx.exe!ClassName
+will list all the method entry address and module and token, include address_of_the_method_table
+$ !dumpmt -md address_of_the_method_table 
+will display all the JIT compile method table and method_address
+
+$ !u method_address
+this command will list all the IL assembly language list
+
+modify the library without the rebuild project 
+
+- garbage collection 
+    + unmanaged applications require considerable memory mgmt effort 
+        * difficult to reason about 
+        e.g. different ownership models 
+        
+        * error prone & difficult to debug 
+        failure to release(leak)
+        multiple release(undefined)
+        use after release(undefined)
+        
+    + the clr's heap manager provides an efficient allocator 
+        * dynamically tuned acquisition of underlying virtual memory resources 
+        * prevents/reduces fragmentation of underlying virtual memory 
+        
+    + the clr collects garbage from time to time 
+        * traversal of rooted references results in identification of garbage 
+        * compaction improves locality of references & alleviates fragmentation 
+        
+- compaction in action, demo the garbage collection 
+    + enable unmanaged code debug 
+    + open memory window Debug|memory
+    open the immediate window 
+    $!clrstack -l 
+    check a local variable of the stack 
+    
+    use 
+    $ !dumpobj address 
+    will display all the local variable referenced object 
+    
+    could directly use the address to display the value of a variable 
+    $ xxxxx.toString();
+    
+    GC.Collect();
+    will trigger to allocate the memory 
+    GC.KeepAlive(object);
+    
+- managed application frameworks 
+    + managed code is often hosted by a framework, for example 
+    + desktop applications 
+        * windows forms 
+        * windows presentation foundation (wpf)
+        
+    + services 
+        * asp.net applications & web services 
+        * windows communication foundation( wcf)
+        
+    + other hosted application scenarios 
+        * silverlight 
+        * sql 2005+ stored procedures & user-defined functions 
+        * powershell cmdlets 
+    + the .net framework must be installed for any of this to work 
+        * you can ship the redistributable with your product if you like 
+- summary 
+    
+vs.net with SOS debugger extension dll 
+
+- references
+    + spec & .net framework variations 
+    http://link.pluralsight.com/netspecs
+    http://www.microsoft.com/net 
+    http://www.microsoft.com/netmf 
+    http://link.pluralsight.com/netcf
+    http://link.pluralsight.com/sscli2
+    
+    + tools 
+    http://www.microsoft.com/whdc/devtools/debugging 
+    http://www.red-gate.com/products/reflector 
+    
+    + instructor-led courses 
+    http://www.pluralsight.com/main/ilt/courses.aspx?category=framework 
+    
+    
+# Assemblies and Versioning 
+- overview 
+    + types & scoping 
+    + assembly naming 
+    + assembly resolution 
+    + assembly cache 
+        * global assembly cache(GAC)
+        * native code cache (ngen cache)
+    
+- assemblies 
+    + managed code is distributed in assemblies
+        * access control 
+        * type names are assemblies-qualified 
+        same type in different assemblies == different types 
+        
+- simple assembly resolution 
+string url = "http://www.pluralsight.com";
+Uri uri = new Uri(url);
+
+when check the code in ildasm the code will be 
+[System]System.Uri uri
+
+obj.GetType().AssemblyQualifiedName;
+will display the information as 
+Namespace.Name, assebly_name, version=xxxx, culture=xxx, PublicKeyToken=xxxx 
+
+    + Assemblies resolution & loading 
+    during managed execution, assembly loading involves 
+        * version mapping(sometimes)
+        * name resolution( a name to CODEBASE mapping operation)
+        * loading "resolved" version into memory 
+
+- Assembly Names 
+    + name format drives sophistication of the resolution algorithm 
+    signed asseblies are referred to as "strongly named"
+    strongly named asseblies have a non-null publicKey token 
+    
+    obj.GetType().Assembly.FullName;
+    library, version=xxx, culture=netural, publicKeyToken=xxxx/null
+- Simple Assembly Resolution 
+    + a simple set of rules govern loading of unsigned asseblies
+    hosting application directory (APPBASE), is the root 
+    subdirectory named after assembly to load, look the directory with the same name as the assembly
+        * clr will look for acme.dll in APPBASE\acme 
+        * also change the extension to exe to find the assembly 
+        
+    additional subdirectory(ies) named in application's config file 
+    called private path probing 
+        * often referred to as "xcopy deployment"
+
+- simple assembly resolution demo 
+the manifest file will contain the assembly dependency information 
+
+use ildasm will display the manifest
+.assembly extern assebly_name 
+{
+    .publickeytoken = (xx xx xx )
+    .ver x.x.x
+}
+
+obj.GetType().Assembly.CodeBase; 
+will display the assembly name 
+
+fusion log viewer, use the log viewer to log bind failure to disc to log assembly resolution, will log all the assembly relative failure on the workstation
+$ fuslogvw 
+
+use the Microsoft .net framework 2.0 Configuration tool to change the application configuration  
+add a application configuration 
+or directly use editor to add 
+<configuration>
+    <runtime>
+        <gcConcurrent enabled="true"/>
+        <assemblyBinding xmlns="urn:schemas-microsfot--com:asm.v1">
+            <publisherPolicy apply="yes"/>
+            <probing provatePath="SubDirectoryName"/>
+        </assemblyBinding>
+    </runtime>
+</configuration>
+    
+- strong names 
+    + fully specified assembly names have 4 parts 
+    firendly name 
+    version 
+    culture (language/region)
+    key token(uniquely identifies the publisher)
+        * involves public/private key pair technology 
+        above format referred to as "display name"
+        
+- assembly signing 
+    + key fiels 
+    SN.exe creates/manages key files 
+    -k command line option creates a new pair of keys 
+    sn -k acmekeys.snk -> go create public key and private key 
+    
+    + assembly name is specified using attributes 
+    or vs.net project settings 
+    [assembly: AssemblyVersion("x.x.x.x")]
+    
+    csc /keyfile:acmekeys.snk /t:library codeFile.cs 
+    
+    use the visual studio project property and the Signing tab will be used to configure the assembly signing 
+        * create new or select a created *.snk file 
+        
+    + signed assemblies & references 
+    strongly named assemblies contain a signature 
+        * assembly hash encrypted with publisher's private key 
+        * copy of public key embedded in manifest for clients 
+        referencing assemblies note the key token for future use 
+        
+    + loading of signed assemblies is more involved 
+        * requested version optionally mapped to alternate version 
+        * is the target version alreadly in memory?
+        * is the target version installed in the Global Assembly Cache(GAC)
+        local file ssytem repository in support of side by side(SxS) versioning 
+        * has a CODEBASE hint been provided 
+        an arbitrary URI( file system, network share, http)
+        fallback on private path probing 
+        strong name validation 
+
+- version mapping 
+    + version policy 
+    assembly version s configurable via config files 
+        * per-application 
+        * per-publisher (strongly named assembly developer)
+        * per-machine 
+        * (any/all of which may be a no-op)
+        
+        v -> application policy -> v -> publisher policy -> v -> machine policy -> v 
+        originally requested version 
+        
+        this could be configure by the .net framework configuraiton tool 
+        
+- global assembly cache (GAC)
+    + the gac supports side-by-sde deployment of assemblies
+    multiple versions of the 'same' assembly present on a machine 
+    clients indicate desired version of assembly to load 
+    if resolved version exists in the GAC, it's used as-is 
+        * strong name validation occurs at GAC-install time, not load time 
+        * a point of vulnerability if write access to GAC can be attained 
+
+obj.GetType().Assembly.CodeBase; //is where the clr found the dll 
+obj.GetType().Assembly.Location; //is where the clr load the dll 
+
+install a dll to GAC 
+$ gacutil -i calc.dll 
+a applicaiton will first check the memory and then the gac to find a assembly  
+
+the path will display all the assembly in the GAC 
+c:\widows\assembly 
+
+- strong name validation 
+the validation load out the GAC is by pass the strong name validation, but load in will use the strong name validation 
+- CODEBASE hints 
+    + assemblies can be loaded from off-host via CODEBASE hints 
+        * used after assembly not found in memory or GAC 
+        * used before private path probing 
+        <codeBase version="x.x.x.x" href="http://localhost/calc.dll"/>
+        add the configuration codebase to the app file 
+- the native code cache(NGEN)
+    + assemblies can be "preJITed" on machines where deployed 
+        * IL-based assembly deployed on target machine normally 
+        * ngen.exe utility run to compile IL to processor-specific code 
+        ngen == 'native code generator' or 'native image generator'
+        run on target machine, not dev machine 
+        image generated is named assembly.ni.extension 
+        eg:mscorlib.ni.dll
+        + the ngen cache is consulted when a assembly is resolved 
+        does a native image exist for the target assembly to be loaded 
+        does it's mvid(module version id) match? 
+            * the MVID is a guid in each assembly's metadata 
+            * generated anew when assembly image is emitted by a compiler 
+            * recorded for future reference when native image is generated 
+            
+        $ ngen install *.dll 
+        $ ngen display *.dll 
+        will generate the *.ni.dll 
+        
+use the debug|module window will display the loaded modules
+- summary 
+start 
+|
+V
+apply version policy <-no- publicKeyToken=null?----------------yes
+|                                                               |
+V                                                               |
+requested version already loaded? -yes-> use loaded assembly    |
+|                                                               |
+no                                                              |
+V                                                               |
+matching assembly found in GAC? -yes -> load assembly from GAC  |
+|                                                               |
+no                                                              |
+|                                                               |
+V                                                               |
+CODEBASE hint provided? -no-> probe APPBASE <-------------------+
+|                               |
+V                               |
+file found <--------------------+
+|   |       (strong name validation)
+no  +-yes-> file matches reference? -yes-> load assembly
+|                           |
+V                           +---> FileLoadException
+FileNotFoundException
+
+- reference 
+    + portable executable and commonObject file format specification 
+    http://www.microsoft.com/whdc/system/platform/firmware/PECOFFdwn.mspx 
+    + common language infrastructure (CLI) specification 
+        * http://link.pluralsight.com/netspecs 
+        * partition IIA: metadata semantics 
+        * partition IIB: metadata file format 
+    + the common language infrastructure annotated standard, book 
+        * by James S. Miler & Susann Ragsdale;Addison-Wesley
+        * miller was the lead software architect of the CLR 
+    + expert .net 2.0 il assembler, book 
+        * by Serge Lindin; APress
+        * clr team member in charge of 
+        IL assembler(ilasm.exe)& disassembler(ildasm.exe)
+        metadata validator(peverify.exe)
+        run-time metadata validation component of the EE
+
+# Assembly 
+- Managed assemblies 
+    + types & scoping 
+    + assembly naming 
+    + assembly resolution 
+        * private path probing 
+        * strong named resolution 
+        
+    + assembly caches 
+        * global assembly cache (GAC)
+        * native code cache(ngen cache)
+        
+- assemblies 
+    + managed code is distributed in assemblies 
+        * act as scoping boundary for types 
+        * assigned location-independent names 
+        * may be independently versioned 
+        
+- assemblies types 
+    + types are scoped by their containing assebly 
+        * access control( public versus internal)
+        * type names are assembly qualified 
+        same type name in different assemblies == different types 
+        
+        namespace Acme {
+            public class Calc{
+            ...
+            }
+        }
+        
+        namespace Acme {
+            public class Calc {
+            ...
+            }
+        }
+
+
+- type names, full qualified type names 
+string url = "http://www.pluralsight.com";
+Uri uri = new Uri(url);
+
+
+# Win32 and COM Interop 
+- Outline  
+    + clr support for managed/native code interop 
+    comparing "managed execution" and "native execution"
+    the metadata-driven partnership
+    mechanics of managed/native interop 
+        * CLR => Win32 
+        * CLR => COM 
+        * COM => CLR 
+- managed versus native execution 
+    + in practice, .net apps involve a mix of managed & native code 
+    CLR-based "managed code"
+    win32/com-based native code 
+    transitions between the two worlds must be carefully coordinated 
+        * it's more than simply parameter marshalling 
+
+    Process Address Space 
+    ---------------------------------------------------------------------------+
+    |managed execution            |   native execution                         |
+    |IL Validation & Verification <=> Pointers Arithmetic & Arbitrary Code Exec|   
+    |Code Access Security (component)  Process-Centric Security                |
+    |Garbage Collection                Manual Memory Management                |
+    |Managed Exception handling        Structure Exception handling            |
+    +--------------------------------------------------------------------------+
+    
+- the metadata-driven partnership 
+    + metadata (type information) drives managed/native interop 
+        * managed type info can be derived from native type info 
+        * native type info can be derived from managed type info 
+        * pro: tools can automate most(not all )transformations 
+        * con: tools can automate most(not all ) transformation 
+        
+        there are corner cases, the default transformation may not fit your needs or not possible 
+    + interop is a partnership involving you the compiler, and the clr 
+        * the clr( and it tools) will automate as much as possible 
+        limited only b the fidelity of the native type information that's available 
+        * you may have to fill in some blanks or fine tune some transformations 
+        
+- interop facilities 
+    + the clr supports two kinds of managed/native interop 
+        * interop with win32 dlls 
+        platform invocation services 
+        "P/Invoke"
+        
+        * interop with COM components 
+        "COM interop"
+        
+- P/Invoke, platform invocation services 
+    + managed code can load & call into win32 dlls 
+    type information for win32 dlls is sorely lacking 
+        * export table contains only names & relative addresses of symbols 
+        * does not indicate whether exported symbol is a function or global variable 
+        * does not indicate "shape" of functions(its signature) or variables(its type)
+        
+    you have known it's a win32 function, and known how to call it 
+    
+    + the partnership 
+        * programmer describes function location & signature in terms of CLR types  
+        * managed compiler produces assembly/type metadata that drives JIT compilation 
+        * JIT compiler uses metadata to build "stubs" that perform CLR/Win32 transition 
+        load the requested dll (LoadLibrary)
+        locate the target function in memory(GetProcAddress)
+        marshal parameters to/from the target function 
+        
+- P/Invoke Mechanics 
+    + the clr/win32 transition is carried out by stubs & helpers 
+    
+    managed call site -> stub -> stub -> stub -> stub -> native call target 
+                          |      |      ...
+                          V      V
+                          helper function in mscor*.dll
+                          
+    + stub, is a small chunks of native code pieces generated by the JIT compiler 
+      specific to the marshalling requirements dictated by the p/invoke declaration 
+
+    + helpers are native functions typically found in mscor*.dll 
+        * general purpose functions that don't need to be tuned specifically to the target 
+        * example 
+        convert a CLR system.string paramter into null-terminated ansi/unicode string 
+        given a collection of CAS permissions, perform a demand/assert/etc 
+    
+- P/Invoke syntax 
+    + programmer-supplied metadata drives p/invokes 
+    method prototype describes the native functoin in therms of CLR types 
+        *managed compiler emits metadata for the managed method(empty body)
+        *managed method can be called like any other static method 
+        
+    + JIT compiler uses metadata to load DLL and located the exported method 
+    * JIT compiler uses metadata to build stubs that handle the transition 
+    
+    [DllImport("nativecalc.dll")]
+    static extern int Add(int a, int b);
+    
+    ...
+    var sum = Add(1,2);
+    
+    + demo font smoothing, programmatically change the font smoothing 
+    
+    SystemParametersInfo Function 
+    
+    Syntax 
+    BOOL WINAPI SystemParametersInfo(__in UINT uiAction, __in UINT uiParam, __inout PVOID pvParam, __in UINT fWinIni);
+    
+    the parameter fWinini, is specifies whether the user profile is to be updated if so whether the WM_SETTINGCHANGE message is to be broadcast to all top-lvel windows to notify them of the change 
+    
+    the font smoothing is set by a enum which is called 
+    SPI_SETFONTMOOTHING
+    SPI_SETFONTMOOTHINGTYPE, is used to pvParam to set standard or clear type 
+
+    //transformed the native code and enum to c# 
+    public enum FootSmoothingType:uint //check the header file of the native file winUser.h
+    {
+        Standard = 0x0001,
+        ClearType = 0x0002
+    }
+    
+    public static class SystemParameters 
+    {
+        public static bool FontSmoothingEnabled 
+        {
+            get {return NativeSystemParamters.IsFontSmoothingEnabled();}
+            set {NativeSystemParamters.EnableFontSmoothing(value);}
+        }
+        
+        public static FontSmoothingType FontSmoothingType 
+        {
+            get {return NativeSystemParamters.GetFontSmoothing();}
+            set {NativeSystemParamters.SetFontSmooting(value);}
+        }
+    }
+    
+    internal static class NativeSystemParamters
+    {
+        enum SPICommand:uint 
+        {
+            GetFontSmoothing = 0x004A,
+            SetFontSmooting = 0x004B,
+            
+            GetFontSmoothing = 0x200A,
+            SetFontSmooting = 0x200B
+        }
+        
+        [Flags]
+        enum ChangeFlags:uint //make the c# enum value is match the native paramter uint 
+        {
+            None = 0x0000,
+            UpdateProfile = 0x0001, 
+            Broadcast = 0x0002,
+            UpdateProfileAndBroadcast = UpdateProfile |Broadcast
+        }
+        
+        internal static bool IsFontSmoothingEnabled()
+        {
+            return (true); //tbd
+        }
+        
+        internal static void EnableFontSmoothing(bool enabled)
+        {
+            if(!SystemParametersInfo(SPICommand.SetFontSmooting, enabled, IntPtr.Zero, ChangeFlags.UpdateProfile))
+            {
+                ThrowLastWin32Error();
+            }
+        }
+        
+        internal static FontSmoothingType GetFontSmoothingType()
+        {
+            return (FontSmoothingType.ClearType);
+        }
+        
+        internal static void SetFontSmootingType(FontSmoothingType type)
+        {
+        }
+        
+        internal void ThrowLastWin32Error()
+        {
+            //int hr = Marshal.GetLastWin32Error();
+            int hr = Marshal.GetHRForLastWin32Error();
+            Marshal.ThrowExceptionForHR(hr);
+            //instead of use the GetHRForLastWin32Error is because the method support get human readable information for the error in stead of the GetLastWin32Error which is just hex error code 
+        }
+        
+        //manually map the native function signature to c# codes 
+        //BOOL WINAPI SystemParametersInfo(__in UINT uiAction, __in UINT uiParam, __inout PVOID pvParam, __in UINT fWinIni);
+        //the static extern tell the compiler to find the functio anywhere avaliable 
+        [DllImport("User32.dll")]
+        static extern bool SystemParametersInfo(
+            SPICommand command, 
+            bool enabled, 
+            IntPtr unused,
+            ChangeFlags flags
+        );
+    }
+
+    + check reference book ISBN: 978-0-672-32170-2
+    
+- P/Invoke error handling, get last error allow you to get error information from the calling thread 
+//manually map the native function signature to c# codes 
+//BOOL WINAPI SystemParametersInfo(__in UINT uiAction, __in UINT uiParam, __inout PVOID pvParam, __in UINT fWinIni);
+//the static extern tell the compiler to find the functio anywhere avaliable 
+[DllImport("User32.dll", SetLastError=true)]
+static extern bool SystemParametersInfo(
+    SPICommand command, 
+    bool enabled, 
+    IntPtr unused,
+    ChangeFlags flags
+);
+
+the parameter SetLastError is used to tell the JIT compiler preserve the native last error code during the marshalling, and save it for the managed world to check the error code. If not set it, during the marshalling process the error code may be overwritten
+
+- EntryPoint Aliasing, EntryPiont, you could tell the name of the function which you want JIT to call 
+
+[DllImport("User32.dll", SetLastError=true, EntryPiont("SystemParametersInfo")]
+static extern bool SystemParametersInfo(
+    SPICommand command, 
+    bool enabled, 
+    IntPtr unused,
+    ChangeFlags flags
+);
+
+then you could change the name of the managed function and specific different parameter names or types bool to int, SystemParametersInfo to SetFontSmooting which is more readable name 
+
+- P/Invoke Fine Tuning 
+    + stub generation can be fine-tuned as needed 
+    Using properties of DllImportAttribute 
+    EntryPoint 
+    CharSet, specify the string parameters 
+    SetLastError, influence the win32 set last error 
+    Others
+    
+    + By applying additional attributes to parameters and/or types 
+    MarshalAsAttribute, use to explicitly tell the clr how a stub particular parameter
+    StructLayoutAttribute, marshal structure parameter to native code, to help exactly control how layout of the fields
+    
+    + example P/Invoke fine tuning 
+    the goal call this function 
+    //exported by weirdtextutiles.dll, BSTR is basic string 
+    BSTR WINAPI Concat(wchar_t *s1, char *s2);
+    
+    //c# code 
+    [return: MarshalAs(UnmanagedType.BStr)]
+    static extern string Concate([MarshalAs(UnmanagedType.LPWStr)]string s1, [MarshalAs(UnmanagedType.LPStr)] string s2);
+    
+- COM Interop:CLR => COM 
+    + managed code can interact fairly easily with COM code 
+    COM type information (TLB) is fairly complete
+    
+    + the partnership 
+    TLBIMP.EXE translates COM type info into CLR type info 
+        * .TLB => TLBIMP.EXE => .DLL("interop assembly")
+        * COM coclass => CLR class(concrete)
+        * COM interface => CLR interface 
+        * automated VS.NET add reference wizard 
+        
+        the tool TLBIMP.EXE can be used manually or automated by VS 
+        
+    + programmer adds a reference to interop assembly 
+    + CLR/JIT compiler use metadata to construct "runtime-callble wrappers" 
+    RCWs, runtime-callable wrappers
+    
+    managed call site -> RCW -> native com component 
+    
+    + DEMO CLR-to-COM   
+        * create a cpp class with ATL COM 
+        interface ICalc: IUnknown
+        {
+            HRERESULT Add([in] long a, [in] long b, [out, retval] long* pSum);
+        }
+        
+        * c# client code 
+        static void Main()
+        {
+            ICalc c = new CalClass();
+            int sum = c.Add(2,2);
+        }
+        
+        * use oleview *.tlb/*.dll to check the com structure 
+        > tlbimp *.tlb 
+        
+        the tool will read the com information and produce a .net presentation *Lib.dll with the com interface 
+        
+        or use VS reference the com class and reference the com component then a Interop.*Lib.dll will be generated by visual studio 
+        
+        * enable the .net project unmanaged code debugging to let debugging through .net to cpp codes 
+        
+- runtime-callable wrappers(RCW)
+    managed call site -> RCW native component 
+    instantiation operator new      CLISID/Progld registry mappings CoCreateInstance 
+    
+    Type navigation is/as/cast      IUnknown::QueryInterface 
+    
+    Error handling system.exception throw/try/catch/finally IErrorInfo(Set|Get)ErrorInfo Win32 SEH
+    Memory Management shared heap garbage collection    CoTaskMeme(Alloc|Free)IUnknown::AddRef/Release
+    
+    + com type inforamtion(TLB) does not quite offer full fidelity 
+    + example 
+        * com IDL supports c-style "conformant arrays"
+        one parameter is a pointer to the first element in an array 
+        another parameters specifies the element count 
+        
+        interface ICalc: IUnknown 
+        {
+            HRESULT Sum([in,size_is(count)]long* pValue,
+                        [in] long count,
+                        [out, retval] long *pResult);
+        }
+        //in the com could use the conformant array to tell the parameter relationship between the pValue and the count 
+        |
+        midl.exe, produce type information of the tlb 
+        |
+        V
+        interface ICalc:IUnknown 
+        {
+            HRESULT Sum([in] long *pvalue, [in] long count, [out, retval] long *pResult);
+        }
+        
+        will missing the relationship the two parameters 
+        |
+        tlbimp.exe 
+        |
+        V
+        interop assembly
+        public interface ICalc 
+        {
+            int sum(ref int pValue, int count)
+        }
+        //we could use the P/Invoke annotation to specify the parameter relationship
+        
+- COM interop Fine Tuning 
+    + RCW metadata can be provided manually when needed ala P/Invoke 
+        * programmer manually describes types in CLR terms 
+        * attributes are used to provide required instantiation and marshaling details 
+        * CLR/JIT compiler uses programmer-supplied metadata to construct RCW 
+    [ComImport, Guid("37DE-xxx-xx")]
+    class CalcClass 
+    {
+        //empty 
+    }
+    
+    [Guild("22e8e9bf-552e-xx"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface ICalc 
+    {   
+        int Sum(
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] int[] values,
+        int count);
+    }
+    //adjust the RCW marshals the "values" parameter, the annotation UnmanagedType.LPArray tell the clr its a C-style array and the size is influenced by the second parameter
+    
+    //use the code 
+    ICalc c = (ICalc)new CalcClass();
+    int[] values = {1,2,3,4};
+    int sum = c.Sum(values, values.Length);
+    
+    //the force convert (ICalc) is necessary because the COM imported CalcClass doesn't implement the ICalc interface in c# to use the RCW customization we need to force change the type 
+    
+- com interop with threads 
+    + COM has an "apartment model" construct for dealing with threads 
+        * components declare their preparedness/requiremenets re calling threads 
+        ThreadingModel registry setting, such as what the requirement of the thread model and control the component behavior under multiple threading access
+        * calling threads declare their preparedness/requirements re components 
+        CoInitialize(Ex)
+        thread tell the COM what they want to interact with the COM 
+        * COM activation returns proxies or not based on those two settings 
+        CoCreateInstance(Ex)
+        use the method to create the com instance 
+    + CLR threads have a property that declares their COM apartment state 
+    System.Threading.Thread.ApartmentState, on the current thread then use the com 
+    System.STAThreadAttribute, to tell the clr which thread want to use the thread apartment
+    System.MTAThreadAttribute 
+    
+    using System;
+    class Program 
+    {
+        [HTAThread]
+        static void Main()
+        {
+            ICalc c = (ICalc) new CalcClass();
+            int sum = c.Add(2,3);
+        }
+    }
+    
+- COM interop: COM => clr 
+    + clr type information offers high fidelity 
+        * CLR-to-COM metadata transformations are often more easily performed, that doesn't means anything to COM, such as generic type can't be mapped 
+        * does not mean every valid clr type can be represented in COM 
+        
+    + the partnership 
+        * TLBEXP.EXE can be used to translate CLR type infor into COM type info 
+        .DLL(assembly) => TLBEXP.EXE => .TLB 
+        .suitable for use by VB6, MSFT c++ & other TLB-aware compilers 
+        
+    + REGAM.EXE performs COM-required registration for com 
+        * all roads lead to MSCOREE.DLL 
+        MSCOREE.DLL execution engine 
+        
+    + MSCOREE.DLL builds COM-callable wrappers(CCWs)
+        * driven by metadata in .net assembly( not the TLB)
+        * .NET can use attributes to fine tune tool operation 
+        
+- COM-callable wrappers(CCW), is a reverse process of RCW 
+    + CCWs are essentially the inverse of RCWs
+        * constructed by mscoree.dll during COM "activation"
+        * constructed whenever CLR object references are marshalled as parameters 
+        * COM-induced complexity made relativly seamless by the CLR 
+        maanged object <--CCW <-- native client 
+        
+- com activation, to help diagnose the managed component 
+VB6/VBA 
+Dim calc as Object 
+Set calc = CreateObject("Pluralsight.Calc")
+
+JS
+var calc = new ActiveXObject("Pluralsight.Calc") 
+        
+Registry/HKCR/Pluralsight.Calc/CLSID (default) = {clsid}
+
+ole32.dll, pesudo code 
+IUnknown *CoCreateInstantanceEx(clasid, iid)
+{
+    dll= LoadLibrary(reg/Default);
+    qco = CetProcesAddress(dll, "DllGetClassObject");
+    
+}
+
+cpp 
+ICalc *pCalc 
+CoCreateInstance(CLSID_PluralsightCalc, 0, CLSCTX_INPROC_SERVER, IID_ICalc, (void**)&pCalc);
+
+Registry/HKCR/{clsid}/InprocServer32 
+{Default} = mscoree.dll 
+ThreadlingModel = Both 
+RuntimeModel = Both
+RumtimeVersion = v2.0.xxx
+Assembly = pscalc, Version = 1.0.0.0, Culture=neutral, ..
+Class = Pluralsight, Calc 
+        
+mscoree.dll 
+IUnknown *DllGetClassObject(clsid, iid)
+{
+    clr = StartCLR9reg/RuntimeVersion);
+    asm = clr.LoadAssembly(reg/Assembly);
+    type = asm.GetType(reg/Class);
+    obj = asm.CreateInstance(type)
+    return BuildRCWForCLRObject(type, object);
+}
+        
+        
+COM Client(VB6/...) -required-> check registry setting get COM information -call-> IUnknown *CoCreateInstanceEx method 
+Native client could (cpp) could directly pass the COM interface -> IUnknown* CoCreateInstanceEx method 
+
+CoCreateInstance -check-> Registry/HKCR/{clsid}/InprocServer32 -> IUnknown* DllGetClassObject(in mscoree.dll)
+all reference mscoree.dll, threadmodel 
+load dll mscoree
+DllGetClassObject which is a class factory method to help create clr version and com component 
+
+- Assembly Resolution 
+    + COM activation and assembly resolution 
+    MSCOREE.DLL!DllGetClassObject can be called in arbitrary process contexts, then the method could be invoked 
+    MSCOREE.DLL resides in %SystemRoot%\System32 
+    MSCOREE.DLL needs to locate (on disk or in memory) and local assemblies 
+        * i.e performance assembly resolution & everything that entails 
+        
+    + implications, the REGAM.exe register the .net assembly to registry 
+        + four-part assembly names are stored in HKCR/{clsid}/InprocServer32
+        + Assemblies intended to be used from COM should be signed & in GAC 
+        + Assemblies referenced/used by "top level" assembly should also be in GAC 
+        + REGASM.EXE can add a CodeBase hint to the registry by a parameter switch 
+            * intended only for quick & dirty testing 
+            * always results in a warning 
+            * may still experience failures at runtime 
+
+
+    + demo CLR-to-CLR, to use the S3 service, CloudBerry is a free cloud storage service 
+        * add class which will be consume by COM client 
+        
+        namespace Pluralsight.PSOD.Samples.Interop
+        {
+            [ComVisible(true)]
+            public class S3ImageSelectorUI
+            {
+                public S3TempFile ChooseImage()
+                {
+                    ...
+                }
+            }
+            
+            [ComVisible(true)]
+            public class S3TempFile:IDispose
+            {
+                ...
+            }
+        }
+        
+        if there is any custom return type should also be com visible too
+        
+        * add assembly information to set com visible to false to hide the unrelative classes and add attribute to the com visible class to expose it to com world 
+        [assembly: ComVisible(false)]
+
+        * build the solution 
+        * execute the regasm tool to register to output .net assembly to com 
+        $ regasm *.dll
+        
+        * check if it is successed by use the register editor and search the output assembly 
+
+        * use a com client to init the com 
+        Set imageChooser = CreateObject("Pluralsight.PSOD.Samples.Interop.S3ImageSelectorUI");
+
+        Dim selectedImage As Object 
+        Set selectedImage = imageChooser.ChooseImage()
+        If Not selectedImage Is Nothing then 
+            Application.ActiveDocument.Shapes.AddPicture selectedImage.Path, SaveWithDocument:=True
+            selectedImage.Dispose
+        End if 
+    
+- Native resource management 
+    + native resource reclamation is manual/explicit
+    free(c), delete(c++), CoseHandle(Win32), IUnknown::Release(COM)
+
+    + managed resource reclamation is more intelligent 
+        * garbage collection takes care of reclaiming unreachable object memory 
+    
+    + managed classes that interact directly with native code need to help 
+        * p/invoke clients should override system.object.Finalize method 
+        i.e make your type inalienable (language-specific syntax)
+        use p/invoke to release native resources(s)
+        do not interact with any managed objects you may be referencing 
+    
+        * RCW & P/invoke clients may implement system.IDisposable 
+        enables aggressive/early native resource cleanup 
+        many languages provide an exception-aware IDisposable idiom 
+
+- native resource management: CLR-to-COM 
+    + RCWs handle the direct interaction with COM objects 
+        * hold the actual interface pointer 
+        * are finalizable 
+        * will perform the final IUnknown::Release when finalized during GC 
+    + classes hat interact with RCWs may optionally spur final release 
+        System.Runtime.InteropServices.Marshal.ReleaseComObject 
+        
+        Reference to RCW Reference to managed object that implements IDisposalbe 
+        
+        
+    class Widget:IDisposable
+    {
+        INativeWidget _w = new NativeWidgetClass();
+        Stream _s = File.OpenWrite(@"c:\widget.log");
+        
+        bool _disposed = false;
+        
+        public void Dispose()
+        {
+            if(!_disposed)
+            {
+                Marshal.ReleaseComObject(_w);
+                _s.Dispose();
+                _disposed = true;
+            }
+        }
+    }
+        
+    NOTE, ReleaseComObject is not just a call to IUnknown::Release, it is the final call to IUnknown::Release 
+        
+- Native Resource Management: CLR-to-Win32 
+//P/Invoke declarations simplified for brevity 
+partial class Widget:IDisposable
+{
+    [DllImport("kernel32.dll")]
+    static extern IntPtr CreateFileMapping(string fileName);
+    
+    [DllImport("kernnel32.dll")]
+    static extern bool CloseHandle(IntPtr h);
+}
+//in memory mapping to a perticular file in the file system 
+        
+        
+partial class Widget:IDisposable
+{
+    //holds a win32 handle
+    IntPtr _h = CreateFileMapping(@"c:\widgetdata.bin");
+    //reference to managed object that implements IDisposable
+    Stream _s = File.ObjectWrite(@"c:\widget.log");
+    bool _disposed = false;
+    
+    //release native resource forward call to Dispose suppress finalization 
+    public void Dispose()
+    {
+        if(!_disposed)
+        {
+            CloseHandle(_h);
+            _s.Dispose();
+            GC.SuppressFinalize(this);
+            _disposed = true;
+        }
+    }
+    
+    //finalizer only release the native resource 
+    ~Widget()
+    {
+        CloseHandle(_h);
+    }
+}
+
+- summary 
+    + managed/native interop is metadata-driven process 
+    programmers supply all metadata for win32 interop 
+    tools supply most metadata for com interop 
+    attributes can be used to fine-tune stub, RCW and CCW construction 
+    some awareness of COM idiom is required 
+    leverage finazlization & IDisposable as needed in first-level interop classes 
+        
+        
+    + useful reference 
+    .Net and COM: The Complete Interopability Guid, adam Nathan, Microsoft Principal developer 
+    book ISBN: 978-0-672-32170-2
+    + p/invoke interop wiki 
+    http://www.pinvoke.net 
+    
+    + cloudberry s3 utility 
+    http://www.clouldberrylab.com 

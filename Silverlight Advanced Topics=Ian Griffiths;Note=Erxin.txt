@@ -1,0 +1,662 @@
+﻿Silverlight Advanced Topics=Ian Griffiths;Note=Erxin
+
+# Server Communication
+- Agenda
+    + web services
+    + http and rest
+    + json
+    + syndication
+    + ado.net data serivces
+    + sockets
+    
+- choices
+    + application
+    browser  -> download silverlight app -> web server, web page and web service
+    
+    basic soap or binary to connect to wcf service
+    + web service may wcf
+    + external server
+        * web service
+        * json service
+        * rest service
+        * rss feed
+        * atom feed
+        * other
+
+- web services, use wcf 
+    + wcf BasicHttpBinding or simple custom binary only
+        * SOAP 1.1 or binary equivalent
+        * full WS-* suite not supported
+
+    + can use full WCF on server
+        * configure suitable binding
+        * could also use any other SOAP 1.1
+
+- WCF on server, ABC, address, binding, contract
+    + create silverlight enable wcf service from the visual studio wcf service template
+    
+- WCF Server configuration
+    + in web.config file
+    <system.serviceModel>
+        <services>
+            //the name of the class implement the service
+            <service name="PS.StockQuoteService"> 
+                //the empty string means use the location of the svc file to choose the address
+                <endpoint address=""
+                          binding="basicHttpBinding"
+                          //the class implement the service contract
+                          contract="PS.StockQuoteService"/>
+                //imply to use the built-in service description endpoint
+                <endpoint address="mex" binding="mexHttpBinding" contract="IMetadataExcahnge"/>
+            </service>
+        </services>
+        <behaviors>
+        </behaviors>
+        <binding>
+            <customBinding>
+                <binding name="customBinding0">
+                    //set message use binary communication
+                    <binaryMessageEncoding/>
+                    <httpTransport/>
+                </binding>
+            </customBinding>
+        </bindings>
+        <serviceHostEnvironment aspNetCompatibilityEnable="true"/>
+    </system.serviceModel>
+
+- web service client
+    + client need to add his own copy of wcf ABC, the serviceModel section will be automatic add web.config by VS
+
+- wcf proxy, visual studio generate the proxy
+    + asynchronous contract
+- using a wcf proxy
+    + create a instance and add relative method event handler
+- http and rest
+    + build content management client
+        * WebClient
+        * HttpWebRequst and HttpWebResponse, give more detail control
+    + subset of XML apis
+        * streaming (XmlReader and XmlWriter)
+        * XLNQ(XDocument, XElement), this kind of api whole entire xml document 
+        * XmlSerializer
+    + Two notable absentees, in silverligtht
+        * DOM not available(ie, no XmlDocument, XmlNode, etc), replace with xlinq
+        * XPath not available(not event the XMLQ support for XPath), replace with xlinq
+    + rest usual .net http support
+    + example to use WebClient directly access the web service
+        * contain the xml data
+        <?xml version="1.0" encoding="utf-8"?>
+        <data>
+            <video>
+                <title> learn wcf in 21 microseconds</title>
+                <author>roger</author>
+                <url>http://....</url>
+            </video>
+            </video>
+                ...
+            </video>
+        </data>
+        * create realtive xml map class
+        [XmlRoot("data")]
+        public class VideoList
+        {
+            [XmlArray("videos")]
+            [XmlArrayItem("video")]
+            public Video[] Videos {get; set;}
+        }
+        
+        public class Video
+        {
+            [XmlElement("title")]
+            public string Title {get; set;}
+            [XmlElement("author")]
+            public string Autor {get; set;}
+            [XmlElement("url")]
+            public string Url {get; set;}
+        }
+
+        use the class
+        WebClient web = new WebClient();
+        web.OpoenReadCompleted += new OpenReadCompletedEventHandler(web_OpenReadCompleted);
+        web.OpenReadAsync(new Uri(HtmlPage.Document.DocumentUri, "VideoData.xml"));
+        void web_OpenReadCompleted(object sender, OpenReadCompletedEventArgs e)
+        {
+            var sr = new XmlSerializer(typeof(VideoList));
+            VideoList list = (VideoList) sr.Deserialize(e.Result);
+            videoList.ItemsSource = list.Videos
+        }
+- xlinq support
+    + book the DownloadStringComplete event and use xlinq to parse the content
+    XDocument doc = XDocument.Parse(e.Result)
+    var items = from person in doc.Descendants("person")
+                let age = double.Parse(person.Attribute("Age").Value)
+                where age > 25
+                orderby age
+                select new PersonViewModel
+                {
+                    Age = age,
+                    Name = person.Element("Name").Value
+                };
+    personListBox.ItemsSource = items.ToArray();
+
+
+    the relative person xml file content is
+    <people>
+        <person Age="33">
+            <Name>Fred </Name>
+        </person>
+        <person>
+            ...
+        </person>
+    </people>
+    
+- json, the java script object notation, json is a syntax to create object in javascript, json from silverlight
+    + no direct wcf support
+    full wcf has it
+    earlier previews of silverlight had it
+    dead easy from javascript
+    
+    + use DataContractJsonSerializer similar to the xml serializer
+        + originally from wcf
+        + statically typed 
+    + system.Json
+        + jsonValue, jsonObject, JsonArray, jsonPrimitive
+        + dynamically typed
+
+- dataContractJsonSerializer
+    + data example
+    {"Married":true,
+    "Age":33,
+    "FristName":"Bob",
+    "LastName":"Smith
+    }
+    
+    + create relative data type
+    public class Person
+    {
+        public string FirstName {get; set;}
+        public string LastName {get; set;}
+        public int Age {get; set;}
+        public bool Married {get; set;}
+    }
+
+    convert the json to relative data type
+    DataContractJsonSerializer jsr = new DataContractJsonSerializer(typeof(Person));
+    var person = (Person)jsr.ReadObject(personJsonStream);
+
+- system.Json, dynamic create and load json stream to JsonObject
+    + indexing and implicit conversions
+
+    + example
+    JsonObject person = (JsonObject) JsonValue.Load(personJsonStream);
+    string firstName = person["FirstName"];
+    string lastName = person["LastName"];
+    bool isMarried = person["Married"];
+    
+    + also implements IEnumerable<KeyValuePaire<string, JsonValue>>
+        * Enumerates properties
+        for(var attribute in JsonObj)
+        {
+            var key = attribute.Key;
+            var value = attribute.Value;
+        }
+
+- syndication, syndication feed
+    + rss 2 feed
+    use webclient class and point to the aim rss uri and get the rss xml content, use the xmlReader to load the xml stream
+    
+    SynicationFeed feed;
+    using()
+    + XmlReader xr = XmlReader.Create(e.Result)
+    {
+        feed = SyndicationFeed.Load(xr);
+    }
+    
+    SyndicationItem[] items = feed.Items.ToArray();
+
+    + atom
+    + necessary to consume ado.net data services
+
+- ado.net data services
+    + sivlerlight has no db support
+        * no MDAC
+        * no system.data
+    
+    + ado.net can fill this gap
+        * service-side part of .net 3.5 sp1
+        * clients tools work in silverlight thanks to syndication
+    + ado.net data service use atom presents data via http
+    + ado.net can fill the gap to let silverlight access database
+        * use ado.net entity framework, .net 3.5 sp1 +
+        * expose the raw data model to silverlight
+        * add wcf service and add service endpoint at the code behind
+        public class WebData:DataService<ADOEntityClass>
+        {
+            public static void InitializeService(IDataServiceConfiguration config)
+            {
+                config.SetEntitySetAccessRUle("*", EntitySetRight.AllRead);
+            }
+        }
+    + the service client could add service reference the previous created data service
+    + in the server client code behind to use the entity
+    var ent = new MyeWebDataClient.WebDataModelEntities(new Uri("/WebData.svc"), UriKind.Relative);
+    var q = from item in ent.vProductModelCatalogDescription
+            where item.Material=="Aiuminum"
+            select item;
+    //the query must be  invode async in silverlight side
+    var dq = (DataServiceQuery<MyWebData, vProductModelCatalogDescription>) q;
+    dq.BeginExecute(delegata(IAsyncResult iar)
+    {
+        var items = dq.EndExecute(iar);
+        myGrid.ItemSource = items.ToArray();
+    }, null);
+    
+    + they are two problems to directly expose the database to client side 
+        * make the only needed data available and do not make the client side code depend on the database structure
+        * the client side need customize the view
+        
+- cross domain http
+    + silverlight policy file
+    clientaccesspolicy.xml
+    
+    <?xml version="1.0" encoding="utf-8"?>
+    <access-policy>
+        <cross-domain-access>
+            <policy>
+                <allow-from>
+                    <domain uri="*"/>
+                </allow-from>
+                <grant-to>
+                    <resource path="/api" include-subpaths="false"/>
+                </grant-to>
+            </policy>
+        </cross-domain-access>
+    </access-policy>
+    
+    + if the client file missing, will search for crossdomain.xml, flash also supported
+    
+    + example from microsoft example services
+    http://lab.msdn.microsoft.com/crossdomain.xml
+    <allow-access-from domain="*" secure="true"
+    
+- sockets, http sometime don't work well with some of community pattern
+    + system.net.sockets available, ipv4 and ipv6
+    
+    + tcp only in silverlight
+    + can only connect to ports 4502-4534 only
+    
+    + new dnsEndPoint class allow connect to the dns alone
+        * allows dns name to be used
+        * silverlight client not allowed to perform nds resolution directly
+        
+        * async only, as with all network access
+- cross domain sockets
+    + same silverlight policy file format
+    + fetched as follows
+        * opens tcp connection to port 943
+        * sends a specific string: "<policy-file-request/>"
+        * expects silverlight policy file in response
+
+
+# custom controls
+- userControl
+    + add new item select usercontrol
+    + the page is also derive from user control
+    + the application start up function only create a new page which is a user control
+    + after draw in the blend, select the relative items and could make them as new user controls
+    
+- using user controls
+    + add xml name space in the head
+    xmlns:name="..."
+    
+    + add relative user control
+    
+    <uc:mycontrol>
+    
+- custom control, pick a base class
+    + control
+    + contentControl
+    + itemsCOntrol
+    
+    + define default template
+    generic.xaml
+    
+- more magic than WPF
+    + in wpf, can derive from other types
+        * frameworkElement
+        * decorator
+        * UIElement
+        * etc.
+    + works because everything builds on wpf's visual layer
+    + not so in silverlight
+        * plug-in makes certain base classes magic
+        * you can't write an equivalent of contentControl from scratch
+    
+- custom control and template
+    + default style for the custom control, in silverlight control only have appearance by template
+    public class MyControl:Control
+    {
+        public MyControl()
+        {
+            this.DefaultStyleKey = typeof(MyControl);
+        }
+    }
+    
+    wpf have to use static 
+    
+    + define default styles
+        * create a class
+        * make the class derive from Control
+        * define the defaultStyleKey
+        public class MyCustomControl:Control
+        {
+            DefaultStyleKey = typeof(MyCustomControl);
+        }
+        
+        * add theme directory in the project
+        * add a generic.xaml as resource dictionary
+        <ResourceDictionary xmlns="http://schemas.microsoft.com/client/2007"
+                            xmlns:mmc="clr-namespace:CustomControlExample">
+            <Style TargetType="mmc:MyCustomControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="mmc:MyCustomControl">
+                            <Grid>
+                                <Ellipse Fill="Green"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    
+        * using the with the MyCustomControl by add the relative namespace into a page
+        xmlns:mcc="clr-namespace:CustomControlExample"
+        
+        <mcc:MyCustomControl/>
+        
+- Template Parts, control can declare they are expect template to have specific name and type
+[TempaltePart(Name = "RootElement", Type = typeof(FrameworkElement))]
+[TempaltePart(Name = "FocusVisualElement", Type = typeof(FrameworkElement))]
+public class MyControl:Control
+{
+    protected override void OnApplyTemplate()
+    {
+        ..
+    }
+}
+
+Template need to provides named elements to match, but nothing currently checks that names or types matchs in silverlight 3
+    
+controls look for parts with GetTemplateChild in OnApplyTemplate method, overwrite the OnApplyTemplate to retrieve the template name parts
+
+example add template parts to the custom control
+[TemplatePart(Name="PART_Target", Type=typeof(Shape))]
+public class MyCustomControl: Control
+{
+    public MyCustomControl()
+    {
+        DefaultStyleKey = typeof(MyCustomControl);
+    }
+    
+    Shape = m_target;
+    public override void OnApplyTemplate()
+    {
+        m_target = GetTempalteChild("PART_Target") as Shape;
+        if(m_target != null)
+        {
+           m_target.MouseLeftButtonDown += new MouseButtonEventHandler(m_target_MouseLeftButtonDown);
+        }
+    }
+}
+
+change the relative resource template for the custom control
+<ResourceDictionary xmlns="http://schemas.microsoft.com/client/2007"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                            xmlns:mcc="clr-namespace:CustomControlExample">
+            <Style TargetType="mmc:MyCustomControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="mmc:MyCustomControl">
+                            <Grid>
+                                <Ellipse x:Name="PART_Target" Fill="Green"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+        
+if need to use custom template to replace the previous created one, it's simple to change the control template but also need to specify the required template parts
+<mcc:MyCustomControl>
+    <mcc:MyCustomControl.Template>
+        <ControlTemplate>
+            <Grid>
+                <Rectangle Fill="Red" RadiusX="30" RadiusY="30" x:Name="PART_Target"/>
+            </Grid>
+        </ControlTemplate>
+    </mcc:MyCustomControl.Template>
+<mcc:MyCustomControl>
+
+- visual states, allows template to define transition animations
+[TemplateVisualStateAttribute(Name="MouseOver", GroupName="CommonStates")]
+[TemplateVisualStateAttribute(Name="Focused", GroupName="CommonStates")]
+[TemplateVisualStateAttribute(Name="Unfocused", GroupName="CommonStates")]
+public class MyControl:Control ...
+
+- state transition kicked off from code
+VisualStateManager.GotoState(this, "MouseOver", true);
+
+- Pass false to skip straight to state without animation 
+used on template load
+
+example add state into the myCustomControl
+[TemplatePart(Name="PART_Target", Type=typeof(Shape))]
+[TemplateVisualStateAttribute(Name="On", GroupName="PowerStates")]
+[TemplateVisualStateAttribute(Name="Off", GroupName="PowerStates")]
+public class MyCustomControl: Control
+{
+    public MyCustomControl()
+    {
+        DefaultStyleKey = typeof(MyCustomControl);
+        m_powerState = false;
+    }
+    
+    bool m_powerState;
+    Shape = m_target;
+    public override void OnApplyTemplate()
+    {
+        m_target = GetTempalteChild("PART_Target") as Shape;
+        if(m_target != null)
+        {
+           m_target.MouseLeftButtonDown += new MouseButtonEventHandler(m_target_MouseLeftButtonDown);
+        }
+        
+        //donot need transition animation to run
+        VisualStateManage.GotoState(this, m_powerState ? "On":"Off", false);
+    }
+    
+    void m_target_MouseLeftButtonDown(object sendser, MouseButtonEventArgs e)
+    {
+        m_powerState = !m_powerState;
+        //need transition animation to run
+        VisualStateManage.GoToState(this, m_powerState ? "On":"Off", true);
+    }
+}
+add new control parts template in blend for each state, all the template should be removed
+the predefined parts name will displayed as visual state add
+    + basic state
+    + add On state
+    + add Off state
+
+- dependency properties
+    + data binding
+    + animation
+    + styling
+    + resource
+    + defaults
+    + on custom routed events for silverlight
+    + example
+    public int lumps
+    {
+        get {return (int) GetValue(lumpsProperty);}
+        set {SetValue(lumpsProperty, value);}
+    }
+    
+    public static readonly DependencyProperty lumpsProperty = DependencyProperty.Register("lumps", typeof(int), typeof(MyControl, OnlumpsChanged);
+    
+    private static void OnLumpsChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {...}
+
+    not all property changes by access the property set method, silverlight access the property by the property system
+
+- custom panels
+    + implement measureOverride
+    + determine preferred total size, use infinite x or y to imply unconstrained layout
+    + implement arranged override 
+ 
+ 
+# navigation
+- web navigation model
+    + click link
+    + back
+- RIA applications can break the back button
+- various hack developed
+    + url fragment(http://example.com/app#foobar)
+    the fragment id is called url reference
+    
+    http://w3.org/tr/html401/struct/objects.html
+    http://w3.org/tr/html401/struct/objects.html#include-objects 
+    use the <a href="include-objects"></a>
+
+    + use url fragment in silverlight to simulate the normal web navigation model
+
+- silverlight 3.0+ offers navigation abstraction, include manage browser history
+- frame and page
+    + root visual contains a frame
+    + define multiple pages
+    frame hosts one page at a time
+    + navigation from page to page
+- visual studio have silverlight navigation application template and normal siverlight template
+    + what the navigation template do is add the dll
+    system.windows.controls.navigation.dll assembly support navigation in silverlight
+
+    + example to add navigation
+    reference the navigation dll
+    xmlns:nav="clr-namespace:System.Windows.Controls;assembly=System.Windows.Controls.Navigation"
+    <Grid>
+    <TextBlock Text="Out of frame"/>
+        <nav:Frame Grid.Row="1" Source="/Page1.xaml"/>
+        then the address bar will add fragment id
+        ...aspx#page1.xaml
+    <Grid>
+    
+    use hyperlinkbutton to add hyper link to navigate to other page
+    <HyperlinkButton FontSize="20" Content="Go to page 2" NavigateUril="/Page2.xaml"/>
+    
+    the content will only replace the content in the frame
+    
+- url mapping, deep linking is meaning let user directly link to a content of a website without link to the main page
+    + uri mapper defines relationship between pages and fragment ids
+    <nav:Frame x:Name="ContentFrame">
+        <nav:Frame.UriMapper>
+            <um:UriMapper>
+                <um:UriMapping Uri="" MappedUri="Page1.xaml"/>
+                <um:UriMapping Uri="/Foo" MappedUri="Page2.xaml"/>
+            </um:UriMapper>
+        </nav:Frame.UriMapper>
+    </nav:Frame>
+    
+    pattern based uri mapping
+    <um:UriMapping Uri="/Item{num}" MappedUri="Page{num}.xaml"/>
+    <um:UriMapping Uri="/Reports/{year}/{month}" MappedUri="/Views/Monthy.xaml?y={year}&amp;m={month}"/>
+    
+    after specify the uri mapping in the frame, the hyperlink control could only use the mapped uri to acchieve navigation
+    <HyperlinkButton x:Name="Link2" Style="{StaticResource LinkStyle}" NavigateUri="/Foo" TargetName="ContentFrame" Content"Foo"/>
+    
+    the content will redirect to the name which target name specified
+    
+- navigating, setFrame.Source to navigate any content
+    + set Frame.Source
+    + HyperlinkButton
+    + Frame methods
+        * Navigate
+        * GoBack, GoForward
+    + Page.Navigation.Service to goback and go forward which is define in the page class
+- query string and navigation context
+    + query string in fragment id uri
+    + available in navigationContext.QueryString
+    + context provided to onNavigatedTo override
+    
+    + example
+    <HyperlinkButton x:Name="Link2" Style="{StaticResource LinkStyle}" NavigateUri="/Foo?foo=bar" TargetName="ContentFrame" Content"Foo"/>
+    
+    then go to the code behind 
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        string fooValue = NavigationContext.QueryString["foo"];
+    }
+    
+- navigation event
+    + global events( frame or navigationService) for the life time a frame
+        * navigating this is a cancel able event
+        * navigated, if navigation success
+        * fragmentNavigation, supply relative fragment id
+        * navigationFailed, when navigation failed
+        * navigationStopped
+        
+    + page methods, relative to the global navigation events
+        * OnNavigtingFrom, the method is same like navigating event in frame
+        * OnNavigatedFrom
+        * OnNavigatedTo
+        * OnFragmentNavigation
+        
+    + example the Navigated event for change the hyperlink button style after navigating
+    private void ContentFrame_Navigtated(object sender, NavigationEventArgs e)
+    {
+        string mappedUriString = ContentFrame.UriMapper.MapUri(e.Uri).ToString();
+        foreach(UIElement child in LinksStackPanel.Children)
+        {
+            HyperlinkButton hb = child as HyperlinkButton;
+            if(hb != null && hb.NavigateUri != null)
+            {
+                string mappedTarget = ContentFrame.UriMapper.MapUri(hb.NavigateUri).ToString();
+                if(mappedTarget.Equals(mappedUriString))
+                {
+                    if(hb.NavigateUri.ToString().Equals(e.Uri.ToString()))
+                    {
+                        VisualStateManager.GoToState(hb, "ActiveLink", true);
+                    }
+                    else
+                    {
+                        VisualStateManager.GoToState(hb, "InactiveLinke", true);
+                    }
+                }
+            }
+        }
+    }
+    
+- navigating into and out of sivlerlight
+    + your application may have other web pages
+    <hyperlinkButton NavigateUri="http://example.com/aboutus" TargetName="_new"/>
+    if TargetName="blank" the web browser will open a new page
+        
+    + plugin lifetime issues, navigate to the new page and reload the siverlight page will make the silverlight content will disappear
+        
+    during navigation the whole page will rebuild again in silerlight to save the content into memory by add a new property for the application object 
+        
+    + use silverlight isolate stoarge feature to save the content
+    
+- multiple frames,
+    + frame navigation integrates with browser by default
+    + can disable by setting the property of frame 
+    JournalOwnership="OwnsJournal"
+    
+    + nested frames own their journal by default
+    default journal ownership is "automatic"
+        
+- navigation into and out of
+- multiple frames
+    
+    
+    

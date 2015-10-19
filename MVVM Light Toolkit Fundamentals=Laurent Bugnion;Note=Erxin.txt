@@ -1,0 +1,1425 @@
+﻿MVVM Light Toolkit Fundamentals=Laurent Bugnion;Note=Erxin_part2
+
+# Introduction
+- introduction to the MVVM pattern
+    + building a simple application without MVVM
+- showing the data service count
+- building the model
+- use json.net to serialize the json object, use nuget to download json.net package
+    + add json property to the model class
+    public class ListOfFiends
+    {
+        [JsonProperty("tag")]
+        public type PropertyName{...}
+    }
+- build a client service
+    + add an interface to definition the services
+    + use httpclient library of microsoft for window 8 and phone
+    + use task library to do the task
+    public async Task<string> Save(Friend updatedFriend)
+    {
+        var client = new HttpClient();
+        var uri = new Uri(string.Format(
+            UrlBase,
+            Constants.Code,
+            Constants.QueryKeyAction,
+            Constants.ActionSave,
+            DateTime.Now.Ticks
+        ));
+        
+        var json = JsonConvert.SerializedObject(updatedFriend);
+        try
+        {
+            var content = new StringContent(json);
+            content.Headers.Content = new MediaTypeHeaderValue("application/json");
+            
+            var response = await client.PostAsync(uri, content);
+            var result = await response.Content.ReadAsStringAsync();
+            
+            return result;
+        }
+        catch(Excpetion)
+        {
+        }
+    }
+- creating the UI of the mainpage
+- navigation and detailsPage
+use the navigation service to navigate to the page
+NavigationService.Navigate(new Uri("/*.xaml", UriKind.Relative));
+    
+rewrite the OnNavigatedTo method on the destination page to handle the navigation event
+protected override void OnNavigatedTo(System.Windows.Navigation.NavigationEventArgs e){...}
+- summarizing the issues of Non-MVVM
+    + can't move datatemplate into resource dictionary
+    + can't use design time data
+    + remove the static property from app 
+    + hard to unit test
+- theory: understanding the MVVM pattern 
+    + derive from MVC
+    + MVVM, the presentation model pattern
+    model, view, view model
+    binding view to property of view model
+    services messages
+    
+    use messages service to communicate with view model
+    + model
+    use inotifiable interface 
+    
+    + message, animations and navigate is hard to do unit test
+    + viewmodel view communication, behaviors
+    
+    use view model ->binding-> behavior of view
+    
+    use view services to communicate between view, use IDiaglogServices, INavigationServices to perform communication and navigation
+    
+    when do unit test use mockDiaglogService and mockNavigationService to mock service behaviors
+    
+- binding string with application resource, ApplicationStrings is a application resource file
+Text="{Binding Path=ApplicationStrings.AboutPageTitle, Source={StaticResource ResourceWrapper}}"/>
+    
+# Refactoring the App to MVVM
+- outline
+    * makeing the model observable
+    * create a view model
+    * create view services
+    * binding the view and the view model
+    * adding design time data and design in blend
+- refactor the model object
+add INotifyPropertyChanged interface to the model and implement the raise proeprty changed method
+public class SomeModel:INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler PropertyChanged;
+    
+    private string _name
+    public string Name
+    {
+        get {return _name;};
+        set {
+            if( _firstName == value)
+            {
+                return;
+            }
+            _name = value;
+            RaisePropertyChanged("Name")
+        }
+    }
+    
+    protected event RaisePropertyChanged(string propertyName)
+    {
+        var handler = PropertyChanged;
+        if( handler != null)
+        {
+            handler(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+}
+
+- add view model classes, create view model class for each view
+public class MainViewModel: INotifyPropertyChanged
+{
+    private IFriendService _dataService;
+    
+    public ObservableCollection<Friend> Friends
+    {
+        get;
+        private set;
+    }
+    
+    public MainViewModel(IFriendService dataService)
+    {
+        _dataService = dataService;
+        Friends = new ObservableCollection<Friend>();
+    }
+    
+    public event PropertyChangedEventHandler PropertyCHanged;
+    protected virtual void RaiseProeprtyChanged(string propertyName)
+    {
+        var handler = PropertyChanged;
+        if(handler != null)
+        {
+            handler(this, new ProepertyCHangedEventArgs(propertyName));
+        }
+    }
+}
+
+- Commands and Services
+add relay commands type as helper methods, move the previous click event handler function as SaveCommand which is a relay command instanc
+
+    + RelayCommand, it is a command type in mvvmlight toolkit
+    
+    private RelayCommand _refreshCommand;
+    public RelayCOmmand RefreshCommand
+    {
+        get
+        {
+            return _refreshCommand ??(_refreshCommand = new RelayCommand(async ()=> {await Refresh();}));
+        }
+    }
+    private async Task Refresh()
+    {
+        Friends.Clear();
+        var friends = await _dataSErvice.Refresh();
+        foreach(var friend in friends)
+        {
+            Friends.Add(friend);
+        }
+    }
+    + RelayCommandGeneric
+
+make the message box as IDialogService and make the view implement the IDialogService interface to display dialog, inject the service from the constructor of view model
+
+public class MainViewModel: INotifyPropertyChanged
+{
+    private IFriendService _dataService;
+    private IDialogService _dialogService;
+    
+    public MainViewModel(IFriendService dataService,
+                         IDialogService dialogService)
+    {
+        _dataService = dataService;
+        _dialogService = dialogService;
+        ...
+    }
+    
+    private RelayCommand<Friend> _saveCommand;
+    public RelayCommand<Friend> SaveCommand
+    {
+        get
+        {
+            return _saveCommand ?? (_saveCommand = new RelayCommand<Friend>(async friend => {
+                var result = await _dataSevice.Save(friend);
+                var id = int. Parse(result);
+                if (id > 0)
+                {
+                    friend.Id = id;
+                }
+                else
+                {
+                    dialogService.Show(Message);
+                }
+            }));
+        }
+    }
+}
+
+public interface IDialogService
+{
+    void ShowMessage(string message);
+}
+
+
+use INavigationService to help view model manage the page navigation, without introduce dependency to the concorate view
+
+public class MainViewModel: INotifyPropertyChanged
+{
+    private IFriendService _dataService;
+    private IDialogService _dialogService;
+    private INavigationService _navigationService;
+    
+    public MainViewModel(IFriendService dataService,
+                         IDialogService dialogService,
+                         INavigationService navigationSerivce)
+    {
+        _dataService = dataService;
+        _dialogService = dialogService;
+        _navigationService = navigationService;
+        ...
+    }
+
+public interface INavigationSevice
+{
+    void GoBack();
+    void NavigateTo(Uri uri);
+}
+
+get the root visual element from the application object to help implement navigation
+_mainFrame = Application.Current.RootVisual as PhoneApplicationFrame;
+_mainFrame.Navigate(pageUri);
+
+- Pairing the View and ViewModel
+create a new resource as main view model in th app xaml to make the view model reference from the view xaml
+<Application.Resource>
+    <ResourceDictionary>
+        <ResourcedDictionary.MergedDictionaries>
+            <ResourceDictionary Source="Styles/Styles.xaml"/>
+        </ResourceDictionary.MergedDictionaries>
+        <vm: MainViewMdoel x:Key="Main"/>
+        <local:LocalizedStrings xmlns=local="clr-namespace:whyMvvm" x:Key="localizedStrings"/>
+    </ResourceDictionary>
+</Application.Resource>
+
+binding the main viewmodel resource from the view
+<phone:ApplicationPage ...
+    DataContext="{Binding Source={StaticResorce Main}}"/>
+
+    <phone:LongListSelector ItemsSource="{Binding Friend}" ItemTemplate="StaticResource FriendTemplate"/>
+
+in window phone, it's not possible to call the command directly from the xaml, because the application bar is not support this. Add call command method from the RefreshClick handler of the backgroun cs application view
+private async void RefreshClick(object sender, System.EventArgs e)
+{
+    var vm = (MainViewModel)DataContext;
+    vm.RefreshCommand.Execute(null);
+}
+
+the binding of the button also need to manually from the code behind in windows phone
+private async void StaticClick(object sender, System.EventArgs e)
+{
+    UpdateBinding();
+    
+    var vm = (MainViewModel)DataContext;
+    vm.SaveCommand.Execute(vm.SelectedFriend);
+}
+
+private void UpdateBinding()
+{
+    var textbox = FocusManager.GetFocusedElement() as TextBox;
+    if(textbox != null)
+    {
+        var binding = textbox.GetBindingExpression(TextBox.TextProperty);
+        binding.UpdateSource();
+    }
+}
+
+- Adding ShowDetailsCommand and Testing the App
+copy temple to resource, the relative event handler outside the style as behavior
+arrange the behavior in blend in easier than in visual studio
+    + select the aim container control in blend
+    + select Edit Additional Templates|Edit Item Template|Edit Current on the top of the container control
+    + select the asset panel from the blend and select behaviors in the tab list, select InvokeCommandAction build in behavior, and drag in on the container
+    + select the added behavior, set event source and trigger from the right panel of the blend designer. 
+    + select the common panel below the trigger panel and create a data binding, binding the main resource 
+    + add command parameters at the lower panel of command, and create data binding for the parameters, check the custom check box and live the path empty to binding to the current binded object of the container
+
+- Adding Design time data
+    + create a new folder called design
+    + create designer time relative services implement the previous interface
+    + make main view model use different service base on design time or runtime
+    public MainViewModel():this(
+        (DeisngerProperties.IsDesignTool?(IFriendsService) new Design.DesignFriendsService(): new FriendService()),
+        new DialogService(),
+        new NavigationService()
+    )
+    {
+        #if DEBUG
+            if(DesignerProperty.IsInDesignTool)
+            {
+                Refresh();
+                SelectedFriend = Friends[0];
+            }
+        #endif
+    }
+    + then it is easy to design the style for the control with living real time data
+    
+- Unit testing the application, use msunit test
+    + add windows phone unit test
+    + create test friend service and test navigation service, these are well known implementation
+    
+    public class TestFriendsService: IFriendsService
+    {
+        public const strin ErrorMessage="This is a test error message";
+        
+        public Task<IEnumerate<Friend>> Refresh()
+        {
+            return Task.FromResult(Enumerable.Empty<Friend>());
+        }
+        
+        public Task<string> Save(Friend updatedFriend)
+        {
+            throw new Exception(ErrorMessage);
+        }
+    }
+    
+    public class TestDialogService: IDialogService
+    {
+        public string MessageShown{ get; private set;}
+        public void ShowMessage(string message)
+        {
+            MessageShown = message;
+        }
+    }
+    
+    public class TestNavigationService:INavigationService
+    {
+        public void GoBack(){}
+        public void NavigateTo(Uri uri){}
+    }
+
+    + add view mode test
+    [TestMethod]
+    public void TestShowingErrorWhenSaving()
+    {
+        var dialogService = new TestdialogService();
+        var vm = new MainViewModel(
+            new TestFriendSerivce(),
+            dialogService,
+            new TestNavigationService()
+        )
+        
+        Assert.IsNull(dialogService.MessageShown);
+        
+        vm.SaveCommand.Execute(new Friend{id = 1});
+        
+        Assert.AreEqual(Test.FriendSerivce.ErrorMessage, dialogService.MessageShown);
+    }
+
+    
+# the core components of mvvm light
+- outline
+    + what is mvvm light
+    + the observable ojbect and the view model base
+    + simplifying commands with relaycommand
+    + sending messages with the messenger
+    + dispatching to the UI thread with the dispatcher helper
+- what is mvvm light, is a toolkit a suit of tools
+    + two dlls, project templates, item templates, code snippets
+    
+    + helpers to help you code faster
+    + helpers t a void repetition and basic operations 
+    + not only useful of xaml
+- the observable object an the view model base
+    + add command property and implement INotifyPropertyChanged also make the view mode base inherite from the observable object to simply the implementation
+    
+    ViewModel -> ViewModelBase -> INotifyPropertyChanged
+                               -> ObservableObject
+                               
+                 Mode (Customer and Producer) -> ObservableObject
+
+    + the class derived from observable object and view model base can event raise, raising the PropertyChanged Event
+
+    + raising the propety changed event
+    event raise(observable object and view model base)
+    there are two ways to raise the proeprty changed event
+        * typical classical way, directly use the property name, which will be come less maintainable when the relative property changed
+        RaisePropertyChanged("PropertyName");
+        Set("PropertyName", ref _myProperty, value);
+    
+        * use lambda expression, supports intellisense and automatic refactoring, very very small performance impact
+        RaisePropertyChanged(()=>PropertyName);
+        Set(() => PropertyName, ref _myProperty, value);
+        
+    + broadcasting through messager (view model base)
+    RaisePropertyChanged("PropertyName", oldValue, value, true);
+    RaisePropertyChanged(()=>PropertyName, oldValue, value, true);
+    
+    + send a property changed message ( see module about messenger)
+    
+    + raising the property changing method, property changing is automatically raised by the set method
+
+    + IsInDesignMode property is used to check is current model is design model
+        * silverlight
+        _isInDesignMode = DesignerProperties.IsInDesignTool;
+        
+        * window store
+        _isInDesignMode = DesignMode.DesignModeEnabled;
+        
+        * WPF
+        var prop = DesignerProperties.IsInDesignModeProperty;
+        _isInDesignMode = (bool) DependencyPropertyDescriptor.FromProperty(prop, typeof(FrameworkElement)).Metadata.DefaultValue;
+        
+        * mvvm light (all xaml framework)
+        public bool IsInDesignMode
+        public static bool IsInDesignModeStatic
+        
+- the demo of view model base and observable object, use mvvmlight to refactory the previous mvvm model codes with mvvmlight toolkit
+    + reference the mvvm toolkit from nuget packagemanager
+    + make the MainViewMode derive from ViewModelBase and remove the INotifyPropertyChanged interface
+    + simply the set method of the proeprties with mvvm light set method
+    Set(()->SelectedFriend, ref _selectedFriend, value);
+
+    + use IsInDesignMode directly to check if current state is derive mode
+    + change the model class Friend derive from the ObservableObject and remove the INoifyPropertyChanged interface
+    add is dirt method to info if the data of the class is need to be save with webservice
+    refactor the properties with mvvmlight toolkit and set the dirty flag 
+    public class Friend: ObservableObject
+    {
+        public bool IsDirty
+        {
+            get {return _isDirty;}
+            set {set(()=> _isDirty, ref _isDirty, value);}
+        }
+        
+        public string FirstName
+        {
+            get {return _firstName;}
+            set { 
+                if( Set(()=>FirstName, ref _firstName, value))
+                {
+                    IsDirty = true;
+                }
+            }
+        }
+    }
+    the Set method will return true if the value is changed 
+    
+- Introduction to ICommand and RelayCommand
+    + the relay command is a implementation of ICommand interface
+        * ICommand interface
+        Execute, method
+        CanExecute, method
+        CanExecuteChanged, event
+
+    + lots of (unnecessary) work to implement for each functionality we want to expose
+    
+    + solution, the relay command, relay command demo
+    public RelayCommand<parameterType> SayHelloCommand
+    {
+        get;
+        private set;
+    }
+    
+    public MainViewMode()
+    {
+        SayHelloCommand = new RelayComamnd<string>(
+            ShowMessage,
+            () => _counter%2 == 0
+        );
+    }
+    
+    private int _counter;
+    public int Counter
+    {
+        get
+        {
+            return _counter;
+        }
+        set{
+            if (_counter == value)
+            {
+                return;
+            }
+            RaisePropertyChanged(()=>Counter);
+            SayHelloCommand.RaiseCanExecuteChanged();
+        }
+    }    
+    
+- RelayCommand Slides
+    + an ICommand implementation
+    + tasks a delegate for the Execute method
+    + tasks a delegate for the CanExecute method (optional)
+    + Has a RaiseCanExecuteChanged method
+    + remote the need for a explicit implementation of ICommand
+    
+- Sending messages and loose event handling with the messenger
+    + issues with conventional event handling
+        * attaching an event handler to a non-static method creates a strong link
+        if you forget, or cannot register the event risk of memory leak
+        
+        * registering 
+        button.click += buttonClick;
+        
+        * unregistering
+        button.click -= buttonClick;
+        
+       * another difficulty: finding the right instance to register
+        sometimes we don't know who arises the event
+        for instance, plug in scenarios
+        especially an issue in decoupled apps
+
+    + what does the messenger do?
+        * it is an "event bus"
+        * a message distribution system
+        one object broadcast a message
+        other objects register to receive these messages
+        the sender doesn't know who receives the messages
+        the receiver doesn't know who sent the messages
+        
+        * one default instance(Messenger.Default)
+        but it is also possible to create as many Messenger instances as need
+
+    + the receiver registers for a message type
+    any types (even simple values) are supported
+
+    + in additional a "private channel" can be opened(see special cases)
+    + typical registration
+    // the type of the message, the instance of the messenger is used to check the lifetime and the handler
+    public MessageRecipient()
+    {
+        Messenger.Default.Register<MyMessageType>(this, HandleMessage)
+    }
+    
+    private void HandleMessage(MyMessageType message)
+    {
+        //do something
+    }
+    
+    + registering for messages(examples)
+    //using name method or lambda
+    public MessageReceiver()
+    {
+        Messenger.Default.Register<NotificationMessage<Friend>>(this, HandleNotification);
+        Messenger.Default.Register<NotificationMessage<Friend>>(this, ()=>{//do something});
+    }
+    private void HandleNotification(NotifcationMessage<Friend> message)
+    {
+        //do something
+    }
+    
+    + sending a message
+    the receiver sends any object
+    
+        * typical send
+        var myInstance = new MessageType();
+        Messenger.Default.Send(myInstance);
+        
+        * with 
+        public class MyMessageType{ //can be anything }
+    + anything can be sent
+    //Dangerous! the messenger don't know how to handle it
+    Messenger.Default.Send(true);
+    
+    Messenger.Default.Send(selectedFriend);
+    
+    var message1 = new NotificationMessage<Friend>(
+        selectedFriend,
+        FriendSelectedNotification);
+    Messenger.Default.Send(message1);
+    
+    var message2 = new NotificationMessage<Friend>(
+        this, // the message source
+        selectedFriend,
+        FriendSelectedNotification);
+    Messenger.Default.Send(message2);
+    
+- Messenger advanced options
+    + sometimes the event handler registered by the messenger is hard to unregistered 
+    + the messenger is optimized for these scenarios, used week reference to prevent the subscriber to be garbage collected
+    + but there is only so much we can do! not all platform fit into this scenarios
+    
+    method  WPF     SL      WP   win8
+    static  OK      OK      OK   OK
+    public  OK      OK      OK   OK
+    internal OK     No      No   OK
+    private OK      No      No   OK
+    lambdas OK      No      No   OK
+
+    + unregistered event handler
+    Messenger.Default.Unregister(this);
+    Messenger.Default.Unregister<IMessage>(this, HandleMessage);
+    Messenger.Default.Unregister<IMessage>(this, Token);
+    Messenger.Default.Unregister<IMessage>(this, Token, HandleMessage);
+
+    + special cases
+    sending with a token, token can be anything, but need to be unique
+ 
+    one or more recipient can be registered to receive a same token
+
+    sender send the message with the same token, the recipient use the same token to filter the message, so event the same type recipe could filtered because the recipient registered with different token
+
+    example sending with a token
+    public class MessageRecipient
+    {
+        public static readonly Guid Token = Guid.NewGuid();
+        
+        public MessageRecipient()
+        {
+            Messenger.Default.Register<NotificationMessage>(
+                this, Token, HandleNotification);
+        }
+        
+        private void HandleNotification( NotificationMessage message )
+        {
+            //do something
+        }
+        
+        public class MessageSender
+        {
+            public void SendMessage()
+            {
+                Messenger.Default.Send(
+                    New NotificationMessage("Do something"),
+                    MessageRecipient.Token);
+            }
+        }
+    }
+    
+    
+    register for base classes/or interface, such as create a IMessage interface, IMessage<-ImplementMessage<-MyGenericMessage<T>
+    on this scenario only need to register the base class or the interface, all the derived message could be send
+    
+    Messenger.Default.Register<IMessage>(this, true, HandleMessage);
+    
+    private void HandleMessage(IMessage message){}
+    
+    Messenger.Default.Send(new ImplementMessage());
+    Messenger.Default.Send(new MyGenericMessage<sting>());
+    
+    + the dangers of the messenger
+        * it can be tempting to overuse the messenger
+        * can lead to confusing code
+        * be reasonable
+        event handlers are OK sometimes tool
+        Often the messenger can be replaced by a service(such as DialogService, NavigationService, etc)
+        
+    + test your code for possible memory leaks
+    if unsure, unregister the messenger
+    
+- Message demo    
+    + use some user control communicate with decoupled method
+    + create message classes create two kinds of message to let the Messenger class dispatch two kinds of messages
+    public class LogMessage
+    {
+        public LogMessage(string text)
+        {
+            Text = text;
+        }
+        public string Text {get; private set;}
+    }
+    
+    public class LogMessageWithFeedBack:LogMessage
+    {
+        public Action<bool> FeedBack {get; private set;}
+        public LogMessageWithFeedBack(string text, Action<bool> feedback):base(text)
+        {
+            Feedback = feedback;
+        }
+    }
+    + add send message to the view model class
+    public class SenderViewModel
+    {
+        private RelayCommand<string> _sendCommand;
+        private RelayCommand<string> _sendWithFeedbackCommand;
+        
+        public RelayCommand<String> SendCommand
+        {
+            get
+            {
+                return _sendCommand ?? (
+                    _sendCommand = new RelayCommand<string>(
+                        text =>
+                        {
+                            var message = new LogMessage(text);
+                            Messenger.Default.Send(message);
+                        }
+                    ));
+            }
+        }
+        
+        public RelayCommand<String> SendWithFeedBackCommand
+        {
+            get
+            {
+                return _sendWithFeedBackCommand ?? (
+                    _sendWithFeedBackCommand = new RelayCommand<string>(
+                        text =>
+                        {
+                            var message = new LogMessageWitFeedBack(
+                                text, 
+                                result =>
+                                {
+                                    var dialog = new MessageDialog(result ?"OK":"Cancel");
+                                    dialog.ShowAsync();
+                                }
+                            );
+                            Messenger.Default.Send(message);
+                        }
+                    ));
+            }
+        }
+    }
+    
+    + add register receiver message handler for the receiver view model
+    public class ReceiverViewModel
+    {
+        public ReceiverViewModel(bool useCallback)
+        {
+            if (useCallback)
+            {
+                Messenger.Default.Register<LogMessageWithFeedBack>(
+                    this,
+                    message=>
+                    {
+                        var display = string.Format("Message {0}", message.Text);
+                        Display = display;
+                        _feedback = message.Feedback;
+                    }
+                );
+            }
+            else
+            {
+                Messenger.Default.Register<LogMessage>(
+                    this,
+                    message=>
+                    {
+                        var display = string.Format("Message {0}", message.Text);
+                        Display = display;
+                    }
+                );
+            }
+        }
+        
+        public RelayCommand<string> SendFeedbackCommand
+        {
+            get
+            {
+                return _sendFeedbackCommand ?? (_sendFeedbackCommand = new RelayCommand<string>(
+                    result=>
+                    {
+                        if(_feedback != null)
+                        {
+                            _feedback(result == "1");
+                        }
+                    }
+                ))；
+            }
+        }
+        
+        public void Unload()
+        {
+            Messager.Default.Unregister<LogMessage>(this);
+            Messager.Default.Unregister<LogMessageWithFeedback>(this);
+        }
+    }    
+    
+- dispatching to the UI thread with the dispatcher helper, threading made easier with the dispatcherHelper
+    + wpf, allow synchronize web request
+    + in silverlight, all request need to be asyncronize
+    + window 8, any file access have to be multiple threaded
+    + threading in xaml frameworks
+    all xaml application start from main thread like a queue
+    main thread -> background thread1, background thread 2
+    
+    main thread own all the UI thread, background thread is not allow access the UI thread directly
+    background dispatcher need to contact the main thread's dispatcher
+    the dispatcher is used to control each thread's element, in code
+    ThreadPool.QueueUserWorkItem(
+        o =>
+        {
+            Dispacther.BeginInvoke( 
+                new Action<string>(UpdateStatus),
+                "Done",
+                DispatcherProperty.Normal);
+        }
+    );
+    
+    with 
+    
+    private void UpdateStatus(string message)
+    {
+        StatusTextBlock.Text = message;
+    }
+    
+    + a few difficulties, the dispatcher property is only available in the view
+    the view model does not have direct access to the dispatcher
+    
+    + the syntax is cumbersome!
+    and different in other xaml framework
+    window 8 does not dispatch like windows phone, for instance
+    
+    + solution DispatcherHelper in MVVMLight
+        * stores an instance of the main Dispatcher(UI Dispatcher)
+        
+        * needs to initialized
+        DispatcherHelper.Initialze();
+        
+        * checking if dispatching needs to be done
+        ThreadPool.QueueUserworkItem(
+            o =>
+            {
+                DispatcherHelper.CheckBeginInvokeOnUI(
+                    ()=>StatusTextBlock.Text = "Done");
+            }
+        );
+        * executes immediately if on main thread
+        * executes with dispatching if on background thread
+        
+- dispatcher helper sensor demo on window phone    
+    * initialize Dispatcher helper at the app.xaml.cs initialize method
+    * add DispatcherHelper.CheckBeginInvokeOnUI() wrapper the logic which the background thread directly access the UI thread
+    
+- dispatcher web reqeust in wpf and silverlight
+    * in wpf the background thread changed property will automtically dispatch to the main thread
+    * in silverlight need to use the dispatch helper to simply the multithread code access the ui
+    
+    
+# The Extras
+- outline
+    + binding views and view models, strageties
+    using the view model locator
+    in code behind
+    + why do we have extras?
+    + managing dependecies with simpleIoc
+    + handling events and commands with eventToCommand
+- setting the dataContext
+    + fully qualify data binding expression
+    <Page.DataContext>
+        <Binding Source="{StaticResource Main}"/>
+    </Page.DataContext>
+    
+    <Button Content="{Binding SearchText, Source={StaticResouce Strings}}"/>
+    
+    + instead of writing
+    this is a shortcut
+    in xaml works great with designers(blend, visual studio)
+    
+    in code, sometimes more convenient( for instance detail view in master-dail apps)
+    protected override void OnNavigatedTo(NavigatioEventArgs e)
+    {
+        DataContext = e.Parameters as DetailsViewModel;
+        base.OnNavigatedTo(e);
+    }
+    
+    + the visual designer tools no run any code behind code in design time, this need to create design time data
+    the design time data context is used to solve this kinds of problem
+    
+    <Page xmlns:d=http://schemas.microsoft.com/expression/blend/2008
+          xmlns:app1="using:App1"
+          mc:Ignorable="d"
+          d:DataContext="{d:DesignInstance, Type=app1:DetailViewModel, IsDesignTImeCreatable=True}">
+    
+    the mc:Ignorable is used to tell the xaml compiler to ignore the element prefix with d
+    
+    + The ViewModelLocator, if a lot of view mode need to create during the application start may draw down the application start time. ViewModelLoator is provide the life time service and view model 
+        * this is just an additional level of control 
+        * defined as a global resource -> known to blend
+        * expose the MainViewModel as public property, not all view model are declare as view model locator, this depend on how the view model life when the view model is created
+        public class ViewModelLocator
+        {
+            public MainViewModel Main
+            {
+                get; private set;
+            }
+            
+            public ViewModelLocator()
+            {
+                //initialize the relative view models
+            }
+        }
+    
+        * syntax in app.xaml
+        <Application.Resources>
+            <vm:ViewModelLocator x:Key="Locator"/>
+        </ApplicationResources>
+    
+        * syntax in the view
+        DataContext="{Binding Main, Source={StaticResource Locator}}"
+    
+- binding to a viewModels, in a window 8 program
+    + replace the previous INavigationService implementation
+    public interface INavigationService
+    {
+        void GoBack();
+        void NavigaionTo(Uri uri);
+        void NavigationTo(Uri uri, object state);
+    }
+    
+    replace with mvvmlight navigation service which implement the method NavigationTo
+    public void NavigationTo(Uri pageUri, object state)
+    {
+        if(EnsureMainFrame())
+        {
+            Uri newUri;
+            lock( _userStates )
+            {   
+                var id = Guid.NewGuid().ToString();
+                _userStates.Add(id, state);
+                
+                if(PageUri.OriginalString.IndexOf("?") < 0)
+                {   
+                    newUri = new Uri(
+                        string.Format(
+                            "{0}?{1}={2}",
+                            pageUri.OriginalString,
+                            QueryUriKey,
+                            id),
+                            pageUri.IsAbsoluteUri ? UriKind.Absolute:UriKind.Relative
+                        )
+                    )
+                }
+                else
+                {   
+                    newUri = new Uri(
+                        string.Format(
+                            "{0}&(1)=(2)",
+                            pageUri.OriginalString,
+                            QueryUriKey,
+                            id),
+                            pageUri.IsAbsoluteUri ? UriKind.Absolute:UriKind.Relative
+                        )
+                    )
+                }
+            }
+            NavigateTo(newUri);
+        }
+    }
+    
+    also supply a GetAndRemovedState to help each page to get and retrieve the page state during navigation
+    public static object GetAndRemovedState(IDictionary<string, string>query)
+    {
+        lock(_userStates)
+        {
+            if(query.ContainsKey(QueryUriKey) && _userStates.ContainsKey(query[QueryUriKey])))
+            {
+                var state = _userStates[query[QueryUriKey]];
+                _userStates.Remove(query[QueryUriKey]);
+                return state;
+            }
+            return null;
+        }
+    }
+    
+    + add view model locator
+    public class ViewModelLocator
+    {
+        public MainViewModel Main
+        {
+            get; private set;
+        }
+        
+        //retrieve the resource locator instance from applicaiton resource
+        public static ViewModelLocator Instance
+        {
+            get
+            {
+                return Application.Current.Resources["Locator"] as ViewModelLocator;
+            }
+        }
+        
+        //initialize the main view mode
+        public ViewModelLocator()
+        {
+            IFriendsService friendsService;
+            if(ViewModeBase.IsInDesignModelStatic)
+            {
+                friendsService = new Design.DesignFriendsService();
+            }
+            else
+            {
+                fiendsServcie = new FriendsService();
+            }
+            
+            IDialogService dialogService = new DialogService();
+            INavigationService navigationService = new Helpers.NavigationService();
+            Main = new MainViewModel(friendService, dialgoService, navigationService);
+        }
+    }
+    
+    the view model locator should be expose into the app.xaml file as resource
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="..."/>
+            </ResourceDictionary.MergedDictionaries>
+            <vm:ViewModelLocator x:Key="Locator"/>
+        </ResourceDictionary>
+    </Application.Resources>
+    
+    + remove the default constructor of the previous MainViewModel, the construct logic is already added into the view model locator
+
+    + remove the SelectedFriend property from the main view model to minimize the risk of memory leak, then each page only manage it's own state
+    
+    pass the friend object as a parameter of NavigateTo method as a state of the detail page
+    public RelayCommand<Friend> ShowDetailsCommand
+    {
+        get
+        {
+            return _showDetailsCommand = new RelayCommand<Friend>(
+            friend =>
+            {
+                _navigationService.NavigateTo(
+                    new Uri("/DetailPage.xaml", UriKind.Relative), friend);
+            });
+        }
+    }
+    
+    in main page the xaml need to modify the data context use the main view model locator
+    DataContext="{Binding Main, Source={StaticResource Locator}}"
+    
+    update the save detail command binding in the style.xaml
+    Command="{Binding Main.ShowDetailsCommand, Mode=OneWay, Source={StaticResource Locator}}"
+    
+    + open the detail page and retrieve the state as DetailViewModel
+    public parital class DetailPage
+    {
+        ...
+        protected override void OnNavigatedTo(System.Windows.Navigation.NavigationEventArgs e)
+        {
+            var state = Helpers.NavigationService.GetAndRemovedState(NavigationContext.Query)
+            DataContext = state; //then the state will be fiend object
+            base.OnNavigatedTo(e);
+        }
+    }
+    update the relative detail page binding
+    
+    + create default friend model constructor for the design time detail page data binding
+    #if DEBUG
+    public Friend()
+    {
+        FirstName = "Fristname";
+        LastName = "LastName";
+        PictureUri = new Uri("....");
+    }
+    #endif
+    
+    use the design time datacontext for blend
+    d:DataContext="{d:DesignInstance Type=model:Friend, IsDesignTimeCreatable=True}"
+    
+- introducing Dependency injection and inversion of control
+    + extra require an external reference
+    SimpleIoc need the Microsoft.Practices.ServiceLocation
+    EventToCommand behavior need the System.Windows.Interactivity
+    
+    + Some users may have issues with prerequese like
+        * licenses
+        * procurement
+
+- introducing dependency injection and inversion of control
+    + what is dependency injection
+    delegates the creation of services to another class
+    injects the dependency inside the consumer
+
+    + IoC, Inversion of Control, the creation is delegated to someone else
+        * create object
+        * injecting them
+        * caching the objects
+        * providing access to them
+    + IoC containers on the market
+        * Unity
+        * Ninject
+        * StructureMap
+        * CastleWindsor
+        ...
+- Registering Classes with SimpleIoC
+- Handling Events and Behavior, blend behavior
+    + based on attached Behaviors
+    developed by the WPF community
+    http://galasoft.ch/s/attbehaviors
+    
+    + initially developed by the blend team
+    but no dependency on blend
+    
+    + small pieces of "packed" code behind
+    + easily redistributable
+    + easily redistributable
+    + attachable to a UI element
+    + very optimized for blend, asset|behaviors
+    + code behind
+        * xaml
+        <Element >
+            <i:Interaction.Behaviors>
+                <ei:MouseDragElementBehavior />
+            </i:Interaction.Behaviors>
+        </Elment>
+        
+        * with
+        xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+        xmlns:ei="http://schemas.microsoft.com/expression/2010/interactions"
+- Using the SimpleIoc
+    + why yet another IoC container
+    + very well suited to mvvm apps
+    + registering to simpleIoc
+        * default registration
+        SimpleIoc.Default.Register<MainViewModel>();
+        
+        * registration with in interface
+        SimpleIoc.Default.Register<IDataService, DataService>();
+        
+        * conditional registration
+        if(condition)
+        {
+            SimpleIoc.Default.Register<IDataService, DataServer>();
+        }
+        else
+        {
+            SimpleIoc.Default.Register<IDataServer, AnotherService();
+        }
+        
+        * the creation of the registered object is on demand 
+        * using pre-created objects
+        var myService = new DataService();
+        Simple.Default.Register<IDataService>(()=>myService);
+        
+        Passing parameter to a constructor
+        SimpleIoc.Default.Register<MainViewModel>(()=>new MainViewModel(param1, param2));
+        
+        * options
+        create the instance at registration
+        Simple.Default.Register<IDataService, DataService>(true);
+        
+        * register with a key for multiple instances
+        SimpleIoc.Default.Register<MainViewModel>(()=> new MainViewMode(), key);
+- getting an instance
+var instance = SimpleIoc.Default.GetInstance<MainViewModel>();
+
+- composing dependencies
+simpleIoc can handle dependencies between objects
+
+- unregistering classes from SimpleIoc
+SimpleIoc.Default.Unregister<MainViewModel>([instance, key]);
+
+- a typical scenario with SimpleIoc in window phone and window 8
+    + when navigation to a page
+    registering the page to display user dialogs
+    
+    + when navigating away
+    unregistering the page so that others can register
+    
+    public sealed partial class MainPage: IDialogService
+    {
+        protected override void OnNavigateTo(NavigationEventArgs e)
+        {
+            //the IDialogService is registed for current page
+            SimpleIoc.Default.Register<IDialogService>(()=>this);
+            base.OnNavigatedTo(e);
+        }
+        
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            SimpleIoc.Default.Unregister(this);
+            base.OnNavigatedFrom(e);
+        }
+    }
+- utility methods of simpleIoc
+    + checking if a class or interface has been registered
+    + checking if a class has at least one instance created
+    SimpleIoc.Default.Register<IDataService, DataService>();
+    
+    var test1 = SimpleIoc.Default.IsRegistered<IDataService>();
+    //true
+    
+    var test2 = SimpleTo.Default.ContainsCreated<IDataService>();
+    //false
+    
+    var instance = SimpleIoc.Default.GetInstance<IDataService>();
+    
+    var test2 = SimpleTo.Default.ContainsCreated<IDataService>();
+    //true
+    
+    + GetAllCreatedInstances, getting all the instances that have been already created
+    
+    + GetAllInstances, this does force the creation of one default instance per registered class/interface
+    
+- Microsoft.Practices.ServiceLocation 
+    + contains the service locator class
+    + an agreement between most IOC containers
+    + allows easy swapping from one IOC container to another
+    
+    + defining the ServiceLocator
+    ServiceLocator.SetLocatorProvider(()=>SimpleIoc.Default);
+    
+    + using the serviceLocator
+    ServiceLocator.Current.GetInstance<IDataService>();
+    
+- introduce to EventToCommand which is an Action
+    + a behavior is standalone
+    for instance MouseDragElementBehavior
+    
+    + a action is always attached to a Trigger
+    think of an action as actuator
+    and trigger as sensor
+    
+    + when triggered, the action can execute its task
+    + triggers can be of multiple kinds
+    event, data, etc
+
+    + also support custom trigger
+
+    + in mvvmlight, the EventToCommand Action in fact it is a action
+    so it can be attached to *any* trigger
+    when the trigger is actuated executes a command
+    
+    in xaml
+    <Rectangle>
+        <i:Interaction.Triggers>
+            <i:EventTrigger EventName="MouseLeftButtonDown">
+                <Custom:EventToCommand Command="{Bidning MyCommand}" CommandParameter="parameter value"/>
+            </i:EventTrigger>
+        </i:Interaction.Triggers>
+    </Rectangle>
+
+    + the eventToCommand scenarios
+        * useful whenever an element doesn't have a command property
+        anything else than buttonBase
+        
+        * useful when another event than "click" must be used
+        also for button
+        * useful with other trigger types
+        for instance data trigger
+        
+        * useful whenever event handlers are not applicable
+        for example dataTemplate, resource dictionary, etc
+    
+    + demo use the EventToCommand, when the project install the mvvmlight toolkit, the EventToCommand could be found from the Asset|Behavior|EventToCommand
+    drag and drop the event to command to the aim element and set the relative parameters
+    
+    + moving template to resource dictionary
+    + datatrigger and eventToCommand
+    + evetnArgs converter
+    + eventToCommand vs InvokeCommandAction
+        * create convert implement IEventArgsConverter from the mvvmlight command
+        
+        public class MouseButtonEventArgsToPointConverter:IEventArgsConverter
+        {
+            public object Convert(object value, object parameter)
+            {
+                var args = (MouseButtonEventArgs)value;
+                var element = (FrameworkElement)paramter;
+                
+                var point = args.GetPosition(elment);
+                return point;
+            }
+        }
+        
+        * define the EventToCommand with EventArgsConverter
+        <Window.Resources>
+            <helpers:MouseButtonEventArgsToPoiontCOnverter x:Key="MouseToPointConverter"/>
+        </Window.Resource>
+        <Rectangle x:Name="TheRectangle"
+            <i:EventTrigger EventName="MouseLeftButtonDown">
+                <mvvm:EventToCommand Command="{Binding ShowPointCommand}" PassEventArgsToCommand="True" EventArgsConverter="{StaticResource MouseToPointConverter}" EventArgsConverterParameter="{Binding EventName=TheRectangle}"/>
+            </i:EventTrigger>
+        </Rectangle>
+    
+- EventToCommand vs InvokeCommandAction
+    + in blend SDK, invokeCommandAction
+    same intent
+    no passEventArgsToCommand
+    
+    + in window 8.1
+    invokeCommandAction + InputConverter + inputConverterParameter
+    note: InputConverter is an IValueConverter
+    
+    + window 8.0
+    no behaviors, http://www.galasoft.ch/s/msdncommand
+    
+    
+# installing the mvvm light toolkit and additional components 
+- using the assemblies from nuget    
+- libraries only vs full
+- introducing the code snippets
+- "INPC" cdoe snippets demo
+    + use mvvminpc to add dependency property
+    + use mvvminpclambda to add dependency property with lambda expression to get property name
+    + use mvvmset to add property with set method to add auto update set method which will return true if the value is changed or the event is raised
+    + use mvvmsetlambda will use lambda expression to add property name
+- "relay" start command to add relaycommand
+    + mvvmr to add relaycommand without canexecute 
+- proppd and propa snippets, dependency property
+    + propdp none mvvm snippet to add 
+    + mvvmpropdp
+    + mvvmslpropdp, declares an attached property in silverlight, wp8
+    + mvvmslpropa, declare an attached property in silverlight and wp8
+- the project template
+    + new file, new project template
+- item template
+
+    
+# Advanced example with mvvm light
+- introduction, plug-in, introducing the interface
+    + dealing with plug-in based application
+    + building an expandable list in windows phone with the messenger
+    + unit test secnarios for mvvm light application
+- plug-ins, preparing the view, the application contain three parts
+    + plugin host
+    public interface IPluginHost
+    {
+        var clear();
+        var placePluginIn(IPlugin plugin, )
+    }
+    + plugin interface
+    public interface IPluginIn
+    {
+        string Name {get;}
+    }
+    
+    FrameworkElement GetElement(); //can be anything contain in the host and the position in the host
+- plug-ins preparing the view
+    + load d.. from specify folder
+    foreach(var file in folder.GetFiles("*.dll"))
+    {
+        var assembly = Assembly.LoadFrom(file.FullName);
+        foreach(var type in assembly.GetTypes())
+        {
+            if(typeof(IPlugIn).IsAssignableFrom(type) && !type.IsInterface)
+            {
+                var constructor = type.GetConstructor( new Type[]{});
+            
+                if(constructor == null)
+                {
+                    throw new InvalidOperationException("No default constructor for plugin in manager found");
+                }
+                var manager = constructor.Invoke(
+                    new object[],
+                    {});
+                PlugIns.Add((IPlugIn)manager);
+            }
+        }
+    }
+    
+    public FrameworkElement GetElement(IPlugin plugInManager)
+    {
+        var fullType = plugInManager.GetType();
+        var method = fullType.GetMethod("GetElement");
+        var element = method.Inovke(PlugInManager, new object[]{});
+        return element as FrameworkElement;
+    }
+    + use re factor to get default constructor
+    
+    + open the main module UI
+        * register the bootstraper into simple IoC
+        
+        * the main window implement the IPluginHost interface
+        * register it self with IPluginHost interface
+        * let host add the plugins into the window
+        foreach(var plugIn in bootstrapper.PlugIns)
+        {
+            PlugIns.Add(plugIn);
+            host.PlacePlugIn(plugIn, this);
+        }
+    
+- plug-in databinding and commanding
+    + use the bootstrapper to set the datacontext of plugin
+- use messenger to communicate between each plugins
+    Messenger.Default.Register<NotificationMessage>(this, HandledNotification);
+    private void HandledNotification(NotificationMessenger message)
+    {
+        if(message.Notification == Notification.CleanupNotification)
+        {
+            Messenger.Default.Unregister(this);
+        }
+    }
+- using a dataservice inside the plug-in
+    + anything need to be share from plug-in need to be add into the contract project share by all the plug-ins
+
+    + use dataservice interface by the ioc container to get the service instance
+    
+- building a second plugin
+- expandable list, preparing the infrastructure
+    + make all message derive from MessageBase and use the messenger to send the message to all the subscriber
+
+    + use the message call back to send information back to the sender
+
+- expandable list, creating the UI and testing for window 8
+    + set the control state by blend
+    + drag the GoToStateAction from the blend and drop it to the aim control
+    + change the trigger type to data trigger
+    + binding and setting different value to different state
+    
+- unit test, testing the selectable view model's expansion
+    + add unit test project
+    + add mvvmlight reference
+    + add aim project
+    + create view model instance and write necessary test logic
+    + call the messenger.reset to reset the messenger
+
+- mock dataservice in the unit test, implement the necessary interface of the service and add some test data
+- mock navigation and property changed event
+add navigation service interface to record current state of the page
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+    
+    

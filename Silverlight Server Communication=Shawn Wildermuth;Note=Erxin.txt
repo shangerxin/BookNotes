@@ -1,0 +1,603 @@
+﻿Silverlight Server Communication=Shawn Wildermuth;Note=Erxin
+
+# silverlight and network stack
+- outline
+    + silverlight and the browser
+    + making server request
+    + rest and silverlight
+    + client http stack
+- the silverlight http stack
+    + your silverlight app is in browser, siverlight ask browser to make a request to the server
+    the request is request include browser context (cookie collection, session id, window authentication)
+    + there is webRequest and webResponse class in silverlight
+        + normally should avoid use this kinds of technology
+        + use this may cause silverlight application run separate from main UI thread
+        + silverlight is design for UI thread centra technology
+        + use this may need to use marshal method retrieve the data back to UI thread
+    + webClient, is base on webRequest and webResponse and a simple to used new classes
+        + asynchronous only
+        + progress notification
+        + supports upload and download
+        + demo
+		var client = new WebClient();
+		//will return a string
+		client.DownloadStringCompleted += (s, a)=>{
+			if(!a.Canceled && a.Error == null)
+			{
+				text = a.Result;
+			}
+		}
+		
+		//will return a stream
+		client.OpenReadCompleted += (s, a)=>{
+		};
+		
+		client.DownloadStringAsync(new Uri("..."));
+		
+		client.UploadStringCompleted += (s, a)=>
+		{
+			return !a.Cancel && a.Error == null;
+		};
+		client.UploadStringAsync(new Uri("/text.aspx"), "hello world");
+		
+		get the data from the server aspx page
+		var stream = Request.GetBufferlessInputStream();
+		var reader = new StreamReader(stream);
+		var data = reader.ReadToEnd();
+		
+    + web Services
+    + wcf data services(e.g OData)
+    + RIA Services
+- rest and silverlight
+    + REprsentational state transfer
+    identification of resources
+    http://someserver/someresource/143
+    
+    + operations separate from resource
+    typically through http verbs
+    
+    + poen formats for data representations 
+    usually xml or json
+    
+    + silverlight just http requests
+    webclient to make requests
+    consume/produce data in-memory
+        * linq to xml
+        * linq to json
+        * serialization
+    
+- consume xml in silverlight demo
+    + send the request same as webclient method
+    + use system.xml.linq to get the data, add xml namespace(in the header of xml document) to make xml document parser class to use the namespace to help parse object
+    xdocument xdoc = new xdocument(xmlString);
+    XNamespace ns = XNamespace.Get("http://...");
+    
+    var query = from g in doc.Decendants(ns + "Game");
+                orderby g.Attribute(ns + "Name");
+                select new GameInfo(){
+                    Name = g.Element(ns + "Name").Value,
+                    Image = g.Element(ns + "ImageUrl").Value
+                };
+    var result = query.ToList();            
+    bindList.ItemSource = result;       
+    
+    public class GameInfo()
+    {
+        public string Name { get; set; }
+        public string ImageUrl { get; set; }
+    }
+    
+    set the ItemTemplate property in the xaml
+    <ListBox x:Name="bindList">
+        <ListBox.ItemTemplate>
+            <DataTemplate>
+                <StackPanel>
+                    <TextBlock Text={Binding Name}/>
+                    <Image Source={Binding ImageUrl}/>
+                </StackPanel>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+    
+- reading json from silverlight
+    + use class System.Json to use linq.json to parse json object
+    JsonArray games = (JsonArray)JsonArray.Parse(json);
+    
+    var qry = from g in games
+              orderby g["Name"] as string
+              select g;
+    
+- writing json
+    + get individual object from webserver
+    + save content to server, add service model reference, System.ServiceModel.Web;
+    var newGame = new GameInfo(){
+        Name = "name",
+        ImageUrl="url"
+    };
+    
+    var client = new WebClient();
+    client.UploadStringCompleted += (s, a) =>
+    {
+    
+    };
+    
+    var serializer = new DataContractJsonSerializer(typeof(GameInfo));
+    var stream = new MemoryStream();
+    searializer.WriteObject(stream, newGame);
+    
+    var json = Encoding.UTF8.GetString(stream.GetBuffer(), begin:0, (int)stream.length);
+    
+    client.Headers[HttpRequestHeader.ContentType] = "application/json";
+    client.UploadStringAsync(new Uri("..."), "POST", json);
+    
+    
+    with http request need to set the content-type header for each request
+    
+- client http stack, when the browser http is not fit for some requirements, it's directly http connection from silverlight
+    + has same benifits and limitations as the browser
+        * good
+        broswer cache
+        context flow through
+        transport security just works(e.g. forms authentication)
+        * bad
+        limited to browser connection pool
+    + why the client http stack?
+    default feels like the site which is good but
+    rest is difficult(only get/post support)
+    error results are wrapped in 404
+    
+    + alternative client, client http stack
+    for specific scenarios
+    need PUT/DELETE
+    need custom cookies
+    need more control
+        * status codes
+        * bodies
+        * and headers    
+    
+- demo the client stack    
+    + add rest relative server method
+    [OperationContract]
+    [WebInovke(Method="DELETE", UriTemplate="game/{name}", RequestFormat=WebMessageFormat.Json)]
+    public bool DeleteGame(string name)
+    {
+        ...
+        return isSuccess;
+    }
+    
+    + send delete request from the client to the server
+    void deleteGame()
+    {
+        var client = new WebClient();
+        
+        client.UploadStringCompleted += (s, a)=>{
+            if(!a.Cancelled && a.Error == null)
+            {
+                var result = JsonObject.Parse(a.Result);
+                if(result == true)
+                {
+                    MessageBox.Show("Deleted");
+                }
+            }
+        }
+        client.UploadStringAsync(new Uri('..'), "Delete", "");
+    }
+    
+    this will not work, the delete method is not work from the browser stack
+    to fix this by use WebRequest class to register use client http stack call from silverlight, there is another type call stack browserHttp which is default method
+    
+    WebRequest.RegisterPrefix("http://localhost:8000/games.svc", WebRequest.ClientHttp);
+    
+    
+    add response format is json too to make client and server communicate with json
+    [ResponseFormat = WebMessageFormat.Json]
+    
+    
+# Silverlight and web services
+- introducing services in silverlight
+- accessing web services 
+    + silverlight supports web services
+    supports any soap-based service
+    add service reference... support
+    wcf services power the support
+    
+- asp.net web services
+    + fully supported
+    generally used to support existing services
+    
+    add service will automatic generate proxy and datacontract classes
+        * datacontract classes are binding friendly
+        * all execution is asynchronous
+        
+    + serviceReferences.ClientConfig
+        * generated wcf client-side configuration, the client always use wcf stack even works with asp.net web service
+        
+- demo asmx    
+    + add entity data, generate from entity framework
+    public class Game:EntityObj
+    {
+        public string Name {get; set;}
+        public decimal Price {get; set;}
+    }
+    + add webservice into the web project, for the new code should choose wcf webservice
+    [WebService(Namespace="http://tempuril.org")]
+    [WebServiceBinding(ConformsTo=WsiProfiles.BasicProfile1_1)]
+    [System.COmponentModel.ToolboxItem(false)]
+    public class GameService:System.WebServices.WebService
+    {
+        [WebMethod]
+        public List<Game> GetGamesByGenre(string genre)
+        {
+            //should not directly add access database logic into the service method
+        }
+    }
+    
+    + set the silverlight relative page, the display member path is specify which property to used
+    <Listbox x:Name="theList" DisplayMemberPath="Name"/>
+    
+    + the client auto generate the client proxy named like
+    var client = new GamesServiceSoapClient();
+    client.GetGamesByGenerCompleted += (s, a)=>
+    {
+    };
+    
+    + change the ServiceReference.Client.Config binding use relative uri to simple deployment process
+    address="/*.asmx"
+
+- wcf web services
+    + same usage as asp.net web services
+    + limitation, typically built wcf services do not work with silverlight
+    + wcf need handshake means to need mark with none to works with silverlight application
+    + the binding must be basicHttpBinding
+    + security must be "None" and binding must be "basicHttpBinding"
+    + build new services use silverlight-enabled wcf service item template
+    + wcf web service, binary encoding support
+
+- wcf have lots of ajax enabled, silverlight enable template
+- client config file looks like the same
+    + disable the binary encoded by change the configuration file
+    <binaryMessageEncoding/>  
+    
+    comment this to disable binary encoding for help web debug
+
+    + limit message size to prevent server attack
+
+- managing change
+    + no client-side context to monitor change
+    can build your own
+    
+    + leverage data binding interfaces
+    INotifyPropertyChanged
+    INotifyCollectionChanged
+    
+    + data contracts and proxy classes support these
+    
+- demo managing changes
+book game's property changed event to help detected and update changes
+game.PropertyChanged += new EventHandler(game_PropertyChanged)
+
+ObservableCollection<Game> _changedGames = new ObservableCollection<Games>();
+void game_PropertyChanged(object sendser, PropertyChangedArgs a)
+{
+    if(!_changedGames.Contains(game))
+    {
+        _changedGames.Add(game);
+    }
+}
+
+update the games to the server
+client.UpateGamesAsync(_changedGames);
+
+
+# silverlight and odata 
+- outline 
+    + why odata 
+    + the odata protocol
+    + creating a service 
+    + query in silverlight 
+    + change management in silverlight 
+- the problem
+    + our apps still need data ...
+        * web services are a good approach 
+        public class MeWebService:WebService {
+            [WebMethod]
+            public List<Customer> GetCustomer(){
+            ...
+            }
+        }
+- we end up adding new endpoints for every request 
+    + the answer ... odata 
+        * open data protocol
+        A.K.A OData 
+    
+    + exposes relational data over web 
+        * queryable endpoints 
+        
+        * secure... but onlly as secure any web data can be 
+        
+        but does not expose the database over the web 
+            
+        * reusable across different ecossystems
+        e.g. iPhone, Android, Java, PHP, etc.
+        
+- facility to expose a *model* over https(s)
+    + rest based api for accessing relational data 
+    + data format is plain text, easy to consume on client 
+    + json or xml 
+    
+- odata
+    + why rest, representational state transfer ?
+    uri based endpoints for your data 
+    
+    crud is mapped to http verbs 
+        * post, create 
+        * get, read 
+        * put, update 
+        * delete, delete 
+        
+- demo odata protocol 
+    + the client could decide which kinds of data will be returned 
+    + support filter, sort, paging in the uri 
+    + get collection
+        * server_uri/collections                                                 get all collection items 
+        * server_uri/collections(index)                                          index access
+        * server_uri/collections?$filter=Key Name eq value                       filter
+        * server_uri/collections?$oderby=property of entity [desc]               order
+        * server_uri/collections?$oderby=property of entity [desc]$skip=2&top=2  paging
+        * server_uri/collections?$oderby=property of entity [desc]$expand=PropertyName, other complex reference entity property 
+        * server_uri/collections?$oderby=property&select=Property, Price, TrainingLanguage, just return some properties of the data 
+    
+        select property from relative object 
+        * server_uri/collections?$oderby=property$expand=eventLocation&select=Property, Price, TrainingLanguage, eventLocation/LastName
+        just return some properties of the data 
+
+- wcf data services 
+    + the could expose linq based data mode 
+    + graph
+    
+    client(siverlight or web) -> wcf (data service odata) -> linq provider (IQueryable) -> data provider 
+                           linq converted to uri       uri converted to linq 
+    
+    the lock and transaction are all depend on the data provider 
+
+- wcf data service 
+    + simple item template in asp.net 
+        * creates a class that expose odata
+        * secure by default 
+        only exposes parts of model explicitly requested 
+        only exposes verbs that  are explicitly allowed 
+        
+    + based on wcf rest api 
+
+- demo create data 
+   + create database on entity framework 
+   + expose on odata feed
+   + add wcf data service to web service project 
+    public class DemoDataService:DataService<EntityContextClass>
+    {
+        public static void InitializeService(DataServiceConfiguration config)
+        {
+            config.DataServiceBehavior.MaxProtocolVersion = DataServiceProtocolVersion.V2;
+        }
+    }
+
+    by default it will not expose the entities, we need specify which collection we need expose, add config 
+    
+    // such as EntitySetRights.All, AllWrite, Read;
+    config.SetEntitySetAccessRule("Games", EntitySetRights.All);
+    // if want to expand the relative object, these object also required to add exposed rule 
+    config.SetEntitySetAccessRule("Genres", EntitySetRights.All);
+
+- querying sivlerlight client 
+    + creates rich client-side data access 
+        * issue linq queries and turn into service calls 
+        * still asynchronous
+        * handles serialization both ways 
+        * add service reference( like web services )
+        create context and data contract classes 
+
+- demo 
+    + go to silverlight project 
+    + reference the service reference to the web service project 
+    + add reference service namespace
+    + use the entity collection which expose by the data service 
+    
+    Entities ctx = new Entities(new Uri("/GamesService.svc", UriKinds.Relative);
+    var query = from g in ctx.EntityNames
+                where g.Property < value 
+                select g;
+                
+    //in siverlight required the service method to be asynchronous so can't do this simple by ToList()
+    //var results = qry.ToList();
+    
+    DataServiceCollection<Entity> c = new DataServiceCollection<Entity>();
+    uiItem.ItemSource = c;
+    c.LoadAsync(query);
+
+    c.LoadCompleted += (s, a) => {
+        if(a.Cancelled || a.Error!=null)
+        {
+            ..
+        }
+    };
+    
+- Managing Changes
+    + context class will track changes 
+        * pass context to dataserviceCollection<T> is key
+        * context class lives longer than query to track changes 
+        * entities track their own changes and report to context 
+        * collection tracks additions/deletions 
+    
+    + demo track the context, the context should define as private variable of class scope  
+    Entities contextObject = new Entities(new Uri("/GamesService.svc", UriKinds.Relative);
+    
+    var c = new DataServiceCollection<Entity>(contextObject);
+    
+    //save changes 
+    context.BeginSaveChanges(r =>
+    {
+        var result = context.EndSaveChanges(r);
+        if(result.Any(i => i.Error != null)
+        {
+            //indicate the item i is save failed 
+        }
+        else
+        {
+            //save completed 
+        }
+    }, null); //state is null
+    
+
+# Securing services
+- outline 
+    + security vectors
+    user -> client -> internet -> firewall -> your server(s)
+    reflector
+    silverlight spy 
+    debuggers, 
+    memory profiler 
+    
+    you have to know siverlight is running on the client machine, should think about protect hacker
+    + securing services 
+    only secure methods in silverlight
+        * token based 
+        * cookie based, use encrypted cookie pass and receive to the server 
+        * NTLM based, for most window base PC
+    
+        * graphc 
+        +-------------------------+
+        |browser                  |
+        |------------+            |
+        |silverlight |-->ask      |--> includes browser context --> internet 
+        |            |browser to  |
+        |            |do the work |
+        +------------+------------+
+        
+- integrated windows authentication 
+    + just work 
+    + browser passed through NTLM token 
+    + can interrogate user information on server 
+        * identity and roles
+        * cookies 
+        asp.net's forms based authentication/authorization 
+        
+        * uses cookies and custom encrypted cookies for you do to your own authentication 
+        never decrypt on client 
+        expire cookies frequently 
+        
+        make the cookie expire short as possible 
+        
+    + token based security 
+        * can use expiring tokens 
+    
+    + securing strategies
+    + secure enough, isolate the network from the outside 
+        * in memory means vulnerable 
+        * send limited data 
+- demo securing services 
+    + using window authentication
+    <authentication model="Windows"/> //in asp.net 
+    <authentication model="Forms"/> //in asp.net, this is a cookie based authentication
+    <authentication model="None"/>
+    
+    + include authorization section for web.config
+    <system.web>
+        <authorization>
+            <deny users="?"/>
+            <allow users="*"/>
+        </authorization>
+    </system.web>
+    
+    use the web.config inherit logic to add sub folder and virtual directory have the same server configuration file 
+    
+    + consider siverlight security items 
+        * what the page rendering means
+        * where to get the xap file 
+        * the referenced service address 
+
+- add service reference problem for security 
+    + doesn't play well with security 
+    + must disable security when adding/refreshing 
+    + trouble for building references at build-time
+    
+- updating secured service references 
+[ServiceContract(NameSpace="")]
+[SilverlightFaultBehavior]
+[AspNetCompatibilityRequirements(RequirementsMode=AspNetCompatibilityRequirement)]
+public class GameService
+{
+    
+}
+  
+for security service you need to comment the authentication part of the web.config and update the service reference, and then uncomment the authentication section   
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+    
+    
+    

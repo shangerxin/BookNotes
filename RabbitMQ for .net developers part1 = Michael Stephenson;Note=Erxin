@@ -1,0 +1,886 @@
+﻿RabbitMQ for .net developers part1 = Michael Stephenson;Note = Erxin
+
+# Agenda
+- introduction messaging 
+    + enterprise integration patters(Hohpe & Woolf)
+    how can I integrate multiple applications so that they work together and can excahnge information
+    application a, b, c
+    |
+    V
+    message bus
+    
+    asynchronous
+    can be reliable
+    can be durable
+    routing
+    many message formats
+    recipient pulls message from queue
+    
+    + history of messaging
+    1986, inforamtion bus, TIB developed
+    1993, ibm MQSeries released
+    1997, microsoft msmq released
+    2001, java messaging service released
+    
+    + why wasn't it working
+    messaging ahs be around for decades
+    message solution are the key to many systems
+        * difficult to build
+        * expensive to buy and run
+        * difficult to connect to applications
+        * vendors tried to build too complex products
+        
+- AMQP, advanced message queue protocol, open standard
+    + developed by JP Morgan Chase and iMatix
+    + open standard protocol for messaging
+    + Wire level protocol like http
+    + vendor agnostic protocol for messaging system
+    2006, rabbit technologies formed rabbitmq
+    2012, AMQP 1.0 approved as a OASIS standard
+    
+    + key concepts
+        * message broker, centerlize message server and under broker have number of exchangers act as router of the message
+        * exchanges
+        direct, point to point style message to exchange
+        fan-out, message send to number of queues
+        topic, send a message to a specify queue base on some rule
+        headers, inspection of message header and route the message by the header
+        * queues, first in first out
+        * bindings, which exchange should be exchange to the proper queue
+        
+    + AMQP message brokers
+    rabbitMQ
+    window azure service bus
+    apache qpid
+    apache activeMq
+    swiftMq
+    stormMq
+    wso2 message broker
+    openAmq
+    
+    signification changes from 0.9 to 1.0
+    
+- What is RabbitMQ
+    + is an AMQP message broker
+    + open source
+    + support 1.0 AMQP
+    + features
+    AMQP 0.8, 09
+    
+    support multiple languages
+    .net, java, python, ruby
+    
+    protocol gate ways
+    XMPP
+    Stomp
+    Smtp
+    Http
+
+    operational features
+        * high availablity
+        * clustering
+        * management 
+        http api
+        web ui
+        command line tool
+
+        * security
+        virtual hosts
+        authentication & permissoin
+
+- erlang
+    + rabbitMq is built on erlang
+    + erlang comes from a history in telecoms systems
+    + offers super fast performance and reliability 
+    
+- demos machine environment
+    + windwow 2012 virtual machine
+    + visual studio 2012
+    + nuget
+
+- installing rabbit mq
+http://rabbitmq.com
+
+erlang binary
+install erlang
+
+take default setting
+
+download the rabbitmq server
+
+after install there will be manage tool displayed in the start menu 
+
+check rabbitmq server state by 
+$ rabbitnqctl status
+
+- administration plugin
+    + management plugin
+    + go to the rabbitmq console
+    $ rabbitmq-plugins enable rabbitmq_management
+    
+    after need restart the service on window
+    
+    $ rabbitmqctl stop
+    $ rabbitmq-service start
+    
+    go to the brower to 
+    http://localhost:15672
+    
+    put into the security login, default is guest, guest
+    
+    + command line tools
+    RabbitMqCtl command used to control 
+    stop, reset, stop_app, start_app, various user management
+
+    RabbitMQ-Server command used to control
+    Stop, Start, Install
+
+- api for .net
+    + .net library, .net manage library
+    
+    + wcf binding, just like other wcf service
+    
+    + Key API Classes, .net managed api
+    IConnection, RabbitMQ use AMQP
+    IModel, channel, IMQ server
+    ConnectionFactory, construct the IConnection object
+    QueueBasicConsumer
+    Protocols, choose witch version of AMQP
+    
+    + demo
+    start use nuget get rabbitmq client library, RabbitMQClient, install it
+    
+    reference the dll
+    
+    var cf = new RabbitMQ.Client.ConnectionFacotry(){
+        Password = password,
+        UserName = username,
+        HostName = hostName
+    };
+    var cn = cf.CreateConnection();
+    var model = cn.CreateModel();
+    model.Exchange, model.Queue, model.basicPublish, methods
+    
+
+# Getting Started
+- introduction
+- creating queues & exchanges
+    + run-time, code driven c#
+    + deploy-time, admin driven
+        * by hand
+        * powershell
+        
+- demo web admin console
+    + enable rabbbitmq management plugin by
+    $ rabbitmq-plugins enable rabbitmq_management
+    + go to the rabbitmq web admin console, http://localhost:15672
+    + create new exchanges tab
+    + add new exchange link
+    + give a new name
+        * choose the type of the exchange
+        * such as create fanout
+        * durability, durable
+        * auto delete?
+        * internal
+        
+    + click the new exchange will display the detail information
+    + go to the queue tab
+    + create new queue
+    + keep the default setting
+    + go to the binding, and check what is available
+    + create new binding from the previous created exchange name
+    + use the publish method feature,, publish message
+    + the queue get message method will get the published, use the get message method to get the published message
+    
+- demo dynamically at runtime
+    
+model.QueueDeclare("MyQueue", ture, false, false, null);
+model.ExchangeDeclare("MyExchange", ExchangeType.Topic);
+module.QueueBind("MyQueue", "MyExchange", "cars"); //cars is the routing key
+    
+//set the routing key, and input the payload to publish the message
+
+message publish with a unexist rout key will ignore the published message
+
+- demo powershell
+- basic message scenario
+         +----------------------------------+
+app1 --> |default exchange  --> named queue |
+         |                                  |
+         +----------------------------------+
+
+var  properties = model.CreateBasicProperties();
+properties.SetPersistent(false);
+
+byte[] messageBuffer = Encoding.Default.GetBytes("messages in to be sent")
+model.BasicPublish(ExchangeName, QueueName, properties, messageBuffer);
+
+- Persistence
+    + durable
+    message saved to disk
+    message still alive after server restart
+    performance overhead
+    
+    + non-durable
+    message only held in memory
+    message disappears after server reboot
+    better performance 
+    
+- queue persistence, for handling server reboot
+if set the durable property of the queue to true will kep the data into hard disk
+also set the properties.SetPersistent(true)
+
+use empty string to means the empty string
+
+if queue is durable but message is not set to persistent, the message will not persistent
+
+
+# Message exchange pattern
+- one way messaging, pattern, producer consumer pattern
+    + overview message is sent by sender
+    + message is processed by receiver
+    
+    + characteristics
+    exchange = "", routing key, the queue to send to 
+    
+    + demo
+- worker queues, enable multiple thread application to compete compare pattern
+- publish subscribe, multiple
+- RPC, client sent the message, waiting for response message come back
+- RabbitSender class
+setting
+hostname, username, password, create connection factory, create connection, create model, convert the message to byte array
+
+- RabbitConsumer, and execute the queueProcess message
+model.BasicQos(0,1,false); //quality of server, only process on message in each time
+
+start method
+var consumer = new QueueingBasicConsumer(_model);
+_model.BasicConsume(QueueName, false, consumer);
+while(Enabled)
+{
+    var deliveryArgs = (BasicDeliveryArgs)consumer.Queue.Dequeue();
+    var messege = Encoding.Deafult.GetString(deliveryArgs.Body);
+    model.BasickAck(deliveryArgs.DeliveryTag, false)
+}
+
+- worker queue
+    + message is sent by the sender
+    + one listener from many will get the message
+    + listeners operate as competing consumers
+    
+- characteristics
+    + exchange = "" (default exchange)
+    + routing key = the queue to send to 
+    + multiple competing consumers
+    
+    + demo worker queues
+    the sender class is the same with the previous
+    
+    there will be two same consumer be created
+
+- publish/subscribe
+    + overview
+    message is sent to an exchange
+    exchange copies the message to all bound queues
+    each queue will have a listener to process the message
+    
+    + characteristics
+    exchange = the message is sent to a named exchange
+    exchange type = fanout
+    message goes to all queues bound to the exchange
+    
+    P ---> Exchange --queue --> client
+                    --queue --> client
+            
+           Message broker
+           
+    + demo power shell set the queue up
+
+    create two create and binding to the exchange
+
+    create an exchange
+    
+    bind the two queue
+    
+    the sender and consumer, the consumer will be difference also create a Subscription
+    
+    var sb = new Subcription(mode, queueName, false);
+    var cs = new ConsumeDelegate(pool);
+    consumer.Invoke();
+    
+    sb.Next();
+    
+    mode.BasicPublish(exchangeName, routingKey, properties, messageBuffer);
+    
+    all the object created relative to rabbitmq are needed to call dispose method
+    
+- remote procedure call
+    + overview
+        the sender will start listening on response queue
+        message is sent to a queue via the default exchange
+            * message includes a response queue
+        the receiver gets the message and places a response message on
+        the sender gets the response message
+        
+    + characteristics
+        + exchange = the message is sent to default exchange
+        + exchange type = N/A
+        + routing key is the queue name 
+        
+    + demo
+    //create a new queue the response queue is created by the client and only exist during the response
+    var response = sender.Send(message, new TimeSpan(0,0,3,0));
+    //the response allow will be a receive
+    
+    sender.send(message, timeout); which contain er a timeout span to indicate how lot the method is waiting
+    
+    //consumer add QueueingBasicConsumer object, queueing basic consuming variable
+    var responseQueue = model.QueueDeclare().QueueName; //queue declare method 
+    _consumer = new QueueingBasicConsumer(model);
+    _model.BasicConsume(_responseQueue, true, _consumer);
+    
+    //the send method
+    _modle.BasicPublish("", QueueName, properties, messageBuffer);
+    
+    if(deliveryArgs.BasicProperties.CorrelationId == correlationToken)
+    {
+        var deliveryArgs = (BasicDeliverEventArgs)_consumer.Queue.Dequeue();
+        var response = Encoding.Default.GetString(deliveryArgs.Body);
+        return response;
+    }
+    
+    //consumer codes
+    var replyProperties = _model.CreateBasicProperties();
+    replyProperties.CorrelationId = deliveryArgs.BasicProperties.CorrelationId;
+    byte[] MessageBuffer = Encoding.Default.GetBytes(response);
+    _model.BasicPublish("", deliveryArgs.BasicProperties.ReplayTo, replay);
+    
+    //acknowledge message is processed
+    _model.BackAck(deliveryArgs.DeliveryTag, cfalse);
+    
+    
+    //client --send message--> exchange --queue-----------> sender
+                                        <--- response queue
+    
+# Advanced Message exchange patterns
+- routing, pattern client provide routing key and rabbitmq rout the message base on the key
+    + overview
+    message sent to an exchange along wiht a routing key
+    a copy of message sent to queues which exactly match the routing key
+    each queue will have a receiver processing messages 
+    
+    + characteristics 
+    exchange = the messsage is sent to a named exchange
+    exchange type = direct
+    routing key = piece of information which can direct messages
+    message only goes to queues which match the routing key 
+    
+    + diagram
+    
+    routing key = apples 
+    message ----------------------> exchange -----queue (apples, oranges) --------> client0
+                                             -----queue (oranges)-----------------> client1
+                                             
+    the apple routing key will  post to client0 and if key is oranges then will be send both to client0 and client1
+
+    + use the routing client
+    //generate a random routine key
+    sender.Send(message, routingKey);
+    
+    _model.BasichPublish(exchangeName, routingKey, properties, messageBuffer);
+    
+    //server side code, create rabbit consumer class as usual, similar to the public subscribe demo
+    var sub = new Subscription(_model, QueueName, false);
+    
+    var args = sub.Next();
+    var msg = Encoding.Default.GetString(deliveryArgs.Body);
+    
+    //acknowledge message is processed 
+    sub.Ack(args);
+    
+    + if a no routing key is no match, this message will be discarded 
+    + use this pattern must binding to the message queue to a specify routing key 
+- topic, client will send message along with string for in trace this message
+    + overview 
+    message sent to an exchange along with a routing key
+    a copy of message sent to queues with match expressions against the routing key
+    each queue will be processed by receivers 
+    
+    + characteristics
+    exchange = the message is sent to a named exchange 
+    exchange type = topic
+    routing key = piece of information which can direct messages
+    routing key includes special characters to do wildcard match
+        * *, can replace one word, if a routing key separate the word with character '.', red.high is two words which compose with red and high
+        * #, can replace zero or more words
+        
+        
+    + graphic of topic
+    
+    routing key = corporate.high.cupboard
+    message -----------------------------------> E ------------- queue(*.high.*) ----------------------> C0
+                                                   ------------- queue( *.*.cupboard ) ----------------> c1
+                                                   ------------- queue(*.medium.*, corporate.#) -------> c2
+    
+    only the routing key match the message routing key will receive the message
+    
+    + demo setup persistence method 
+    byte[] messageBuffer = Encoding.Default.GetBytes(message);
+    
+    var properties = _model.CreateBasicProperties();
+    _model.BasicPublish(Exchange, routingKey, properties, messageBuffer);
+    
+    //consumer logic
+    var deliveryArgs = _subscription.Next();
+    var message = Encoding.Default.GetString(deliveryArgs.Body);
+    
+    //Acknowledge message is processed
+    _subscription.Ack(deliveryArgs);
+- headers, similar to topic, include collection header values
+    + overview
+    a message is sent to an exchange including some headers
+    a copy of the message is sent to queues with match the headers
+    each queue is then processed by receivers
+    
+    + characteristics
+    exchange = the message is sent to a named exchange
+    exchange type = headers
+    routing key = should not be set
+    the message will have some properties specified
+    match type indicates if all or any header must match 
+    
+    + graphi
+    
+    Material = Wood
+    Customer Type = B2C
+    Message ----------------------> E ------------ Materials = Wood, Customer Type = B2B---------> c0
+                                                   queue
+                                                   
+                                      ------------ Materials = Metal, Customer Type = B2C---------> c1
+                                      
+                                      
+        + x-match == any, then all the queue match any of the header will be dispatch with the message
+        + x-match == all, required all the header items should be match
+    
+    + demo 
+    first create the exchange and queue, the queue will be set with binding with the arguments with x-match:any, name0:value0, name1:value1
+    
+    //get the message value
+    
+    
+    //send the message
+    messageSender.Send(message, )
+- scatter gather, next extension to rpc message, client send one message and can obtain more message back 
+
+    
+# Part2 RabbitMQ for .net developers 
+# Message and Data 
+- Introduction 
+- What & Why 
+serialization message 
+
+sender application -> bit array -> queue -> receiving application 
+- message format & serialization
+    + what & why, types of serialization 
+    xml, json, binary 
+    
+    + how do i communicate what the format of the message body is? 
+    ContentType property of the message is the meta data to determine which kinds of format for the body is
+     
+    + contentType name
+    json, application/json, 
+    xml, text/xml, 
+    binary, application/octet-stream
+
+    //json, use json.net 
+    var jsonString = Newtonsoft.Json.JsonConvert.SerializeObject(myObject);
+    return Encoding.Default.GetBytes(jsonString);
+    
+    //xml
+    var messageStream = new MemoryStream();
+    var xmlSerializer = new xmlSerializer(myMessage.GetType());
+    xmlSerializer.Serialize(messageStream, myMessage);
+    messageStream.Flush();
+    messageStream.Seek(0, SeekOrigin.Begin);
+    return messageStream.GetBuffer();
+    
+    //binary
+    var messageStream = new MemoryStream();
+    var binarySerializer = new BinaryFormatter();
+    binarySerializer.Serialize(messageStream, myMessage);
+    messageStream.Flush();
+    messageStream.Seek(0, SeekOrigin.Begin);
+    return messageStream.GetBuffer();
+    
+    //after get the byte array message buffer, set the relative properties 
+    var properties = model.CreateBasicProperties();
+    properties.SetPersistent(true);
+    properties.ContentType = contentType; //the previous three kinds of content 
+    
+    model.BasicPublish(ExchangeName, QueueName, properties, messageBuffer);
+    
+    //receive the message from the sender, first need to encode the body 
+    Encoding.Default.GetString(body);
+    
+    //for binary array use
+    Convert.ToBase64String(body);
+
+    //then de-serialization the message 
+    var jsonString = Encoding.Default.GetString(body);
+    Newtonsoft.Json.JsonConvert.DeserializeObject<MyMessage>(jsonString);
+    
+    //xml
+    var messageStream = new MemoryStream();
+    messageStream.Write(body, 0, body.Length);
+    messageStream.Seek(0, SeekOrigin.Begin);
+    var xmlSerializer = new XmlSerializer(typeof(MyMessage));
+    xmlSerializer.Deserialize(messageStream) as MyMessage;
+    
+    //binary
+    var messageStream = new MemeoryStream();
+    messageStream.Write(body, 0, body.Length);
+    messageStream.Seek(0, SeekOrigin.Begin);
+    var binarySerializer = new BinaryFormatter();
+    return binarySerializer.Deserialize(messageBuffer) as MyMessage;
+
+    //the consume message logic
+    var deliveryArgs = (BasicDeliverEventArgs)consumer.Queue.Dequeue();
+    
+    var messageFormat = GetMessageFormat(deliveryArgs.BasicProperties.ContentType);
+    var myMessage = DeserilizeMessage(deliveryArgs.Body, MessageFormat)
+    model.BasicAck(deliveryArgs.DeliveryTag, false);
+
+    + disadvantage of binary serialize is that you have to have the type on both end 
+    
+- Message Identification 
+    + from the content 
+    + the sender indicates the message type 
+    + such as biztalk which is quit good at use xml 
+    + rabbity mq have a basic properties has a type property intended for the message type 
+    
+    convert object to byte[] -> indicate the type of message -> indicate the format of message -> send message -> queue -> receive message -> workout the message format -> workout the message type -> convert byte[] to object 
+        * Custom string to identify the type 
+        * .net full qualified name 
+        * xsd namespace ++ root element 
+    + considerations 
+        * should be application agnostic (if you want interoperability)
+        * what about version ? 
+- Shared Type Demo 
+[Serializable]
+public class MyMessage
+{
+    public string Message {get;set;}
+}
+
+message format, 
+content type, 
+message.GetType().AssemblyQualifiedName;
+
+var proeprties = model.CreateBasicProperties();
+properties.SetPersistent(true);
+properties.ContentType = contentType;
+properties.Type = GetMessageType(myMessage);
+- Interoperable demo 
+
+read the sent properties 
+var deliveryArgs = consumer.Queue.Get();
+deliveryArgs.BasicProperties.ContentType; 
+
+//get a type of types from assembly 
+var types = from type in assembly.GetTypes()
+            where Attribute.IsDefined(type, typeof(DataContractAttribute))
+            select type;
+            
+foreach(var type in types)
+{
+    var attribute = type.GetCustomAttribute<DataContractAttribute>();
+    var messageType = string.Format("{0}#{1}", attribute.Namespace, attribute.Name);
+    messageTypes.Add(messageType, true);
+    Console.WriteLine("Message type:{0} is in this assembly", messageType);
+}
+
+server and client use the share type
+
+- interoperability, use xsd 
+    + get types from assembly 
+    
+    var assembly = Assembly.GetExecutingAssembly();
+    var types = from type in assembly.GetTypes();
+                where Attribute.IsDefined(type, typeof(DataContractAttribute))
+                select type;
+                
+    foreach(var type in types)
+    {
+        attribute = type.GetCustomAttribute<DataContractAttribute>();
+        var messageType = string.Format("{0}#{1}", attribute.Namespace, attribute.Name);
+        messageTypes.Add(messageType, type);
+    }
+    
+    + get message type with xsd 
+    http://domain.org#type
+    
+    + *.xsd file, visual studio have xsd file editor 
+- Summary 
+
+
+# Large message 
+- large message 
+    + push large message through rabbit?
+    + messaging systems 
+    + amqp supports very large messages 
+    + rabbitmq 
+        * you can use large messages 
+        * but you need to be careful 
+        
+    + how can we do it 
+        * buffered 
+        small/medium files 
+        
+        * chunked larger files 
+        break the file down 
+- buffered demo 
+
+//send message 
+var properties = model.CreateBasicProperties();
+properties.SetPersistent(true);
+byte[] messageBuffer = File.ReadAllBytes(InputFile);
+
+model.BasicPublish(exchangeName, queueName, properties, messageBuffer);
+messageCount++;
+
+//receive message
+var consumer = new QueueingBasicConsumer(model);
+var deliveryArgs = (BasicDeliverEventArgs)consumer.Queue.Dequeue();
+
+deliveryArgs.Body();
+model.BasicAck(deliveryArgs.DeliveryTag, false);
+- chunked demo 
+separate large object in to different pieces 
+
+# Dealing with Errors 
+- Introduction 
+- Basic Errors and Retry 
+    + error scenarios 
+    exception processing a message 
+    poison message 
+    a message we don't understand 
+- Basic Retry Demo 
+    + reject and retry 
+    mode.BasicReject(deliveryArg.DeliveryTag, isRequeue);
+    
+    isRequeue equal to false, the message will be discard 
+    + reject and discard 
+- Advanced Errors and Retry 
+    + we can't retry forever 
+    + we should retry n times and then reject 
+    + we can decide if to reject sooner or later depending on the type of error 
+    + how can we do it? 
+    Reject equal BasicReject ( no re-queue)
+    Retry equal custom solution 
+        * custom property to track no.retries 
+        * no retires in incremented with each attempt 
+        * instead of rejecting we re-publish a new message with updated properties 
+        * application decides how many times it will allow a message to retry 
+        
+    //server code 
+    var connection = connectionFactory.CreateConnection();
+    var model = connection.CreateModel();
+    model.BasicQos(0, 1, false);
+    model.BasicConsume(QueueName, false, consumer);
+    
+    var deliveryArg = (BasicDeliverEventArgs)consumer.Queue.Dequeue();
+    var message = Encoding.Default.GetString(deliveryArgs.Body);
+    
+    model.BasicAck(deliveryArgs.DeliveryTag, false);
+    var attempts = GetRetryAttempts(deliveryArgs.BasicProperties);
+    
+    add information to headers 
+    var properties = model.CreateBasicProperties();
+    properties.Headers = CopyMessageHeaders(deliveryArgs.BasicProperties.Headers);
+    
+    the headers is a dictionary like object 
+- Dead Letter Queue 
+    + when we reject messages we don't just want to throw them away 
+    + store errors for review by ops 
+    + advanced error handling 
+    + repair & resubmit 
+    
+    + how can we do it 
+        * declare an exchange for receiving messages 
+        * on queue set the x-dead-letter-exchange property 
+        * routing rules 
+            * normal exchange routing rules can apply 
+            * you can setup a dead letter routing key 
+- Dead Letter Queue Demo  
+- Routing Failure 
+    + when processing messages sometimes a message will not be subscribed to 
+    + routing failure 
+        * could be an error 
+        * could be a malicious message 
+        * could be fixable 
+        
+    message ->  Exchange one (topic)       -> queue 01
+                Exchange Alternative(fanout) -> queue backup
+    + how can we do 
+    define a alternative exchange on the topic exchange then any routing failure will be set to the exchange, add alternative exchange argument when create the exchange 
+- Routing Failures Demo 
+    
+# Advanced Topics 
+- Introduction
+    + scheduled delivery 
+    + virtual hosts 
+- Scheduled Delivery
+    + how can I publish a message but delay the processing of the message? 
+    holding queue? put message aside at the broker and the message is saved at the holding queue 
+    
+    Exchange <--- Holding queue 
+             ----> processing queue 
+             
+    use dead letter exchange policy, use message expiration value for the message 
+- Scheduled Delivery Demo 
+Define a holding queue, and a dead letter exchange, 
+var connection = CreateConnection();
+var mode = connection.CreateModel();
+mode.ExchangeDeclare("Sample.Exchange", Fanout, true);
+mode.QueueDeclare("NormalQueue", "Sample.Exchange", "");
+var args = {"x-dead-letter-exchange"="Sample.Exchange"};
+mode.QueueDeclare("Holding.Queue", true, false, false, args);
+
+the management web page could check the properties for the defined queues
+
+then send message to the holding queue and set the message expiration property to let the message deliver to the normal queue 
+var properties = mode.CreateBasicProperties();
+properties.SetPersistent(true);
+properties.Expiration = "5000";
+- Virtual Hosts 
+    + can I sandbox messaging in rabbitmq
+    + why 
+        * application isolation 
+        * data protection 
+        * support separation 
+        * SLA 
+    + rabbitmq support virtual host, support multiple virtual host, which support have separate exchanges and queues
+    + the management console could check the virtual host list, the default virtual host is /, support set different user privileges for different virtual host
+- Virtual Hosts Demo 
+    + navigate to the admin control panel
+    + create different users 
+    + create different virtual host 
+    + set permissions for different users 
+    
+    + navigate to the queue management console, the up right could select different virtual hosts 
+    + when connection to the rabbbitmq specify the virtual host parameters and users before connected
+- Summary 
+
+
+# Messaging Frameworks 
+- introduction
+    + wcf 
+    + spring.net amqp framework 
+    + summary 
+    
+- wcf and rabbitmq 
+    + wcf & rabbitmq 
+    + what is it? provide support for wcf 
+    + messaging patterns 
+        * one way 
+        * two way rpc 
+        * duplex 
+    + wcf usage 
+        * code driven 
+        * configuration driven 
+        
+    + wcf ABC's 
+        * address, soap.amp:///<Servicename>
+        * binding 
+        <binding>
+            <rabbitMQBinding>
+                <binding name="rabbitMQConfig"
+                         protocolversion="AMQP_0_9_1"
+                         hostname="localhost"
+                         port="5672"
+                         username="guest"
+                         password="guest"/>
+            </rabbitMQBinding>
+        </binding>
+        
+        required add rabbitmq binding extensions 
+        
+    + contract 
+    <client>
+        <endpiont address="soap.amqp:///Test"
+                  binding="rabbitMQBinding"
+                  bindingConfiguration="rabbitMQConfig"
+                  contract="Contract.ITestContract"
+                  name="TestService"/>
+    </client>
+    
+    [ServiceContract]
+    public interface ITestContract
+    {
+        [OperationContract]
+        string TestPing(string message);
+    }
+    
+    + limitations 
+        * direct exchange only 
+        amq.direct 
+        * dynamic queues only 
+        * non persistent queues 
+        * two way doesn't really work with multiple listeners 
+- wcf demo 
+    + reference the RabbitMQ.ServiceModel.dll 
+    + add configuration and contract 
+    + add binding extension for wcf service 
+    <extensions>
+        <bindingExtensions>
+            <add name="rabbitMQBinding" type="RabbitMQ.ServiceModel.RabbitMQBindingSection, RabbitMQ.ServiceModel, Version=1.0.0.0"/>
+        </bindingExtensions>
+    </extensions>
+- spring.net AMQP 
+    + what is it? open source framework, for .net developer program amqp message 
+    + why use it 
+        * messaging patterns 
+        all 
+        * usage 
+        configuration driven 
+        removes lots of code 
+    + key elements 
+        * client 
+        connection factory 
+        rabbit template 
+        message converter 
+        type mapper 
+        service gateways 
+        
+        * server 
+        connection factory
+        message listener 
+        message adapter 
+        message converter 
+        type mapper 
+- spring demo 
+- summary 
+    + others to note 
+    NServiceBus
+    EasynetQ
+    Rebus 
+    RabbitBus 
+    Burrow.net 
+    Mass Transit 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+

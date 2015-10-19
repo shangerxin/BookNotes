@@ -1,0 +1,2890 @@
+﻿C++11 language Features=Alex Korban;Note=Erxin
+
+# Overview, c++11 for gcc 4.8, the changes in c++03
+- required gcc 4.8+
+{language}, {library}
+
+you need to specify the option for gcc cpp compiler to open the c++11 new features, -std=c++11
+
+- prefer to change libraries not the language it self 
+- improving abstraction mechanisms rather than to solve narrow use cases 
+- increasing type safety
+- improve performance 
+- zero overhead principle, which means no overhead from unused features
+- maintaining backwards compatibility 
+- in this module 
+    + type inference 
+        * more concise
+        * more flexible 
+        * less redundancy 
+        auto/decltype
+        auto, is limited to declaring variables 
+        decltype is more general tools 
+        //bad example
+        std::map<std::string, std::vector<int>>::const_iterator 
+        
+        with auto version 
+        auto a = 5;
+        auto plan = JetPlan("xxx");
+        cout << plane.modle();
+        for(auto i = plane.engines().begin(); i != plane.engines().end(); ++i)
+            i->set_power_level(Engine::max_power_level);
+            
+    
+    + trailing return type syntax 
+    + lambda expression
+
+- auto in deep 
+    
+    //auto is a keyword in c++ sine the beginning which mean it is a local variable, however it it not used. then c++11 use it to define a variable type
+    //you can't use auto as function variable and define an array of auto  
+
+    + sometimes it is hard to write a code without auto 
+    template<typename X, typename Y>
+    void do_magic(const X& x, const Y& y)
+    {
+        auto result = x * y; //use auto could let the compiler choose the result type during runtime 
+    }
+
+    + why else do we need it 
+    don't repeat yourself 
+    higher level of abstraction 
+    type changes are better localized 
+    easier re factoring 
+    simple template code for the intermediate types 
+    declaring variables of undocumented or unnameable types 
+
+    + detail of use auto could be used to define mutiple variables 
+    auto a = 5.0, b = 10.0;
+    auto i = 1.0, *ptr = &a, &ref = b; //auto infers the unadorned type  
+    auto j = 10, str = "err"; //compiler error, auto can't define different types in one line 
+
+    + you can add const, reference to auto when definition variables 
+    auto& ref = index;
+    auto* ptr = &index;
+    const auto j = index;
+    const auto& cref = index;
+
+    + const and volatile specifier are removed 
+    const vector<int> values;
+    auto a = value; //type of a is vector<int>
+    auot& b = value; //type of b is const vector<int>& 
+
+    volatile long clock = 0;
+    auto c = clock;     //c is not volatile 
+    JetPlane fleet[10]; 
+    auto e = fleet;     //type of e is JetPlane*
+    auto& f = fleet;    //type of f is JetPlan(&)[10] - a reference 
+
+    + arrays and functions are turned into pointers 
+    int func(double) {return 10;}
+    auto g = func;  //type of g is int(*)(double)
+    auto& h = func; //type of h is int(&)(double)
+
+    + you can use either assignment or copy initialization syntax to initialize your auto variables 
+
+    + there is a except rule, when a type have a explicit copy constructor, in this situation you can only use copy initialization 
+
+    + the back work process of auto is similarly to the template type argument inference
+
+- decltype specifier and declval, you pass an expression to it and figures out the types of the expression 
+int i = 10;
+cout << typeid(decltype(i+1.0)).name() << endl; //outputs double 
+
+compare to auto which could only be used in definition. decltype is meant to be a type specifier, you can use decltype of an expression in place of a type name anywhere 
+
+vector<int> a;
+decltype(a) b;
+b.push_back(10);
+decltype(a)::iterator iter = a.end(); //instead use vector<int>::iterator
+
+the decltype is very useful when write template function which return type is depend on the template arguments 
+
+template<typename X, typename Y>
+auto multiply(X x, Y y) -> decltype(x * y) //this is a new syntax for retrieve return type 
+{
+    return x * y;
+}
+
+    + side effects, the expression given to decltype is not actual evaluated 
+    decltype(a++) b;  //a will not be changed outside 
+
+    + comma operator returns the last argument, so var will be the same type as I
+    template<int I>
+    struct Num
+    {
+        static const int c = I;
+        decltype(I) _memeber;
+        Num():_memeber(c) {}
+    }
+    int i;
+    decltype(Num<1>::c, i) var = i; //var is int&, but the compiler still need to initialize the Num template make sure the expression is valid this template instantiation is side effect 
+
+    + expression to decltype has to be valid, if a class with a private constructor 
+    class A
+    {   
+    private:
+        A();
+    };
+    
+    cout << typeid(decltype(A())).name() << endl; //doesn't compile A() is private;
+
+    //in this time declval will take the rescue part, delval is a standard template which is provided for just such situation 
+    
+    cout << typeid(decltype(declval<A>())).name() << endl; //OK. declval A actually yeilds an rvalue reference to A, which is a new type of reference added   
+
+    Note: declval can only be used in an unevaluated operand, if you attempt to use it where it has to be evaluated, you will get a compilation error 
+
+- trailing return types, auto, decltype - how about both at once?, keyword auto use with function as return type means a trailing return type. this is a new syntax variation where return type is specified after the parameters 
+
+template<typename X, typename Y>
+auto multiply(X x, Y y) -> decltype(x * y) //this is a new syntax for retrieve return type 
+{
+    return x * y;
+}
+
+//in the old days 
+template<typename X, typename Y>
+ReturnType multiply(X x, Y y)
+{
+    return x * y;
+}
+// the problem is ReturnType should be x * y but we have no way to specifying it because X and Y aren't scope yet 
+
+- lambda expression, anticipate
+[](parameterlist){body of the lambda expression};
+[] is lambda introducer 
+
+for_each(v.begin(), v.end(), [](const JetPlan& jet){cout << jet.model() << endl;});
+
+//compiler will generate 
+class lambda0
+{   
+public:    
+    void operator()(const JetPlan& jet)const {
+        cout << jet.module() <<endl;
+    }
+}
+
+for_each(v.begin(), v.end(), lambda0());
+
+//benefit of lambda 
+    + improve locality 
+    + reduce boilerplate 
+    + express intentions better 
+
+//example of Hurb Shutter, you can't make the variable constant 
+auto const_val = some_default_value;
+if(some_condition_is_true)
+{
+    //do some operations and calculate the value of const_val
+    const_val = calculate();
+}
+const_val = 1000; //oops const_val can be modified later 
+
+// then if you define the const_val with lambda you can make the const_val const 
+const auto const_val = [&] 
+{
+    auto const_val = some_default_value;
+    if(some_condition_is_true)
+    {
+        //do some operations and 
+        //calculate the value of const_val 
+        const_val = calculate();
+    }
+    
+    return const_val;
+}();
+    
+- components of lambda expressions, return type, if your lambda expression don't specify return type compiler will try to figure out the return type if can't will get compilation error 
+
+when you return a sequence of return type which are convertible to each other, you can using trailing return type syntax 
+    
+[](int i) -> double {if (i > 10) return 0.0; return double(i);}
+  
+you don't have to specify the auto keyword when using trailing return type with lambda expression   
+    
+c++ standard says that the return types should only be deduced if it's void or if the body consists of a single return statement. the rule of the standard not consider a defect, next standard should mean the current gcc behavior which already consider the defect 
+
+you can pass parameters to lambda like a regular function with several exceptions 
+    + no default values for parameters 
+    + no variable length argument lists 
+    + no unnamed parameters 
+    
+    lambda may omit the parameter list altogether, you don't have to specify parentheses unless you've declared your lambda mutable 
+    
+    + body of lambda is just like a normal function 
+    
+- storing lambda or return a lambda from a function 
+auto foo = [](int i) {return i > 10;};
+
+foo(5);
+
+//limitation, you can't be able to pass a lambda into a function this way or store it as a class member, in those case you need to specify the type explicitly. then auto is not work 
+
+c++11 include a standard library template called std::function, this template can be bound to pretty much anything callable such as lambdas, function objects, function pointers and member function pointers, which include in the functional header 
+
+#include <functional>
+using namespace std;
+class LambdaStore
+{
+    function<bool(double)> _stored_lambda; //lambda function take a double argument and return a bool 
+public:
+    function<int(int)> get_abs() const 
+    {
+        return [](int i){return abs(i);};
+    }
+    
+    void set_lambda(const function<bool(double)>& lambda)
+    {
+        _stored_lambda = lambda;
+    }
+};
+    
+//use this class 
+LambdaStore ls;
+
+ls.set_lambda([](double d){return d > 0.0;});
+
+auto abs_lambda = ls.get_abs();
+abs_lambda(-10); //return 10
+    
+- referring to external variables, lambda allow to exist after the scope which created is gone. the reference variable and lambda expression is compose a closure which defined by computer science 
+a closure is a function combined with a referencing environment for the non-local variables of a function 
+
+f(){} + environment = closures 
+
+the terminology for this is to say that a function is closed over its free variables. the reference environment binding the non-local variables to corresponding local variables, this is called captured, the life time of the referenced local variable is extended same as the closure 
+
+- capturing in c++ 11 
+    + give the variable name in the [] which means reference by value 
+    [variable](){variable;};
+
+    //compiler will generate a class 
+class lambda1 
+{
+    date_t _today;
+public:
+    lambda(data_t today): _today(today) {}
+    void operator()() const 
+    {
+        variable;
+    }
+}
+
+//you can reference to non-local variable without capture them 
+function<bool> g()
+{
+    static auto a = 5;
+    static auto b = -3;
+    return [](){return a + b > 0;}; //a, b are static variable which is not local variable could be used directly 
+}
+
+//local variables always need to be captured explicitly 
+function<bool()> f()
+{
+    auto a = 5;
+    auto b = -3;
+    
+    //won't compile if a& b aren't captured 
+    return [a, b](){return a + b > 0;};
+}
+
+    + capture by reference, variable name with a ampersand 
+    [&jet](){ jet; };
+
+    //compiler will generate 
+class lambda1 
+{
+    JetPlan& _jet;
+public: 
+    lambda1(JetPlan& jet): _jet(jet){}
+    void opertor()() const {_jet;};
+}
+
+    + capture multiple variables you can mix and match capture by value and by reference 
+    int a, b, c, d;
+    [a, &b, c, &d](){};
+    
+    when capture by reference we have to make sure the reference is valid 
+    
+    + sometime you want to capture the variable in the same way, you can use default capture mode 
+    
+    [=](){return (a > b) && (c < d);} //capture all variables by value 
+    
+    [&](){return (a > b) && (c < d);} //capture everything by reference 
+    
+    //you can also specify default capture mode and override it with specify variables 
+    [=, &a]() { a = 20; }
+    [&, d]() { d = 20; }
+    
+    //use default capture mode will only capture the used value by lambda 
+    
+    + capture class members, you have to capture the this pointer then use the members, compiler will make the generated lambda class as member of the wrapper class, the function call operator could refer to all member of class 
+    
+    class JetPlane
+    {
+        const int _min_fuel_level;
+        vector<Tank> _tanks;
+        
+    public:
+        bool is_fuel_level_safe()
+        {
+            return all_of(_tanks.begin(),
+                          _tanks.end(),
+                          [this](Tanks& t){return t.fuel_level() > _min_fuel_level;});
+        }
+    }
+
+    //if you use a default capture mode, it automatically captures this providing access to class members. you need to remember it is capture this pointer, the object return the lambda may go out of scope make this pointer invalid 
+    //this pointer is always capture by value, if you try to capture this pointer by reference, it still keep capture by value [&this] will get compile error 
+    
+    + capture list are only allow when lambda is define in block scope, the example code will get error which is in global scope 
+    
+    #include <iostream>
+    
+    auto x = 12;
+    auto f = [&x](){return x;};
+    
+    int main()
+    {
+        std::cout << f() << std::endl;
+    }
+    
+    //the identifier in a capture list are looked up using the rules for unqualified name lookup with in the reaching sope of lambda 
+    // the reaching scope is the set of enclosing scopes up to and including the innermost enclosing function and its parameters 
+    // another limitation is you can't capture a move only type, the alternative way is save the move only object in a shared_pointer and capture that 
+    // if you can't use shared_pointer, you always have the option of writing a custom function object 
+    
+- mutable lambda, the default function operator define by the lambda is declared const when capture by value you can't modify the captured variables, you need to add the mutable keyword to let the lambda remove the const restriction 
+
+vector<pair<int,int>> flight_hours;
+
+auto running_total = 100;
+
+for_each(flight_hours.begin(), 
+         flight_hours.end(), 
+         [running_total](pair<int, int>& x) mutable 
+         {
+            running_total += x.first;
+            x.second = running_total;}
+        );
+
+    + one caveat or limitation is you can't pass them by const reference 
+template <class Func>
+void by_const_ref(const Func& f){ f();}
+
+by_const_ref([] {});         //ok
+
+by_const_ref([]() mutable{}) //ok, if mutable lambda doesn't capture anything gcc will ignore the mutable keyword  
+
+string s("executing mutable lambda");
+by_const_ref([s]() mutable {cout << s << endl;}); //error 
+    
+- other feature of lambda expression is non-capture lambdas can be converted into function pointers 
+
+typedef int(*Func)();
+Func f = []{return 10;};
+f(); //invoke lambda via function pointer 
+
+    + in the case of lambdas which capture variables, you'll need to wrap them in std::function 
+
+    + lambda also could be nested 
+auto mode = public_announcement;
+vector<Cabin> cabins;
+for_each(cabins.begin(), cabins.end(), [=](Cabin& cabin){
+    for_each(cabin.seat_screens().begin(), cabin_seat_screens().end(), [=](SeatScreen& seat_screens){seat_screens.set_mode(mode);});
+});
+    
+    + if you want to recursive the lambda expression, you need to use the std::function template to achieve this 
+using namespace std;
+    
+function<int(int)> fibonacci = [&](int n) -> int
+{
+    if(n < 1)
+        return -1;
+    else if (n == 1 || n == 2)
+        return 1;
+    else 
+        return fibonacci(n - 1) + fibonacci(n - 2);
+};
+
+- define namespace
+#include <iostream>
+using namespace std;
+
+// first name space
+namespace first_space{
+   void func(){
+      cout << "Inside first_space" << endl;
+   }
+}
+// second name space
+namespace second_space{
+   void func(){
+      cout << "Inside second_space" << endl;
+   }
+}
+    
+- avoiding undefined behavior
+    + capture some variable but the variable is go out of scope when the lambda is called 
+function<int()> f;
+
+{
+    auto i = 5;
+    f = [&i] {return i;};
+}
+f(); //undefined because i is out of scope 
+
+it is up to you to ensure that variables captured by reference have a sufficiently long lifetime 
+
+    + capture a pointer by value, the pointed resource could be deallocated when the lambda is called 
+function<int()> f;
+{
+    auto p = new int(10);
+    f = [=] {return *p;};
+    delete p;
+}
+f(); //undefined behavior because p has been deleted 
+
+    + if a lambda is capture this and return a member function and the object goes out of scope before the lambda is invoked, it results in undefined behavior 
+function<int()> f;
+
+class Plane
+{
+    int _capacity;
+public:
+    Plane(int capacity):_capacity(capacity){}
+    function<int()> get_lambda() const 
+    {
+        //the lambda is capture the this pointer but not the capture the _capacity by value
+        return [=]{return _capacity;};
+    }
+};
+
+{
+    Plane plane(10);
+    f = plane.get_lambda();
+}
+f(); //undefined behavior because plane is out of scope
+    
+- rules of thumb for lambdas 
+    + write short and clear lambdas 
+    + if it's becoming long, you might need a function object 
+    + don't duplicate code across lambda expression 
+    
+[capture_bloc](parameter_list) mutable exception_spec -> return type {body}
+    
+    
+# Templates, Classes, Initialization
+- Overview
+    + template features, two big additions to templates
+        * variadic templates 
+        * template aliases 
+    + class features 
+    + overhauled syntax for initialization, incorporates a few smaller changes such as access rights for nested classes 
+- Variadic Templates 
+    + variadic template, let template add arbitrary arguments 
+    + template aliases, like type divs  with partially-bound template parameters 
+    + proper parsing of multiple closing angle brackets 
+    + local and unnamed types as template arguments 
+    + extern templates 
+    + default values for function template parameters 
+    + arbitrary expression in template deduction contexts 
+    
+    + for example the std::function need to support take arbitrary template arguments to support wrapper any callable entity 
+    function<bool(int, double)>
+    function<int(double, double, double)>
+
+    //the ellipses is indicate 0 or more occurrences of something, you can have whitespace between typename and ..., it could be a class template parameter pack or a member functoin parameter pack  
+    template<typename Stream, typename... Columns>
+    class CSVPrinter
+    {
+    public:
+        void output_line(const Columns&... columns);
+        //other methods, constructors etc. not shown 
+    }
+    //this template is design to support print arbitrary columns csv file, because its a template class the parameter could be int, float, string, dates and so on 
+    
+    + what else are variadic templates good for? it simplify the meta programming and increase generosity of templates 
+        * perform type computation at compile time 
+        * generate type structure for class like tuple, which is a standard template which generate the concept of std::pair to an arbitrary number of types 
+        * implement type safe functions with arbitrary number of arguments, for example a type safe printf which could check the type of the arguments  
+        * perform argument forwarding 
+        
+- working with parameter packs, there are only support two operation, you can also iterate over the list by using templates to separate the first element from the rest 
+    + pack expansion 
+    + type count 
+    
+    + example 
+void output_line(const Columns&... columns)
+{
+    // tell the compiler to expand the function parameter and give it to output_line into its element, you can accept pattern during they expand 
+    write_line(validate(columns)...);
+}
+    
+if the output_line method is instantiation in this CSVPrinter 
+CSVPrinter<decltype(stream), int, double, string> printer;
+|
+V equivalent to 
+void output_line(const int& col1, const double& col2, const string& col3)
+{
+    write_line(validate(col1), validate(col2), validate(col3));
+}
+//each argument is adorn with const and reference which also be wrapped with validate 
+
+    + recursive traversal of the parameter pack
+//recursive traversal of the parameter pack, this could be done by split the header of the list and recursive instantiating template with the rest of the list 
+//the first template split off the head of the parameter list 
+template<typename Value, typename...Value>
+void write_line(const Value& val, const Value&... values) const 
+{
+    //perform a output operation on the header 
+    write_column(val, _sep);
+    write_line(values...);
+}
+//the second template is used to finish the template recursive
+template<typename Value>
+void write_line(const Value& val) const 
+{
+    write_column(val, "\n");
+}
+    
+//this implementation is different from the output_line, recursive initialization is supply arbitrary type of parameters, output_line only allow one kinds of the parameter 
+void output_line(const Columns&... columns);
+    
+    + get number of types in a parameter pack 
+using namespace std;
+template<typename Stream, typename... Columns>
+class CSVPrinter
+{
+    Stream& _stream;
+    //declare an array of column headers in my CSVPrinter class 
+    array<string, sizeof...(Columns)> _headers;
+};  
+//sizeof...(Columns) this expression return the number of types in the parameter pack
+
+    + class and function parameter pack are similar, you can determine memory requirement for a set of types 
+template<typename... Types>
+struct TupleSize;       //allow zero parameters template instantiation 
+
+template<typename Head, typename... Tail> //traverse types to calculate the value 
+struct TupleSize<Head, Tail...>
+{
+    static const size_t value = sizeof(Head) + TupleSize<Tail...>::value;
+};
+
+template<> struct TupleSize<>   //end recursion
+{
+    static const size_t value = 0;
+};
+    
+//use the template 
+TupleSize<>::value;         //0
+TupleSize<int, double, char>::value  //13 on a 32-bit platform 
+    
+    + you can also write a template accept arbitrary arguments for a same type, this is similar to the outline implementation, the key different is the first output_strings parameter is string which restrict the recursive parameters type to string    
+template<typename... Strings>
+void output_strings(const string& s, const Strings&... strings) const 
+{
+    write_column(s, _sep);
+    output_strings(strings...);
+}
+
+void output_strings(const string& s) const 
+{
+    write_column(s, "\n");
+}
+
+- more variadic template features, pack expansion can appear in places other than class or function bodies, it also appear in places such as member initialization list, lambda capture or base class list 
+
+template<typename... Bases>
+class Derived: public Bases...
+{};
+
+    + variadic template can be nested 
+template<typename... Args1>
+struct zip
+{
+    template<typename... Args2>
+    struct with 
+    {
+        //this parameter packe expansion required Args1, and Args2 have same number of type 
+        typedef tuple<pair<Args1, Args2>...> type;
+    };
+};
+
+//T1 is tuple<pair<short, unsigned short>, pair<int, unsigned>>
+typedef zip<short, int>::with<unsigned short, unsigned>::type T1;
+
+//error different number of arguments specified or Args1 and Args2 
+typedef zip<short>::with<unsigned short, unsigned>::type T2;
+
+    + class template can have at most one parameter pack, function templates are allowed more than one 
+    + parameter type are not limited to types, you can also use them to non-type template parameters, for example the codes is extract a subset of values at arbitrary indexes from a standard library tuple 
+//non-type parameter pack, it take arbitrary number of values of type size_t, it will be used to specify the indexes to extract 
+template <size_t... Ns>
+struct Indexes
+{};
+
+//two parameter packs, one for store tuple parameter, second is used to save the indexes of second parameter 
+//make_tuple is a std:: template function, and get<> is another std:: use to extracts a value from a tuple object at the index specified by the template 
+template<typename... Ts, size_t... Ns>
+auto cherry_pick(const tuple<Ts...>& t, Indexes<Ns...>) -> decltype(make_tuple(get<Ns>(t)...))
+{
+    return make_tuple(get<Ns>(t)...);
+}
+
+//construct tuple<int, int, const char*, const char*, int, int>
+auto data = make_tuple(10, 12012, "b737", "boeing 737", 2, 1250000);
+
+//construct a tuple of(10, "b737", 2)
+auto even_index_data = cherry_pick(data, Indexes<0,2,4>());
+
+//relative block link
+//http://aulkeir.wordpress.com/2012/12/03/building-tuple-indices/
+
+    + if you lots of template, there must be some place you could benefit from variable template 
+    
+- template aliases, you can use the using keyword create a alias for a template, you only required to provide some of the template arguments compare to typedef 
+template<typename T>
+using StrKeyMap = map<string, T>;
+//define an alias for the map template with the key type set to string 
+    
+    + elaborate example 
+//custom deleter for the unique_ptr
+template<typename Stream>
+struct StreamDeleter 
+{
+    void operator()(Stream* os) const 
+    {
+        os->close();
+        delete os;
+    }
+};
+
+template <typename Stream>
+using StreamPtr = unique_ptr<Stream, StreamDeleter<Stream>>;
+
+{
+    StreamPtr<ofstream> p_log(new ofstream("log.log"));
+    *p_log << "Log statement";
+}//stream gets closed and deleted here  
+
+    + using keyword can be a alternative syntax for typedef which could be work with non-templated types 
+//planeId is a alias of int 
+using planeId = int;
+
+//alias for function pointers is more readable 
+using Func = int(*)(double, double);
+
+//it is easy to see the typename compare to typedef 
+
+- template arguments, extern templates 
+    + closing angle brackets are allowed to tail-gate, you don't need to add additional spaces for the template defination 
+vector<vector<int>> v;
+map<int, vector<vector<int>>> m;
+
+    + c++11 allows you to uses local type as template arguments    
+{
+    struct A 
+    {
+        string name() const {return "I'm A!";}
+    };
+    
+    vector<A> v(10);
+    cout << v[0].name() << endl;
+}
+
+    + use unnamed types as template arguments 
+template <typename T>
+void print(const T& t)
+{
+    t.print();
+}
+
+struct 
+{
+    int x = 10;
+    void print() const 
+    {
+        cout << x;
+    }
+}a;
+
+print(a);
+//variable a which is a unnamed struct which passed to the function template print, the unnamed types includes enums in addition to classes and structs  
+//if you have two unnamed types with the same definition in different translation units it results in two different template instantiation 
+    + extern template is like the ordinary declarations, it is used to speed up compilation time and reduce object file size prevent redundancy template instantiation  
+//--file1.h-- 
+template<typename T>
+T templated_func(const T&t)
+{
+    return t;
+}
+
+//file1.cpp 
+using namespace std;
+
+void f()
+{
+    cout << template_func(10);
+}
+
+//file2.cpp 
+using namespace std;
+
+extern template int template_func(const int&);
+
+void g()
+{
+    cout << templated_func(1234);
+}
+
+//during compilation the compiler will generate two template instantiation for both file1.cpp and file2.cpp in the previous days then one of them will be discarded by the linker, you can use extern to prevent template instantiation in one of the files 
+    
+//this also can be used both for classes in which case it applies to all members or for individual members 
+//applied to a class 
+extern template vector<int>;
+//applied to the size method only 
+extern template vector<int>::size_type vector<int>::size const;
+
+if you don't provide an instantiation in any of the translation you will get a linker error 
+    
+    + default values for function template parameters, before c++11, you can only provide default template parameters for class template 
+template<typename T, typename Cont = vector<T>>
+Cont get_batch(T seed)
+{
+    Cont batch;
+    /*populate batch using seed value...*/
+    return batch;
+}
+    
+//the function can be used like this 
+vector<int> batch_vector = get_batch(1234);
+list<double> batch_list = get_batch<double, list<double>>(50.37);
+
+    + expressions in template deduction contexts 
+template<int N>
+struct Alex
+{
+    static int size() {return N;}
+};
+
+int f(int);
+double f(double);
+
+template <typename T>
+A<sizeof(f((T)0))> calc_size(T)
+{
+    return A<sizeof(f((T)0))>();
+}
+//overload resolution between the two different versions of F is required to figure out the return type, only specific conditions produce hard errors everything else treat as a case of substitution failure isn't an error. the specific situations which still cause an error are these 
+        * processing external entities to expression for example an instantiation of a template or the generation of the definition of an implicit declared copy constructor 
+        * implementation limits 
+        * access violations 
+    
+- class features overview 
+    + in-class initializers for non-static data members, you can use assignment operator or curly braces but not parentheses this is useful when you have several constructors and initialize some of the members the same expressions 
+class JetPlan
+{
+public:
+    string_model = "unknown";
+};
+
+//in previous time you have to 
+class JetPlan
+{
+    vector<Engine> _engines;
+    string _manufacturer;
+    string _mode;
+public:
+    JetPlan():
+        _engines(2), 
+        _manufacturer("Unknown"),
+        _mode("Unknown")
+    {}
+    
+    JetPlan(const string& manufacturer):
+        _engines(2),
+        _manufacturer(manufacturer),
+        _mode("unknown")
+    {}
+};
+
+//you can also use other members or member function calls in the initializing expression 
+class JetPlan
+{
+public:
+    string _manufacturer = "Unknown";
+    string _mode = "Unknown";
+    vector<Engine> _engines {get_engine_count(_manufacturer, _mode)};
+    static size_t get_engine_count(const string& manufacturer, const string& model);
+};
+//the initialization is done by declaration order 
+
+//type is no longer aggregate if it has in-class initializers so you can't do 
+struct Counter 
+{
+    int _count = 1;
+};
+Count c = {10}; //the declaration of c will make the compiler complain 
+
+//if you still use the constructor initializer then the initializer will override the in-class initializer
+class JetPlan
+{
+public: 
+    vector<Engine> _engines {2};
+    JetPlan(): _engines(4)
+    {}
+};
+//the number of _engines will be 4 not 2
+
+    + delegating constructors inheriting constructors form a base class 
+//in the previous days we have to reimplement the base class constructor on the inherited class 
+class Plane
+{
+    vector<Engine> _engines;
+    string _manufacturer;
+    string _mode;
+public:
+    Plane(const string& manufacturer);
+    Plane(const PlaneID& tail_number);
+};
+
+class JetPlane: Public Plane 
+{
+public:
+    JetPlane(const string& manufacturer):Plane(manufacturer)
+    {}
+    
+    JetPlane(const PlaneID& tail_number):Plane(tail_number)
+    {}
+};
+
+//now for c++11 we could inherit the constructor from base class by 
+class JetPlane:Public Plane 
+{
+    using Plane::Plane;
+};
+
+JetPlane plane("Boeing"); //OK 
+
+// if you define a constructor with the same signature in the base class, it will override the inherited constructor 
+class PropPlane:public Plane 
+{
+public:
+    using Plane::Plane;
+    //override the Plane constructor with the same parameters 
+    PropPlane(const string& manufacturer):Plane(manufacturer)
+    {
+        cout << "In PropPlane()" << endl;
+    }
+};
+
+PropPlane prop_plane("ATR");
+//this feature could also be used to solve multiple inherit ambiguity
+class Plane 
+{
+    string _manufacturer;
+public:
+    Plane(const string& manufacturer): _manufacturer(manufacturer)
+    {}
+};
+
+class Boat
+{
+    string _boat_manufacture;
+public:
+    Boat(const string& manufacturer): _boat_manufacture(manufacturer)
+    {}
+};
+//both plane and boat have a same signature constructor which will be conflict in the inherited class  
+class FloatPlane: public Plane, public Boat
+{
+    using Plane::Plane;
+    using Boat::Boat;
+    //override the constructor with a string parameter 
+    FloatPlane(const string& manufacturer): Plane(manufacturer), Boat("n/a")
+    {}
+};  
+
+// it's not a good idea to use inherited constructors if you add data members to your derived class because it's easy to forget to initialize them 
+class PropPlane: public Plane 
+{
+    size_t _prop_count;
+public: 
+    using Plane::Plane;
+};
+//oops, _prop_count is not initialized 
+PropPlane prop_plane("ATR");
+
+//if you still want to use the inherit initializer, you could use the in-class initializers for the data members in derived class 
+
+//c++11 also add a new feature to allow a constructor call another constructor by the constructor list 
+class JetPlane
+{
+    vector<Engine> _engines;
+    string _manufacturer;
+    string _model;
+public:
+    JetPlane():JetPlane(2, "Unknown", "Unknown"){}
+    
+    JetPlane(const string& manufacturer, const string& model):JetPlane(Lookup::engine_count(manufacturer,model), manufacturer, model)
+    {
+        assign_tail_number();
+    }
+private:
+    JetPlane(size_t engine_count, const string& manufacturer, const string& model):_engines(engine_count), _manufacturer(manufacturer), model(model)
+    {
+        configuration_engines();
+    }
+};
+//constructor call another constructor like this is called a delegating constructor, the private JetPlane constructor will be executed first follow by the assign_tail_number
+class JetPlane 
+{
+public:
+    JetPlane() = default;
+    JetPlane(const JetPlane& other);
+    JetPlane(JetPlane&&) = default; 
+}
+//adding default to the declaration to allow the compiler generate the default method, this code disable the compiler generate the copy constructor(by default it will disable the default constructor and move constructor) with default keyword we could restate to let the compiler generate the default method for us 
+//compiler generated method are public inline and non-explicit, you can use the default keyword to generate the method with different access right or you can make the default destructor virtual 
+class JetPlane 
+{
+public:
+    jetPlane() = default;
+
+protected:
+    JetPlane(const JetPlane& other) = default;
+    JetPlane& operator = (const JetPlane) = default;
+};
+
+    + marking methods as uncallable with a delete keyword 
+        * you can also add delete keyword which means the function doesn't have an implementation, it's uncallable and can't be used in any way. first use of it is disable compiler generated method 
+class JetPlane
+{
+public:
+    JetPlane() = default;
+    JetPlane(const JetPlane&) = delete;
+    JetPlane& operator = (const JetPlane&) = delete;
+    JetPlane(JetPlane&&) = default;
+    JetPlane& operator = (JetPlane&&) = default;
+};
+
+//delete keyword can be used with any function, not just those generated by the compiler and not just the class methods. this allowed to disable particular instantiations for a template, can use to disable unwanted conversion, disable heap allocation 
+template<typename T>
+void serialize(const T& obj)
+{
+    cout << obj.to_string();
+};
+//PasswordStore& not allowed to be serialized
+void serialize(const PasswordStore&) = delete;
+
+//disable convert from int but allowed double 
+class Altimeter 
+{
+public:
+    Altimeter(double) {}
+    Altimeter(int) = delete;
+};
+
+//disable heap allocation by mark new operator with delete keyword, then the class can only be created on stack not on the heap 
+class StackOnly
+{
+public:
+    void* operator new(size_t) = delete;
+};
+
+//you can also mark virtual function with delete too, but any other declaration of that function in the class hierarchy will also need to be deleted. deleted function still participates in name lookup 
+//the key aspect of delete is that a deleted function still participated in name lookup 
+    + inheriting constructors from a base class 
+    + control of the default methods, compiler can generated several default methods for a class, if you declare your own copy operation, then the compiler won't generate the move operations, c++ supply a way to explicit request default implementation from the compiler 
+        * constructor 
+        * destructor 
+        * copy constructor 
+        * copy assignment operator 
+        * move operations 
+    + override and final specifiers, allow you to enforce strict rules around inheritance, both of these keywords are context sensitive, so they can be used as identifier outside of class or member function 
+    
+int override = 5; //ok
+int final = 10; //ok 
+        * the override keyword tell the compiler must override the function in the base class 
+struct Base 
+{
+    virtual void f(int){}
+};
+
+struct Derived:public Base 
+{
+    virtual void f(int) override {} //ok 
+    
+    virtual void f(double) override {} //error, it mark override keyword but doesn't override any base class method 
+};
+
+//final keyword which disallowed inherite from the class, mark method as final which means the method can't be override in the derived class 
+struct Base final 
+{
+};
+
+struct Derived: public Base {}; //compile error, can't inherit from final class  
+
+//mark method as final 
+struct Interface 
+{
+    virtual void f() {}
+};
+
+struct Base: public Interface 
+{
+    virtual void f() final {}
+};
+
+struct Derived:public Base 
+{
+    virtual void f() //compile error, can't override a final method 
+};
+    
+    + extended friend declarations, you can now make a friend declaration without the class keyword 
+class A;
+class B;
+class Friend
+{
+    friend class A; //old declarations are still work 
+    friend B; //c++11
+};
+
+//there is a little different in these two kinds of declaration 
+class Amigo 
+{
+    friend class D; //ok: declares new class D
+    friend D; //error, undeclared class D
+};
+
+//typedefs can be declared as friends as long as the class keyword is omitted 
+class Base
+typedef B B2;
+class Amigo 
+{
+    friend B2; //ok 
+};
+    
+//new style of fiend declarations also allow template parameters to be declared as fiends 
+template<typename T, typename U>
+class Ami 
+{
+    friend T; //ok 
+    friend class U; //old syntax still a error, can't use an elaborate specifier in a template 
+};
+
+//if the template instantiation are built in types then the friend keyword are omitted 
+Ami<string, string> rc; //ok 
+Ami<char, string> f; //ok, "friend char" has no effect in the template 
+    
+    + nested class access right, in c++03 members of nested class didn't have special access to members of an enclosing class, in c++11 nested class is member and therefore has the same access rights as other members 
+class JetPlane 
+{
+private:
+    int _flap_angle;
+    
+    class GPSNavigator{};
+    
+    class Autopilot 
+    {
+        GPSNavigator _gps_navigator;    //OK, JetPlane::Autopilot can access JetPlane::GPSNavigator
+        
+        void adjust_flaps(JetPlane& plane, int flap_angle)
+        {
+            plane._flap_angle = flap_angle; //OK, JetPlane autopilot can access JetPlane::_flap_angle
+        }
+    }
+};
+    
+- Uniform initialization, if you have a class with not constructor you could use curly braces to init it. if you have a constructor you have to switch back to parentheses 
+    + one limitation 
+
+class Point 
+{
+    public int _x, _y;
+};
+
+Point p = {10, 20}; //OK the class is consistent 
+    
+    
+class Point 
+{
+public:
+    int _x, _y;
+    Point(int x, int y): _x(x), _y(y){}
+};
+Point p(10, 20); //have to use this instead
+    
+    + other one 
+int values[] = {1,2,3}; //ok 
+
+int* p_values = new int[3]{1,2,3}; //not going to happen 
+
+//you can't also init in constructor initialization list either 
+class Hexagon 
+{
+    int _points[6];
+    Hexagon(){} //no way to initialize _points in initialization list 
+};
+    + c++03 supply several alllowed initialization method 
+int x(10); //directly initialization 
+int x = 20; //copy initialization
+int values[] = {1,2,3}; //brace initialization
+
+    + c++11 extend the brace initialization
+int x {5}; //use it init built in type 
+int *pvalue = new int[3]{1,2,3};
+
+class Point 
+{
+public:
+    int _x, _y;
+    Point(int x, int y): _x(x), _y(y) {}
+};
+
+Point p1 {10, 20}; //it both works for direct init or copy init 
+Point p = {10, 20}; //can be used for classes with user-defined constructors 
+    
+class Hexagon
+{
+    int _points[6];
+    
+    Hexagon(): _points{1,2,3,4,5}{}//also works for member array  
+};
+
+//c++11 also extend the brace initialization ability 
+vector<int> v {1,2,3,4,};
+
+vector<int> extract_core_points(const vector<int>& v)
+{
+    return {v.front(), v[v.size()/2], v.back()};
+}
+
+vector<int> core_points = extract_core_points({1,2,3,4,5});
+//initializing containers like this is done with the help of a standard library template called initializer_list uniform initilization list isn't a pure language feature it actually extends to library code, compiler convert {...} => initializer_list and pass to the constructor 
+- initializer_list, most stl headers already include the initialized list header because the standard constainers provide initializer list constructors so you probably don't need to include the header explicitly 
+#include <initializer_list> 
+
+//an initializer list instance contains an underlying array of values and provides begin end and size methods, you can see it in this example 
+Polygon(initializer_list<int> point_indexes)
+{
+    if(point_indexes.size() < 3)
+    {
+        throw Error("polygons require a 3 or more points");
+    }
+    
+    for_each(point_indexes.begin(), point_indexes.end(), [=](int index){_points.push_back(Lookup::point(index));});
+}
+//the standard library code always passes initializer_list by value as it's a small object 
+
+//there are also overload free-standing begin and end functions. so you could call the for_each call in a slight different way 
+Polygon(initilizer_list<int> point_indexes)
+{
+    for_each(begin(point_indexes), end(point_indexes), [=](int index) {_points.push_back(Lookup::point(index));});
+}
+
+//initilizer list doesn't have a subscript operator, you can use a pointer returned by begin to simulate 
+const int *p = point_indexes.begin();
+cout << p[1] << end;
+
+//any function an use initializer_list as parameter for example standard template library container use it like this 
+vector<int> core_points;
+core_points.insert(core_points.ends(), {7, 9, 11});
+
+- narrowing conversions 
+//c++03 is ok 
+int x[] = {1, 2.5, 3};
+
+//c++11 will complain the code by throw a warning message, which is narrowing conversion on the second value 
+
+//it also present the target type can present all value of the source type, int->float, float->int 
+
+//example of pitfalls
+vector<int> v1(10); //define 10 element of vector int 
+vector<int> v2{10}; //init from the initialize list and copy the element from initialize list to the vector 
+//when initialize list is used, compiler will always pick a constructor take a initialize list first than any other constructor
+
+//second problem is move-only type in your vector, it owns its underlying pointer exclusively 
+vector<unique_ptr<int>> pointers {unique_ptr<int>(new int(1))};  //error, you can't specify a list of unique_ptr via constructor 
+pointers.push_back(unique_ptr<int>(new int(1))); //ok, you can store unique_ptr in a container, you wont' be able to supply a list of them via a constructor. you can use push_back, insert or another method to add elements to the vector 
+
+    + result of interaction between auto and brace delimited lists 
+    
+int x = 5;//define a int
+auto x {5}; //define a initializer_list containing one int  
+    + what you can do with template deductoin context 
+    
+    + the type of a brace delimited list can't be deduced from a plain template argument, you have to specify the type explicitly 
+template<typename T> 
+void f(T);
+
+f({1});         //error 
+f({1,2});       //error 
+
+template<typename T> 
+void f(const vector<T>&);
+f({1,2,3});                 //error 
+f({"Template", "trouble"}); //error 
+
+//solution 
+f(vector<int>{1,2,2,3});
+f<int>({1,2,3});
+
+    + the restriction on their end can also result in somewhat surprising behavior 
+int16_t w {0};
+int16_t y = {w + 1}; //error because the expression may cause narrowing conversion 
+
+//other error example 
+unsinged int x {true? 1: 2}; //OK 
+
+bool flag {true};
+unsigned int y {flag? 1: 2} //ERROR
+
+    + finally you can only initialize the first member of a union using the uniform initialization syntax 
+    
+
+# Move Semantics, Perface Forwarding, constexpr 
+- overview, the main topic is about performance and change some computation time from runtime to compile time 
+    + move semantics 
+    + rvalue references 
+    + perfect forwarding 
+    + constexpr, which expression could be evaluated at the compile time 
+
+- Move semantics introduction. in c++03 there are some scenario you can't avoid redundant copy. it's quite typical to insert temporary objects into an STL container
+//these code result temp object construct copy and destroy, a vector also have copy process when extend 
+vector<string> v;
+
+v.push_back(string("a"));
+v.push_back(string("b"));
+
+//another example is construct a string, each plus operator will create a new temporary string object 
+string s = string("Boeing") + "737" + "-" + "300";
+
+//c++11 supply move semantics which is an addition to copying via copy constructor or copy assignment operator 
+classs JetPlane
+{
+public:
+    JetPlane();
+    
+    JetPlane(const JetPlane&);
+    JetPlane& operator=(const JetPlane&);
+    
+    JetPlane(JetPlane&&); //move copy constructor 
+    JetPlane& operator=(JetPlane&&); //move assignment 
+};
+    
+    + what are the benefits? 
+        * better performance, it allow to choose to perform a shallow copy when appropriate can result in significant performance improvements than all deep copies 
+        
+        * when object have dynamic allocated members where deep copy is copy the object memory and the dynamic allocated resource memory. where move semantics only copy the object's memory 
+        
+        * more clarity of intention in the code 
+Surface3D get_surface(const Latitude& lat, const Longitude& lon)
+{
+    Surface3D surface;
+    //load up millions of points making up the surface 
+    return surface; //as long as Surface3D provide move operations then its no problem to return by value 
+}
+
+        * better support for exclusive resource ownership, now its easy to contain these kinds of object which contain large resources into standard container 
+        
+    + how does this stuff work? compile could distinct move operation and copy operations through the use of rvlaue references in move operations 
+        * reference 
+        rvalue 
+        lvalue 
+        
+- lvalue/rvalue revision, every expression in c++ falls into one of two categories. it's either a lvalue or rvalue. 
+There are two important things about lvalue and rvalue 
+    + they are attributes of expressions, not variables 
+    + l and r don't stand for anything in particular, thing them left and right its helpful 
+    + several rules to determine a value is lvalue or rvalue
+lvalue                                          rvalue 
+has a name                                      doesn't have a name 
+can have address taken                          can't have address taken 
+    &value, the operand must be lvalue 
+example:                                        example:
+    var                                             &(a*b) 
+    *ptr                                            &x++
+    arr[n]                                          &string("abc")
+    ++x
+                                                this pointer is defined as a rvalue which is a 
+                                                    named expression 
+                                                    
+    + rvalues are temporary values that only exist for the duration of one expression 
+    + lvalues persist beyond the boundaries of a single expression 
+    + when function or operator calls are part of an expression, you need to look at the return type to figure out whether the expression is lvalue or rvalue. if the return type is reference, then the standard define it's a lvalue otherwise its a rvalue 
+vector<int> v;
+v[0]; //lvalue, because vector<int>::operator[] returns int& 
+v.size(); //rvalue because vector<int>::size() returns size_t
+
+string s;
+s + "abc"; //rvalue because string::operator+ returns string  
+
+    + const + lvalue/rvalue, both lvalue and rvalue can have a const attribute which result in four types of expression, check the example 
+    
+string f() {return string("F");}
+const string g() {return string("G");}
+JetPlane jet;
+const int max_power_level = 100;
+    
+jet                 //lvalue 
+max_power_level;    //const lvalue 
+f()                 //rvalue 
+g()                 //const rvalue 
+
+//const rvalue is used to call non-const member functions on them 
+cout << jet.model().append("_RR").size() << end; //append modifies the string 
+//model() method return a string 
+
+    + reference initialization, a reference to non-const type can only be initialized with a non-const lvalue, const reference can be initialize with any four types of expression, only the variable of const reference to a const rvalue  is a const lvalue 
+
+JetPlane jet;
+JetPlane& jet_ref = jet; //OK, initialize with a non-const lvalue 
+
+const JetPlane grounded_jet; 
+JetPlane& jet_ref2 = grounded_jet;      //doesn't compile, non-const with const value 
+JetPlane& jet_ref3 = JetPlane();        //doesn't compile, initialize with a non-const rvalue
+
+auto make_const_jet = []() -> const JetPlane{ return JetPlane(); };
+
+JetPlane& jet_ref4 = make_const_jet(); //doesn't compile, initialize with a const rvalue 
+
+//modify the declaration to make the reference initialization works by 
+JetPlane jet;
+const JetPlane& jet_ref = jet; //OK, initialize with a non-const lvalue 
+
+const JetPlane grounded_jet; 
+const JetPlane& jet_ref2 = grounded_jet;      //ok 
+const JetPlane& jet_ref3 = JetPlane();        //ok 
+
+auto make_const_jet = []() -> const JetPlane{ return JetPlane(); }; //return a const rvalue 
+
+const JetPlane& jet_ref4 = make_const_jet(); //ok  
+jet_ref4; //the expression is a lvalue, because it has a name 
+
+- rvalue references declared ith a double ampersand, lvalue reference(&), rvalue reference(&&), the behavior of the two reference types are similarly, must be initialized and can't be reinitialized 
+an expression consisting of a named rvalue reference is an lvalue just like an expression consisting a named lvalue reference 
+    + the different between lvalue reference and rvalue reference is rvalue reference can only be initialized with a non-const rvalue;
+
+//JetPlane() will return a const revalue 
+JetPlane&& jet_ref9 = JetPlane(); //OK
+
+JetPlane jet;
+JetPlane&& jet_ref10 = jet;         //doesn't compile to prevent accidental 
+
+const JetPlane grounded_jet; 
+JetPlane&& jet_ref11 = grouned_jet; //doesn't compile 
+
+JetPlane&& jet_ref12 = make_const_jet(); //doesn't compile 
+    
+    + in c++11 you can have four overload resolution 
+void f(JetPlane& plane);        //lvalue reference 
+void f(const JetPlane& plane);  //lvalue reference 
+void f(JetPlane&& plane);       //rvalue reference 
+void f(const JetPlane&& plane); //rvalue reference 
+
+        * the selected overload has to maintain const correctness, don't bind const value to non-const ref 
+        * bind lvalues to lvalue refs, bind rvalues to rvalue refs if possible 
+        * if rule 2 isn't enough to resolve ambiguity, compiler will chose an overload which preserves const-ness 
+
+JetPlane jet; 
+f(jet);     //f(JetPlane&);
+
+const JetPlane ground_jet;
+f(ground_jet); //f(const JetPlane&)
+
+f(JetPlane());  //f(JetPlane&&)
+
+auto make_const_jet = []() -> const JetPlane {return JetPlane();};
+
+f(make_const_jet()); //f(const JetPlane&&)
+
+//if the fourth overload f(const JetPlane&&) doesn't present then compiler will choose const lvalue overload instead f(const JetPlane&) 
+//this is the rule the compile choose between copy operation and move operation. you also don't required to implement the const rvalue reference. 
+
+- Move semantics implementation, if a constructor take rvalue reference than the compile seems it a move operation if it is a lvalue reference then it is a copy operation 
+A(const A& rhs); //lvalues and const rvalues are pass to the copy constructor 
+A(A&& rhs);       //non-const rvalues pass to the move constructor 
+
+    + try a class doesn't have move operator 
+struct A
+{
+    A()
+    {
+        cout << "A's constructor" << endl; 
+    }
+    
+    A(const A& rhs)
+    {
+        cout << "A's copy constructor" << endl;
+    };
+}
+
+vector<A> v;
+cout << "==> push_back A()" << endl;
+v.push_back(A());
+cout << "==> push_back A()" << endl;
+v.push_back(A());
+
+//the output will be 
+==> push_back A()
+A's constructor 
+A's copy construtor 
+==> push_back A()
+A's constructor 
+A's copy constructor 
+A's copy constructor 
+//inorder to added the second object the copy constructor has to be invoked twice, this is due to reallocation performed when vector growth 
+
+    + try add a move constructor to A 
+A(A&& rhs) noexcept //noexcept tell the compile not throw exception
+{
+    cout << "A's move constructor" << endl; 
+}
+//the output of the same operation will be 
+==> push_back A()
+A's constructor 
+A's move construtor 
+==> push_back A()
+A's constructor 
+A's move constructor 
+A's move constructor 
+//the gcc implemented vector are prefer to pick the move constructor than copy constructor 
+// you should implement the move constructor and move assignment whenever possible 
+    + c++ standard provision for the compiler to generate move operations automatically but with these requirements 
+        * no user-declared copy constructor or copy assignment operator 
+        * no user-declared move assignment operator 
+        * no user-declared destructor 
+        * the move constructor wouldn't be implicitly marked as deleted 
+    + what do you need to write in your move operations, you need to provide move member by member 
+    
+//for example a class have three member, double, int* and string, move operation should be implemented as 
+class A 
+{
+    double _d;
+    int* _p;
+    string _str;
+public:
+    A(A&& rhs): _d(rhs._d), _p(rhs._p), _str(move(rhs._str))
+    {
+        rhs._p = nullptr;
+        rhs._str.clear(); //clean the source value because it could be an lvalue which it's being explicitly move from move(lvalue)
+    }
+    
+    A& operator=(A&& rhs)
+    {
+        delete _p;
+        _d = rhs._p;
+        _str = move(rhs._str); //careful, required the move function, a named rvalue reference which make it to a lvalue. so directly assignment will call the copy constructor not the move constructor 
+        rhs._p = nullptr;
+        rhs._str.clear();
+        
+        return *this;
+    }
+};
+//for built-in types we just need to assign the value, for the heap object required to delete the previous allocated value and assign the new 
+    
+    + move semantics not reserved to constructors and assignment operators, you can also provide move overloads for setters in a class 
+    
+void JetPlane::set_model(const string& model)
+{
+    _model = model;
+}
+
+void JetPlane::set_model(string&& model)
+{
+    //careful, model is a named rvalue ref so it's an lvalue; use std::mvoe to force a move operation 
+    _model = move(model);
+    model.clear();
+}
+    
+string model("Airbus 320");
+JetPlane jet;
+
+jet.set_model(model);       //copy overload used, call function will lvalue 
+jet.set_model(string("Airbus 320")); //move overload used 
+    
+- std::move, the move function is used to tell the compiler to choose a move overload when you have a named rvalue reference or a lvalue you known it isn't going to be used anymore. the std::move convert a lvalue into a rvalue 
+instead of move you can use static_cast<T&&> to convert a lvalue to a rvalue reference type. but move is shorter and clear 
+
+- move semantics guidelines 
+    + rvalue references to const are legal but they are not useful in the move semantics
+auto make_const_jet = []() -> const JetPlane {return JetPlane();};
+
+JetPlane jet(make_const_jet()); //copy constructor invoked 
+
+    + don't return const object from your functions, which will make the compiler select the copy operation instead of the move operation 
+    const object can't be move from because move required modified the src object 
+    
+    const T foo(); //not for move
+    
+    + don't define const rvalue reference parameter for a function, because it's not able to move it either 
+    
+    T foo(const T1&&); //not for move 
+    
+    + when you implement the move semantics in a class you need to provide move semantics operations in the derived class. you need to be careful 
+    
+    Derived(Derived&& rhs): Base(rhs) {} //the Base(rhs) will call the copy constructor of the base class because rhs is a named rvalue reference which make it a lvalue 
+    
+    Derived(Derived&& rhs): Base(move(rhs)) {} //you need to help the compiler to known you required call the move constructor 
+    
+    whenever you want to call a move operation, you need to make sure the arguments is a rvalue 
+    
+    B(B&& rhs)
+    {
+        *this = rhs; //wrong, invokes the copy assignement operator 
+    }
+    
+    B(B&& rhs)
+    {
+        *this = move(rhs); //call move 
+    }
+    
+    + always provide check assignment logic for move operations to prevent call the move operation on the same object 
+    
+    B& operator=(B&& rhs)
+    {
+        if(this == &rhs)
+            return *this;
+    
+        _p = rhs._p;
+        rhs._p = nullptr;
+        return *this;
+    }
+    
+    B b;
+    b = move(b);
+    *b._p; //without the reference check will be undefined bhevaior to call the pointer _p 
+    
+    //copy constructor don't required to do this because the source is left intact 
+    
+    + you shouldn't declare the move constructor explicit because it will result in a copy constructor being chosen instead 
+    some STL container and function such as unique_ptr, sort algorithm, swap method required the object is move constructible 
+    
+    explicit A(A&&); //not for move because it required the move constructor being called explicitly 
+    
+- reference qualifiers for member functions, the function is distinguish by the reference qualifier in the function declaration 
+struct A
+{
+    bool run() const& {return false;} //lvalue overload 
+    bool run() && {return true;}  //rvalue overload
+};
+
+A a;
+a.run(); //calls run() const& 
+A().run(); //calls run() && 
+
+//when you call method on a lvalue the the lvalue overload is called, if you call the function on a rvalue then the rvalue overload is called 
+//the overload are selected based on the implicit *this parameter 
+    
+    + we could use this feature to optimize our member function call 
+Counter operator+(const Counter& other) const& 
+{
+    Counter c(*this);   //take a copy of this
+    c += other;
+    return c;
+}
+    
+Counter operator+(const Counter& other) &&
+{
+    *this += other;     //the second version can modify the object in place and return it because the object is rvalue, this improve performance when operator + is used with temporary object 
+    return move(this);
+}
+
+    + the feature also make the custom type more like built-in type 
+struct Curious 
+{
+    int _count = 10;
+    Curious& operator ++() {++_count; return *this;}
+    Curious* operator &() {return this;}
+};
+
+Curious() = Curious();      //assign to rvalue 
+Curious& c = ++ Curious();  //c is a dangling reference 
+&Curious();                 //address of rvalue 
+ 
+//when you add reference qualifier to the definition all of the previous call will get compile error 
+struct Curious
+{
+    int _count = 10;
+    Curious& operator ++() & {++_count; return *this;}
+    Curious* operator &() & {return this;}
+};
+
+    + don't mix with non-reference qualifier overload with reference qualifier overload 
+struct A
+{
+    bool run() const {return false;}
+    bool run() && {return true;} //error, the compiler will complain about the ambiguity
+};
+
+- move only types, it also could help express the semantics of ownership, not only for the type which is movable but also benifit the exclude ownership object 
+
+class MoveOnly 
+{
+    int* _p;
+    
+public: 
+    MoveOnly(): _p(new int(10)){}
+    ~MoveOnly() {delete _p;}
+    
+    MoveOnly(const MoveOnly& rhs) = deleted;
+    MoveOnly& operator=(const MoveOnly& rhs) = deleted;
+    
+    MoveOnly(MoveOnly&& rhs)
+    {
+        *this = move(rhs);
+    }
+    
+    MoveOnly& operator=(MoveOnly&& rhs)
+    {
+        if(this == &rhs)
+        {
+            return *this;
+        }
+        
+        _p = this._p;
+        rhs._p = nullptr;
+        return *this;
+    }
+};
+
+MoveOnly a;
+MoveOnly b(); //copying doesn't compile 
+MoveOnly c(move(a));    //OK 
+MoveOnly d;
+d = move(b);        //OK 
+ 
+- Perfect forwarding, the move semantics and variadic template also solve the lognstanding problem of transparently forwarding function arguments 
+f(a1, ..., aN)
+{
+    g(a1, ..., aN);
+}
+
+//the problem raise when a forwarding arguments to a function via a template 
+
+//recall the problem with a unique_ptr
+unique_ptr<vector<Point>> p_points(new vector<Point>(10));
+
+//lets implement the make_unique function by ourself 
+template<typename T, typename Arg>
+unique_ptr<T> make_unique(Arg arg)  
+//the parameter is a copy it's not fit for unique_ptr
+{
+    return unique_ptr<T>(new T(arg));
+}
+
+template<typename T, typename Arg>
+unique_ptr<T> make_unique(Arg& arg)
+//change the parameter to reference but it still not fit for rvalue 
+{
+    return unique_ptr<T>(new T(arg));
+}
+
+make_unique<vector<int>>(10);   //can't convert argument from int to int& 
+
+//to fit for this requirement we need to supply additional overload to take const parameter 
+tempalte<typename T, typename Arg>
+unique_ptr<T> make_unique(const Arg& arg)
+{
+    return unique_ptr<T>(new T(arg));
+}
+
+//then 
+int a = 10;
+make_unique<vector<int>>(a)     //ok, Arg& overload 
+make_unique<vector<int>>(10);   //ok, const Arg& overload 
+
+//this solution fit for one arguments but not fit for multiple arguments, for example handle two arguments requires four overloads, three arguments requires eight overload 
+
+//c++11 slove this issue by rvalue reference and argument forwarding forward<type>(parameter);
+template<typename T, typename T1, typename T2>
+unique_ptr<T> make_unique(T1&& arg1, T2&& arg2)
+{
+    return unique_ptr<T>(new T(forward<T1>(arg1), forward<T2>(arg2)));
+}
+
+//use tempalte parameter pack to extend it to arbitrary arguments 
+template<typename T, typename... Args>
+unique_ptr make_unique(Args&&... args)
+{
+    return unique_ptr(new T(forward<Args>(args)...));
+}
+//the forward template is part of the standard library which is define in the utility header. implement of forward relies on two new concepts, template argument deduction rules for rvalue and reference collapsing 
+
+    + template argument deduction rule, reference http://en.cppreference.com/w/cpp/language/template_argument_deduction
+In order to instantiate a function template, every template argument must be known, but not every template argument has to be specified. When possible, the compiler will deduce the missing template arguments from the function arguments. This occurs when a function call is attempted, when an address of a function template is taken, and in some other contexts: 
+
+template<typename To, typename From> To convert(From f);
+ 
+void g(double d) 
+{
+    int i = convert<int>(d); // calls convert<int,double>(double)
+    char c = convert<char>(d); // calls convert<char,double>(double)
+    int(*ptr)(float) = convert; // instantiates convert<int, float>(float)
+}
+
+- reference collapsing forward and move templates, c++03 don't allowed reference to reference 
+Point p1(10,10);
+using PointRef = Point&;
+PointRef& p2 = p1;  //won't compile in c++03 
+
+    + c++11 changes the behavior, double reference collapse into single reference 
+A& &    becomes     A& 
+A& &&   becomes     A&
+A&& &   becomes     A&
+A&& &&  becomes     A&&
+
+    + rvalue reference and templates interact in a particular way, if you have a template like this, the following rules apply 
+template<typename T> void f(T&&);
+
+f(lvalue A) => T is A& => f(A& &&) => f(A&)
+f(rvalue A) => T is A => f(A&&)
+//in other words lvalue pass to lvalue overload and rvalue pass to rvalue overload 
+
+    + the complete code and function relies on the forward template like this 
+template<class T> 
+T&& forward(typename remove_reference<T>::type& arg)
+{
+    //forward arg, given explicit specified type parameter 
+    return static_cast<T&&>(arg);
+}
+
+template<typename T> 
+struct remove_reference 
+{
+    typedef T type;
+};
+
+template<typename T>
+struct remove_reference<T&>
+{
+    typedef T type; //the memeber typedef is always the type without the reference qualifer 
+};
+
+template<typename T> 
+struct remove_reference<T&&>
+{
+    typedef T type;
+};
+
+    + the reason why forward could be call like this, is template argument deduction is used. when forward is passed an lvalue a rvalue reference to T would turn to lvalue reference and we don't want that to happen, so we required the remove_reference template to keep it as a rvalue reference 
+template<typename T>
+T&& forward(T&& arg)
+{
+    return arg;
+}
+
+    + let's go back to the make_unique gets called with an lvalue 
+string model("Boeing 787");
+auto sp = make_unique<JetPlane>(model);
+
+//it result in this following instantiation 
+//showing the uncollapse reference code here 
+unique_ptr<JetPlane> make_unique(JetPlane& && arg1)
+{
+    return unique_ptr<JetPlane>(new JetPlane(forward<JetPlane&>(arg1)));
+}
+
+JetPlane& && forward<remove_reference<JetPlane&>::type& arg)
+{
+    return (JetPlane& &&)arg;
+}
+
+//apply the reference collapse rule, the the functon is called with lvalue reference which is what we need 
+unique_ptr<JetPlane> make_unique(JetPlane& arg1)
+{
+    return unique_ptr<JetPlane>(new JetPlane(forward<JetPlane&>(arg1)));
+}
+
+JetPlane& forward<remove_reference<JetPlane&>::type& arg)
+{
+    return (JetPlane&)arg;
+}
+
+    + when make_unique called with an rvalue reference then it will be called with a collapsed rvalue reference function 
+    
+    + let's check the std::move function too the implementation of move function relies on the same rule of perfect forwarding 
+template<class T> 
+typename remove_reference<T>::type&& move(T&& arg)
+{
+    return static_cast<typename remove_reference<T>::type&&>(arg);
+}
+
+//when move is called with an lvalue argument 
+int a = 10;
+move(a);
+
+//result in these template instantiation 
+remove_reference<int&>::type&& move(int& && arg)
+{
+    return static_cast<remove_reference<int&>::type&&>(arg);
+}
+
+//after collapse reference and substitution reference this equal to call 
+int&& move(int& arg)
+{
+    return (int&&)arg;
+}
+
+//for rvalue reference this instantiation is made 
+remove_reference<int>::type&& move(int&& arg)
+{
+    return static_cast<remove_reference<int>::type&&>(arg);
+}
+
+//the collapse reference function it turn to 
+int&& move(int&& arg)
+{
+    return (int&&) arg;
+}
+
+//move function return a rvalue reference whether pass a lvalue or rvalue 
+- constexpr mechanism, is a new keyword in c++ an abbreviation for constant expression, it can be apply to variable and functions to tell the compiler that they may be evaluated at compile time. advantage 
+    + ensure constant initialization at compile time 
+    + constant expression can be used in case labels etc. 
+    + guaranteed not to causes race conditions 
+    
+    + what can be in const expression, it is a literal of 
+        * an integer type, 
+        * floating point type, 
+        * an enumerator. 
+        * in some instances you can use addresses too 
+        * complex const, by creating your own classes with instantiation usable in constant expressions by calling constexpr functions. the result can be assign to constexpr variables. rules for constexpr variables 
+        must be initialize when they declare 
+        can only be initiliazed with a literal value, constexpr value or return value of a constexpre function 
+        
+constexpr auto c_dimensions = 3;
+constexpr auto c_threshold = 42.5;
+constexpr auto c_name = "constexpr evaluator";
+
+//by the way constexpr implies const but not the other way around, a constexpre variable can't always be initialized with a const. it can only be initialized with a const variable if that variable was itself initialized with a constant expression 
+auto a = 10;
+const auto b = a; //be is initialized with a variable a 
+constexpr auto d = b;//compile error 
+
+const auto c = 10; //c is initialized with a constexpr 
+constexpr auto e = c; //compile ok 
+
+- constexpr functions & literal types, if a function is marked with constexpr it means that it can be evaluated at compile time as long as all its arguments are constant expressions. the body of the function must only have a single return statement  
+...foo(...)
+{
+    return statement; //only one this means you have to use the ternary operator 
+}
+
+in addition to the return statement, you can only use things like using statements and typedefs as well as static assert these are evaluated at compile time 
+
+if you want to mark a member function for compile time, it can't be virtual 
+
+    + example of constexpr 
+constexpr long fibonacci(int n)
+{
+    return n < 1 ? -1 : (n==1 || n==2 ? 1:fibonaci(n-1) + fibonacci(n-2));
+};
+
+//use the function 
+enum Fibonacci 
+{
+    Ninth = fibonacci(9),
+    Tenth = fibonacci(10)
+};
+
+auto a = 4, b = 6;
+cout << fibonacci(a + b) << endl; //outputs 55 
+
+    + constexpr can be a template as well 
+    
+template<typename T> 
+constexpr auto square(const T& v)->decltype(v*v)
+{
+    return v*v;
+}
+
+    + contexpr function can't modiffy their arguments, so passing arguments by argument is off limits. how every it can still take const reference arguments. the return type nad the parameters must conform to the requirements for literal types 
+    
+    + defination of literay types 
+    void 
+    scalar types 
+    reference typs referring to literal types 
+    array of literal types 
+    classes with the following requirements 
+        * trivial destructor 
+        * all non-static data members and base classes also literal types 
+        * it's an aggregate type, or has at least one constexpr constructor which isn't a copy or move constructor 
+        * constexpr constructor also have to follow some rules, similar for constexpr function except the return statements 
+        type have empty body 
+        must initialized none static data members 
+        initialization must be done with constant expressions both for members and for base class constructors 
+        it implies that all the other constructors involved must also be constexpr 
+        
+        * example in STL for complex class 
+class Complex 
+{
+    double _real, _imaginary;
+public:
+    constexpr Complex(double real, double imaginary):_real(real), _imaginary(imaginary)
+    {}
+    
+    constexpr double real() const {return _real;}
+    constexpr double imaginary() const {return _imaginary;}
+    constexpr Complex operator+(const Complex& lhs, const Complex& rhs)
+    {
+        return Complex(lhs.real() + rhs.real(), lhs.imaginary() + rhs.imaginary());
+    }
+};
+
+//with this class we could start performing operations on instance of complex at compile time 
+constexpr Complex c1(1, 2);
+constexpr Complex c2(3, 4);
+constexpr Complex c3 = c1 + 2;
+
+//there are also examples for constexpr for simple operations on arrays and strings 
+    + a couple more notes on constexpr, when functions are evaluated at compile the compiler doesn't evalue the conditional branches which aren't taken but in compile time the branch will still be taken. the functions and constructor are implicit inline 
+//constexpr is a replace for template meta programming which make the compile time almost the same 
+- summary 
+ 
+ 
+# Range-based for nullptr, enums, literals, static_assert, noexcept 
+- overview 
+    + range-based for loop, which allowed to iterate over containers conveniently 
+    + nullptr which is a improved alternative to NULL 
+    + enum changes, new features 
+    + unicode support, raw string, literals, user defined literals
+    + compile time assertions with static_assert 
+    + exception specifications with noexcept 
+    
+- range-based for loop, supports the concept of arranged defined by begin and end functions 
+vector<int> v;
+for(auto elem: v)
+    cout << elem << endl;
+    
+for(auto& elem: v)
+    elem *= 2
+    
+    + const and voliative qualifiers are also allowed for the iterating variable, if you want you can specify the type of the iterating variable explicitly 
+    + explicit conversion aren't allowed when initializing the loop variable 
+    + specicial handling for built-in arrays under the hood 
+int arr[] = {10, 20, 30, 40};
+for(auto elem: arr)
+    cout << elem << endl;
+    
+//the initializer list which is not a STL container but have begin end member function so it could works with the for range loop.
+//if member version aren't available then non-member functions which return appropriate iterators are looked up 
+class MyContainer 
+{
+    list<int> _values {111,222,333};
+public:
+    friend list<int>::iterator begin(MyContainer& cont);
+    friend list<int>::iterator end(MyContainer& cont);
+};
+
+list<int>::iterator begin(MyContainer& cont)
+{
+    return cont._values.begin();
+}
+
+list<int>::iterator end(MyContainer& cont)
+{
+    return cont._values.end();
+}
+
+//then we could use the custom contain in for range loop 
+MyContainer cont;
+for(auto& elem: cont)
+    cout << elem << endl;
+    
+    + for range loop is equivalent to the original for loop 
+for(auto iter = seq.begin(), seq_end = seq.end(); iter != end; ++iter)
+{
+    elem_decal = *iter;
+    statement;
+}
+
+//if member begin end is not available then use 
+for(auto iter = begin(seq), seq_end = end(seq); iter 1= seq_end; ++iter)
+{
+    elem_decl = *iter;
+    statement;
+}
+
+- null pointer, nullptr is a new keyword for NULL pointers, nullptr is a rvalue which has the type nullptr_t, which is defined in terms of nullptr 
+namespace std 
+{
+    typedef decltype(nullptr) nullptr_t;
+}
+
+//interoperate 0 and NULL with nullptr 
+int* p = nullptr;
+int* p1 = NULL;
+int* p2 = 0;
+p1 == p; //true 
+p2 == p; //true 
+
+//nullptr convertible to any pointer type or member pointer type and also to bool, delete nullptr has no effect. STL is updated to use nullptr instead of NULL, the default initialization to pointer is nullptr 
+int* p{}; //p is set to nullptr 
+    + advantage of nullptr 
+    
+bool ambiguous(int)
+{
+    return false;
+}
+
+bool ambiguous(int*)
+{
+    return true;
+}
+
+ambiguous(NULL); //returns false, ambiguous(int) overload chosen 
+ambiguous(nullptr); //return true; ambiguous(int*) chosen 
+
+- enum changes 
+    + strongly typed enums, in order to improve type safety 
+    + forward declarations for enums to reduce coupling and improve compilation times 
+//flight_board.h
+enum class AirportCode; //forward declared enum 
+
+struct FlightBoard
+{
+    //then we could use the AirportCode enum in the following codes 
+    void print_airport_name(AirportCode code)
+    {}
+    
+    void print_flight(AirportCode code, const string& flight)
+    {
+        //...
+        print_airport_name(code);
+    }
+};
+
+//forward declaration also support nested import
+//navigator.h 
+struct Navigator 
+{
+    Navigator();
+private:
+    enum CompassPoint: int;     //forward declaration form the navigator.cpp when include the header
+    CompassPoint _compass_point; 
+};
+
+//navigator.cpp 
+#include navigator.h 
+enum Navigator::CompassPoint: int {North, Sourth, East, West};
+
+Navigator::Navigator(): _compass_point(North)
+{}
+
+        * forward declaration rules
+        has to include the type (implicitly or explicitly)
+        the underlying type has to match between all declaration and definition 
+        declarations can't change form scoped to unscoped enum, or vice versa 
+        
+        examples 
+enum E: short; //ok 
+enum F; //error underlying type is required 
+enum class G:short; //ok and G is scoped enum 
+enum class H; //ok underlying type for scoped enum is int by default 
+
+enum E: short; //ok redecaration 
+enum class G:short; //ok redecaration
+enum class H; //ok redecaration
+enum class H: int; //ok redecaration with same underlying type  
+
+enum class E: short; //error can't change from unscoped to scoped 
+enum G: short; //error can't change from scoped to unscopded 
+
+enum E: int; //error different underlying type 
+enum class G; //error different underlying type 
+enum class H: short; //error different underlying type 
+enum class H {}; //ok this redecaration rather than a definition
+    
+    + scoped enums, if you use enum class instead of enum the element of enum will not be expose to the outside of the scope. scope enum will not automatically convert to integer either 
+    
+enum class Proportion 
+{
+    OneHalf;
+    OneThird;
+    OneQuater
+};
+
+Proportion pop = OneThird;  //error 
+auto prop = Proportion::OneThird;       //ok 
+if(prop == 1) //error 
+    ...
+  
+    + specify the underlying type for the enum, non-integral type is not fit for underlying type. this is fit for cross platform compatibility. it will also save memory. scoped enum have int by default 
+enum Direction: unsigned short 
+{
+    South,
+    West,
+    East,
+    North
+};
+cout << sizeof(North) << endl; //outputs sizeof(unsigned short)
+
+- compile time assertions which is checked at compile time, which is different from the runtime assertion. compile time assertion is implemented with template meta programming and expression which could be evaluated at the compile time. for example narrow down the acceptable time in your template defination 
+    + preconditions on template type parameters 
+    + validate non-type template parameters 
+    + enforce requirements for type sizes 
+    + compile time assertions are performed with static_assert 
+int int_magic(int a, int b)
+{
+    static_assert(sizeof(int) <= 4, "int must be no more than 4 bytes");
+}
+
+    + checking preconditions on template parameters 
+template<unsigned int dimentions>
+struct Matrix
+{
+    Matrix()
+    {
+        static_assert(dimentions <= 3, "dimensions must not exceed 3");
+    }
+};
+Matrix<3> m3; //ok 
+Matrix<4> m4; //error 
+    
+    + you can also use static_assert to enforce the behavior of type template parameters 
+struct Base
+{
+    virtual ~Base();
+};
+
+template<typename T> 
+class Derived:public T 
+{
+    static_assert(has_virtual_destructor<T>::value, "the base class must have a virtual destructor");
+};
+
+//static_assert can be place anywhere is allowed, not just inside a function body 
+
+Derived<Base> d;    //ok 
+Derived<string> s; //triggers static_assert    
+    
+- unicode support & new literals 
+    + unicode literals, add three new string prefixes 
+u8"utf-8: \u00bd"
+u"utf-16: \uA654"
+U"utf-32: \0003287f"
+
+different literals are stored in arrays of different character types 
+prefix      character type      string type 
+u8          char                string 
+u           char16_t            u16string 
+U           char32_t            u32string 
+
+you can specify unicode symbols by their code and string literals by prefixing the code with backslash u or U 
+string s(u8"\u00BD \u00B5s"); //the string represents 1/2 __mu__s, the standard is ISO/IEC 10646, lower case is short hand for U 
+
+prefix      character type      example literal 
+u           char16_t            u'\u160E'
+U           char32_t            U'\U0000160E'
+you can't use u8 prefix with a character literal 
+
+without the standard support standard library doesn't support unicode 
+    + raw literals, don't allowed special characters, such as don't replace the \n to line switch, they are delimited with parenthese enclosed in double quotes 
+cout << R"(use "\n" for newlines)" << endl;
+
+r prefix can used with all types of string literal 
+R"No newline \n"
+LR"No newline \n"
+u8R"No newline \n"
+uR"No newline \n"
+UR"No newline \n"
+
+raw literals is good for define regex expression only the escape for the regular expression escaping is necessary 
+R"("\w+\\\w+")"
+
+in c++03 you have to do 
+"\"\\w+\\\\\\w+\""
+
+Raw literal is handy for command string two 
+R"(grep -r "\.js" *)"
+
+raw literal still contain a special character combination, )" this is a problem if your string contains this sequence of character. this could be bypass by custom delimiter 
+cout << R"!!(A raw literal is delimited with "( )")!!"  << endl; 
+
+raw literal is support contain new line 
+
+R"(multiline 
+literal)"   ==equal to ==> "multiline\nliteral"
+
+    + user defined literals with custom suffixes, these are marked with suffixes instead of prefixes by analogy with suffixes for number literals. this allow you to take user define types or units to literals then this make your code more readable 
+1.2_i; //express complex numbers 
+10_km; //express units 
+
+widget.set_height(150_px);
+widget.set_width(80_percent);
+
+//this kinds of literals is made possible by litral operators 
+//create a "complex" instance from an imaginary literal 
+//compiler will pass the literal number to the function 
+constexpr complex<double> operator "" _i(long double d)
+{
+    return {0, d};
+}
+//there has a space between quotes and the suffix, but there can't be any spaces between the quotes, then the operator transforms a literal suffix with _i into an instance of the standard complex class, the real part to 0 and imaginary part to the argument it's supplied 
+//user defined literal have to start with a underscore. all the names which don't start with underscore are reserved for future use in the standard 
+//you can't redefine built in literal 
+    + user define literal can be added to four kinds of literals
+        * integer literals, compiler will look for 
+        operator "" _suffix(unsigned long long)
+        operator "" _suffix(const char*)
+        
+        template<char... Digits>
+        operator "" _suffix()
+        
+        * floating point literals 
+        operator "" _suffix(long double)
+        operator "" _suffix(const char*)
+        
+        template<char... Digits>
+        operator "" _suffix()
+        
+        * character literals 
+        operator "" _suffix(char)
+        operator "" _suffix(wchart_t)
+        operator "" _suffix(char16_t)
+        operator "" _suffix(char32_t)
+        
+        * string literals 
+        operator "" _suffix(const char*)
+        operator "" _suffix(const wchar_t*)
+        operator "" _suffix(const char16_t*)
+        operator "" _suffix(const char32_t*)
+        
+    literal function behave liken any function except they don't have c linkage 
+        
+- literal operators for integers 
+constexpr Distance operator "" _au(unsigned long long n)
+{
+    return Distance 
+}
+
+constexpr double radius = (30_au).to_light_years();
+cout << "Neptune orbit radius:" << radius << "light years" << endl;
+
+//when literal item combine with method call it requires to wrapper in a parentheses
+
+    + implement binary literal 
+//if you want to access the character of the literal instead of the numeric value 
+unsigned long long operator "" _b(const char* digits)
+{
+    if(strlen(digits) > numeric_limits<unsigned long long>::digits)
+        throw runtime_error("Too manydigits in binary literal");
+        
+    unsigned long long res = 0;
+    auto digit = digits;
+    while(*digit != '\0')
+    {
+        if(*digit != '\0')
+            throw runtime_error("only 1 and 0 allowed in binary literals");
+            
+        res = (*digit - '0') + (res << 1);
+        ++digit;
+    }
+    return res;
+}
+//this kind of literal operator is called raw literal operator with this operator you could write things 
+
+101_b; //equals to 5
+-1011_b //equals -11
+//we don't have to handle the minus because it is a unary operator applied to the integer value returned by the custom operator 
+123_b; //will throw exception 
+    
+    + literal operator template which allow you to use template meta programming to handle the characters in the literal 
+template<char... Digits>
+constexpr unsigned long long operator "" _b()
+{
+    return Binary<Digits...>::value;
+}
+
+template <char... Digits>
+struct Binary;
+
+template<char digit, char... Digits>
+struct Binary<digit, Digits...>
+{
+    static_assert(sizeof...(Digits) +1 <= numeric_limits<unsigned long long>::digits, "Too many digits in binary literal");
+    
+    static_assert(digit == '1' || digit == '0', "only 1 and 0 allowed in binary literals");
+    
+    static constexpr unsigned long long value = ((digit - '0') << sizeof...(Digits)) + Binary<Digits...>::value;
+};
+
+//this is used to stop the recursion when their are not more digit to process 
+template<>
+struct Binary<>
+{
+    static constexpr unsigned long long value = 0;
+};
+//variadic template which could recursively process the digits, the parameters are passed in a parameter pack
+//all the calculate is happened in the compile time, so the literal can be used with constexpr
+constexpr auto value = 101_b;
+
+    + character and string literal operators 
+character literals 
+operator "" _suffix(char)
+operator "" _suffix(wchar_t)
+operator "" _suffix(char16_t)
+operator "" _suffix(char32_t)
+
+string literals 
+operator "" _suffix(const char*)
+operator "" _suffix(const wchar_t*)
+operator "" _suffix(const char16_t*)
+operator "" _suffix(const char32_t*)
+
+//example for string literal, the size_t argument conveniently allows the compiler to distinguish a string literal operator from a number literal operator which receives the digits as a string 
+u16string operator "" _reverse(const char16_t* str, size_t len)
+{
+    u16string s(str);
+    reverse(s.begin(), s.end());
+    return s;
+}
+
+uR"(two\nlines)"_reverse; //yields "seniln\owt"
+//\n will be convert to n\
+
+u"the quick brown fox"
+"jumps over a lazy dog"
+"and back in reverse"_reverse;
+//if string literals are concatenated, you only need to use the user-defined literal suffix on one of them 
+
+- exception specifications, the introduction of the noexcept specifier is a byproduct of add and move semantics to the language 
+    + byproduct of the introduction of move semantics 
+    + noexcept specifier means function should not throw 
+    + dynamic exception specification are deprecated 
+    + compiler generated functions are noexcept if all the operations they directly invoke are noexcept, it allows STL container to choose move operations over copy and therefore have better performance 
+    + delete operators and user defined destructors are noexcept unless explicitly specified 
+    + you can add any noexcept for any function you write 
+constexpr long fibonacci(int n) noexcept 
+{
+    return n < 1? -1: (n==1 || n==2? 1:fibonacci(n-1) + fibonacci(n-2));
+};
+//noexcept tell the compiler this function will not throw exception, if it does compiler will immediately call std::terminate 
+
+    + you can use noexcept with a constant expression which evaluate true or false  
+template<typename T> 
+auto square(const T& v) noexcept(is_fundamental<T>::value) -> decltype(v * v)
+{
+    return v * v;
+}
+//noexcept without a constant expression is equivalent to noexcept true  
+
+~A() noexcept(false); //override the default function exception specification 
+
+    + noexcept operator
+template<typename T> 
+auto square(const T& v) noexcept(noexcept(v*v)) -> decltype(v * v)
+{
+    return v * v;
+}
+//the first noexcet is a exception specifier, the second noexcept is the operator keyword, the operator analyzes the expression and returns true if it shouldn't throw exceptions and false otherwise. if the multiplication operation doesn't throw exceptions, then this function is also noexcept true;
+    + the noexcept operator is similar to decltype in that it's the operand isn't evalued 
+    + the analysis is limited to checking that all operations are noexcept 
+    the compiler looks at all the operations in the expression if all of their exception specifications are noexcept true, then it yields true. it doesn't analyze the actual definitions of the operations though 
+    + guidlines to when to use noexcept 
+        * you are not likely to use it a lot 
+        * prefer to use it with small functions which are easy to analyze 
+        * avoid noexcept if your function has preconditions 
+        * move constructors and move assignment operators should be noexcept if possible, it allows better performance as STL containers can choose to use move operations 
+        
+    + more notes, a pointer to a noexcept function can be declared noexcept 
+long (*p_fib)(int) = fibonacci; //OK, but noexcept is lost 
+long (*p_fib2)(int) noexcept = fibonacci; //instead, noexcept can be preserved 
+
+    + noexcept should not appear in type aliases 
+using Func = void(const string&) noexcept; //error 
+
+- template meta programming example 
+template <int n>
+struct factorial {
+	enum { value = n * factorial<n - 1>::value };
+};
+ 
+template <>
+struct factorial<0> {
+	enum { value = 1 };
+};
+ 
+// Usage examples:
+// factorial<0>::value would yield 1;
+// factorial<4>::value would yield 24.
+//http://en.wikipedia.org/wiki/Template_metaprogramming
+
+    + a length-n vector addition, the compiler could unroll the for loop because the template parameter length is a constant at compile time 
+template <int length>
+Vector<length>& Vector<length>::operator+=(const Vector<length>& rhs) 
+{
+    for (int i = 0; i < length; ++i)
+        value[i] += rhs.value[i];
+    return *this;
+}
+//when the compiler instantiates the function template defined above, the following code may be produced. However, take caution as this may cause code bloat
+template <>
+Vector<2>& Vector<2>::operator+=(const Vector<2>& rhs) 
+{
+    value[0] += rhs.value[0];
+    value[1] += rhs.value[1];
+    return *this;
+}
+
+- summary 
+    + range-baed for loop 
+    + nullptr
+    + enum features 
+    + unicode support and new literals 
+    + compile time assertions and exception specifications 
+
+
+# more language features, other plantforms and the future of c++ 
+- overview 
+    + explicit conversion operators 
+    + inline namespaces 
+    + alignment keywords 
+    + new capability of sizeof 
+    + new memory model 
+    + thread local storage 
+    + generalized attributes 
+    + updated definition of POD types 
+    + changes to unions 
+    + capability with C99 
+    + deprecated and removed features 
+    + c++ support in other compilers 
+    + features planned for c++ 14 
+    
+- explicit conversion operators, to prevent unwanted conversion. for example STD template have a 
+explicit operator bool() const noexcept; 
+//this operator return true if the function object have a target 
+
+function<void(int, int)> f1, f2;;
+auto sum = f1 + f2; //error 
+bool flag = f1 //error, implicit conversion is disallowed by the operator definition 
+
+//operator bool gets sepcial treatment from the compiler and the explicit specifier is ignore where it's consider safe to do so. safe context are conditional statement and the turnery operator 
+
+if(f1)
+    f1(10, 20);
+
+//the explicit specifier will be enforce when checking for equality or inequality though 
+
+- inline namespace provide a way to implement version in libraries 
+
+namespace API 
+{
+    //inline means its contents become available in the outer namespace API, so the caller don't required to specify the namespace v2
+    inline namespace v2 
+    {
+        //v2 processes doubles instead of ints 
+        void process(vector<double>)
+        {}
+    }
+    
+    namespace v1 
+    {
+        void process(vector<int>)
+        {}
+    }
+}
+
+//this allowed to use library like this 
+vector<double> doubles;
+//call the v2 process method without need to add ::v2 
+API::process(doubles);
+
+vector<int> ints;
+API::v1::process(ints);
+
+//when need to add v3 then remove the inline from v2 and add it to v3 
+
+    + you could use using keyword to achieve parts of the feature but there is several limitation, it will be a problem when you library want to provide template specification in your API 
+    
+//library header 
+namespace API 
+{
+    namespace v2 
+    {
+        void process(vector<double>)
+        {}
+    }
+    
+    using namespace v2;
+}
+
+//user's code 
+namespace API
+{
+    //doesn't compile, because the Hash is defined in the API namespace which is not in the v2 namespace as the process function defined 
+    template<>
+    //if the library required user to provide custom template specification, there will be a problem 
+    class Hash<Part>
+    {
+        size_t operator()(const Part& p) const 
+        {/*...*/}
+    };
+}
+
+//inline keyword take care of this 
+
+- c++11 introduced two new keywords related to alignment, alignas and alignof 
+    + alignof keyword returns the alignment requirements of its argument which is an expression, the type used with alignof must be complete, if it is used with reference type then it's the same as applying it to the type which is referred to 
+    alignof(T&) <=> alignof(T)
+    
+    if it is applied to an array type, it returns the alignment requirement of the element type 
+    alignof(T[N])  <=> alignof(T)
+    
+    + alignas specifies how type or an object should be aligned, it can be applied to variables, datamembers and class declarations 
+        * for class, alignas has to come after the class or struct keyword, the requested alignment has to be a power of 2, int that as the aliagnas expression is equivalent to alignas alignof T. this allow you to match alignment requirements of another type 
+        
+    aliagnas(32) int arr[10];
+    
+    struct s 
+    {
+        aliagnas(32) Buffer _buf;
+    };
+    
+    struct alignas(2 * alignof(double)) Doubled
+    {};
+
+    
+    alignas(double) unsigned char double_buff[256];
+
+        * also allow to apply more than one aliagnas specifier, in this case the strictest aliagnment will be used. by strictest i mean the alignemtn with the highest numeric value. it will be used to in sure that alignment requirement for an array isn't weaker than the requirement for the element type 
+        alignas(T) alignas(A) T buffer[N];
+
+    + sizeof can applied to non-static data members without providing an object 
+class A 
+{
+public: 
+    int _a;
+};
+
+sizeof(A::_a);  //yields sizeof(int) 
+
+- memory model, provide two minute overview of it, make more sense in conjunction with talking about standard library facilities for atomic types 
+    + c++ 11 standard has a different definition of the abstract machine, which now allows the possibility of multi-thread execution unlike the previous version of the standard 
+
+    + the result is that it's now possbile to write multi-threaded code in a non-platform specific way 
+    + the memory model define compiler behavior vis-avis memory class to allow memory access for instance it guaraentee the threads can read write separate memory location 
+    + provisions for ordering memory operations and control over ordering for library 
+    + objects of static storage duration guaranteed to be initiazed in a thread-safe manner, however access till need to synchronized 
+    + standard library requires const objects to be thread-safe, this isn't enforce by the compiler 
+    + mutable members of classes used with STL must be synchronized internally 
+
+- thread local storage, variable with thread local storage exist for the duration of the thread in which they are created. each thread gets its own copy of the variable 
+    + you need to mark variable with thread_local, this support dynamic initialization and destruction semantics. this required runtime overhead for thread_local variable which are non-function local define in a different translation unit 
+    + gcc have a non-standard __thread keyword, this is different from the thread_local which have runtime overhead and dynamic initialization
+    
+    + thread_local can't be apply to function, can only apply to data declaration with static storage duration, which means namespace scope variables including in the global namespace, static function variables, static class members 
+thread_local B b1;
+
+namespace 
+{
+    thread_local B b2;
+}
+
+class C 
+{
+    //each thread gets a separate instance counter 
+    static thread_local int _instance_counter;
+};
+
+void f()
+{
+    //each thread invoking f() has a copy of run_count 
+    static thread_local int run_count;
+}
+
+//when use block scope variables, static is implied when using thread_local but you might prefer to mark the variable with static for clarity 
+    + thread_local can be combined with extern, all thread_local variable must be specified in all declaration 
+extern int i; 
+int thread_local i; //error 
+
+extern int thread_local i;
+int thread_local i; //ok 
+
+    + thread local objects can be of types with arbitrary complex constructors and destructors, by default thread_local variable are zero initialized, can be initialized dynamically 
+    
+    + namespace scope variables and static class members initialized before first use 
+    + variables declared in a function are initialized similarly to local static variables. initialization happens when execution goes through the declaration 
+    + an exception during construction results in a call to std::terminate
+    
+    + destructors called in reverse order of construction but construction order is unspecified 
+    + if a thread calls std::exit from main, its variables are destroyed 
+    + variables on other threads are not destroyed 
+    
+- generalized attributes, provide a standard mechanism for integrating parts of the program such as functions with optional information or compiler specific 
+    + gcc, __attribute 
+    + microsoft, __declspec 
+    + standard [[attribute_name]], denoted with double square brackets, you can't use two opening squares brackets in any other context 
+vector<int> v = {1,2,3,4};
+int a = v[[]{return 1;}()]; //error wont' compile 
+
+auto lambda = []{return 2;};
+int c = v[lambda()]; //ok, double square brackets is reserved for attribute defination 
+
+    + standard attributes only define two attributes in c++11 
+        * noreturn, such as a function always throw a exception could be mark with no return, which means not return control ability to the caller. this will give the compiler an opportunity to give warning about unreachable code to perform optimizations. if a function marked with noreturn but returns nontheless, it's undefined behavor 
+[[noreturn]] void thrower(const string& err) noexcept(false)
+{
+    throw runtime_error(err);
+}
+        * carries_dependency, it can be apply to either function or function parameters this allowed compiler to perform optimization for using a relaxed memory model, currently gcc ignore this attribute 
+        
+        * also we could use gcc_specific attributes 
+        struct [[gnu::aligned(32)]] S{}; //gcc specific have to be prefixed with gnu 
+        
+        //equal to 
+        struct __attribute((aligned(32))) S{};
+
+        * standard provides a namespacing mechanism for attributes recommands that vendor choose a distinct namespace name 
+        
+- POD types, plain old data types 
+    + POD struct, requires 
+        * trivial class 
+        * standard layout class 
+        * all non-static data members are 
+        POD structs, POD unions or arrays of those 
+    + POD union, data members are POD structs, POD unions or array or those, has no known static data members of type non-POD struct, non-POD union, or array of such types 
+
+- trivial classes, objects of trivial types may be created via malloc and copied with memcpy 
+    + a scalar type 
+    + a trivially copyable class with trivial default constructor 
+    + an array of one of those 
+    + optionally const- or volatile-qualified
+    + no virtual functions or virtual base classes 
+    + trivial copy and move constructors 
+    + trivial copy and move assignment operators 
+    + trivial destructor 
+    + in c++ 11 are allowed to have user-defined constructors as long as they provide trivial default constructor 
+    + trivial operations 
+        * not user-provided 
+        * the containing class has no virtual functions or virtual base classes 
+        * all the base class copy and move constructors are also trivial 
+        * copy and move constructors are trivial for all non-static data members of the class which are of types or arrays of class types 
+- standard layout types, such a type will have a memory layout which is the same layout of a C struct  
+    + a scalar type 
+    + a standard layout class 
+    + an array of one of those 
+    + optionally const- or volatile qualified 
+    + all of its non-static data members are standard layout or arrays of standard layout classes 
+    + the same access control for all non-static data members, before c++11 all members have to be public 
+    + no virtual functions or virtual bases 
+    + all base classes are standard layout too 
+    + at most one class in the inheritance hierarchy has non-static data members, this can be the derived class or one of the base class 
+    + no base classes of the same type as the first non-static data members 
+        
+- a class can be trivial but not standard layout, and vice versa 
+struct Trivial //trivial but not standard layout, contain both public and private member 
+{
+    int a; 
+private:
+    int;
+};
+
+struct StandardLayout //standard layout but not trivial, it doesn't have a trivial destructor 
+{
+    int a;
+    int b;
+    ~StandardLayout();
+};
+   
+- changed restrictions on unions    
+    + members of types with user defined constructors, destructors and assignment operations are allowed 
+    + member types can't have virtual functions or to be reference types 
+    + operations of non-static data members can trigger removal of corresponding union operations 
+    there is a new restriction which says that if a non-static data member has a non-trivial default constructor, destructor or a copy or move operation the same function of the union itself is implicitly deleted. so you have to write your own function to implicit the behavior 
+    
+    + example 
+//you can define union like this 
+union Compact 
+{
+    int _i;
+    string _s;
+};
+
+Compact c1; //but you can't use it because the string class is override the default compiler generate methods, you need to define a constructor and destructor 
+
+union Compact
+{
+    int _i;
+    string _s;
+    
+    Compact(): _i(100){}
+    
+    ~Compact(){}
+};
+Compact c1;
+cout << c1._i << endl; //outputs 100 
+
+//still required use new operator to create a instance for string object 
+new (&c1._s) string("ABC"); //switch the active member to _s 
+c1._s.~string(); //destroy the string before making _i active 
+c1._i = 0; //switch the active member back to _i 
+
+//somehow you need to keep track the string member which contain self defined destructor whether it's the active member or not, because you need to call the destructor explicitly 
+
+    + discriminated unions, is a struct incorporating an anonymous union toghether with a data member to keep track of which member of union is active 
+class Compact 
+{
+    enum 
+    {
+        Int,
+        String
+    } _active_type;
+    
+    union 
+    {
+        int _i;
+        string _s;
+    };
+    
+    Compact(int i): _active_type(Int), _i(i)
+    {}
+    
+    Compact(const string& s): _active_type(String)
+    {
+        new (&_s) string(s);
+    }
+    
+    ~Compact()
+    {
+        if(_active_type == String)
+            _s.~string();
+    }
+    
+    int get_int() const 
+    {
+        if(_active_type != Int)
+            throw runtime_error("Inactive type requested");
+            
+        return _i;
+    }
+    
+    string get_string() const 
+    {
+        if(_active_type != String)
+            throw runtime_error("Inactive type requested");
+            
+        return _s;
+    }
+    
+    void set(const string& s)
+    {
+        if(_active_type == String)
+            _s = s;
+        else
+            new(&_s) string(s);
+            
+        _active_type = String;
+    }
+};
+//because the union is anonymous, we could access the member of the union likes the member of the class 
+//we could also implement the class with copy and move operations 
+//use the class 
+Compact c1(100);
+
+cout << c1.get_int() << endl; //outputs 100 
+c1.get_string(); //throws because _s is inactive 
+
+string s("ABC");
+c1.set(s);
+
+cout << c1.get_string() << endl; //outputs ABC 
+
+- C99 compatibility features, c++ 11 incorporated most the changes from c99 with the exception of variable length arrays and designated initializers
+    + variable length arrays weren't included because STL includes better functionality 
+    + designated initializer are redundant because c++ have constructors 
+    + long long type, equal or creater than long 
+    + standard C macros such as __func__ and __STD_HOSTED__ are included 
+    __STD_HOSTED__ tells you whether the implementation is hosted or freestanding 
+    + _Pragma(X) preprocessor operator 
+    + Vararg macros and empty macro arguments 
+    + concatenation of wide and narrow strings 
+    + c11 new feature is too new to include in c++11 
+    
+    + deprecated and removed features 
+        * auto can no longer be used as a storage specifier, it now used either to declare variables with inferred types or in functions with trailing return types 
+        * export specifier for template is no longer supported, because it is only implemented in one compiler 
+        * dynamic exception specifications with the use of the throw specifier are deprecated with noexcept taking their place 
+        * the use of the register storage class specifier is deprecated 
+        * if the class has a user declared copy assignment operator or destructor, the compiler will not create a default copy constructor 
+        * if the class has a user declared copy constructor or destructor, the compiler will not create a default copy assignment operator 
+        * a few deprecated in STL 
+        
+- writing cross-platform code, if you write code which has to compile on compilers other than GCC, it's useful to know the level of C++11 support they have. limit the features is the best choice 
+visual studio 2013 not full support c++11 
+gcc 4.8+ is full support c++11 
+Clang 3.3+ is full support c++11
+intel is almost full support 
+
+- C++ 14, finalized in 2014, for fix problem in c++11 standard 
+with gcc compile parameter with -std=c++1y to compile with the exp
+
+- summary 
+    + explicit conversion operators 
+    + inline namespaces 
+    + alignment keywords 
+    + new capability of sizeof 
+    + new memory model 
+    + thread local storage 
+    + generalized attributes 
+    + updated definition of POD types 
+    + changes to unions 
+    + compatibility with c99 
+    + deprecated and removed features
+    + c++ 11 support in other compilers 
+    + features planned for c++ 14 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

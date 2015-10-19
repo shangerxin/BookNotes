@@ -1,0 +1,1351 @@
+﻿Wcf advance topics=pluralsight;Node=Erxin
+
+# hosting
+- wcf hosting concepts
+- self-hosting drill-down
+- hosting in windows services
+- hosting in iis5/6
+- hosting in iis7 with WAS, window process activation service
+- serviceHost is the wcf programming model for hosting services, it's the key class
+    + a given serviceHost instance manages a signal service type, in the constructor
+    + serviceHost can be used in any host process with a CLR appdomain
+    + a host process many contain multiple serviceHost instances
+
+    Host Process { ServiceHost0, ServiceHost1, ...}
+    
+- you can host wcf services in your own applications
+    + referred to as self-hosting
+    + requires you to manage the lifecycle of the serviceHost instance
+- or you can let iis/asp.net manage hosting your services
+    + referred to as managed hosting
+    + asp.net manages the service host instance lifecycle for you
+
+- self-hosting scenarios
+    + when does it make sense to use self-hosting techniques?
+    + when you need to take advantage of inproc hosting
+    + when you want to avoid iis for whatever reason
+    + when you want to use advanced hosting extensibility points
+    
+- ServiceHost life cycle
+    + you construct the serviceHost and sepcify the service type
+        * serviceHost reads configuration from application config file
+        * you can also configure the instance of pro grammatically
+    + you call open to create the wcf runtime for the service type
+        * creates the wcf dispatch runtime & messaging runtime
+        * launches worker threads to monitor incoming messages, by the time open returns to monitor incomming message
+        * allows host application to make blocking calls
+    + you call close() to gracefully shutdown the wcf runtime
+        * waits for calls in progress to complete and closes network stack
+        * after close the service can no longer receive messages
+    + you call Abort() to "tear down" runtime and close immediately without waiting
+- serviceHost lifecycle example
+
+class Program {
+    static void Main(string[] args)
+    {
+        //create host
+        ServiceHost host = new ServiceHost(typeof(InvoiceService));
+        try
+        {
+            //open host builds runtime
+            host.Open();
+            Console.ReadLine();
+            host.Close();
+        }
+        catch(Exception e)
+        {
+            //tear-down serviceHost
+            Console.WriteLine(e);
+            host.Abort();
+        }
+    }
+}
+
+- ServiceHost architecture
+    + createServiceHost
+                                         Host process
+    ServiceA assembly            -read-> +---------------------+
+    Host Application config file -read-> |ServiceHost(ServiceA)|
+                                         |ServiceDescription   |
+                                         |(ServiceA)           |
+                                         |                     |
+                                         |instanceContect, ... |
+                                         |ServiceA Ins         |
+                                         |  A         A        |
+                                         |  |         |        |
+                                         |  |         |        |
+                                         | Dispatcher(runtime) |
+                                         |message channel stack|
+                                         | http, tcp,...       | 
+   + ServiceHost.Open will create the instance
+   + ServiceHost.Close/Abort will destroy the instance
+   + DisposeServiceHost will remove the service host instance
+- demo understanding the serviceHost lifecycle
+
+- host base addresses
+    + each serviceHost instance can be configured with base addresses
+        * one base address per transport protocol
+        * can be supplied via constructor or configuration section
+    + used to resolve relative endpoint addresses
+        * the binding type tells wcf which base address to use
+        //add base address for the service host
+        ServiceHost host = new ServiceHost(
+            typeof(InvoiceService),
+            new Uri("http://server:8080/"),
+            new Uri("http://server:8081/"));
+        //use relative address
+        host.AddServiceEndpoint(typeof(IInvoiceService), 
+                                new BasicHttpBinding(),
+                                "invoiceservice");
+- configuring base address in configuration filonfiguration>
+    <system.serviceModel>
+        <services>
+            <service name="InvoiceServiceLibrary.InvoiceService" behaviorConfiguration="Default">
+                <host>
+                    <!--specify base address-->
+                    <baseAddresses>
+                        <add baseAddress="http://service:8080"/>
+                        <add baseAddress="net.tcp:server:8081"/>
+                    </baseAddress>
+                </host>
+                <!--specify relative address-->
+                <endpoint address="invoiceservice"
+                          binding="netTcpBinding"
+                          contract="InvoiceServiceLibrary.IInvoiceService"/>
+                <endpoint address=""
+                          binding="netTcpBinding"
+                          contract="EvalServiceLibrary.IEvalService"/>
+            </service>
+        </services>
+        ...
+        <behaviors>
+            <serviceBehaviors>
+                <behavior name="Default">
+                    <serviceMetaData httpGetEnabled="true"
+                    httpGetUrl=""/>
+                <behavior>
+            </serviceBehaviors>
+        </behaviors>
+    </system.serviceModel>
+</configuration>
+the omitted relative endpoint address means use the base address
+the behavior also could use the base address
+all the relative address could supply absolute address or base address
+
+- implementing a custom ServiceHost
+    + you can implement a custom ServiceHost-derived class
+        * allows you to customize service configuration(endpoints/behaviors)
+        * allows you to overrride Dispose
+        * Hook lifecycle events:OnOpening, OnOpened, OnClosing, etc.
+    + for advanced customization, derive from ServiceHostBase
+        * requires you to create the internal ServiceDescription
+- demo implement a custom service host
+public class MyEvalServiceHost:ServiceHost
+{
+    public MyEvalServiceHost():base(typeof(EvalServide){}
+    
+    protected override void OnOpening()
+    {
+        base.OnOpening();
+        this.AddServiceEndpoint(typeof(IEvalService),
+            new BasicHttpBinding(),
+            "always-here");
+            
+        ServiceMetadataBehavior meta= this.Description.Behaviors.Find<ServiceMetaBehavior>();
+        if(meta != null)
+        {
+            meta.HttpGetEnable = true;
+        }
+        else
+        {
+            meta = new ServiceMetadataBehavior();
+            meta.HttpGetEnabled = true;
+            this.Description.BehaviorsAdd(meta);
+        }
+    }
+}
+
+use the custom service host
+MyEvalServiceHost host = new MyEvalServiceHost();
+host.AddServiceEndpoint(typeof(IEvalService), new BasicHttpBinding(), "another");
+host.Open();
+
+buidl the client app, add client service
+- self vs managed-hosting
+    + with self-hosting, you take on several key responsibilities
+        * responsibilities can be com costly to implement
+        * however you may not care about any/all of them
+        * but if you do, look into a managed hosting solution
+- host wcf service in window services
+    + wcf service can be hosted within windows services
+    a managed hosting solution built into windows
+    + provides several key advantages
+        * startup options: auto-start, manual commands(start & stop)
+        * doesn't constrain communication options
+        * choice of security identity
+        * management tool
+        ServiceControlManager, scm, services.msc
+- implementing a windows service, the class ServiceBase is the base class for window services
+public partial class InvoiceServiceHost:ServiceBase
+{
+    ServiceHost serviceHost = new ServiceHost(typeof(InvoiceService));
+    protected override void OnStart(string[] args)
+    {
+        try{
+            host.Open();
+        }
+        catch(Exception e)
+        {
+            ...//write exception details to event log
+        }
+    }
+    
+    protected overwride void OnStop(){
+        if(null == serviceHost)
+        {
+            return;
+        }
+        if(serviceHost.State == CommunicationState.Faulted)
+        {
+            serviceHost.Abort();
+        }
+        else
+        {
+            serviceHost.Close();
+        }
+    }
+}
+
+- demo create a window service host
+    + create a project type as window service
+    + add reference to system.serviceModel for wcf
+    + add relative wcf service implementation
+    + add service host in the window service
+
+    add host open() to OnStart method add host.Close to OnStop
+    + add the configuration to the window service configuration
+    + return to the design view of the add window service file
+    + add a installer to the window service project, change to the designer
+
+    + click the serviceProcessInstaller and change the property Account, for demo use LocalSystem, but for production will need to specify a real user
+
+    + build the project
+    + go to the release folder and run the installutil serviceName.exe to install the service into the system
+
+- host wcf service in iis5/6
+    + wcf services can be hosted in IIS 5/6 within asp.net applications
+    a managed web-hosting solution
+    + provides several key advantages
+        * startup options: on-demand activation
+        * pooling recycling heath monitoring
+        * choice of security identity
+        * management tool
+        internet information services(iis) manager
+
+    + one key disadvantage, till iis 7
+    restricts you to http endpoints
+
+- iis 6.0 architecture
+kenerl-model   http.sys
+iis 5/6 metabase, svchost.exe this service break down to 
+    configration manager, 
+    process manager,  -> activate the base on the http request
+    http adapter
+w3wp.exe(app pools), may have multple web appilcation running in the pool
+            +---------------------------+
+            |svchost.exe                |
+            |w3svc(service)             |
+IIS 5/6 <-  |configuration  process -------> w3wp.exe(app pools), appDomain
+            |manager         manager    |
+            |                           |
+            |http adapter               |
+user-mode   +---------------------------+
+                A
+                |
+kernel model http.sys
+                A
+                |
+                request
+        
+- integrating wcf with iis
+    + you map incoming request to a wcf servieHost using a .svc file
+        * use the asp.net ServiceHost directive and the Service attribute
+        * asp.net intercepts incoming requests and creates ServiceHost instance
+        * referenced assemblies must be in app's bin directory or the GAC
+        * you can also place code in App_Code or inline(compiled on 1st request)
+    //reference class in assembly
+    <%@ ServiceHost Service="InvoiceServiceLibrary.InvoiceService" %>
+    
+    //reference class in App_Code
+    <%@ ServiceHost Language="C#" Debug="true" Service="Invoiceservice" CodeBehind="~/App_Code/InoviceService.cs"%>
+    
+    + Configuring.svc services
+    you configure .svc services in the application's web.config 
+        * the http base address is set to the base address of the iis application
+        * wcf will ignore any base addresses specified in web.config
+
+    when you configure endpoint only use relative address during this time
+    web.config
+    <configuration>
+        <system.serviceModel>
+            <services
+                <service name="InvocieServiceibrar.InvocieService">
+                    <endpoint
+                        address=""/>
+                </serivce>
+            </services>
+
+    the absolute address must machine the application's base address
+
+- add wcf web site
+    + change the relative *.svc file
+    + change the web.config file
+        * add service into the serviceModel section and remove the unnecessary auto added content
+        * add service endpoint
+        * add servcie behavior
+        * add metadata enable behavior
+
+        the content is same as the configuration section
+
+- serviceHostFactory
+    + You can intercept serviceHost creation using a servcieHostFactory
+        * derive from serviceHostFactory and override CreateServiceHost
+        * specify your factory class in .svc using the factory attribute
+    
+    public class CustomServiceHostFactory:ServiceHostFactory
+    {
+        protected override ServiceHost CreateServiceHost(Type serviceType, Uri[] baseAddresses)
+        {
+            return new CustomServiceHost(serviceType, baseAddresses);
+        }
+    }
+
+    to use the factory, need to added it into the *.svc file
+    <%@ ServiceHost Factory="CustomServiceHostFacotry" Service="InvoiceServiceLibrary.InoviceService" %>
+
+    the custom serviceFactory is used to work with custom host and *.svc file
+
+- asp.net compatibility mode
+    + in general, wcf services can run in one of two modes
+        * mixed transports model(default)
+        * asp.net compatibility mode
+    + with mixed transports mode
+        * you will not have access to any asp.net features(httpContext, authorization, session state, etc)
+    + with the asp.net compatibility mode
+        * you have access to all asp.net features
+        * similar to asmx services
+        
+    + to enable this model by configuration file
+    <configuration>
+        <system.serviceModel>
+            <serviceHostingEnvironment aspNetCompatibilityEnabled="true"/>
+            <services>
+                <service name="InvoiceServiceLibrary.InvoiceService">
+                    <endpoint address="" binding="basicHttpBinding" contract="InvoiceServiceLibrary.InvoiceService"/>
+            ...
+
+    require the host to provide asp.net compatibility 
+    [AspNetCompatibilityRequirements(RequirementsMode=AspNetCompatibilityRequirementsModel.Required)]
+    public class InvoiceService:IInvoiceService
+    {
+    ..
+    }
+    
+    with this model the service could only be host in iis and only support http endpoint
+    
+- window process activation services
+    + problem:wcf is transport-neutral but iis 5/6 is tied to HTTP
+    you can't take full advantage of WCF in this case
+    + solution, windows process activation service(WAS)
+        * generalizes process activation & management
+        * allows wcf service activation over any transport
+        * part of iis 7.0 but can be installed / configured separately
+        * ships with windows vista and windows server 2008
+    
+    + the architecture is a little difference between the previous architecture
+    
+    was(service) is host the configuration manager and process manager
+    A
+    |
+    w3svc(service) host http adapter
+                    A
+                    |
+    kernel-model  http.sys
+
+    was is separate the http adapter with the process management
+
+    Non-IIS7 components, such as smsvchost.exe to adapter with process manager such as NetTcpActivator, NetPipActivator, NetMsmqActivator
+
+- configure was
+    + ensure you have WAS & the WCF activation components installed 
+        * windows process activation service
+        * microsoft.net 3.0 | wcf http /non-http activation
+    + add configuration to applicationHost.config
+        * add protocol binding to web sites
+        * enable protocols within applications
+        * you can do this manually or via appcmd.exe
+    + configure endpoints like you normally would in web.config
+        * now you can configure non-http endpoints
+    + use .svc files just like before
+
+- configuring WAS in application Host.config
+<bindings>
+    <binding protocol="https" bindingInformation="*:443:"/>
+    <binding protocol="http" bindingInformation="*:80:"/>
+    <binding protocol="net.tcp" bindingInformation="*:808:"/>
+    <binding protocol="net.pip" bindingInformation="*:"/>
+    <binding protocol="net.msmq" bindingInformation="localhost"/>
+    <binding protocol="msmq.formatname" bindingInformation="localhost"/>
+<bindings>
+    
+add protocol bindings to website
+enable protocols with application
+<application path="/InvoiceService" enableProtocols="http,net.tcp,net.pip,net.msmq">
+    <virtualDirectory path="/" physicalPath="c:\service\InvoiceService"/>
+</application>
+    
+do the something with appcmd.exe setup WAS.cmd
+appcmd.exe set site "MySite" -bindings.[protocol='net.tcp',bindingInformation='808:*]
+    
+appcmd.exe set app "Default web Site/evals" /enableProtocols:http,net.pipe,net.msmq
+    
+check the help content by appcmd.exe /?
+    
+- demo
+    + turn the WAS feature on by the add window feature
+    + check the Window Process Activation Service
+    + make sure .net framework wcf relative item is checked
+    
+    + turn to the iis 7 manager
+        * add application 
+        * add the physical application aim to the *.svc file
+        * use the wcf configuration directory
+        c:\windows\system32\inetsrv\config
+        * open the applicationHost.config file
+        switch to the created website configuration section
+    
+        * use the appcmd.exe to enable the protocol and add the binding
+        * the website section will added the relative binding and the protocol
+        * after this the website application could use the enabled protocol
+    
+    the client could use the named protocol binding name
+    
+    
+# runtime Execution 
+- instancing
+    + percall
+    + single
+    + persession
+    + durable
+    
+- throttling
+    + serviceThrotllingBehavior
+    + concurrency
+        * single
+        * reentrant
+        * multiple
+        
+- wcf runtime execution
+    + most applications differ widely in their requirements and needs 
+        * scalability performance, throughput etc
+        * hence a single runtime strategy doesn't work for everyone
+    + wcf provides the ability to configure key runtime behaviors
+        * service instancing
+        * throttling
+        * concurrency
+        
+    hese behvaviors are mostly a serviceside implementation detail
+    
+- instancing & threading
+    + you control service isntancing and threading with [ServiceBehavior]
+    service-wide setting, applies to any serviceHost, all endpoints etc
+    
+    instanceContextModel
+        * percall
+        * single
+        * persession
+        
+    concurrency model
+        * single
+        * multiple
+        * reentrant
+        
+- instanceContextModel
+    + instanceContextModel controls the service instancing behavior
+        * how the dispatcher manager instance lifecyle(create and disposal)
+        single, a single service instance is used for all calls
+        percall, a new service instance is created and disposed on each call
+        per-session(default), a new service instance is created for each client channel
+        
+    + instanceContextModel.PerCall
+        * each client request always gets a dedicated service instance
+        * no need to worry about concurrent access(always single-threaded)
+        
+    + after dispatching is complete wcf dispose of the instance
+        * wcf calls dispose if the service implements IDisposable 
+        * release instance for garbage collection
+                                +--hostprocess----------+
+                                +--serviceHost----------+
+        client --dowork()---->  | +--instanceContext--+ |
+        channel1                | | service instance  | |
+                                | +-------------------+ |
+        client  --dowork()--->  | +--instanceContext--+ |
+        channel2                | | service instance  | |
+                                | +-------------------+ |
+                                +-----------------------+
+        
+- demo using percall
+    + create a service behavior
+    [ServiceContract]
+    public interface IMath
+    {
+        double add(double x, double y);
+    }
+    
+    [SerivceBehavior(InstanceContextModel=InstanceContextModel.PerCall)]
+    public class MathService:IMath
+    {
+        public double add(double x, double y)
+        {
+            return x + y;
+        }
+    }
+    
+    create basic http and nettcp endpoint for the service
+    
+    the default behavior of basic http is percall
+    the default behavior of net tcp is per session
+    
+- percall summary
+    + pros
+        * simple to sue and highly scalable
+        * works well in servicer farms with load balancing
+        * only holds resources while actually in use
+    + cons
+        * clients don't know about new instances
+        * services must be designed to manage state
+        * you trade some performance for scalability
+        creating nad disposing instance
+        
+- instanceContextModel.Single
+    + all client request are dispatched to a single service instance
+        * singleton instance created when serviceHost is created
+        * or you can provide an initialized instance when constructing serviceHosting        
+        * all clients share instance, so you must manage concurrency
+        
+    + singleton instance isn't disposed until ServiceHost shuts down
+    // initialize instance here
+    InvoiceServcie singleton = new InvoiceService();
+    ServiceHost host = new ServiceHost(instance);
+    //this initialize is equal to pass an instance
+    ServiceHost host = new ServiceHost(typeof(InvoiceService));
+    
+    // access singleton instance later on
+    var singleton = host.SingletonInstance;
+    
+    change the service definition from Percall to Single
+    [ServiceBehavior(InstanceContextMode=InstanceContextMode.Single)]    
+    public class MathService: IMath
+    {
+        #region IMath Members
+        public double add(double x, double y)
+        {
+            return x + y;
+        }
+    }
+        
+- instanceContextModel.Single
+    + pros
+        * simple model for managing global state
+        * good for modeling real "singletons" in the physical world(e.g. a piece of hardware)
+    + cons
+        * very difficult to scale 
+        * you must manage concurrency
+        * you must manage session state
+    
+- InstanceContextModel.PerSession
+    + each client channel gets a dedicated service instance
+    allows you to manage client state in member variables
+    + session management is provide by the underlying channel stack
+        * you must choose a binding that provides this feature(not all do)
+        * if the channel doesn't provide a session, you get percall behavior
+        
+    + lifetime of session it typically controlled by the client channel
+        * once closed, channel notifies service that session has ended
+        * wcf calls dispose if the service implemetns IDisposable
+        * dispose called on new thread, operationContext not available
+        * session can also time-out after a (configuration) period of inactivity
+    
+    + PerSession
+    there will be a SessionId associate with the incoming message, use the same channel will also dispatch to the same service instance
+    
+    + netTcpBinding & NetNamedPipeBinding naturally support sessions
+        * wcf associates transport connection with client
+        * sessions can be enabled via soap over connection-less protocols
+        accomplished using various WS-* specification
+        WSHttpBinding supports sessions if security is truned on (default)
+        You can also enable RM on the binding to get session support
+        Sessions may or may not be reliable depending on configuration
+    
+    + if  the channel supprts sessions, you'll get a session identifier
+        * look in OperationContext.Current.SessionId to discover it
+        * useful with both PerSession and Single model
+    
+- demanding a sessionful binding
+    + persession service are typically designed with that mode in mind
+    hence it probably won't work if the binding doesn't provide sessions
+
+    + you can require sessionful binding use sessionModel
+        * provide setting, Allowed(default), NotAllowed, Required
+        * host throws exceptions when mismatches are identified
+
+        [ServiceContract(SessionMode=SessionMode.Required)]
+        public interface IInvoceService
+        {
+            ...
+        }
+
+- demo using persession
+[ServiceBehavior(InstanceContextModel=InstanceContextModel.PerSession)]
+public class MathService:IMath
+{
+    double runningTotal;
+    public double add(double x, double y)
+    {
+        return x+y;
+    }
+}
+
+annotate session model is require to the service contract
+[ServiceContract(SessionMode=SessionMode.Required)]
+public interface IMath
+{
+    [OperationContract]
+    double add(double x, double y);
+}
+
+it's a good practice to annotate the service contract to SessionMode.Required
+
+- session termination
+    + session typically end when the client close the channel
+    but that you happens the client terminates ungracefully 
+    + session have an idle timeout that you can configure
+    default value is 10 minutes
+    clients and services can set this independently (shortest value wins)
+    
+    in the configuration file change the binding content to 
+    <binding name="myConfig">
+        <reliableSession enable="true" inactivityTimeout="00:30:00"/>
+    </binding>
+
+- shaping sessions with contract
+    + sessionful contract can specify session start/end operations
+        * use isInitiating/isTerminating properties on [OperationContract]
+        * requires SessionMode=SessionMode.Required
+        * useful with both Persession and singleton services
+        
+    Property            True                            False
+    IsInitiating        starts new session(default)     can't be called first
+    IsTerminating       session terminates when return  session continues
+
+    [OperationContract(IsInitating=true, IsTerminating=false)]
+    void Clear();
+    
+- advanced instance management
+    + the dispatcher actually correlates each session to an instance Context
+        * hence, isntanceContextMode controls lifetime of the instanceContext
+        * You can separately control instance deactivation within a context
+
+    + declarative instance deactivation
+        * use OperationBehavior.ReleaseInstanceMode(None, BeforeCall, AferCall)
+        None, won't release the instance
+        BeforeCall, will release the instance just the before the call, this is a kind of PerCall operation behavior if you mark all the operation contract with this mode
+        AfterCall, will release the instance after call the method
+        
+    + explicit instance deactivation
+        * use IntanceContext.ReleaseServiceInstance within an operation
+    + You can even provide custom instance management with a behavior
+    
+- PerSession with ReleaseInstanceModel, doWork is marked with ReleaseInstance.BeforeCall
+
+client channel -> dowork() -> ServiceHost
+    
+    + Pros
+        * simple model for managing state
+        * works great for tightly-coupled systems
+        * gives DCOM/.net remoting a path forward
+    + cons
+        * limits scalability
+        * ties each client a particular service machine
+        * reduces effectiveness of data balancing
+    
+- durable services
+    + wcf 3.5 provides a new mechanism for persisting service instances
+        * like perSession, only the instance durable for the session
+    + enabing durable services requires several changes
+        * annotate the service with [DurableServiceBehavior]
+        * annotate your operations with [DurableServiceOperationBehavior]
+        * configure the service with a PersistenceProviderBehavior
+        * use one of the new "context" binding that come with 3.5
+    + the sdk comes with scripts for the sqlPersistenceProvider
+        * look in c:\windows\microsoft.net\framework\v3.5\sql\en
+        use this sql script to setup the persistence database
+        create database sql and schema 
+        
+instance is persisted after each operation invocation, after a call the service instance is persisted into persistence store(database)
+
++----------+                +---host processes------+
+|client    |----dowork()--->|+----ServiceHost------+|
+|channel   |                ||+--instanceContext--+||
++----------+                |||service instance   |||
+                            ||+-------------------+||
+                            |+---------------------+|
+                            +-----------------------+
+                                A
+                                |persisted the service instance into database
+                                |
+                                V
+                            +-----------------------+
+                            |Persistence store      |
+                            +-----------------------+
+    
+[Serializable]
+[DurableService]
+public classs DurableCalc:ICalculator
+{
+    int sum;
+    [DurableOperation]
+    public void add(double x)
+    {
+        return this.sum += x;
+    }
+    
+    //the CompletesInstance is true means the serialized instance can be remove
+    //from the persistence store
+    [DurableOperation(CompletesInstance=true)]
+    public int GetFinalSum()
+    {
+        return this.sum;
+    }
+}   
+    
+configure the persistence provider in the configure file
+<serviceBehaviors>
+    <behavior name="MakeDurable">
+        <PersistenceProvider>
+            type="...sqlPersistenceProviderFactory..."
+            connectionStringName="SqlPersistenceConnection"
+            persistenceOperationTimeout="00:00:10"
+            lockTimeout="00:01:00"
+            serialazeAsText="true"/>
+...
+
+<service behaviorConfiguration="MakeDurable" name="DurableCalc"
+    <endpoint address=""
+              binding="basicHttpContextBinding"
+              contract="ICalculator"/>
+...
+    
+
+the client side program is 
+
+CaculatorClient client = new CalculatorClient("Endpoint_Name");
+//the the service relative context
+IContextManager mgr = client.InnerClientChannel.GetProperty<IContextManager>();
+
+IDictionary<string, string> ctx = mgr.GetContext();
+using(FileStream fs = new FileStream("context.bin", FileMode.Create))
+{
+    DataContractSerializer dcs = new DataContractSerializer(typeof(IDictionary<string>,<string>);
+    dcs.WriteObject(fs,ctx);
+    
+    DataContractSerializer dcs = new DataContractSerializer(typeof(IDictionary<string,string>));
+    ctx = dcs.ReadObject(fs) as IDicionary<string, string>;
+}
+if(null != ctx)
+{
+    mgr.SetContext(ctx);
+}
+
+- Service throttling
+    + wcf allows you to throttle the load on a particular service type
+        * maximum number of concurrent sessions
+        * maximum number concurrent calls
+        * maximum number concurrent instances
+        * configured using the ServiceThrottlingBehavior
+    + when exceeded wcf places pending callers in  a queue
+        * pending caller dispatched from queue in order
+        * clients could timeout depending on setting
+    + some bindings also allow you to constrain max connections
+        * NetTcpBinding & NetNamedPipeBinding
+
+- throttling examples
+<configuration>
+    <system.serviceModel>
+        <behaviors>
+            <serviceBehaviors>
+                <behavior name="Throttling">
+                    <serviceThrottling maxConcurrentCalls="20"
+                                       maxConcurrentSessions="50"
+                                       maxConcurrentInstances="100"/>
+                </behavior>
+...
+    
+<bindings>
+    <netTcpBindings>
+        <binding name="CustomTcp" maxConnections="50"/>
+...
+
+- threading
+    + all incoming wcf requrest are executed on clr worker threads
+    you can control how they're allowed to interact with your instances
+    + concurrencyMode controls the service threading behavior
+    it basically defines how wcf takes locks before calling your service
+    + when using perCall instancing you don't have a choice
+    perCall instance are naturally single-threaded
+    
+- concurrencyMode.Single
+    + only one thread at a time will be allowed to call the service instance
+    + wcf attempts to acquire lock before each invocation
+    + if lock is already owned, caller is placed in queue and must wait
+    + frees you from dealing with concurrency within your service code
+
+- deadlocks and reentrancy
+    + occurs when a downstream instance attempts to re-enter locked instance
+    client -> service instance  -> blocking ->service isntance B
+                locked                          |
+                  A                             |
+                  |                             |
+                  deadlock                      |
+                  |                             |
+                  service C<--------------------+
+
+- concurrencyMode.Reentrant
+    + concurrency.Reentrant is designed to avoid deadlocks
+    + you must designer your services carefully to handle reentrancy
+    instance must ensure consistent state before/after outbound call
+
+    + this still can block the reentrant when another client call the service before the service reentrant call the service
+    
+- concurrencyModel.Multiple
+    + wcf is allowed to access the service instance with multiple threads
+    + you must write synchronization code within service
+    
+- synchronization contexts
+    + .net 2.0 introduced the concept of synchronization contexts
+    a simple api for marshalling calls across threads(SynchronizationContext)
+    
+    + every thread can have a synchronization context associated with it
+    store in TLS, accessed via SychronizationContext.Current
+    
+    + wcf an maintain affinity with the current synchronization context
+        * serviceBehaviorAttribute.UseSynchronizationContext=true(default)
+        * when the host opens, it associates itself with the current context
+        * all service instance will execute on that synchronization context
+    classic use-case is hosting a wcf service on a ui thread(so the instance can update the ui controls)
+    
+    
+# extensibility
+- overview
+- wcf runtime architecture
+        service model layer
+client                      Service
+method ... method           method ... method
+|                                   A
+object                              |
+|                                   objects
+V                                   |
+client                          dispatch
+runtime                         runtime
+|                                   A
+message                             |
+|                                   message
+V                                   |
+            channel layer
+protocol                        protocl
+protocol                        protocol    
+encoder                         encoder
+transport --- messagebytes -->  transport
+    
+runtime extensibility and channel extensibility
+
+- channel extensibility overview
+    + wcf channel layer is completely extensible
+        * allows for custom message encoder(formats) & protocols
+        * also makes it possible to implement custom transports
+        
+    + using custom channel components directly istn't trivial
+        * implement a custom binding to make them easy for others to use
+        * you may also need to implement metadata extensions
+        
+    + wcf channel extensibility is an advanced topic
+        * however most developers won't need to use these techniques
+        * most needs can be handle in the dispatch/client runtime
+    + reference
+    channel layer(msdn)
+    wcf channels mini book 
+    
+- dispatch/client runtime extensibility
+    + the dispatch/client runtimes shield you from the messaging details
+    + the runtime are modelled by a few .net classes
+        * dispatchRuntime and clientRuntime classes
+    + these components expose numerous extensibility points
+        * inject interceptors
+        * interceptors can do pre&post processing during invocation
+    
+    Method
+    |
+    objects
+    |
++-------------------------------------+
+|   |                                 | 1. parameter inspection
+|   client operation                  | 2. message formatting(serialization)
+|   |                                 | 3. message inspection
++---------client runtime--------------+
+            |
+            message
+            |
+            V
+        +-----channel stack----+
+        |                      |
+        +----------------------+
+    
+for the disptachRuntime is similar on the server side
+    
+one per method, one per service 
+    
+- implement interceptors
+    + each interception stage is modelled by interface definitions
+    you simply implement the interface for the stage you want to target
+    
+    stage                   Interceptor Interface       Description
+    Parameter Inspection    IParameterInspector
+    Message formatting      IDispatchMessageFormatter
+                            IClientMessageFormatter
+    Message inspection      IDispatchMessageInspector
+                            IClientMessageInspector
+    Operation selection     IDispatchOperationSelector
+                            IClientOperationSelector
+    Operation invoker       IOperationInvoker
+                            
+    + write a parameter inspector
+    public class ZipCodeInspector: IParemeterInspector
+    {
+        int _index = 0;
+        public ZipCodeInsepctor():this(0){}
+        public ZipCodeInsecptor(int index){_index = index}
+        
+        public void AfterCall(string operationName, object[] outputs, object returnValue, object correlationState)
+        {
+        }
+        
+        //the return object will be the parameter correlationState of After call method
+        //perform regular expression matching to check the input match the zip code format
+        public object BeforeCall(string operationName, object[] inputs)
+        {
+            if(!Regex.IsMatch(input[index], @"\d{5}-\d{4}"))
+            {
+                throw new FaultException("Invalid zip code")
+            }
+            else
+            {
+                return null
+            }
+        }
+    }
+
+    + write a message inspector
+
+    public class ConsoleMessageInspector: IClientMessageInspector, IDispatchMessageInspector
+    {
+        private Message TraceMessage(Message input)
+        {
+            MessageBuffer buffer = input.CreateBufferedCopy(int.MaxValue);
+            Message newMsg = buffer.CreateMessage();
+            Console.WriteLine(newMsg);
+            return buffer.CreateMessage();
+        }
+    
+        public void AfterReceiveReplay(ref System.ServiceModel.Channels.Message reply, object correlationState)
+        {
+            reply = this.TraceMessage(reply);
+        }
+        
+        public object BeforeSendRequest(ref System.ServiceModel.Channels.Message request)
+        {
+            request = this.TranceMessage(request);
+            return null; //null for correlationState parameter
+        }
+    }
+    
+    + writing an operation invoker, component, implement a caching behavior, to avoid hitting database on each time
+
+    public class ZipCodeCacher: IOperationInvoker
+    {
+        int index = 0;
+        IOperationInvoker innerInvoker = null;
+        Dictionary<string, string> cachedValues = new Dictionary<string, string>();
+        
+        public ZipCodeCacher(int index, IOperationInvoker innerInvoker)
+        {
+            this.index = index;
+            this innerInvoker = innerInvoker;
+        }
+        
+        public object Invoke(object instance, object[] inputs, out object[] outputs)
+        {
+            string zipCode = inputs[index] as string;
+            string value;
+            if(cachedValue.TryGetValue(zipCode, output value))
+            {
+                outputs = new object[0];
+                return value;
+            }
+            else
+            {
+                value = innerInvoker.Invoke(instance, inputs, out outputs) as string;
+                cachedValue[zipCode] = value;
+                return value;
+            }
+        }
+        
+        public AsyncResult InvokeBegin(object instance, object[] inputs, AsyncCallback callback)
+        {
+            return innerInvoker.InvokeBegin(instance, inputs, callback, state);
+        }
+        
+        public object InvokeEnd(object instance, out object[] outputs, IAsyncResult result)
+        {
+             return innerInvoker.InvokeEnd(instance, out outputs, result);
+        }
+        
+        public bool IsSynchrounous
+        {
+            get { return innerInovker.IsSynchrounous; }
+        }
+    }
+    
+- IErrorHandler, in addition to these stages you can inject a custom error handler
+supply a exception handle method for global manner 
+    + implement IErrorHandler and inject into the channel dispatcher
+    + provideFault is called immediately after an exception is thrown
+    allows you to generate a custom fault message
+    + handlerError is called on a separate thread after return to client
+    Allows you to perform more time-consuming error logging techniques
+    
+    public interface IErrorHandler
+    {
+        //for time consuming job this method will be called after exception
+        //happened. this method will be called on different thread of the 
+        //the wcf work thread. it is a fit place to run heavy clean up works
+        //such as log into databae
+        bool HandleError(Exception error);
+        
+        //mechanism for translate service exception to custom fault exception
+        //this method will be called immediately on the same thread of the wcf
+        //service, this is not a good place to do some time consuming task such
+        //as write log into database
+        void ProvideFault(Exception error, MessageVersion version, ref Message fault);
+    }
+    
+- behaviors
+    + so how do you inject an extension into the dispatch/cilent runtime?
+    with a custom behavior
+    + your job is to add the behavior to the service description
+    then wcf calls each behavior during runtime initialization
+    + it's the behavior's job to inject extensions into the runtime
+        * dispatch/clientRuntime objects supplied to the behavior
+        * your implementation uses the runtime objects to configure extesions
+    
+    + adding behviors to the description
+    there are three ways to add a behavior to the service description
+        * explicitly via code
+        Service host = new ServiceHost(typeof(ZipCodeService));
+        host.Description.Behaviors.Add(new ZipCodeInspector());
+        //make the runtime to be built
+        host.Open();
+        
+        * declaratively via attributes
+        [ZipCodeValidation]
+        [ConsoleMessageTracing]
+        public class ZipCodeService: IZipCodeService
+        {
+            ...
+        }
+    
+        * declaratively via configuration
+        <system.serviceModel>
+            <behaviors>
+                <serviceBehaviors>
+                    <behavior name="Default">
+                        <consoleMessageTracing/>
+                    </behavior>
+                </serviceBehaviors>
+            <behaviors>
+        </system.serviceModel>
+        <extensions>
+            <behaviorExtensions>
+                <add name="consoleMessageTracing" type="ConsoleMessageTracing,..."/>
+            </behaviorExtensions>
+        </extensions>
+    
+- applying behviors at runtime
+    + createServiceHost
+    ServiceHost
+    Description     <--- .net assembly [MyBehavior]
+    behavior   <--- Configuration <myBehavior/>
+               <--- host.Description.Behaviors.Add(new MyBehavior) before open the host
+    
+- types of behaviors, wcf defines four types of behaviors that map to different wcf scopes
+                                Scope of Impact
+type      Interface           Service     Endpoint    Contract    Operation    
+Service   IServiceBehavior    X           X           X           X
+Endpoint  IEndpointBehavior               X           X           X
+Contract  IContractBehavior                           X           X
+Operation IOperationBehavior                                      X
+    
+all kinds of behavior can be used on the the server side
+the Service behavior can't be used on the client side
+    
+constraint to use the behavior
+            Usage
+type        Attribute   Configuration       Explicit(code)        
+Service     X           X                   X
+Endpoint                X                   X
+Contract    X                               X
+Operation   X                               X
+    
+- implementing behaviors, Simply implement the appropriate interface for the behavior type
+    + implement the methods that you care about
+    + each behavior interface defines the following methods
+    + however, signatures look different for each type
+
+    Method                  Description
+    Validate                called before runtime is build
+                            perform custom validation on service description
+    AddBindingParameters    calling in the first step of building the runtime
+                            before channel construct
+                            add parameters to influence channel stack creation
+    ApplyClientBehavior     allows behavior to inject proxy(client) extensions
+                            note:not present in IServiceBehavior
+    ApplyDispatchBehavior   Allows behvavior to inject dispatcher extensions
+    
+- applying extensions with behaviors
+public class ZipCodeParameterValidation:Attribute, IOperationBehavior
+{
+    int index = 0;
+    public ZipCodeParameterValidation():this(0){}
+    public ZipCodeParameterValidation(int index){this.index = index;}
+    
+    #region IOperationBehavior 
+    public void AddBindingParameters(OperationDescription operationDescription)
+    {
+    }
+    
+    public void ApplyClientBehavior(OperationDescription operationDescription, ClientOperation clientOperation)
+    {
+        clientOperation.ParameterInspectors.Add(new ZipCodeInspector());
+        
+    }
+    
+    public void ApplyDispatchBehavior(OperationDescription operatoinDescription, DispachOperation dispatchOperation)
+    {
+        dispatchedOperation.ParameterInspectors.Add(new ZipCodeInspector());
+    }
+    
+    public void Validate(OperationDescription operationDescription)
+    {
+    
+    }
+    #end region
+}
+    
+apply the behavior 
+[ServiceContract]
+public interface IZipCodeService
+{
+    [ZipCodeParameterValidation]
+    [OperationContract]
+    string Lookup(string zipCode);
+}
+    
+this behavior will be called before any service operation executed 
+    
+- write a behavior extension element, to let the client side code integrate with the custom behavior 
+public class ConsoleTracingElement:BehaviorExtensionElement
+{
+    public override Type BehaviorType
+    {
+        get {return typeof(ConsoleTracing);}
+    }
+    
+    protected override object CreateBehavior()
+    {
+        return new ConsoleTracing();
+    }
+}
+
+add extension into the client configuration 
+<configuration>
+    <client>
+        <endpiont address="http://localhost:8000/zipcodes" binding="wsHttpBinding" behaviorConfiguration="behavior">
+    </client>
+    <behaviors>
+        <behavior name="Default">
+            <consoleTracing/>
+        </behavior>
+    </behaviors>
+    <extensions>
+        <behaviorExtensions>
+            <add name="consoleTracing" type="Extensions.ConsoleTracingElement, Extensions, Versions=1.0.0.0, Culture=neutral, PublicKeyToken=null">
+        </behaviorExtensions>
+    </extensions>
+</configuration>
+- validating the description
+    + behavior also get a chance to validate the service description
+        * this is your chance to check the configuration before initialization
+        * if you don't like something you find, you can throw an exception
+        * an exception
+- validation behaviors, demo ride a behavior to restrict to not use basicEndpoint 
+public class NoBasicEndpointBehavior:Attribute, IServiceBehavior
+{
+    #region IServiceBehavior Memebers
+    public void AddBindingParameters(...){}
+    public void Validate(ServiceDescription serviceDescription, ServiceHostBase serviceHostBase)
+    {
+        foreach(ServiceEndpoint se in serviceDescription.Endpoints)
+        {
+            if(se.Binding.Name.Equals("BasicHttpBinding"))
+            {
+                throw new FaultException("please don't use basic http binding");
+            }
+        }
+    }
+    #endregion
+}
+
+
+- sharing state between extensions 
+    + you may need to share state access different runtime components
+    the mechanism for managing state in wcf  is IExtensionCollection<T>
+    
+    + wcf provides the three standard contexts for storing state 
+    serviceHost, instanceContext and OperationContext 
+    each provides an Extensions property of type IExtensionCollection<T>
+    
+state scope                     type                description
+ServiceHost.Extensions
+InstanceContext.Extensions
+OperationContext.Extensions
+
+    + the state collections manage objects of type IExtensions<T>
+    Hence the objects you use must derive from IExtension<T>
+    IExtension<T> defines attach and detach methods 
+    called when objects is added or removed from the collection 
+    
+public class MyStateContainer:IExtension<ServiceHostBase>
+{
+    //properties and methods  for managing  state 
+    public void Attach(ServiceHostBase owner)
+    {
+    }
+    
+    public void Detach(ServiceHostBase owner)
+    {
+        
+    }
+}
+
+ServiceHost host = new ServiceHost(typeof(MyService));
+host.Extensions.Add(new MyStateContainer());
+MyStateContainer state = host.Extensions.Find<MyStateContainer>();
+
+MyStateContainer state = host.Extensions.Find<MyStateContainer>();
+
+- Using the Extensions property 
+public class MyStateContainer:IExtension<ServiceHostBase>
+{
+    public string myState;
+    public MyStateContainer(string state){this.myState = state;}
+    //properties and methods  for managing  state 
+    public void Attach(ServiceHostBase owner)
+    {
+    }
+    
+    public void Detach(ServiceHostBase owner)
+    {
+        
+    }
+}
+
+//use the my state container
+ServiceHost host = new ServiceHost(typeof(ZipCodeService));
+MyStateContainer sc = new MyStateContainer("foo"); 
+host.Extensions.Add(sc);
+
+//get the state from the inspector instance of behavior 
+public object AfterReceiveRequest(ref Message message)
+{
+    var sc = OperationContext.Current.Host.Extensions.Find<MyStateContainer>();
+    sc.myState; //get the shared state 
+}
+    
+- custom service host, is used the shield the customer behavior and endpionts configuration from the users, simply the developer use 
+    + implementing a custom serviceHost can simply the experience 
+    automatically add/configure endpoints & behaviors 
+    + hides the behavior details from other developers 
+    + helps ensure a correct configuration and proper usage 
+    
+    + simply derive from ServiceHost 
+    Hook lifecycle events: OnOpening, OnOpened, OnClosing etc. 
+    
+    + For advanced customization, derive from ServiceHostBase
+    
+- demo custom service host
+public class MyTracingHost:ServiceHost
+{
+    public MyTracingHost(Type ServiceType, params Uri[] baseAddresses):base(serviceType, baseAddresses){}
+    public MyTracingHost(object singleton, params Uri[] baseAddresses):base(singleton, baseAddresses){}
+
+    protected override void OnOpening()
+    {
+        base.OnOpening();
+        
+        ConsoleTracing ct = this.Description.Behaviors.Find<ConsoleTracing>();
+        if(null == ct)
+        {
+            this.Description.Behaviors.Add(new ConsoleTracking());
+        }
+    }
+}
+
+//use the servie host 
+MyTracingHost host = new MyTracingHost(typeof(ZipCodeService));
+
+which will always enable the behavior ConsoleTracing 
+- custom channel factory 
+    + you can do the same for clients with a custom channelFactory
+    same benefits as implementing a custom ServiceHost
+    
+    + Derive from ChannelFactory<T>
+    hooking lifecycle events:OnOpen, OnOpened, OnClosing, etc 
+    
+    + For Advanced customization, derive from ChannelFactoryBase 
+    
+public class MyFancyFactory<T> :ChannelFactory<T>
+{
+    public MyFancyFactory(string endpoint):base (endpoint) {}
+    protected override void OnOpening()
+    {
+        this.Endpoint.Behaviors.Add(new MyFancyBehavior());
+        base.OnOpening();
+    }
+}
+    
+    
+    
+    
+    
+    
+    
+    

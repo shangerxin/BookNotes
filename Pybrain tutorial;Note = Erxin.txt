@@ -1,0 +1,373 @@
+﻿Pybrain tutorial;Note = Erxin
+
+# introduction
+- pybrain is a open source artificial neutrual net work project 
+http://pybrain.org/
+- build network shortcut
+    >>> from pybrain.tools.shortcuts import buildNetwork
+    >>> net = buildNetwork(2, 3, 1)
+returns a network that has two inputs, three hidden and a single output neuron.
+The net is already initialized with random values - we can already calculate its output:
+    >>> net.activate([2, 1])
+    array([-0.98646726])
+- layers are Module objects and they are already connected with FullConnection objects.
+- examining the structure, in pybrain every part of a network has a name by which you can access it. 
+    >>> net['in']
+    <LinearLayer 'in'>
+    >>> net['hidden0']
+    <SigmoidLayer 'hidden0'>
+    >>> net['out']
+    <LinearLayer 'out'>
+- sophisticated networks, by default the hidden layer is constructed with the sigmoid squashing, but we could customize the default
+    + use TanhLayer as hidden layer
+    >>> from pybrain.structure import TanhLayer
+    >>> net = buildNetwork(2, 3, 1, hiddenclass=TanhLayer)
+    >>> net['hidden0']
+    <TanhLayer 'hidden0'>
+    + set a different class for the output layer:
+    >>> from pybrain.structure import SoftmaxLayer
+    >>> net = buildNetwork(2, 3, 2, hiddenclass=TanhLayer, outclass=SoftmaxLayer)
+    >>> net.activate((2, 3))
+    array([ 0.6656323,  0.3343677])
+    + network to use a bias
+    >>> net = buildNetwork(2, 3, 1, bias=True)
+    >>> net['bias']
+    <BiasUnit 'bias'>
+
+# Build a dataset
+- dataset is used to contain input target for the network
+- SupervisedDataSet, whose size we have to specify on object creation
+    >>> from pybrain.datasets import SupervisedDataSet
+    >>> ds = SupervisedDataSet(2, 1) 
+    supports two dimensional inputs and one dimensional targets.
+    + Adding samples, a classic neural network training is the XOR function
+    >>> ds.addSample((0, 0), (0,))
+    >>> ds.addSample((0, 1), (1,))
+    >>> ds.addSample((1, 0), (1,))
+    >>> ds.addSample((1, 1), (0,))
+    + access dataset
+    for inpt, target in ds
+    ds['target']
+    ds['input']
+    
+# Training network by the dataset
+- A classic example for training is backpropagation.
+    >>> from pybrain.supervised.trainers import BackpropTrainer
+    >>> net = buildNetwork(2, 3, 1, bias=True, hiddenclass=TanhLayer)
+    >>> trainer = BackpropTrainer(net, ds)
+    >>> trainer.train()
+    0.31516384514375834
+    This call trains the net for one full epoch and returns a double proportional to the error.
+- If we want to train the network until convergence, there is another method:
+    >>> trainer.trainUntilConvergence()
+    return a bunch of data training epoch
+    
+# Build network with modules and connections
+- buildNetwork method is limited in some ways, sometimes we need to create network from ground up
+- Feed forward networks
+    + create new
+    >>> from pybrain.structure import FeedForwardNetwork
+    >>> n = FeedForwardNetwork()
+    + construct input and output layer
+    >>> from pybrain.structure import LinearLayer, SigmoidLayer
+    >>> inLayer = LinearLayer(2)
+    >>> hiddenLayer = SigmoidLayer(3)
+    >>> outLayer = LinearLayer(1)
+    + add them to network by specify which layer is used as input and which is used as output
+    >>> n.addInputModule(inLayer)
+    >>> n.addModule(hiddenLayer)
+    >>> n.addOutputModule(outLayer)
+    + explicitly determined how they should be connected a full connectivity between layers, by connecting each neuron of one layer with each neuron of the other. This is implemented by the FullConnection class:
+    >>> from pybrain.structure import FullConnection
+    >>> in_to_hidden = FullConnection(inLayer, hiddenLayer)
+    >>> hidden_to_out = FullConnection(hiddenLayer, outLayer)
+    + explicitly add the connection into network
+    >>> n.addConnection(in_to_hidden)
+    >>> n.addConnection(hidden_to_out)
+    + final step is sort the modules for the network topologically
+    >>> n.sortModules()
+- Examining a network
+    >>> print(n)
+- Use the network
+    >>> n.activate([1,2])
+    array([-0.11302355])
+- Check the weights of the connections for the network by check the .params field of the connections.
+The network also contain the weights in the .params field
+- Naming your network structure
+    >>> LinearLayer(dimentions[, name=str_name])
+- Using Recurrent Networks
+    + create network, like create feed forward network
+    >>> from pybrain.structure import RecurrentNetwork
+    >>> n = RecurrentNetwork()
+    + add layer and connection like feed forward network
+    >>> n.addInputModule(LinearLayer(2, name='in'))
+    >>> n.addModule(SigmoidLayer(3, name='hidden'))
+    >>> n.addOutputModule(LinearLayer(1, name='out'))
+    >>> n.addConnection(FullConnection(n['in'], n['hidden'], name='c1'))
+    >>> n.addConnection(FullConnection(n['hidden'], n['out'], name='c2'))
+    + add recurrent which looks back in time one timestep
+    >>> n.addRecurrentConnection(FullConnection(n['hidden'], n['hidden'], name='c3'))
+    + active the network, the output result will effected by the output history
+    >>> n.sortModules()
+    >>> n.activate((2, 2))
+    array([-0.1959887])
+    >>> n.activate((2, 2))
+    array([-0.19623716])
+    >>> n.activate((2, 2))
+    array([-0.19675801])
+    + clear the recurrent network history
+    >>> n.reset()
+
+# Classification with feed-forward neural networks
+- example address
+http://pybrain.org/docs/tutorial/fnn.html
+
+
+# Using dataset
+- a dataset can be seen as a collection of named 2d-arrays, called fields in this context
+    >>>inp = DS['input']
+    >>>inp[0, :]
+    >>>for inp, targ in DS:
+    >>>    DS.appendLinked(inp, targ)
+    >>># or alternatively, with  ia  and  ta  being arrays:
+    >>>assert(ia.shape[0] == ta.shape[0])
+    >>>DS.setField('input', ia)
+    >>>DS.setField('target', ta)
+normally there are two named fields, 'input' and 'target'
+- similarly the dataset could be created one-by-one
+- whether you get one, two or more sample rows as a return depends on the number of linked fields in the DataSet
+- random pick trainning and testing data method of dataset
+>>> trainds, testds = ds.splitWithProportion(0.8)
+- supervised regression training dataset
+    >>> from pybrain.datasets import SupervisedDataSet
+    >>> DS = SupervisedDataSet( 3, 2 )
+    >>> DS.appendLinked( [1,2,3], [4,5] )
+- sequential dataset for supervised regression training, subdivided into sequences of variable length that can be accessed via the methods
+getNumSequences()
+getSequence(index)
+getSequenceLength(index)
+    + sequential dataset is inherits from SupervisedDataSet
+    + fill the dataset by call newSequence(), add data by appendLinked()
+    for i in range(DS.getNumSequences):
+        for input, target in DS.getSequenceIterator(i):
+           # do stuff
+- classification dataset for supervised classification training
+    + init
+    DS = ClassificationDataSet(inputdim, nb_classes=2, class_labels=['Fish', 'Chips'])
+    + regenerate the class information using assignClasses(), calculateStatistics()
+    >>> DS = ClassificationDataSet(2, class_labels=['Urd', 'Verdandi', 'Skuld'])
+    >>> DS.appendLinked([ 0.1, 0.5 ]   , [0])
+    >>> DS.appendLinked([ 1.2, 1.2 ]   , [1])
+    >>> DS.appendLinked([ 1.4, 1.6 ]   , [1])
+    >>> DS.appendLinked([ 1.6, 1.8 ]   , [1])
+    >>> DS.appendLinked([ 0.10, 0.80 ] , [2])
+    >>> DS.appendLinked([ 0.20, 0.90 ] , [2])
+    >>> DS.calculateStatistics()
+    {0: 1, 1: 3, 2: 2}
+- SequenceClassificationDataSet which combines the features of classification and sequentialdataset
+- ImportanceDataSet, Weighted supervised training, it works like its parent, except comprising another linked field named ‘importance’, which should contain a value between 0.0 and 1.0 for each pattern.
+    
+# Black-box optimization
+- optimization problems, input is choosen from a set and maximizing(or minimize) a given objective function
+- pybrain provided 
+    + BlackBoxOptimizer
+    + ContinuousOptimizer, only be used for continuous optimization
+- Continuous optimization
+    + example to find the minimize value of x^2, use one of the optimization algorithms CMAES, by default all the optimization algorithms maximize the result
+    >>> def objF(x): return sum(x**2)
+    >>> x0 = array([2.1, -1])
+    >>> from pybrain.optimization import CMAES
+    >>> l = CMAES(objF, x0)
+    >>> l.minimize = True
+    >>> l.maxEvaluations = 200
+    >>> l.learn()
+    (array([ -1.59778097e-05,  -1.14434779e-03]), 1.3097871509722648e-06)
+    + algorithm-specific, always possible dfine the 
+        * maximal number of evaluations
+        * maximal number of learning steps
+        * reaching a desired value
+- General optimization using Evolvable, let the user define a subclass of Evolvable and implements
+    + a copy() opertator
+    + a method for generating random other points: randomize()
+    + mutate(), an operator that does a small step in search space, according to some distance metric
+    + (optionally) a crossover() operator that produces some combination with other evolvables of the same class
+    >>> from random import random
+    >>> from pybrain.structure.evolvables.evolvable import Evolvable
+    >>> class SimpleEvo(Evolvable):
+    ...     def __init__(self, x): self.x = max(0, min(x, 10))
+    ...     def mutate(self):      self.x = max(0, min(self.x + random() - 0.3, 10))
+    ...     def copy(self):        return SimpleEvo(self.x)
+    ...     def randomize(self):   self.x = 10*random()
+    ...     def __repr__(self):    return '<-%.2f->'+str(self.x)
+    which can be optimized using for example HillClimber
+    >>> from pybrain.optimization import HillClimber
+    >>> x0 = SimpleEvo(1.2)
+    >>> l = HillClimber(lambda x: x.x, x0, maxEvaluations = 50)
+    >>> l.learn()
+    (<-10.00->, 10)
+- Optimization in reinforcement Learning
+    + example, our objective function are use any episodic task
+    >>> from pybrain.rl.environments.cartpole.balancetask import BalanceTask
+    >>> task = BalanceTask()
+    + construct a module that can interact with the task
+    >>> from pybrain.tools.shortcuts import buildNetwork
+    >>> net = buildNetwork(task.outdim, 3, task.indim)
+    + choose a optimization algorithm HillClimber, two way to use
+        * connect with the constructor
+        >>> HillClimber(task, net, maxEvaluations = 100).learn()
+        * use agent-based framework
+        >>> from pybrain.rl.agents import OptimizationAgent
+        >>> from pybrain.rl.experiments import EpisodicExperiment
+        >>> agent = OptimizationAgent(net, HillClimber())
+        >>> exp = EpisodicExperiment(task, agent)
+        >>> exp.doEpisodes(100)
+    + this is similar to non-optimization reinforcement learning
+    >>> from pybrain.rl.learners import ENAC
+    >>> from pybrain.rl.agents import LearningAgent
+    >>> agent = LearningAgent(net, ENAC())
+    >>> exp = EpisodicExperiment(task, agent)
+    >>> exp.doEpisodes(100)
+- Reinforcement learning, always consists of a few components that interact with each other, Environment, Agent, Task and Experiment
+    + general packages of RL components
+    from scipy import *
+    import sys, time
+
+    from pybrain.rl.environments.mazes import Maze, MDPMazeTask
+    from pybrain.rl.learners.valuebased import ActionValueTable
+    from pybrain.rl.agents import LearningAgent
+    from pybrain.rl.learners import Q, SARSA
+    from pybrain.rl.experiments import Experiment
+    from pybrain.rl.environments import Task
+    + Environment is the world, in which the agent acts, it receives input with the performAction() and output with getSensors(), all environments in PyBrain are located under pybrain/rl/environments
+    + example a maze environment
+    structure = array([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+                       [1, 0, 0, 1, 0, 0, 0, 0, 1],
+                       [1, 0, 0, 1, 0, 0, 1, 0, 1],
+                       [1, 0, 0, 1, 0, 0, 1, 0, 1],
+                       [1, 0, 0, 1, 0, 1, 1, 0, 1],
+                       [1, 0, 0, 0, 0, 0, 1, 0, 1],
+                       [1, 1, 1, 1, 1, 1, 1, 0, 1],
+                       [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                       [1, 1, 1, 1, 1, 1, 1, 1, 1]])
+    env = Maze(structure, (7,7))
+    the (7,7) is the target point
+    + controller in PyBrain is a module, takes states as inputs and transforms them into actions, for value-based methods like Q-Learning algorithm we will use in example, need a module that implements the ActionValueInterface, in PyBrain there are two
+        * ActionValueTable for discrete actions
+        * ActionValueNetwork for continuous actions
+    controller = ActionValueTable(81, 4)
+    controller.initialize(1.)
+    + agent, is where learning happens, It can interact with the environment with its getAction() and integrateObservation(), it contains
+        * a controller, which maps states as input to actions
+        * a learner, which updates the controller parameter according to the interaction
+        * explorer, all standard agents already have default one
+    + task, is a special component connects environment and agent, for example the maze environment contain a MDPMazeTask, markov decision process
+    + example use the Q-Learning algorithm
+    learner = Q()
+    agent = LearningAgent(controller, learner)
+    task = MDPMazeTask(environment)
+    experiment = Experiment(task, agent)
+
+    while True:
+        experiment.doInteractions(100)
+        agent.learn()
+        agent.reset()
+
+        pylab.pcolor(controller.params.reshape(81,4).max(1).reshape(9,9))
+        pylab.draw()
+
+# Extending PyBrain's structure
+- Layers, NeuronLayer class serves as a base class for all types of layers
+    + implement a linear layer
+    from neuronlayer import NeuronLayer
+    class LinearLayer(NeuronLayer):
+        """ The simplest kind of module, not doing any transformation. """
+        def _forwardImplementation(self, inbuf, outbuf):
+            outbuf[:] = inbuf
+        def _backwardImplementation(self, outerr, inerr, outbuf, inbuf):
+            inerr[:] = outerr
+    inbuf and outbuf. Both are Scipy arrays of the size of the layer’s input and output dimension respectively
+    The second method is used to calculate the derivative of the output error with respect to the input.
+    + An example: quadratic polynomial as transfer function, f(x) = x^2
+    def _forwardImplementation(self, inbuf, outbuf):
+        outbuf[:] = inbuf**2
+        
+    def _backwardImplementation(self, outerr, inerr, outbuf, inbuf):
+        inerr[:] = 2 * inbuf * outerr
+- Connections, A Connection works similarly to a Layer in many ways. The key difference is that a Connection processes data it does not “own”
+    + example
+    from pybrain.structure.connections.connection import Connection
+    class IdentityConnection(Connection):
+         """Connection which connects the i'th element from the first module's output
+         buffer to the i'th element of the second module's input buffer."""
+
+         def __init__(self, *args, **kwargs):
+             Connection.__init__(self, *args, **kwargs)
+             assert self.indim == self.outdim, \
+                    "Indim (%i) does not equal outdim (%i)" % (
+                    self.indim, self.outdim)
+
+         def _forwardImplementation(self, inbuf, outbuf):
+             outbuf += inbuf
+
+         def _backwardImplementation(self, outerr, inerr, inbuf):
+             inerr += outerr
+- ParameterContainers, In all neural networks, you want adaptable parameters that can be trained by an external learning algorithm.
+    + use it combine with the connection class to implement a adaptable parameters connection
+    + example
+    from scipy import reshape, dot, outer
+    from connection import Connection
+    from pybrain.structure.parametercontainer import ParameterContainer
+
+    class FullConnection(Connection, ParameterContainer):
+        def __init__(self, *args, **kwargs):
+            Connection.__init__(self, *args, **kwargs)
+            ParameterContainer.__init__(self, self.indim*self.outdim)
+        def _forwardImplementation(self, inbuf, outbuf):
+            outbuf += dot(reshape(self.params, (self.outdim, self.indim)), inbuf)
+        def _backwardImplementation(self, outerr, inerr, inbuf):
+            inerr += dot(reshape(self.params, (self.outdim, self.indim)).T, outerr)
+            self.derivs += outer(inbuf, outerr).T.flatten()
+    params and derivs which are two arrays of size N. These are used to hold parameters and possibly derivatives.
+    ParameterContainer expects an integer argument N, which depicts the amount of parameters the FullConnection needs
+- Checking for correctness, can check the gradients of our neural network implementation numerically. gradientCheck()
+    + example
+    from pybrain.tools.shortcuts import buildNetwork
+    from pybrain.tests.helpers import gradientCheck
+
+    n = buildNetwork(2, 3, 1, hiddenclass=QuadraticPolynomialLayer)
+    n.randomize()
+    gradientCheck(n)
+    If we have done everything right, we will be rewarded with the output Perfect gradient.
+    
+# Fast networks for pybrain
+- PyBrain has its own spin-off called arac to speed up neural network, speedups of 5-10x or better in the range of 100x
+- a comparison script shipped with PyBrain at examples/arac/benchmark.py
+- Installation
+- Usage
+    + use the shortcut of buildNetwork function
+    >>> from pybrain.tools.shortcuts import buildNetwork
+    >>> n = buildNetwork(2, 3, 1, fast=True)
+    >>> n.activate((2, 3))
+    array([-0.20781205])
+    >>> n
+    <_FeedForwardNetwork '_FeedForwardNetwork-8'>
+    the Python convention for naming C implementations of already existing classes
+    >>> from arac.pybrainbridge import _FeedForwardNetwork, _RecurrentNetwork
+    The third method is to construct a network as a PyBrain network and call the method convertToFastNetwork afterwards:
+    >>> n = buildNetwork(2, 3, 1, fast=False)
+    >>> n.convertToFastNetwork()
+    <_FeedForwardNetwork '_FeedForwardNetwork-18'>
+    be cautious with the last method since changes to the PyBrain network are not reflected in the arac network.
+- limitation, arac development is likely to be slower than PyBrain’s.
+
+# Using ODE Environments, (NEED RECODING, pyode is not fit for python 2.7, check ode.org)
+- using a existing ode environment
+- creating your own learning task in an exisiting ODE environment
+- creating your own ODE environment
+- creating your own XODE instance
+
+
+
+
+    
+    

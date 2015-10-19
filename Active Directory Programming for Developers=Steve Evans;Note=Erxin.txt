@@ -1,0 +1,454 @@
+﻿Active Directory Programming for Developers=Steve Evans;Note=Erxin
+
+# introduction
+- what is LDAP & Active Directory?
+- introduction to LDAP
+    + what is LDAP, light weight directory access protocol
+    + enterprise address book
+    users and information, used for authenticate users
+    groups, group up users to control access resources 
+    computers/servers, management
+    services, discovery
+    application data
+- LDAP terminology
+    + directory structure
+    LDAP://CN=user, OU=Employee,DC=company,DC=com
+    LDAP://ldap.company.com/OU=Groups,DC=company,DC=com
+    
+    + LDAP tool, active directory users and computers to browse LDAP information
+    the structure is like a tree, the leaf is user information
+    
+    + object types and attributes
+    user, first name, last name username, email, phone numbers
+    group, user name, group memebership
+    organization unit like a folder in the structure
+    
+- Introduction to Active directory
+    + AD, active directory is a server of Microsoft, it contain in the domain controler
+    + AD lightweight directory services (ADLDS) is another server for
+    applications
+    web authentication
+    testing
+- LDAP programming with .net
+    + ADSI, active directory services interface
+    + .net 1.0,  system.direcotryServices introduced, .net wrapper for ADSI any LDAP server, no strongly typed objects
+    
+    + .net 2.0, system.DirectoryServices.Protocols, skips ADSI, better performance /harder to use
+    
+    + .net 3.5, system.DirectoryServices.AccountManagement, AD/ADLDS only, user, group, computer objects only, strongly typed objects, ADO.net vs ORM
+    
+    + powershell, module activeDirectory very similar to S.DS.AccountManagement
+    
+    
+# system.directory.services
+- DirectoryEntry class, represents individual object in LDAP storage, can be any thing such as root of LDAP, or other type of object such as user
+
+- net significant class is DirectorySearcher class, LDAP searchers
+- SearchResult/SearchResultCollection
+    + LDAP search result
+    + read only must convert to DirectoryEntry for R/W
+    
+- binding to LDAP
+//this will directly connect to the root
+var Test = new DirectoryEntry(
+    "LDAP://ldap.itd.umich.edu",
+    null,
+    null,
+    AuthenticationTypes.Anonymous);
+
+//prep AD
+DirectoryEntry RootOU = new DirectoryEntry(
+    "LDAP://DC=demo,dc=local",
+    null, //username
+    null, //password
+    AuthenticationTypes.Secure);
+    
+//connect to special organization unit(OU)
+DirectoryEntry SampleOU = new DirectoryEntry(
+    "LDAP://OU=sample,DC=demo,dc=local",
+    null, //username
+    null, //password
+    AuthenticationTypes.Secure);
+
+// until directly query to entry, then will start to connect to the LDAP server    
+SampleOU.NativeGuid; 
+    
+- creating objects
+    + find the parent of a node in LDAP
+    + use the child property to add a object
+    DirectoryEntry groupEnt = SampleOU.Children.Add("CN=TestGroup", "Group");
+    
+    using(groupEnt)
+    {
+        //it's the username for legacy reason it named sAMAccountName
+        groupEnt.Properties["sAMAccountName"].Value = "TestGroup";
+        groupEnt.CommitChanges();
+    }
+    
+    + user name
+        * user principle name, like the UserName@demo.local
+        * sAMAccountName pre-windows 2000, DEMO\UserName
+    
+    userEnt.Properties["sAmAccountName"].Value = user.UserName;
+    userEnt.Properties["userPrincipalName"].Value = user.UserName+"@demo.local"
+    userEnt.Properties["givenName"].Value = user.FirstName;
+    userEnt.Properties["sn"].Value = user.LastName;
+    
+    userEnt.CommitChanges();
+    
+    //enable the user, by default the created user is disabled
+    int val = (int)userEnt.Properties["userAccountControl"].Value;
+    userEnt.Properties["userAccountControl"].Value = val &~ADS_UF_ACCOUNTDISABLE;
+    userEnt.CommmitChanges();
+    
+- find objects
+DirectorySearcher searcher;
+SearchResultCollection result;
+
+//LDAP search expression is (attribute operators value)
+//operators such as =
+searcher.Filter = "(sAmAccountName=steve.evans)";
+searcher.SearchRoot = SampleOU;
+
+using(searcher)
+{
+    results = searcher.FindAll();
+    
+    if(result.Count == 1)
+    {
+        string path = results[0].Path;
+        user1 = results[0].GetDirectoryEntry();
+    }
+}
+
+the search result is readonly and the directory result is read and write capable
+
+- advanced searches
+    + use wildcard case matching
+    (as*A)
+
+    + query a and operation for both condition
+    (&(sn=Evans)(givenName=Steve))
+
+    a query start with specific characters is efficient than wildcard in the front. if whildcard in the middle which is the mose expensive operation
+
+    + the expression is like lisp language
+
+- object properties
+userEnt.Properties["sAmAccountName"].Value = user.UserName;
+userEnt.CommitChanges();
+
+var sn = Convert.ToString(userEnt.Properties["sAmAccountName"].Value);
+
+there is a multiple values attribute property for a entry, such as a member property of a group
+string userDN = user1.Properties["distinguishedName"].Value.ToString();
+group1.Properties["member"].Add(userDN);
+group1.CommitChanges();
+
+ldapDirectoryEntry.Path will display LDAP connection value
+
+- Set up users passwords, think the set password is a kind of store procedure, it's a little different in other property operation
+
+userEnt.Invok("SetPassword", new object[]{Password});
+
+- deleting user
+result.GetDirectoryEntry().DeleteTree();
+
+
+# S.DS.AccountManagement
+- Classes in the namespace
+    + PrincipleContext class, binding to directory
+    + UserPrincipal class, individual AD user
+    + GroupPrincipal class, individual AD group
+    + Search, 
+    PrincipalSearcher, 
+    UserPrincipal.Methods(), 
+    GroupPrincipal.Methods()
+- Binding to AD
+//directly connect to the root
+DomainContext = new PrincipalContext(ContextType.Domain);
+DomainContext = new PrincipalContext(ContextType.ApplicationDirectory);
+//localmachine
+DomainContext = new PrincipalContext(ContextType.Machine); 
+
+DomainContext = new PrincipalContext(ContextType.Domain, 
+                                     null, //current computer domain
+                                     "OU=Sample,DC=demo,DC=local");
+- Creating objects
+    + create user by UserPrincipal class
+    var user = new UserPrincipal(
+        SampleOUContext,
+        user.UserName,
+        "password",
+        true
+    );
+    
+    user.GivenName = "First name";
+    user.Surname = "Last name";
+    user.UserPrincipalName = "username@domain.local";
+    using(user)
+    {
+        user.Save();    
+    }
+    
+    + creating group
+        * group scope
+        domain local, have multiple domain
+        global, for all
+        universal
+        
+        * group type
+        security, for assign permissions
+        distribution, don't need to  assign any kinds of permissions
+        
+        * code example
+        var group = new GroupPrincipal(
+            SampleOUContext,
+            "Group name"
+        );
+        
+        group.GroupScope = GroupScope.Global;
+        using(group)
+        {
+            newGroup.Save();
+        }
+- Finding objects
+var user = UserPrincipal.FindbyIdentity(
+    SampleOUContext,
+    "name"
+);
+
+group = GroupPrincipal.FindByIdentity(
+    SampleOUContext,
+    "name"
+);
+
+get current user login information by
+UserPrincipal.Current
+
+there are several other kinds of method to get user information by the UserPrincipal class
+UserPrincipal.FindByLoginTime
+UserPrincipal.FindbyExpirationTime
+UserPrincipal.FindByPasswordSetTime
+UserPrincipal.FindbyBadPasswordAttempt
+
+- Advanced searches
+UserPrincipal userSearch = new UserPrincipal(SampleOUContext);
+userSearch.Surname = "E*";
+
+PrincipalSearcher searcher = new PrincipalSearcher();
+searcher.QueryFiler = userSearch();
+using(searcher)
+{
+    PrincipalSearchResult<Principal> result = searcher.FindAll();
+    foreach(Principal result in result)
+    {
+        string name = result.Name;
+    }
+}
+
+- Object properties
+user.Description
+user.VocieTelephoneNumber
+
+add user to group
+group.Memebers.Add(user);
+
+- Extending S.DS.AM Classes, for dealing with code with legacy or do something which is not supplied by the System.Directory Account Management
+
+DirecotryEntry userentry = (DirecotryEntry)user.GetUnderlyingObject();
+DirecotryEntry parent = userentry.Parent;
+    
+extending the user principal or group principal class, such as add properties
+public class UserExtended:UserPrincipal
+{
+    [DirectoryProperty("customProperty")]
+    public string CustomProperty
+    {
+        get
+        {
+            object [] result = this.ExtensionsGet("CustomProperty");
+            if (result != null)
+            {
+                return (string)result[0];
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+}
+
+use the extend user class just like the user principal class
+UserExtend user = new UserExtend(SampleOUContext);
+user.Save();
+- set user password
+user.SetPassword(password);
+
+- delete object
+user.Delete();
+
+# PowerShell AD Module
+
+# Performance Optimization
+- search optimization
+    + set the search root where you begin to search
+    DirectorySearcher search = new DirectorySearcher();
+    search.SearchRoot = new DirectoryEntry("LDAP://OU=Sample,DC=demo,DC=local");
+    
+    + using search with index search, LDAP have same to indexes in sql
+        * adfind, tool to search ldap from command line
+        http://joeware.net/freetools/  
+        adfind -default -f "(telephoneNumber=555-555)" -stats+Only
+
+        the parameter -stats+Only will display the query statistic information
+- GUID binding, binding specify user by the GUID
+var Guid = DirectoryEntryObject.Guid
+
+rebind the same object by Guid
+var user = new DirectoryEntry(string.Format("LDAP://<GUID={0}>", Guid.ToString("D")));
+
+- Global catalog searches, is a read-only partial representation of all the domain in the forest. 
+active directory consist as a forest may compose with multiple domains
+    + look for user from multiple domain, there is a readonly global catolog for search all the domain in the active directory
+    
+    DirectoryEntry gc = new DirecotryEntry("GC:");
+    foreach(var root in gc.Children)
+    {
+        //get to the forest
+        gc = root;
+    }
+    
+    DirectorySearcher searcher = new DirectorySearcher();
+    searcher.SearchRoot = gc;
+    search.Filter = "(sAMAccountName=steve.evans)";
+    
+    SearchResultCollection results = searcher.FindAll();
+    
+    if(results.Count == 2)
+    {
+        string path = result[0].Properties["distringuishedName"][0]
+        DirectoryEntry dc = new DirectoryEntry();
+        dc.Path = string.Format("LDAP://{0}", path);
+        
+        string username = dc.Properties["sAMAccuntName"].Value.ToString();
+    }
+- Attribute Scoped Queries
+filter active directory by attribute
+
+DirectoryEntry group = new DirectoryEntry("LDAP://CN=Talent, OU=Mail,DC=demo,DC=local");
+var searcher = new DirectorySearcher();
+seracher.SearchRoot = group;
+sercher.Filter="(&(objectClass=contact)(objectCategory=person)(mail=*))"
+
+searcher.PropertiesToLoad.Add("mail");
+searcher.SearchScope = SearchScope.Base;
+
+//looks the member of the group
+searcher.AttributeScopeQuery = "member";
+using(SearcherResultCollection results = searcher.FindAll())
+{
+    List<string> mail = new List<string>();
+    foreach(SearchResult result in results)
+    {
+        mail.Add(result.Properties["mail"][0].ToString());
+    }
+}
+
+- Connection Pooling, make sure use the same connection
+DirectoryEntry connection = new DirectoryEntry("LDAP://DC=demo,DC=local");
+using(connection)
+{
+    //connection created now, and existing connection reuses
+    tmp = connection.NativeObject;
+}
+in the using scope if create a same DirectoryEntry with same parameters will actually only use the connection of the using block. if the parameter is different such as use different authentication then will create a new connection
+
+
+
+
+
+    
+        
+# LDAP Authentication
+- System.DirectoryServices Authentication
+    public bool Authenticate(string UserName, string Password)
+    {
+        const int ERROR_LOGO_FAILURE = -2147023570;
+        
+        //every LDAP server have a concept of rootDSE, per LDAP spec, every user is able to read attributes off of it
+        DirecotryEntry root = new DirecotryEntry(
+            "LDAP://rootDSE",
+            UserName,
+            Password,
+            AuthenticationTypes.Secure);
+            
+        using(root)
+        {
+            try
+            {
+                object tmp = root.NativeObject;
+                return true;
+            }
+            catch(System.Runtime.InteropService.COMException ex)
+            {
+                if(ex.ErrorCode != ERROR_LOGON_FAILURE)
+                {
+                    throw;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+    }
+- S.DS.Account Management
+PrincipleContext adContext = new PrincipalContext(ContextType.Domain);
+using(adContext)
+{
+    return adContext.ValidateCredentials(UserName, Password);
+}
+- authenticate with asp.net
+edit in the web.config
+<connectionStrings>
+    <add name="ADService" connectionString="LDAP://demo.local"/>
+</connectionString>
+<system.web>
+    <authentication mode="Forms">
+        <forms loginUrl="~/login.aspx" timeout="2880"/>
+    </authentication>
+    
+    <membership defaultProvider="AspNetActiveDirectoryMembershipProvider">
+        <providers>
+            <clear/>
+            <add name="AspNetActiveDirectoryMembershipProvider"
+                 type="System.Web.Security.ActiveDirecotryMembershipProvider, System.Web"
+                 connectionStringName="ADService"
+                 attributeMapUsername="sAMAccountName"
+        </providers>
+    </membership>
+    <authorization>
+        <deny user="?"/>
+    </authorization>
+</system.web>
+
+create login.aspx page and use default authorization user control
+<asp:login></asp:login>
+
+login to the default.aspx
+<asp:LoginStatus/>
+<asp:LoginName/>
+
+get detail of login account
+PrincipalContext context = new PrincipleContext(ContextType.Domain)
+string username = HttpCOntext.Current.User.Identity.Name;
+UserPrincipal user = UserPrincipal.FindByIdentity(context, username);
+user.VoiceTelephoneNumber;
+
+
+
+
+
+

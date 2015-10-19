@@ -1,0 +1,178 @@
+'******************************************************************************** 
+' 
+'Name.......... APIClass 
+'File.......... APIClass.cls 
+'Version....... 1.0.0 
+'Dependencies.. kernel32.DLL 
+'Author........ Zhou Wen Xing<humanhome@126.com> 
+'Date.......... Apr, 17nd 2008 
+'UpdateURL..... http://bbs.rljy.com/?m=vbAPIClass 
+' 
+'Copyright (c) 2008 by www.rljy.com 
+'Liuzhou city, China 
+' 
+'******************************************************************************** 
+Option Explicit 
+'============================================================================== 
+'数据类型定义 
+'============================================================================== 
+Private Type VariableBuffer 
+   VariableParameter() As Byte 
+End Type 
+'============================================================================== 
+'API 函数声明 
+'============================================================================== 
+Private Declare Function LoadLibrary Lib "kernel32" Alias "LoadLibraryA" (ByVal lpLibFileName As String) As Long 
+Private Declare Function GetProcAddress Lib "kernel32" (ByVal hModule As Long, ByVal lpProcName As String) As Long 
+Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hwnd As Long, ByVal Msg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long 
+Private Declare Function FreeLibrary Lib "kernel32" (ByVal hLibModule As Long) As Long 
+Private Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (lpDest As Any, lpSource As Any, ByVal cBytes As Long) 
+'============================================================================== 
+'成员定义 
+'============================================================================== 
+'类中的全局变量 
+Private m_opIndex As Long 
+Private m_OpCode() As Byte 
+'******************************************************************************** 
+'**   作    者 ：    人类(Supermanking) 
+'**   函 数 名 ：    ExecuteAPI 
+'**   输    入 ：    LIBPath(String)         -  刷新的目标窗口句柄，可为0 
+'**            ：    APIScript(String)       -  场景图像的宽度 
+'**   返    回 ：    (Long)                  -  返回零表示失败，非零表示成功 
+'**   功能描述 ：    动态执行类库里的API函数 
+'**   创建日期 ：    2008-04-17 
+'**   修 改 人 ： 
+'**   修改日期 ： 
+'**   版    本 ：    Version 1.0.0 
+'******************************************************************************** 
+Public Function ExecuteAPI(LIBPath As String, APIScript As String) As Long 
+   Dim hProcAddress As Long, hModule As Long, x As Long, y As Long 
+   Dim RetLong As Long, FunctionName As String, FunctionParameter As String 
+   Dim LongCount As Long, StringInfo As String, StrByteArray() As VariableBuffer 
+   Dim StringSize As Long, ByteArray() As Byte, IsHaveParameter As Boolean 
+   Dim ParameterArray() As String, OutputArray() As Long 
+   StringSize = 0 
+   ReDim StrByteArray(StringSize) 
+   '识别函数名称 
+   RetLong = InStr(1, APIScript, " ", vbTextCompare) 
+   If RetLong = 0 Then 
+      '没有参数的函数 
+      FunctionName = APIScript 
+      IsHaveParameter = False 
+   Else 
+      '带参数的函数 
+      FunctionName = Left(APIScript, RetLong - 1) 
+      IsHaveParameter = True 
+       
+      '识别函数参数 
+      FunctionParameter = Right(APIScript, Len(APIScript) - RetLong) 
+    
+      '分析函数参数 
+      ParameterArray = Split(FunctionParameter, ",") 
+    
+      '初始化函数内存大小 
+      ReDim OutputArray(UBound(ParameterArray)) 
+    
+      '格式化函数参数 
+      For x = 0 To UBound(ParameterArray) 
+         If IsNumeric(Trim(ParameterArray(x))) = True Then 
+            LongCount = CLng(Trim(ParameterArray(x))) 
+            OutputArray(x) = LongCount 
+         Else 
+            StringInfo = Mid(Trim(ParameterArray(x)), 2, Len(ParameterArray(x)) - 3) 
+            If Len(StringInfo) = 0 Then 
+               OutputArray(x) = CLng(VarPtr(Null)) 
+            Else 
+               ReDim Preserve StrByteArray(StringSize) 
+               ByteArray = StrConv(StringInfo, vbFromUnicode) 
+               ReDim Preserve StrByteArray(StringSize).VariableParameter(UBound(ByteArray) + 1) 
+               CopyMemory StrByteArray(StringSize).VariableParameter(0), ByteArray(0), UBound(ByteArray) + 1 
+               OutputArray(x) = CLng(VarPtr(StrByteArray(StringSize).VariableParameter(0))) 
+               StringSize = StringSize + 1 
+            End If 
+         End If 
+      Next x 
+      ReDim m_OpCode(400 + 6 * UBound(OutputArray)) '保留用来写m_OpCode 
+   End If 
+    
+   '读取API库 
+   hModule = LoadLibrary(ByVal LIBPath) 
+   If hModule = 0 Then 
+       ExecuteAPI = 0   'Library 读取失败 
+       Exit Function 
+   End If 
+
+   '取得函数地址 
+   hProcAddress = GetProcAddress(hModule, ByVal FunctionName) 
+   If hProcAddress = 0 Then 
+      ExecuteAPI = 0   '函数读取失败 
+      FreeLibrary hModule 
+      Exit Function 
+   End If 
+    
+   If IsHaveParameter = True Then 
+      '带参数的情况在此执行 
+      ExecuteAPI = CallWindowProc(GetCodeStart(hProcAddress, OutputArray), 0, 1, 2, 3) 
+   Else 
+      '不带参数的情况在此执行 
+      ExecuteAPI = CallWindowProc(hProcAddress, 0, 1, 2, 3) 
+   End If 
+    
+   '释放库空间 
+   FreeLibrary hModule 
+End Function 
+
+Private Function GetCodeStart(ByVal lngProc As Long, arrParams() As Long) As Long 
+    Dim lngIndex As Long, lngCodeStart As Long 
+    lngCodeStart = (VarPtr(m_OpCode(0)) Or &HF) + 1 
+    m_opIndex = lngCodeStart - VarPtr(m_OpCode(0)) 
+    For lngIndex = 0 To m_opIndex - 1 
+        m_OpCode(lngIndex) =  
+    Next lngIndex 
+    For lngIndex = UBound(arrParams) To 0 Step -1 
+       AddByteToCode  
+       AddLongToCode arrParams(lngIndex) 
+    Next lngIndex 
+    AddByteToCode  
+    AddLongToCode lngProc - VarPtr(m_OpCode(m_opIndex)) - 4 
+    AddByteToCode  
+    AddByteToCode  
+    AddByteToCode  
+    GetCodeStart = lngCodeStart 
+End Function 
+
+Private Sub AddLongToCode(lData As Long) 
+    CopyMemory m_OpCode(m_opIndex), lData, 4 
+    m_opIndex = m_opIndex + 4 
+End Sub 
+
+Private Sub AddIntToCode(iData As Integer) 
+    CopyMemory m_OpCode(m_opIndex), iData, 2 
+    m_opIndex = m_opIndex + 2 
+End Sub 
+
+Private Sub AddByteToCode(bData As Byte) 
+    m_OpCode(m_opIndex) = bData 
+    m_opIndex = m_opIndex + 1 
+End Sub 
+
+
+
+//调用方法
+
+Private Sub Command1_Click() 
+   Dim API As New APIClass 
+   Dim APIScript As String 
+   '最简单的调用API函数 
+   APIScript = "MessageBoxA 0, ""这是动态调用API函数显示的MSGBOX内容，下面将要在作面画一笔。"", ""API信息提示"", 0" 
+   API.ExecuteAPI "C:\WINDOWS\system32\user32.dll", APIScript 
+    
+   '=============在作面画画============ 
+   Dim DesktophWnd As Long, DesktophDC As Long 
+   '取得桌面窗口句柄 
+   DesktophWnd = API.ExecuteAPI("C:\WINDOWS\system32\user32.dll", "GetDesktopWindow") 
+   '取得桌面窗口设备句柄 
+   DesktophDC = API.ExecuteAPI("C:\WINDOWS\system32\user32.dll", "GetWindowDC " & DesktophWnd) 
+   '在作面设备上画一条线 
+   API.ExecuteAPI "C:\WINDOWS\system32\gdi32.dll", "LineTo " & DesktophDC & "," & Screen.Width / 15 & "," & Screen.Height / 15 
+End Sub 

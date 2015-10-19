@@ -1,0 +1,446 @@
+﻿Education Sessions HP;Note=Erxin
+
+# TruClient Firefox High level Overview 
+## TruClient Modes 
+- presenter, Mosh Kraus
+- interactive mode(under firefox)
+    + recoding IM user
+    + replay IM user 
+    + debug IM user 
+    + script enhancing 
+    
+- load mode(under VuGen/LG)
+    + replay LM user 
+    
+- standalone mode with MDRV 
+    + similar to interactive mode but lauching FF not from VuGen 
+    
+- Standalone mode without MDRV 
+    + full replay without MDRV 
+    
+- code structure 
+truClient 
+    + build 
+    + common, ie and firefox live and some javascript 
+    + web2UI, firefox
+        * tool, have lots of batch tool  
+        all-fast.bat 
+        TC_FF_Standalone, a link with some parameters 
+    + web2UIMob, web ui mobile 
+    + webIE 
+     
+- interactive mode components 
++---------------------------------------------------------------+       +--------------+
+|firefox        |truClient firefox extension                    |<----->|c-functions   |
+|browser        |script development                             |       |js_functions  |
+|capabilities   |script execution +-----------------------------+       |rts           |
+|extensibility  | vuGen bridge    |truClient MDRV               |       |log           |
+|               |                 |run-logic execution          |       |              |
+|               |                 |MDRV services(               |       |              |
+|               |                 |parameters/attributes/log    |       |              |
+|               |                 | /Etc)                       |       |              |
++---------------+-----------------+-----------------------------+       +--------------+
+
+trueClient MDRV is used for replaying 
+
+- interactive mode development 
+VuGen 
++
+Firefox  --> recoding single step exection, script enhancing 
++
+truClient 
+
+VuGen 
++
+firefox 
++
+truClient FF .ext -----> script execution, step by step exeuction 
++
+truClient 
+MDRV 
+ext. 
+
+- load mode components 
+truClient MDRV extension contain Gecko 
+    + Gecko 
+    browser core capabilities|trueClient firefox extension script execution 
+    embedding 
+
+- IM replay vs LM replay
+                        interactive mode            load mode
+Browser capabilities    firefox                     gecko(firefox core)
+loading mdrv            truClient ff extension      vuGen 
+browser windows         standard ff windows         windows are small and transparent 
+mouse                   mouseovers are disabled     N/A
+                        winthin the AUT
+profile                 IM profile                  LM profile 
+AUT state after replay  current state preserved     MDRV shut down when replay end 
+                        when relay end 
+
+
+%load_runner_install_drectory%\data\LrWeb2MasterProfile                         
+
+when the profile will be copy to the loadrunner project folder?
+
+dom parase will occupy lots of memory 
+
+check the profile by system internal suit, process explorer and check the command line 
+- load runner architecture, such as the features of MDRV 
+
+what is AUT, application under test?     
+
+- private browsing 
+replay will alwas start in a clean private browsing mode 
+- prepare truclient script for load 
+
+develop script -> try in interactive mode -> try in load mode -> run a load scenario 
+
+in load mode should make sure the script running not required user interaction 
+
+
+# TC Architecture IE 
+- presenter, Yehuda, Sabag 
+- content 
+- TC for FF, first 
+- need for TC IE 
+- why are we starting with IE 
+- today, TC as part of loadrunner 
+- future, tc as a platform 
+- we will cover the state today 
+
+- RRE, recode replay engine, written in javascript, is the left pane of true client in IE or firefox 
+- LRI, loadrunner integration 
+- webbrowser control (wbc), it is a webbrowser control of IE, run IE9 
+- EB, embedded browser, host webbrowser control 
+- mdrv, loadrunner replay engine, in all protocol
+
+- interactive, LrWebIELauncher.exe, load webbrowser control, there is additional controls displayed 
+    + record 
+    + replay, called interactive replay 
+    
+- load, load launching the mdrv which is running before the browser load the browser as a dll 
+    + controller load, mdrv.exe process name 
+    + VuGen Load(aka 'VuGen replay') HP.Utt.StandaloneDebugger.exe process name 
+    
+- standalone(LrWebIELaucher.exe), without vugen, there is a addtional parameter button at the top off the RRE pane
+    + for BPM 
+
+- flow diagram 
+VuGen -+-Load----> MDRV -----------------+
+  |    |                                 |
+  |    +-Interactive--> LrWebIELauncher -+--> Loader ---+-I/L---> Hooks, for browser configuration
+  |                                                     |         Hooks use winsocket 
+  |                                                     +-------> Inet Protocol
+  |                                                     +-------> Browser manager ----- LrWebIEBrowser
+  |                                                                      |                  |     |
+  |                                                                      |                  |     |
+  |         V------------------------------------------------------------+                  |     |
+  |     JS bridge + JS ---------------+                                                     |     |
+  |               | JS UI(I/L)        |<----------------------------------------------------+     |
+  +-------------->|  RRE, LRI         |                                                           |
+                  +-------------------+                                                           V
+                                                                                                 AUT
+
+1. init the hooks
+2. inet protocol, for order code in side the solution, http manipulating user application relative to http-tcp layer 
+3. browser manager, instruction to RRE, RRE communicate with browser manager, give instruction to browser, RRE is implemented with javascript
+4. LrWebIEBrowser load JS and AUT 
+
+JS bridge between cpp and javascript, communication to browser manager, js bridge have two parts, one is javascript, and com component communicate with the cpp world 
+LRI, is javascript, save script, delete parameter, communicate with VuGen, runtime setting 
+
+- threading model, interactive 
+javascript and com component have different thread, RRE thread start first 
+
+RRE thread is used to change the js UI when execute a step? 
+the mdrv thread is used to run the scripts? otherwise why do we need to load the Mdrv extension 
+currently each mdrv drive 50 Vuser by default 
+
+- thread model, load 
+the start point is from Mdrv thread is main, controller launch nanny. create thread for browser the thread load the browser. Nanny is control used to launch RRE thread and prevent memory leak and monitory the process 
+
+- svn and solution structure 
+app 
+    + protocols 
+        * truClient 
+        command 
+            + app 
+            RRE 
+            UI, all the UI is common 
+        Web2UI, truClient for FF 
+        Web2UIMob, truClient for mobile 
+        
+        common 
+            + platform 
+            snapshot 
+
+        WebIE 
+            + LRI 
+            + RRE  
+            + Common 
+                * KMEvents, keyboard mouse events 
+                * LrWebIEHooks 
+                * LrWebIELogger 
+                * LrWebIESnapShots 
+                * LrWebIEUtil
+                ...
+            + dat, include configuration of the browser , lrWebIE_master_prefs.json 
+            lrWebIE_run_time_setting.xml            
+
+            WebIENDP, is loadrunner protocol 
+            + template, user configure from VuGen, VuGen take the template 
+
+            + tools 
+            export.bat, export data from product, copy all the javascript, dll and content to the loadrunner bin file 
+            killMdrvAndIE.bat, convince tool 
+            killExport.bat 
+            
+            
+# TC Architecture IE, Deep dive session
+- content 
+    + launcher 
+    + extension service 
+    + browser configuration, RTS, GS 
+    + User separation hooks 
+    + RREWrapper, MdrvWrapper, LRIServices 
+    javascript c++ communication 
+    
+    + InternetProtocols 
+        * measurements 
+        * ie9 standarad mode, injection 
+        * client certificate record\replay 
+        * user authentication record\replay 
+        * header maninpulation 
+        * filtering 
+
+- the load initialize all the other parts 
+Run logic
+Logging
+Browser - separate session
+Nanny solution – separate session
+
+- the UI is build base on MFC
+- LrWebIE solution 
+    + LRI folder 
+        + LrWebIEReplay project is the start project 
+
+        + LrWebIELRIServices 
+            + Header files folder 
+            AmbianceService.h
+    + UI 
+        + browser 
+            + LrWebIEBrowser project
+            + LrWebIELaucher project 
+
+            The launcher.cpp use the factory method GetLoader()
+
+            Startup() method call a lots of initialization steps 
+
+- the tomato plugin? do we have license? 
+- Check the load mode start project 
+    + LRI 
+        + LrWebIEReplay 
+            + Source Files 
+            LrWebIEExtensionService 
+            
+            int LrWebIEExtensionService::extPerProcessInitialize(){
+            
+                ...
+                if(mode == LOAD_MODE)  
+                {
+                }
+            }
+
+why create a separate thread for the browser. because every browser represent one users, it is for javascript and communication 
+
+each thread is created for each Vuser in loadrunner 
+
+in TC every Vuser is process, each contain a main mdrv thread 
+
+- Extension service 
+LrWebIEExtensionService class three class inherite from it 
+    + CompileExtensionService, empty don't required in TC 
+    + InteractiveExtensionSerivce 
+    + LoadExtensionService 
+    
+function flow for the extension service 
+PerProcessInit -> PerThreadInit -> vuser_init -> vuser_action -> vuser_end -> PerThreadTerm -> PerProcessTerm 
+    + interactive extension 
+
+in the LrWebIEReplay project 
+    + Header Files 
+    LrWebIEExtensionService.h 
+    
+int LrWebIEExtensionService::initMdrvServiceWrapper()
+{
+    CComPtr<IlrMdrvServivcesWrapper> mMdrvServicesWrapper;
+    if(FAILED(mMdrvServicesWrapper.CoCreateInstance(CLSID_lrMdrServciesWrapper))){
+        OutputDebugStringA("LrWebIEExtensionService::initMdrvServiceWrapper(): fail to initialize the lrMdrvServiceWrapper(COM)");
+        return 0; //faild will return zero?
+    }
+    //GIT stand for global interface table, it is a ATL template, http://www.codeproject.com/Articles/17837/Global-Interface-Table-An-Easy-Way-to-Marshal-an-I
+    CComGITPtr<IlrMdrvServicesWrapper> mdrvServicesWrprToMarshal = mMdrvServicesWrapper;
+    ...;
+}
+
+the LrWebIELoadExtensionService::extPerProcessInitialize() will call the LrWebIEIReplayMain->RestartEvalVM() a c evaluation engine and init the Nanny process 
+
+one nanny process will monitor all the other mdrv process, and communicate to the controller 
+
+every class is running in the state base on different mode, we don't compile the user script just give the warning 
+
+    + load extension 
+    LrWebIELoadExtensionService::extPerThreadInitialize()
+    
+    check the IE9 is installed 
+    
+    
+firefox doesn't known com, for firefox you have to create profile for the user running 
+- Loadrunner code? 
+
+
+# TruClient architecture RRE record and replay engine overview
+- the core technology of truClient, it is code in javascript 
+- structure in svn 
+app
+    + protocol 
+        + truClient 
+            + Common 
+                + app 
+                    + RRE 
+            + WebIE, same folder path in web2ui and webie, when export, just copy all the javascript files and modify it for fit for the explorer 
+                + app 
+                    + RRE 
+                        + content 
+                            + Ident, object identification 
+                            + Infra, first thing need to load, contains rules mechanism RuleEngine, Query, Event 
+                            + Model, TestObject, Transaction, Library, RunLogic, RTS, Script, Step {TestObjest Steps {RolesImel, RolesSchemas}, Step Progress, StepExts}, BackwardComp 
+                            + Interactive, ScriptModefiers, StepGens, NameGens, RolesGens, ScriptUndo, ReplayAssistant
+                            + L10N, things that need translation 
+
+- in the Script.js 
+Query is used to filter event and add event handler 
+Query.addEventListener("runLogic/init/start", function()){
+}
+
+such as the snapshot should be take before each step begin and end 
+
+- a empty step have a template Default.xml
+app\Protocol\TruClient\Web2UI\app\RRE\content\template\Default.xml 
+
+<truScript>
+<step type="block" stepId="step:{00000000-0000-0000-0000-000000000001}" action="TopStep" level="1">
+    <step type="block" stepId="step:{00000000-0000-0000-0000-000000000002}" action="action" section="Script" level="43">
+        <step type="block"" stepId="step:{00000000-0000-0000-0000-000000000003}" action="action" section="Init" level="43"/>
+        
+        <step type="block"" stepId="step:{00000000-0000-0000-0000-000000000004}" action="action" section="Action" level="43"/>
+        
+        <step type="block"" stepId="step:{00000000-0000-0000-0000-000000000005}" action="action" section="End" level="43"/>
+        
+        <step type="block"" stepId="step:{00000000-0000-0000-0000-000000000006}" action="Handlers" section="Handlers" level="43"/>
+        
+        <step type="runLogic"" stepId="step:{00000000-0000-0000-0000-000000000007}" action="default" section="Action" level="43">
+            <step type="control" stepId="step:{00000000-0000-0000-0000-00000000000101}" action="ref" level="43" arguments="{}" refStepId="step:{00000000-0000-0000-0000-000000000001}"/>
+            
+            <step type="control" stepId="step:{00000000-0000-0000-0000-00000000000102}" action="ref" level="43" arguments="{}" refStepId="step:{00000000-0000-0000-0000-000000000002}"/>
+            
+            <step type="control" stepId="step:{00000000-0000-0000-0000-00000000000103}" action="ref" level="43" arguments="{}" refStepId="step:{00000000-0000-0000-0000-000000000003}"/>
+        </step>
+    </step>
+</step>
+<testObjects></testObjects>
+<transactions>
+</truScript>
+
+all step inherit from step 
+
+type block have unlimit child step 
+
+type if have only could max two children 
+
+for loop, is block but only could have single children 
+
+the action is stand for the specific implementation 
+
+    + implementation code of step, 41, 43 is unvisible step level, which is for internal uses
+    //Step.js 
+    Object.extend(Step, {
+    normal: 1 
+    hight: 2 
+    maximum: 3 
+    hidden: 42 
+    internal: 43 //for internal uses invisible to user 
+    });
+    
+when you change the step value in the UI the actually change the top step level property 
+
+document.implementation.createDocumet(pvarNS, pvarElementName, pDocumentType);
+pvarNS, the namespace UIR of the resulting document or null value 
+varElementName[in], the root element for the document or a null value 
+pDocumentType, the desired document type for the document or a null 
+
+https://msdn.microsoft.com/en-us/library/windows/apps/hh453110.aspx
+
+testObjects, Step and Transaction object each one have its own document object when serialization these content will be saved 
+
+only the truClient engine is responsible for saving or reading the xml files 
+
+step extend is a class 
+
+
+# TruClient Front End, architecture overview
+- Application structure 
+    + an application is natively consist of 
+    a model, set of entities/collections of entities 
+    + a user interface set of visual element used to 
+        * describe relevant parts of the current state of the model 
+        * change the current sate of the model 
+        * activate other UI elements 
+        
+- javascript state machine 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                 
+
+
+
+

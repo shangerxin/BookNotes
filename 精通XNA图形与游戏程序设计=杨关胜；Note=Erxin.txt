@@ -1,0 +1,262 @@
+精通XNA图形与游戏程序设计=杨关胜；Note=Erxin
+
+# XNA简介
+- 2004年发布XNA framework
+- 2006年发布XNA Build March 2006 CTP(Community technology preview), 类似于msbuild和ant
+- XNA运行在.net基础之上，相对于directx会有1~2%的效率损失
+- XNA工程文件说明， 新建空白XNA项目，包含两个文件
+	* 文件说明
+	Game1.cs, 继承至xna framework game, 供program调用run方法执行游戏
+	Program.cs, 整个游戏程序入口
+	content目录用于存放素材
+	* content.RootDirectory="Content", 表示当前目录下的content目录，contentManager是当前的素材管理器
+	* 获取玩家按键状态
+	KeyBoardState ks = KeyBoard.GetState([PlayerIndex]);
+	GamePad.GetState([PlayerIndex]);
+	ex.判断是否是esc按下，按下则推出
+	if(ks.IsKeyDown(Keys.Escape)) this.Exit(); 	
+	* 控制窗口Game.Window属性
+	* 图形设备的获取, game属性中的GraphicsDevice公有属性实现，还可以通过graphics调用类
+	GraphicsDeviceManager的公有属性GraphicsDevice获取图形设备
+	* 全屏运行游戏
+	this.graphics.PreferredBackBufferWidth = 1024;
+	this.graphics.PreferredBackBufferHeight = 768;
+	this.graphics.IsFullScreen = true;
+	* 全屏切换
+	this.graphics.ToggleFullScreen();
+	
+# 二维图形与字体
+- 素材管道，content pipeline
+XNA不再和directx一样使用函数调用方式加载外部资源(图片，字体，网络模型，声音，效果文件等)，而是在编译阶段将所有资源经XNA素材管线编译成二进制*.xnb文件
+- 素材管线的使用
+	* 简单资源无需使用代码，只需要将资源复制到指定目录下，然后从项目中链接资源，
+	设置好资源的content import属性和content processor属性就可以了，
+	通常XNA会根据不同的资源进行自动配置
+	* 还可以从XNA提供的素材管线继承并创建自己的管线
+	* 管线的实现
+	microsoft.xna.framework.content.pipline.dll
+	提供基本素材管线
+	microsoft.xna.framework.pipline.textureImporter.dll
+	导入纹理或图片
+	microsoft.xna.framework.pipline.XImporter.dll
+	导入directx使用的网格模型
+	microsoft.xna.framework.pipline.fbxImporter.dll
+	主要用于导入网格模型文件
+	microsoft.xna.framework.pipline.effectImporter.dll
+	导入效果文件
+	microsoft.xna.framework.pipline.audioImporters.dll
+	导入声音文件
+	microsoft.xna.framework.pipline.videoImporters.dll
+	导入视频文件
+- XNA4.0中会建立资源项目，将所有资源单独管理
+- 导入图片
+	+ 将资源复制到conent project的目录下
+	+ 在content project中添加已有项, 为导入的资源起名
+	+ 使用资源
+		* 建立Texture2D变量，在game的loadContent方法中载入资源
+		Texture2D tx = Content.Load<Texture2D>("ResourceKey");
+	+ 资源种类
+	Texture2D, Texture3D, Effect, TextureCube立方体纹理, SpriteFont字体，Model网格模型
+	+ 渲染二维图片，通常XNA使用spiriteBatch渲染二维图片，建立成员变量 在loadContent中添加对其的初始化
+	SpriteBatch sb = new SpriteBatch(graphics.GraphicsDevice);
+	sb.Begin();
+	sp.Draw(texture2d, vector2 position, color color); //其中color表示进行通道调制的颜色，白色为不调制
+	sb.End();
+- 渲染多幅图片
+	* 获取当前设备的状态，使用PresentationParameters属性
+	如后台缓冲区大小，当前窗口大小
+	PresentationParameters pp = graphics.GraphicsDevice.PresentationParameters;
+- 二维图片的旋转、缩放、镜像与剪接
+使用spiriteBatch.Draw的另一个重载方法
+public void Draw(
+	Texture2D tx,
+	Vector2 pos,
+	Nullable<Rectangle> sr, //指定渲染图形的某个矩形区域部分， 为null则绘制整幅图片
+	Color color,
+	float rotation, //为弧度值，顺时针为正
+	Vector2 origin, //绘制的基准点，默认0，0
+	Vector2 scale,  //渲染时对高和宽的缩放比例
+	SpriteEffects, effects, 
+	float layerDepth) //当前画面的深度直, 越小越靠前，0~1
+- 图层与透明渲染
+	* 使用SpriteBatch.Draw的重载函数
+	SpriteBatch.Begin(
+		SpriteBlendMode blendMode, //回合模式有三种additive, alphaBlend使用alpha混合， None不混合
+		
+		SpriteSortMode		sortMode,
+		//指定图层的渲染顺序，Deferred在调用end()之后使用draw()函数顺序绘制， BackToFront根据深度值由前至后绘制，FrontToBack, Texture类似于deferred区别在于根据纹理的优先级别渲染， immediate与deferred相反，表示draw()已经调用直接绘制
+		
+		SaveStateMode stateMode)
+- 字体，使用SpriteBatch同样可以显示二维字体， 使用字体时需要导入一个字体类SpriteFont, 使用字体的时候需要运行应用程序的计算机已经安装字体
+	+ 英文字体， 使用
+	SpriteBatch.DrawString(
+		SpriteFont spriteFont,
+		string text,
+		Vector2 position,
+		Color color)
+	渲染字符串
+	测试以指定字体绘制的字符串长与宽
+	vector2 objSpriteFont.MeasureString(objString);
+	+ 汉字字体， 在引用完对应的字体后需要修改字体文件中的CharacterRegion，将使用到的汉字的十六进制内容填写到region中
+
+# 三维图形基础
+- 顶点缓冲区，基本图元，索引缓冲区，用户定义顶点结构，填充模式等三位图形基本理论
+- BasicEffect类, XNA用其提供固定函数流水线的变成方式
+	+ 构造函数有两个重载
+	protected BasicEffect(
+		GraphicsDevice device,
+		BasicEffect clone)
+	public BasicEffect(
+		GraphicsDevice device,
+		EffectPool effectPool)
+	effectPool， 多位多个效果共享的效果池
+	device, 当前的图形设备
+	clone, 被克隆的原效果
+    + 对象使用
+    CurrentTechnique, 当前技术
+    World, View, Projection， 属性，世界变换矩阵，曲靖变换矩阵，投影变换矩阵
+    VertexColorEnabled, 开启顶点着色
+    LightingEnabled, 光照效果
+    AmbientLightColor, 环境光效果
+    EmissiveColor, DiffuseColor, SpecularColor, SpecularPower, 自发光颜色， 漫反射颜色， 镜面反射颜色和镜面反射强度
+    Alpha
+    DirectionalLight0, DirectionalLight1, DirectionalLight2, 获取当前0，1，2好方向光，进而设置各个方向光的属性
+    TextureEnable, Texture, 实现纹理效果时使用的，TextureEnable用来开启和关闭纹理相关属性
+    FogEnable, FogStart, FogEnd, FogColor, 实现雾化， 起始雾化距离， 最大雾化距离， 设置雾的颜色
+    Begin，End， 用户开启/关闭当前技术
+    CommitChanges，用于将当前技术中的变化提交给设备进行图形渲染
+- 坐标系， 绝大部分时间使用笛卡尔坐标系
+    + 2维
+    + 3维， 左手系， 右手系， 握紧方向大拇指与Z轴方向决定， XNA使用右手系，Z指向屏幕外侧
+- 渲染流水线
+顶点数据，基本图元数据 -> 顶点处理 -> 几何处理 -> 像素处理， 纹理采样 -> 像素渲染
+- XNA集合处理，geometry processing
+    + 剪切， cliping， 剔除不在view中显示的三角形
+    + 背面剔除， back face culling， 剔除背对摄像机的三角形
+    + 顶点属性计算， attribute evaluation， 根据渲染状态计算每个顶点的状态
+    + 光栅化处理， rasterization， 为剩余的每个顶点分配像素
+    + 像素处理， 设置每个像素的颜色值
+    + 纹理采样， 根据顶点数据对纹理进行采样，获取三角形中每个像素的纹理颜色
+    + 像素渲染， XNA通过alpha测试，深度测试，模板测试或进行alpha混合，计算每个像素最终的颜色值并显示在屏幕上
+- 定点缓冲区， vertex buffer， 4种结构固定的顶点格式, 也可以自定义顶点格式
+VertexPositionColor, VertexPositionColorTexture, VertexPositionNormalTexture, VertexPositionTexture
+    + ex， 顶点声明3个变量
+    VertexBuffer verbuf;
+    VertexPositionColor[] arrpoint;
+    VertexDeclaration delverofPosandCol;
+- 顶点声明与设置顶点数据, 使用顶点声明类VertexDeclaration
+public VertexDeclaration(GraphicsDevice gd; VertexElement elements)
+    + ex
+    var vd = new VertexDeclaration(device, VertexPositionColor.VertexElements);
+    aryPoint = VertexPositionColor[1];
+    aryPoint[0].Position = new Vector3(1.5f, -1.5f, 0.0f);
+    aryPoint[0].Color = Color.Red;
+- 建立顶点缓冲区VertexBuffer类
+public VertexBuffer(GraphicDevice gd, Type vertexType, int elementCount, BufferUsage usage);
+BufferUsage为枚举值， 有三个值
+    + None，普通缓冲区
+    + Points， 表示渲染点point sprite的缓冲区
+    + WriteOnly， 表示创建只写缓冲区
+使用SetData函数来填充建好的缓冲区
+    + ex.
+    var verbuf = new VertexBuffer(device, typeof(VertexPositionColor), 3, BufferUsage.None);
+    verbuff.SetData<VertexPositionColor>(aryPoint);
+- 顶点坐标变换是渲染的第一个任务， 需要设置三个相关的变换阵
+    + 世界变换与世界变换阵， 平移， 旋转， 缩放
+    [x_ y_ z_ 1] = [x y z 1][[1  0  0  0]
+                             [0  1  0  0]
+                             [0  0  1  0]
+                             [Tx Ty Tz 1]]
+	+ 通常使用Math类的，CreateTranslation构造平移变换阵
+    public static Matrix CreateTranslation(float xPosition, float yPosition, float zPosition); //参数为延各个坐标轴平移的距离
+	+ 旋转变换阵, 通常使用math的静态成员CreateRotationX(), CreateRotationY(), CreateRotationZ()构造绕轴x，y，z的旋转变换矩阵， 还提供了matrixCreateFromYawPitchRoll()函数来一次提供绕x，y，z轴相继旋转
+        * x轴旋转阵
+        [x_ y_ z_ 1] = [x y z 1][[1   0    0   0]
+                                 [0  cos@ sin@ 0]
+                                 [0 -sin@ cos@ 0]
+                                 [0   0    0   1]]
+            
+        * y轴旋转变换矩阵
+        [x_ y_ z_ 1] = [x y z 1][[cos@  0 -sin@ 0]
+                                 [0     1   0   0]
+                                 [sin@  0  cos@ 0]
+                                 [0     0   0   1]]
+        * z轴旋转变换
+        [x_ y_ z_ 1] = [x y z 1][[ cos@ sin@ 0 0]
+                                 [-sin@ cos@ 0 0]
+                                 [   0   0   1 0]
+                                 [   0   0   0 1]]
+    + 缩放变换， CreateScale()函数
+        [x_ y_ z_ 1] = [x y z 1][[Sx 0   0  0]
+                                 [0  Sy  0  0]
+                                 [0  0   Sz 0]
+                                 [0  0   0  1]]
+    + 复合变换矩阵，是以上单位变换矩阵的乘积，乘积的顺序决定了变换的次序
+- 取景变换矩阵，决定了取景虚拟摄像机的位置，使用Matrix成员函数CreateLookAt()创建取景变换矩阵
+public static Matrix CreateLookAt(
+    Vector3 cameraPosition, 
+    Vector3 cameraTarget, 
+    Vector3 cameraUpVector)
+使用取景变换阵
+basicEffect.View = Matrix.CreateLookAt(camPos, camAim, camUp);
+- 投影变换及投影变换阵， 从取景空间想二维虚拟相机胶片，也就是用户的屏幕上，有两种投影，正交投影，透视投影
+    + 正交投影，投影向量和观察平面垂直，顶点坐标沿着观察坐标系的z轴平行投影到观察平面上，观察点
+    和观察平面的距离不会影响物体的投影大小， 投影范围是一个长方体
+    Matrix.CreateOrthographic(
+        float width, 
+        float height, 
+        float zNearPlane, 
+        float zFarPlane)方法创建
+    zNearPlane, zFarPlane是取景长方体距离摄像机的最近距离和最远距离
+    + 透视投影， 距离摄像机越远物体在投影平面上成的像越小，相反越大，投影范围是一个四棱台
+    Matrix CreatePerspectiveFieldOfView(
+        float fieldOfView, 
+        float aspectRatio, 
+        float nearPlaneDistance, 
+        float farPlaneDistance)
+    fieldOfView, 表示摄像机在y轴上的成像角度
+    aspectRatio, 表示四棱台截面的宽高比
+    + 使用投影矩阵
+    basicEffect.Projection = Matrix.CreatePerspectiveFieldOfView(...);
+- 视区变换和屏幕坐标系， 投影坐标系的坐标为付点坐标， 通过定义屏幕区域将浮点坐标转化为像素坐标的过程称为视区变换，该像素坐标值称为屏幕坐标，例如视区大小宽慰640，高480，则(1.0f, 0.5f)对应坐标为(640, 240)
+    + 视区大小修改，一般XNA程序为整屏显示
+    var view = new Viewport();
+    view.Height = 300, view.Width = 400;
+    device.Viewport = view;
+- 顶点处理后就可以进行几何处理、像素处理和纹理采样和像素渲染了。图形渲染例子
+basicEffect.Begin();
+foreach(EffectPass pass in basicEffect.CurrentTechnique.Passes)
+{
+    pass.Begin();
+    device.VertexDeclaration = delverofPosandCol;
+    device.Vertices[0].SetSource(verbuf, 0, VertexPositionColor.SizeInBytes);
+    device.DrawPrimitives(PrimitiveType.TriangleStrip, 0, 1);
+    pass.End();
+}
+设置顶点数据流函数声明
+public void SetSource(
+    Vertex Buffer vb, 
+    int offsetInBytes, 
+    int vertexStride);
+vb, 为对应的顶点缓冲区资源， 参数offsetInBytes为该数据流相对起始位置，参数vertexStride为数据流中每个顶点的大小，以字节为单位通常用顶点格式结构体的SzieInBytes属性获取
+渲染基本图元函数声明如下
+public void DrawPrimitves(
+    PrimitiveType primitiveType, 
+    int startVertex, 
+    int primitiveCount)
+primitiveType, 表示图元类型
+startVertex, 表示第一个顶点的索引号
+primitiveCount表示渲染图元的个数
+- XNA基本图元类型
+PointList, 一组点
+LineList, 一组线段
+LineStrip, 不间断的点表示一组线段
+TriangleList, 一组三角形
+TriangleStrip, 不间断点表示一组三角形
+TriangleFan, 扇形的一组三角形
+
+        
+        
+        
+        
+        

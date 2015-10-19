@@ -1,0 +1,588 @@
+﻿WCF channel 9;Note=Erxin
+
+# what's new in wcf 4.0
+- protocol bridging, using routing service, bright two kinds of protocol
+- create a routing service 
+    + create a route service
+    + only need to change the configuration to make the routing works
+    + add routingConfiguration behavior for the routing service
+    + add filter tables for the service behavior
+    <behaviors>
+        <serviceBehaviors>
+            <behavior name="">
+                <serviceMetadata = httpGetEnabled="true"/>
+                <serviceDebug includeExceptionDetailInFaults="false"/>
+            </behavior>
+            <behavior name="routingConfiguration">
+                <routing filterTableName="filterTable"/>
+                <serviceDebug includeExceptionDetailInFaults="true"/>
+            </behavior>
+        </serviceBehaviors>
+    </behaviors>
+    <bindings>
+        <netTcpBinding>
+            <binding name="CalculatorService">
+                <security model="None"/>
+            </binding>
+        </netTcpBinding>
+    </bindings>
+    <routing>
+        <filters>
+            <filter name="MatchAllFilter" filterType="MatchAll"/>
+        </filters>
+        <fitlerTables>
+            <filterTable name="filterTable">
+                <add filterName="MatchAllFilter" endpointName="regularCalculatorEndpoint" priority="0"/>
+            </filterTable>
+        </filterTables>
+    </routing>
+    <client>
+        <endpoint name="regularCalcularEndpoint"
+                  address="net.tcp://localhost:9090/CalculatorService"
+                  bidning="netTcpBinding"
+                  bindingConfiguration="CalculatorService"
+                  contract="*"/>
+    </client>
+    <services>
+        <service behaviorConfiguration="routingConfiguration" name="System.ServiceModel.Routing.RoutingService">
+            <endpoint address="general" binding="basicHttpBinding" name="routerEndpoint1" contract="Sytem.ServiceModel.Routing.IRequestReplyRouter"/>
+        </service>
+    </services>
+    
+    change the client to use the router service and make it route base http to net.tcp protocol service
+    
+    + change the client app configuration
+    <configuration>
+        <system.serviceModel>
+            <bindings>
+                <binding name="CalculatorService">
+                    <security model="None"/>
+                <binding>
+            <bindings>
+            <client>
+                <endpoint address="net.tcp://localhost:9090/CalculatorService"
+                          binding="netTcpBinding" bindingConfiguration="CalculatorService"
+                          contract="CalculatorServiceReference.ICalculatorService" name="ClculatorService"/>
+                          
+            </client>
+        </system.serviceModel>
+    </configuration>
+    
+- use content to help router decision 
+    + create a out going message header to let the router check the header and then router the request
+    OperationContext ctx = OperationContext.Current;
+    MessageHeaders messgeheadersElement = ctx.OutgoingMessageHeaders;
+    ctx.OutgoingMessageHeaders.Add(
+        MessageHeader.CreateHeader(
+            "RoudingCalculator",
+            "http://my.custom.namespace/",
+            "1"));
+        
+    + change configuration for the routing service, use the xpath by a new filter to check the message header container the relative namespace:MessageHeaderName
+    <routing>
+        <namespaceTable>
+            <add prefix="custom" namespace="http://my.custom.namespace/"/>
+        </namespaceTable>
+        
+        <filters>
+            <filter name="XPathFilter"
+            filterType="XPath"
+            fitlerData="sm:header()/custom:RoudingCalculator = 1"/>
+            ...
+        </filters>
+        <filterTables>
+            <fitlerTable name="filterTable">
+                <add filterName="roudingCalculatorEndpoint" priority="1"/>
+                <add filterName="MatchAllFilter" endpointName="regularCalculatorEndpoint" priority="0"/>
+            </filterTable>
+        </filterTables>
+    </routing>
+    
+    <!--add relative roudingCalculatorEndpoint-->
+    <client>
+        <endpoint name="roudingCalculatorEndpoint"
+                  address="net.tcp://localhost:8080/RoundingCalculatorServic"
+                  binding="netTcpBinding"
+                  bindingConfiguration="CalculatorService"
+                  contract="*"/>
+        ...
+    <client>
+
+    the priority 1 is greater than 0
+
+- use backup list for routing service when a bad endpoint is encountered will try the service in the backup list
+    + add a backup list into the filterTable
+    <routing>
+        <backupLists>
+            <backupList name="backupList1">
+                <add endpointName="roudingCalculatorEndpoint"/>
+            </backupList>
+        </backupLists>
+        ...
+        <filterTables>
+            <filterTable name="filterTable1">
+                <add filterName="XPathFilter"
+                     endpointName="badEndpoint"
+                     backupList="backupList1"
+                     priority="1"/>
+                ...
+            </filterTable>
+        </filterTables>
+        ...
+    </routing>
+
+    
+    
+# building restful services using wcf, Jon Flanders
+- about the author
+http://wwww.rest-ful.net/
+independent consultant/Pluralsight instructor
+microsoft mvp
+
+TechEd bookstore
+    
+- most of the services should build with rest but not all
+- stands for representational state transfer
+introduced by Roy Fielding
+- is an architectural style(extends client-server)
+- defines a set of constraints distilled from the architecture of the web
+    + urls represent resources
+    + messages are self-descriptive(contentType)
+    + clients interact with resources via a uniform interface
+    get, post, put, delete
+    + services are stateless
+    + hypermedia(i.e. hrefs) drive application state
+    
+- client-server 
+    + reset, is a architecture style
+    + soap, like a protocol implementation
+    + rpc
+    + dcom
+    + java mi
+    
+- rest have several rules to implement the architecture but the other kinds of implementation doesn't have a direct rules
+    + everything is addressable, everything has an unique uri, URIs represent resources
+    + content negotiation, server-client support use different kinds of content to communicate compare to other kinds of service
+    xml, xhtml, json
+    + interact resource with an uniform interfaces
+        * in rest the verb is pre set
+        get, post, put, delete
+        post, post is used to update resource
+        put, create or delete
+    
+    + services are stateless
+    + hypermedia(i.e. hrefs) drive application state
+    
+- uniform interface
+    + get, retrieves a resource, guaranteed not to cause side-effects(SAFE), results are cacheable
+    + post, creates a new resource, unsafe:effect of this verb isn't defined by http
+    + put, updates an existing resource, sued for resource creation when client knows uri, can call n times, same thing will always happen(idempotent)
+    + delete removes a resource, can call n times, same thing will always happen(idempotent)
+    
+conditional get, server can cache the response, with cache can do conditional get, the server return the identifier of the resource, the client ask the server with the identifier to check if resource is changed
+    
+- why should you care
+    + microsoft live services
+    + sql server data services
+    + ado.net data services
+    + everybody that isn't microsoft(google, yahoo, facebook, myspace)
+    
+- advantages
+    + get response can be cached
+    + using uris to build on experience, using the web
+    + uniform interface simplifies building and using services(no apis to build)
+    + statelessness constraint eases scalability
+    + wide interoperability
+    + a more lightweight way to build services
+    
+- simple is not equal to easy, soap is easy when both of the sites align to communicate with it
+- building a restful service
+    + design your resource(s) & content type
+    + determine the uri for each resource
+    + determine what part of the uniform interface each resource should implement
+    + figure out how the resources link together(hyperlinking)
+    
+- window communication foundation(WCF)
+    + is a framework for building applications
+    + abstracts away network complexities
+    + is a model geared toward SOAP
+    + rest support added in 3.5 and improved
+    
+- wcf messages to methods
+    + wcf maps network messages to methods
+        * done by default dispatcher
+    + soap support in 3.0/3.5 routes messages to methods based on soap action
+        * uri always the same
+        * always uses post when using http
+        * soap responses can't be cached
+    
+- wcf 3.5 web programming
+    + messages are routed to methods based on 
+        * uri
+        * http verb
+    + same wcf programming model
+        * serviceContract
+        * operationContract
+        * dataContract
+    + new dispatcher maps uri+verb + methods
+    
+- wcf dispatching
+message <-network-> transport channel(http)
+                    message encoder
+                    protocol channel(1-N)
+                    dispatcher(action)
+                    your code
+    
+- simple services in a SimpleService.cs file
+namespace SimpleService
+{
+    public class Thingy
+    {
+        public int id {get;set;}
+        public string data {get;set;}
+    }
+    public class Thingies:List<Thingy>
+    {
+    }
+
+    [ServiceContract]
+    public class Simple
+    {
+        static Thingies _theThingies = Init();
+        
+        private static Thingies Init()
+        {
+            var t = new Thingies();
+            t.Add(new Thingy{Id=0, data="Thing1"});
+            return t;
+        }
+
+        [OperationContract]
+        [WebGet(UriTemplate="/")]
+        public Thingies GetAll()
+        {
+            return _theThingies;
+        }
+    }
+}
+    
+the WebGet attribute is define in System.ServiceModel.Web assembly
+    
+add svc file to make wcf service host in iis
+<%@ ServiceHost
+    Service="SimpleService.Simple"
+    Factory="System.ServiceModel.Activation.WebServiceHostFactory"%>
+    
+view the svc file in the svc file will call the default WebGet method to get all the Thingies
+
+- use fiddler to build a request builder could test the restful services
+- control the serialization output of the array of thingies by add CollectionDataContract(Namespace="", Name="thingies")
+
+[CollectionDataContract(Namespace="", Name="thingies")]
+public class Thingies:List<Thingy>
+{
+}
+    
+[CollectionDataContract(Namespace="", Name="thingy")]
+public class Thingy
+{
+    [DataMemeber]
+    public int id;
+    [DataMember]
+    public string data;
+}
+    
+the serialize output of thingies will name as thingies instead of ArrayOfThingies
+ 
+- add variable pass segment
+[OperationContract]
+[WebGet(UriTemplate="/{id}")]
+public Thingies GetOne(string id)
+{
+    ...
+}
+    
+[OperationContract]
+[WebInvoke(UriTemplate="/")]
+public void AddOne(Thingy t)
+{
+    ..
+}
+    
+the WebInvoke attribute is default call by POST protocol, the Thingy object will come from the http post request body
+
+[OperationContract]
+[WebInvoke(UriTemplate="/{id}",Method="DELETE")]
+public void DeleteOne(string id)
+{
+    ..
+}
+    
+the WebInvoke attribute is default call by POST protocol
+
+- consume restful service in wpf client
+Microsoft.Http.dll, Microsoft.Http.Extensions.dll
+
+var client = new HttpClient();
+var msg = client.Get("http://localhost:28185/service/")
+msg.Content; //the content of the response may be different kinds of thing such as xml, json, xhtml
+
+//we could read the content as stream and parse it manually or use the feature of visual studio Edit|Paste xml as types
+msg.Content.ReadAsStream(...);
+
+//Copy the service return xml content structure and paste it as type into the project, and then use the xml serialize library to get the instances of the types 
+msg.Content.ReadAsXmlSerializable<xml_instance_type>();
+
+in visual studio 2008, there is a rest starter kit to add the past xml as type
+
+- rest architecture don't need auto generated proxy
+
+- wcf 3.5 rest basics summary
+    + uriTemplates
+    literal and replaceable path URI path segments
+    + webGetAttribute
+    verb GET-UriTemplate property defines URI
+    + webInvokeAttribute
+    ver*-method property determines
+    post is default, other method is determine by the method property
+    + webHttpBinding
+    http+text(no soap)
+    + webServiceHost
+    automatic config
+    + webServiceHostFactory
+    automatic config in iis
+
+the wcf configuration could be empty if just implement the rest service, if need security and authentication it still need to add web configuration
+
+- ajax support 
+    + many restful clients are javascript based ajax clients
+    + javascript object notation(JSON) is the preferred resource representation
+        * smaller footprint than xml
+        * no parsing necessary
+    + wcf has support for ajax application at two levels
+        * JSONDataContractSerializer for JSON parsing and generation
+        * javascript "proxy" build on asp.net ajax
+
+
+- add ajax enable wcf service template
+[OperationContract]
+[WebGet()]
+public string DoWork()
+{
+    return "flying monkey";
+}
+
+add ajax asp.net web form by the visual studio, the form will automatic add script manager, add service reference into the script manager
+<asp:ScriptManager ...>
+    <Services>
+        <asp:ServiceReference Path="~/Service1.svc"/>
+    </Services>
+</asp:ScriptManager...>
+
+then in the javascript could directly use the javascript proxy to do the ajax work
+Service1.DoWork(callback);
+
+function callback(results)
+{
+    ...
+}
+
+- the literal path segment is parse before the variable path segment in the uriTemplate attribute for the wcf operation
+[OperationContract]
+[WebGet(UriTemplate="/json")]
+Thngies GetAll()
+{
+}
+
+- web feeds, implement by the xml 
+[OperationContract]
+[WebGet(UriTemplate="/feed")]
+public Atom10FeedFormatter GetFeed()
+{
+    var r = GetAll();
+    var feed = Syndicationfeed();
+    feed.Title = new TextSynicationContent("Review feed");
+    var items = new List<SyndicationItem>();
+    feed.Items = items;
+    foreach(var item in r)
+    {
+        items.Add(new SyndicationItem{
+            Title=new TextSyndicationContent(item.Review);
+        });
+    }
+    return new Atom10FeedFormatter(feed);
+}
+
+http://localhost:port/service_name/*.svc/feed/
+
+
+# integrating dynamic language into your enterprise application
+- why you should love dynamic languages
+dynamic programming language is a term used broadly in computer science to describe a class of high-level programming languages that execute at runtime many common behaviors that other languages might perform during compilation, if at all
+these behaviors could include extension of the program, by adding new code, by extending objects and definition, or by modifying the type system, all during program execution
+- why should I care?
+    + clr and jvm
+    + uni-language apps == Multi-Framework apps
+- microsoft enbrace the open source 
+- meta-programming
+- dynamic languages and .net
+ironpython, ironRuby, c#, vb.net, others, $x{Foo}
+        A
+        |
+dynamic language runtime
+        |
+        V   
+object binder, com binder, python binder, ruby binder, your binder
+- DLR hosting
+scriptRuntime
+|               |
+V               V
+scriptScope     ScriptEngine
+                |
+                V
+                ScriptSource
+- can dynamic languages improve enterprise .net applications?
+    + Absolutely improve
+    + domain specific languages
+    + unit/application testing
+    + dynamic validations(aka rules-based validation)
+    + declarative configuration
+    
+- demo
+    + implementing cool unit testing strategies with IronRuby
+    implement test with dynamic language
+    + save the tests into database
+    + create a wcf restful web service to help get the test and create the relative DLR dynamic language engine to execute the test
+    + the there could be multiple clients use consume the saved tests and run the tests together
+
+- sharepoint could share everything in the sharepoint as feed
+- domain specific languages
+    + write dsl from domain specific logic
+    + seamlessly design naguages that model areas of knowledge of my application
+    + not have to become a languages expert
+    + fully integrate my DSLs into my .net enterprise applications
+    
+- building domain specific languages with IronRuby
+- configuration management
+    + not have to deal with configuration madness
+    + have the mechanisms to efficiently represent configuration information
+    + not have to write lots of code to interpret the application configuration
+    + help to manage configuration and even write test
+
+- the dynamic script will return dynamic object into the clr
+- validation
+    + implement validation logic using declarative paradigms
+    + use domain specific validation languages
+    + extend the validation logic without impact my application
+
+- dynamic languages is fit for the task which may change frequently such as configuration, validation rules and so on
+    
+- entity framework for interacting with data
+    
+- conclusions
+    + no language solve it all, greate enterprise applications should be mult-language
+    + no language paragdigm solve it all
+    + ironPython and ironRuby can extend .net enterprise applications
+    + start small learn, improve
+    
+    
+# wcf http test tool, web page test client
+- wcf restful service template
+- add service extension behavior, test behavior
+<behaviors>
+    <endpointBehaviors>
+    </endpointBehaviors>
+</behaviors>
+- service.src/help will display help information about the rest service in the browser
+- service.src/test/ will dispaly test page
+
+
+# wcf endpoint complex ajax enable
+- use ajax enable wcf services template
+- add normal wcf method
+namespace ComplexTypeAjaxService
+{
+    [ServiceContract="Namespace=""]
+    [AspNetCompatibilityRequirements(RequirementsMode=AspNetCompatibilityReuquirementsModel.Allowed)]
+    public class Calculator
+    {
+        [OperationContract]
+        public MathResult DoMath(double n1, double n2)
+        {
+            return new MathResult()
+            {
+                sum = n1 + n2,
+                difference = n1 - n2,
+                product = n1 * n2,
+                quotient = n1 / n2
+            };
+        }
+    }
+}
+
+add service configuration
+<system.serviceModel>
+    <behaviors>
+        <endpointBehaviors>
+            <behavior name="ComplexTypeAjaxService.CalculatorAspNetAjaxBehavior">
+                <enableWebScript/>
+            </behavior>
+        </endpointBehavior>
+    <behaviors>
+    <serviceHostingEnvironment aspNetCompatibilityEnable="true" multipleSiteBindingsEnable="true"/>
+    <services>
+        <service name="ComplexTypeAjaxService.Calculator">
+            <endpoint address="" behaviorConfiguration="ComplexTypeAjaxService.CalculatorAspNetAjaxBehavior" binding="webHttpBinding" contract="ComplexTypeAjaxService.Calculator"/>
+        </service>
+    </services>
+</system.serviceModel>
+
+consume the service by script manager in the asp.net form
+
+<asp:ScriptManager ID="ScriptManager" runat="server">
+    <Services>
+        <asp:ServiceReference Path="~/Calculator.svc"/>
+    </Services>
+</asp:ScriptManager>
+    
+var proxy = new Calculator();
+proxy.DoMath(1,2, onSuccessCallback, onFailCallback);
+
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,429 @@
+WCF Jumpstart=Brain Noyes;Note=Erxin
+
+# Hello WCF
+- Course Outline
+- WCF Overview 
+    + windows communication foundation 
+    + platform for building distributed, service-oriented applications 
+        * define services and hosts for those services 
+        * define clients to connect to services 
+        
+    + SOAP messaging, xml based message protocol, not required to http protocol
+    + abstracts your code from wire-level protocol details 
+    focus on business operations instead of plumbing 
+    + make it easy for .net object-oriented programmer to build distributed service-oriented applications 
+        * secure 
+        * scalable
+        * robust 
+        * flexible 
+
+- WCF Building Blocks 
+    + service contract  
+        * data contract 
+        * service 
+    + graphic
+    
++--------------+         +--------------------+
+|consumer      |         |service host        |
+|   |          |         | +-----------------+|
+|   V          |         | |service contract ||
+|  proxy-------------------->                ||
+|              |         | | +-------------+ ||
+|              |         | | |data contract| ||
+|              |         | | +-------------+ ||
+|              |         | +-----------------+|
+|              |         | +-----------------+|
+|              |         | |service          ||
+|              |         | +-----------------+|
+|              |         | +-----------------+|
+| configuration|         | |configuration    ||
+|              |         | +-----------------+|
++--------------+         +--------------------+
+    
+- wcf configuration 
+    + endpoints, compose ABC, 
+        * address, how client get to service 
+        * binding, how communication works at wire level 
+        * contract, defines what's expose 
+        
+    + example of phone call
+        * number -> address 
+        * conversation content -> contract 
+        * same language -> binding 
+    
+- Demo hello wcf service 
+    + debug start external program 
+
+- Demo hello wcf client 
+    + check the project option, wcf server option WCF Options| Start WCF Service Host when debugging another project in the same solution 
+    
+- Demo service app solution tour 
+
+
+# Implementing Services 
+- Introduction
+    + service implementation overview
+    + define service contract 
+    + defining data contract 
+    + implementation 
+    
+- Service implementation Overview
+    + create a wcf service library project, for contain service definition 
+    + define service contract 
+    + define data contract for operation parameters and return types 
+    + define the service implementation class 
+    service layer -> dispatch to business layer -> data layer method 
+- demo service contract 
+    + create a new wcf service library 
+    + delete automatic generated service file
+    + remote the auto generated service configuration from app.config file 
+    <services>
+        <service name ... ></service> //remove
+    </services>
+
+    + go to WCF Options and turn off Start WCF Service Host when debugging another project in the same solution 
+    + go to Debug tab comment out the command line library that the wcf test client 
+    --/client "WcfTestClient.exe"
+
+    + additional reference of wcf compare to normal class library 
+    System.Runtime.Serialization
+    System.SeriviceModel
+
+    + add service contract 
+    [ServiceContract]
+    public interface IZzaService
+    {
+        [OperationContract]         
+        List<product> GetProducts();
+    }
+    
+- data contract 
+[DataContract]
+public class product 
+{
+    [DataMemeber]
+    public int Id {get;set;}
+}
+
+with out data contract is implicit data contract, you don't have much control on wire level 
+
+with DataContract you could control the expose name, namespace etc.
+[DataContract(NameSpace="...", Name="newName")]
+
+- demo service implementation, service is a class implementation a interface
+[ServiceBehavior(InstanceContextModel=InstanceContextMode.PerCall/PerSession/Single)]
+public class ZzaService:IZzaService, IDisposable
+{
+    readonly ZzaDbContext _Context = new ZzaDbContext();
+    public void Dispose()
+    {
+        _Context.Dispose();
+    }
+    
+    [OperationBehavior(TransactionScopeRequired=true)]
+    public void SubmitOrder(Order order)
+    {
+        _Context.Orders.Add(order);
+        _Context.SaveChanges();
+    }
+}
+
+use entity framework data contract 
+
+define and implementation IDisposable to ask wcf host to dispose the service 
+
+use instanceContextMode to determine the lifetime of your service interface 
+
+the default is percall based wcf instance mode 
+
+wcf support transaction set TransactionScopeRequired behavior could ensure the data is inserted integrated 
+
+
+# Hosting Services 
+- introduction 
+- hosting overview 
+- service configuration, the most important and complex 
+- wcf service library hosting 
+    + self hosting 
+        * any .net process 
+        * use ServiceHost class 
+    + IIS Host
+        * hosted in a web site on an iis server 
+        * defined through an asp.net web application project 
+        * can only hand HTTP traffic 
+        * Get the benefit of iis scalability, robustness, and configurability 
+        * can handle other protocols through "WAS"
+        window process activation service 
+        
+    + WCF service library 
+        * ok for quick smoke testing 
+        * generally want to debug and develop with a self or IIS host 
+        
+- demo configuring endpoints 
+    + configuring endpoints, supply the protocol and address and port 
+    <system.serviceModel>
+        <services>
+            <service name="Zza.Services.ZzaService">
+                <endpoint address="http://localhost:2112/Zza" binding="basicHttpBinding" contract="Zza.Services.IZzaSerivce"/>
+                <endpoint address="net.tcp://localhost:2113/Zza" binding="netTcpBinding" contract="Zza.Services.IZzaSerivce"/>
+            </service>
+        </services>
+    </system.serviceModel>
+
+- demo, configuring behaviors 
+     <system.serviceModel>
+        <services>
+            <host>
+                <baseAddresses>
+                    //with base address could direct use relative address references 
+                    <add baseAddress="http://localhost:2112"/>
+                </baseAddresses>
+            </host>
+            <service name="Zza.Services.ZzaService">
+                <endpoint address="Zza" binding="basicHttpBinding" contract="Zza.Services.IZzaSerivce"/>
+            
+                ...
+            </service>
+        </services>
+        <behaviors>
+            //define a behavior without a name will apply it to all the service for the server 
+            <behavior>
+                <serviceDebug includeExceptionDetaillInFaults="true"/>
+                //support get the wisdle information of the service 
+                <serviceMetadata httpGetEnable="true"/> 
+            </behavior>
+        </behaviors>
+    </system.serviceModel>
+
+- demo configuring binding, every binding have lots of configuration aspect to drive the communication happen at wire level 
+Could use binding configuration to tweak the bindings 
+     <system.serviceModel>
+        <services>
+            <service>
+                ...
+            </service>
+        </services>
+        <behaviors>
+            //define a behavior without a name will apply it to all the service for the server 
+            <behavior>
+                ...
+            </behavior>
+        </behaviors>
+        <bindings>
+            <basicHttpBinding>
+                <binding maxReceivedMessageSize="21431" maxBufferSize="2141234">
+                    <readerQuotas maxArrayLength="2147483647" maxStringContextLength="2147483647"/>
+                </binding>
+            </basicHttpBinding>
+             <netTcpBinding>
+                <binding maxReceivedMessageSize="21431" maxBufferSize="2141234">
+                    <readerQuotas maxArrayLength="2147483647" maxStringContextLength="2147483647"/>
+                </binding>
+            </netTcpBinding>
+        </bindings>
+    </system.serviceModel>
+
+- hosting in wcf service library 
+    + connection string configuration 
+    <connectionStrings>
+        <add name="ZzaDbContext" connectionString="server=.;database=Zza;trusted_connection=true" providerName.../>
+    </connectionStrings>
+    <system.serviceModel>
+        <services>...</services>
+        <behaviors>...</behaviors>
+        <bindings>...</bindings>
+    </system.serviceModel>
+
+    + uncomment the start wcf client command line from the project properties 
+    + check the wcf options start debugging 
+    + run the wcf service library 
+    
+- hosting in console application 
+    + create a console applicatoin 
+    + reference the wcf service library 
+    + add reference to 
+    System.ServiceModel
+    System.Runtime.Serialization
+    
+    + for the configuration, copy and past the connection string and service model sections
+    + host the code 
+    ServiceHost host = new ServiceHost(typeof(ZzaServie));
+    host.Open();
+    
+    Console.ReadKey();
+    host.Close(); // graceful shutdown 
+    
+    both open and close may throw exceptions, sole need add them into try catch scope 
+    
+- hosting-in iis 
+    + create a asp.net web project 
+    + reference wcf service library
+    + copy and past the connection string and service model section 
+    remote the basic address section and address property for the service element 
+    <system.serviceModel>
+        <services>
+            <!--removed
+            <host>
+                <baseAddresses>
+                    //with base address could direct use relative address references 
+                    <add baseAddress="http://localhost:2112"/>
+                </baseAddresses>
+            </host>-->
+            <service name="Zza.Services.ZzaService">
+                <endpoint binding="basicHttpBinding" contract="Zza.Services.IZzaSerivce"/>
+            
+                ...
+            </service>
+        </services>
+    + add a serviceName.svc file with content 
+    <%@ ServiceHost Service="TheServiceImplementationClass"%>
+    
+    + if you don't do the WAS hosting, then remove the other endpoint except basicHttpBinding
+    
+    
+# Implementing client 
+- introduction
+- wcf client overview 
+    + to consume wcf services from .net clients you need a client proxy 
+    + proxies can be code generated by visual studio based on metadata exposed by the service 
+        * service must enable metadata either through wsdl or ws-metadataexchange endpoint 
+        
+    + proxies can be hand-coded for more control over the code in proxy 
+        * encapsulate repeating patterns of usage, leverage WCF extensibility features 
+    + make calls through proxy instance methods 
+        * opens connection to the server
+        * dispatches the call through SOAP messages 
+        * gets a response message back - completes method
+        
+- code generation
+    + add service reference
+    + enter service address + go, or discover if service is auto-hosted in same solution 
+    + enter code generation child namespace 
+    + configure advanced settings 
+        * async methods options 
+        * types for collection and dictionary parameters and return types 
+        + whether use referenced assemblies in code generation process 
+    
+    + visual studio generates 
+        * client side compatible service contract 
+        * client proxy class 
+        * data contracts for parameters and return types if not already present in referenced assemblies 
+        + client endpoint configuration compatible with service configuration 
+            * may need to tweak 
+        + during the proxy generation dialogue in visual studio, click the advanced button to configuration the code generation options
+
+            * for example the reuse type in all referenced assembles will make client and server use the same data entity type 
+        
+        + for data binding purpose choose the data type ObservableCollection is the better option
+    
+        + if both create the service and client project, reference the same entity project will prevent the duplicate entities generate by the reference reference 
+    
+- calling the service methods 
+ZzaServiceClient proxy = new ZzaServiceClient();
+var products = await proxy.GetProxysAsync();
+var customers = await proxy.GetCustomersAsync();
+    
+- visual studio solution could be configure to set to multiple start up project 
+- if use the default constructor to call the wcf service, there must be only one service configuration contract in the configuration file 
+
+- keep your service call in try, catch, final make sure release the service client reference 
+
+- manual proxy proxies, you could define your self IServiceContract on client and reference the contract with your manual proxy 
+public class ZzaProxy:ClientBase<IZzaService>, IZzaService 
+{
+    public ZzaProxy();
+    public ZzaProxy(string endpointName):base(endpointName){}
+    public ZzaProxy(Binding binding, string address):base(binding, new EndpointAddress(address){}
+    public ObservableCollection<Entities.Product> GetProducts()
+    {
+        return Channel.GetProducts();
+    }
+    public Task<ObservableCollection<Entities.Product>> GetProducts()
+        return Channel.GetProductsAsync();
+    {
+    }
+}
+    
+    
+# Quick intro to WCF Security 
+- WCF Security Overview
+    + service calls should be secured 
+        * authenticate the caller
+        * authorize what they have access to on the server side 
+    + most wcf bindings are secure by default using windows  authentication and authorization 
+        * basicHttpBinding is not secure by default
+        * wsHttpBinding
+        
+- WCF authentication options 
+    + can use different kinds of client credentials 
+        * windows 
+        * userName 
+        * certificate 
+        * federated tokens
+        
+    + can validate credentials in various ways 
+        * windows 
+        * membership provider 
+        build by asp.net team 
+        * federated security token service, STS security token service 
+        * custom hook 
+        
+- WCF authorization 
+    + once credentials validated, wcf establishes thread IPrincipal based on client identity 
+        * thread.CurrentPrincipal static property 
+    + can programmatically call IPrincipal.IsInRole() if is authenticated user 
+    + can user [PrincipalPermission] attribute on service method
+    + can use ClaimsPrincipal to check if caller has certain claims
+    + can implement a custom ServiceAuthorizationManager
+    
+- WCF Windows Authentication 
+    + client passes windows identity to the service 
+        * client process identity 
+        * alternate credentials set through the client proxy 
+    + wcf automatically validates client identity at the server using windows network security protocols 
+        * NTLM
+        * Kerberos, on a domain will be this 
+        
+    + Principal can be used for authorization 
+        * uses windows groups by default 
+        * can be configured to use other authorization sources 
+            * i.e custom database 
+    
+- demo leveraging windows security, wcf authentication is based on windows authentication 
+var principal = Thread.CurrentPrincipal; 
+
+will get the current service method principal 
+
+use attribute to set the principal action for a method 
+
+[PrincipalPermission(SecurityAction.Demand, Role="Domain\userName")]
+public List<Product> GetProducts()
+{
+    var principal = Thread.CurrentPrincipal;
+    if(!principal.IsInRole("Domain\userName")
+    {
+        throw new SecurityException("Access Denied");
+    }
+    //also could use ClaimsPrincipal instead of thread principal which is also inherite form claims principal
+    ClaimsPrincipal.Current.HasClaim(check the claimed values);
+}
+
+- demo passing alternate client credentials from client proxy to server 
+ZzaProxy proxy = new ZzaProxy("NetTcpBinding_IZzaService");
+proxy.ClientCredentials.Windows.ClientCredential.UserName="Domain\test";
+proxy.ClientCredentials.Window.ClientCredential.Password="password";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,468 @@
+﻿Building ASP.NET Web API OData Services=Brian Noyes;Note=Erxin
+
+# Introduction 
+- open standard to define data services 
+- introduction to asp.net web api services and odata 
+- odata platforms, tools, and resources 
+- supporting odata query syntax 
+- advanced odata queries
+- supporting odata formatting and defining entity data models 
+- defining explicit entity data model 
+- updating resources through odata 
+- consuming odata web apis 
+
+
+# Introduction to asp.net web api services and odata 
+- asp.net web api overview 
+    + new platform for building http web services (web apis)
+    wcf, service oriented  
+    + built on top of asp.net mvc 4 framework 
+        * released with .net 4.5 
+        * compatible with .net 4.0 
+        
+    + makes it easy to biuld services for consumption from multi-platform clients 
+        * simple rpc services 
+        * CRUD services 
+        * REST services 
+        * OData services 
+    + services are controllers 
+        * apiController class 
+    + Leveraged mvc features 
+        * routing 
+        * model binding 
+        * action filters 
+    + convention over configuration, don't required configuration like wcf 
+    wcf required configuration for abc
+        
+    request 
+    GET http://localhost:1234/api/Customers/ALFKI?includeOrders=true    HTTP/1.1
+    User-Agent:Fiddler
+    Host:localhost:1234
+    
+    public class CustomerController:ApiController
+    {
+        public Customer GetCustomer(string id, bool includeOrders)
+        {
+            ...
+        }
+    }
+    
+    the convention configuration means, the URI to the method is composes with method name GetCustomer, will be get method, Customers, and then the parameters values are separated with ?
+    
+    + Content negotiation 
+        * based off HTTP Accept/Content-Type headers 
+        
+    request 
+    GET http://localhost:1234/api/Customers/ALFKI?includeOrders=true    HTTP/1.1
+    User-Agent:Fiddler
+    Host:localhost:1234
+    Accept:application/json
+    
+    Response
+    HTTP/1.1 200 OK...
+    Content-Type:application/json;charset=utf-8
+    Content-Length:206
+    {"CustomerID":"ALFKI","CompanyName":"Alfreds Futterkiste"}
+    
+- asp.net web api pipeline and configuration 
+    +-------------------------------------------+
+    |Controller                                 |
+    |Model binding |                 |GetXYZ()  |
+    |Formatters    |->ApiController->|PutXYZ()  |
+    |Action Filters|                 |PostXYZ() |
+    +-------------------------------------------+
+                    A
+                    |
+    +-------------------------------------------+
+    |HttpServer                                 |
+    |Controller dispatcher handler              |
+    |       A                                   |
+    |       |                                   |
+    |Message handler                            |
+    +-------------------------------------------+
+            A                       A
+            |                       |
+    +----------------------+    +------------------+
+    |Web Host              |    |Self host         |
+    |HttpControllerHandler |    |Message pump      |
+    |Asp.net routing       |    |Wcf channel stack |
+    +----------------------+    +------------------+
+    
+    + no config file settings needed 
+    + HttpConfiguration class you could use to control detail 
+        * associated with the asp.net web application instance 
+        * accessible from Global.asax code behind 
+        * calls webApiConfig.Register 
+        public static class WebApiConfig 
+        {
+            public static void Register(HttpConfiguration config)
+            {
+                config.Routes.MapHttpRoute(
+                    name:"DefaultApi",
+                    routeTemplate:"api/{controller}/{id}",
+                    defaults:new {id = RouteParameter.Optional}
+                );
+            }
+        }
+        
+        * get, put, post, delete, http verb 
+        * defaults are good enough for basic web apis 
+        * can plug in formatters, filters, message handlers and other custom extensible 
+        
+- rest fundamentals, reset stand for REpresetnational state transfer, have wire level presentation for resources 
+    + rest is an architectural style, SOAP is a protocol 
+        * based on Ph.D. thesis: Roy Fielding 
+        
+    + compare REST and SOAP is like compare apple and orange, REST is full blown architectural style, SOAP is nothing more than a message format 
+    + REST fully embraces HTTP, http also has headers,.verbs, ...
+    
+    URI, 
+        * service address 
+        * query string parameters 
+        * resources 
+    http verb, operation(post, get, put, delete)
+    http header 
+        * status codes
+        * security, etags, etc 
+        * content negotiation 
+    http body 
+        * payload 
+        * media types 
+        * hypermedia 
+    
+    URI define is a big step for rest services 
+
+- simple defining CRUD serves with web api 
+    + data collections are resources 
+    + expose a data collection as a web api controller 
+    + map http verbs onto CRUD actions and controller methods 
+    
+    Http Verb           CRUD Action         Controller Method 
+    Post                Create              PostCustomer
+    GET                 Retrieve            GetCustomers, GetCustomer(id)
+    Put                 Update              PutCustomer(id)
+    DELETE              Delete              DeleteCustomer(id)
+    + demo 
+    
+    the web method should return http status codes from not found 
+    HttpResonseException(HttpStatusCode.NotFound)
+        * start with entity framework code first dbcontext for northwind database 
+        Customer, Orders, Employee, OrderDetail
+        
+        * add asp.net mvc 4 web application, select the web api template
+        * remove the generated controller 
+        * reference the entity projects 
+        * add connection string 
+        * Add WebApplicationConfig during Application_Start()
+        
+        protected void Applicaiton_Start()
+        {
+            AreaRegistration.RegisterAllArea();
+            
+            WebApplication.Register(GlobalConfiguration.Configuration);
+            FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
+            RouteConfig.RegisterRoutes(RouteTable.Routes);
+            BundleConfig.RegisterBundles(BundleTable.Bundles);
+        }
+        
+        * the webApiConfig is contain the route setting 
+        public static void Register(HttpConfiguration config)
+        {
+            config.Routes.MapHttpRoute(
+                name:"DefaultApi",
+                routeTemplate:"api/{controller}/{id}",
+                defaults:new {id = RouteParameter.Optional}
+            );
+        }
+        
+        * add controller with Empty API controller 
+        public class CustomersController:ApiController
+        {
+            NorthWindDBContext _Context = new NorthWindDBContext();
+            
+            public IEnumerable<Customer> GetCustomers()
+            {
+                return _Context.Customers.ToArray();
+            }
+            
+            public Customer GetCustomer()
+            {
+                return _Context.Customers.FirstOrDefault(c => c.CustomerID == id);
+            }
+            
+            public void PostCustomer(Customer customer)
+            {
+                _Context.Customers.Add(customer);
+                _Context.SaveChanges();
+            }
+            
+            public void DeleteCustomer(string id)
+            {
+                var matchingCustomer = _Context.Customers.FirstOrDefault(c => c.CustomerID == id);
+                if(matchingCustomer != null)
+                {
+                    _Context.Customers.Remove(matchingCustomer);
+                    _Context.SaveChanges();
+                }
+                else
+                {
+                    return HttpResonseException(HttpStatusCode.NotFound);
+                }
+            }
+            
+            public void PutCustomer(string id, Customer customer)
+            {
+                var matching Customer = _Context.Customers.FirstOrDefault(c=>c.CustomerID == id);
+                if(matchingCustomer != null)
+                {
+                    SetChangedProperties(matchingCustomer, customer);
+                    _Context.SaveChanges();
+                }
+            }
+            
+            protected override void Dispose(bool disposing)
+            {
+                base.Dispose(disposing);
+                _Context.Dispose();
+            }
+        }
+        
+        * use fiddler to check the web api 
+        * should return http status code for REST service method, for example 
+        public Customer GetCustomer(string id)
+        {
+            Customer c = _Context.Customers.FirstOrDefault(c => c.CustomerID == id);
+            if(customer == null)
+            {
+                throw new HttpResonseException(HttpStatusCode.NotFound);
+            }
+            else 
+            {
+                return c;
+            }
+        }
+        
+- odata protocol overview 
+    + Industry open standard protocol, http://www.odata.org 
+        * led by microsoft
+        
+    + expose data over http services for query or update 
+    + REST-based services 
+        * Hypermedia links for related resources and actions 
+        * Includes metadata for client code generation 
+        wcf include metadata, code generate services easy
+        REST don't have protocol for services 
+        
+        odata spec does have metadata you could auto generate the client 
+        
+        * current version 3.0 
+        
+    + OData query syntax: URL syntax for expressing queries 
+        * data service URI 
+        * entity set name 
+        * navigation property 
+        * operators and functions 
+        
+    + OData Formatting: ATOM publishing protocol or JSON formatting 
+        * context header contain data type: application/atom+xml or application/json 
+        * JSON verbose vs JSON light 
+        
+    + HTTP Verbs to express operation 
+    GET, POST, PUT, DELETE, PATCH, MERGE
+    
+
+# OData Platform, tools and resources 
+- Outline 
+    + OData support across platforms 
+    + WCF Data Services vs Web API OData 
+    + WCF Data Services 
+    + OData tools and libraries 
+    
+- OData Server Platforms 
+    + WCF Data Services 
+    initial odata microsoft platform 
+    + node.js, php, java, all support odata 
+    + SQL server reporting servies, you could directly expose odata 
+    + sharepoint 
+    + windows azure tables storage, support odata 
+    + windows azure data marketplace 
+        * aka microsoft "dallas"
+    + IBM WebSphere/DB2/Informix 
+    + ASP.NET Web API 
+    
+- WCF Data servies and web api odata, there is a little overlap 
+    + wcf data servies 
+    no wcf knowledge needed 
+    
+    + is the most complete implementation of the latest odata specification from microsoft
+    + create for exposing whole data stores with little intervening logic 
+        * interceptor coding patterns slightly awkward 
+        code complex business logic between difficult 
+        
+        * complicated to used with non-linq provider data 
+        * not very extensible 
+
+    + ASP.NET web api odata 
+        * new addition to web api stack 
+        * does not support all odata operatoin yet 
+        will catch up with frequent/short release cycle of web api through nuget 
+        * give you more control over underlying data sources, model definition and routing conventions 
+        * easier programming model for intervening business logic 
+        * can support multiple models per site, mix non-odata with odata services 
+        * very extensible 
+
+- WCF Data Services fundamentals 
+    + service side 
+        * define DataService<T>
+        T is an entity framework model (db or code first)
+        
+        * expose data collections based on the model, set individual entities set access right 
+        * set access permissions at a model level 
+        * define query and update interceptor methods for intervening logic, before the intercept calling get into the database, it is pipline between the service caller and database 
+        
+    + data services client 
+        * generates client side proxy from odata metadata 
+        * available for .net, silverlight, windows phone and windows store apps 
+        * proxy is a client side data repository 
+        expose DataServiceCollections for odata service collections 
+        converts linq expression trees into odata query syntax URLs 
+        caches changes to entities batch submits 
+        * async queries and updates for all platforms 
+        * sync queries and updates only for .net framework clients 
+        
+    + demo wcf data services 
+    
+        * add entity framework data mode 
+        * add wcf data services 
+        * set the entity framework model class name 
+        public class NorthWindDataService:DataService<NorthWindDBContext>
+        {
+            public static void InitializeService(DataServiceConfiguration config)
+            {
+                config.SetEntitySetAccessRule("Customers", EntitySetRights.All);
+                config.SetEntitySetAccessRule("Orders", EntitySetRights.AllRead);
+                config.SetEntitySetAccessRule("Order_Details", EntitySetRights.AllRead);
+                config.SetEntitySetAccessRule("Customers", EntitySetRights.All);
+                config.DataServiceBehavior.MaxProtocolVersion = DataServiceProtocolVersion.V3;
+            }
+        }
+        configure the entity access right 
+    
+        * you could also create your own method for the odata service 
+        [WebGet(UriTemplate = "OrderedCustomers")]
+        public IQueryable<Customer> OrderedCustomers()
+        {
+            return this.CurrentDataSource.Customers.Orderby(c => c.CompanyName);
+        }
+    
+        the method expose a get method for the wcf odata service, with a method name OrderedCustomers which is not necessary same with the method name 
+    
+        * reference uri, odata wcf msdn 
+        https://msdn.microsoft.com/en-us/library/dd744841(v=vs.110).aspx
+- Intro WCF odata service 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+        
+
+
+
+
+
+
+
+
+
+
+

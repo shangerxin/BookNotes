@@ -1,0 +1,521 @@
+﻿WCF 4.5 Multi-layer Services Development with Entity Framework Third Edition=Mike Liu;Note=Erxin
+
+# preface
+- what's this book covers
+- what you need for this book
+.net 45, VS 2012/2013, SQL 
+- convention
+- feedback
+- customer support
+- errata
+- piracy
+
+
+# Web Services and Windows Communication Foundation
+- what is a web service, can be done by sending xml messages
+Web service directory(UDDI)  <--Publish--> Web Services Provider
+A                                             |
+|                                             |
+discover                                      |
+|                                             |
+V                                             |
+WebServices Client <--bind and invoke---------+
+
++ wsdl, provides the ability to give a description of the methods available through the web service
+check the WSDL of the micrsofot ASMX web service by add ?WSDL at the end of the web service URL
+
+example
+http://localhost/MyService/MyService.asmx?WSDL.
+
+- proxy class, make call the service method just like call a normal library method
+- soap, is a protocol to exchange xml data message between service
+- web service standards and specifications, occasionally referred to as WS-* as their prefix, besides xml, soap, and wsdl here is a brief list of some other important standards
+    + WS-I profiles, web services interoperability organization(WS-I), promote interoperability across the stack of web services specifications
+    http://www.ws-i.org
+    
+    + WS-Addressing, a mechanism that allows web services to communicate addressing information, the addressing information will include into the message
+    + WS-Security, how to handle security issues with the SOAP messages
+    + WS-ReliableMessaging, a protocol allows soap message to be delivered reliably between the distributed applications, if a message cannot be delivered to the destination, the model must raise an exception
+    + WS-Coordination and WS-Transaction, coordinate the actions of distributed applications, Transaction describes coordination types that are used with the extensible coordination framework
+    + Windows Communication Foudnation, WCF
+    
+- WCF architecture
+    + diagram 
+    http://msdn.microsoft.com/en-us/library/ms733128.aspx
+    application
+    +---------------------------------------------------------------------+
+    contracts
+    data contract, message contract, service contract, policy and building
+    +---------------------------------------------------------------------+
+    Service runtime
+    Throttling behaviour, error behaviour, metadata behaviour, instance behaviour, message inspection, transaction behaviour, dispatch behaviour, concurrency behaviour, parameter filtering
+    +-------------------+
+    Messaging
+    WS Security channel, ws reliable messaging channel, encoders binary/mtom/text/xml, http channel, tcp channel, transaction flow channel, named pip channel, msmq channel
+    +---------------------+
+    Activation and hosting
+    window activation service, *.exe, window services, com+
+    
+a channel is a component that processing a message in some way
+    
+- basic wcf concepts, wcf ABCs
+    + address, normally as a url
+    htpp://www.myweb.com/myWcfServices/SampleService
+    ----  -------------  --------------------------
+    |           |                           |
+    V           V                           V
+    Transport   Machine address             Service Path
+    
+- binding, for specifying the transport, encoding and protocol details, some examples of system provided bindings
+    + BasicHttpBinding, use SOAP 1.1 messages it has attributes and elements such as receiveTimeout, sendTimeout, maxMessageSzie, maxBufferSize
+    + WSHttpBinding
+    + WSDualHttpBinding
+    + WS2007HttpBinding
+    + WSFederationHttpBinding
+    + WS2007FederationHttpBinding
+    + NetTcpBinding
+    + NetNamedPipeBinding
+    + NetMsmqBinding
+    + NetPeerTcpBinding
+    + WebHttpBinding
+    + MsmqIntegrationBinding
+    
+- Contract, defines the interface of a wcf service
+    + service contract, interface of the wcf service
+    + operation contract, defined within a service contract, defines the parameters and return type of an operation
+    
+    defines the operation-level settings, directions of the operation and the fault contract of the operation
+    
+    [FaultContract(typeof(ProductFault))]
+    GetProductResponse GetProduct(GetProdcutRequest request);
+    
+    + Message contract, an operation contract needs to pass a message as a parameter or return a message, defines the elements of the message such as level of security and whether should go to the header or to the body
+    namespace MyWCF.EasyNorthwind.MessageContracts
+    {
+        /// <summary>
+        /// Service Contract Class - GetProductResponse
+        /// </summary>
+        [System.ServiceModel.MessageContract(IsWrapped = false)] 
+        public partial class GetProductResponse
+        {
+            private MyWCF.EasyNorthwind.DataContracts.Product product;
+            [System.ServiceModel.MessageBodyMember(Name = "Product")] 
+            public MyWCF.EasyNorthwind.DataContracts.Product Product
+            {
+                get { return product; }
+                set { product = value; }
+            }
+        }
+    }    
+    
+    + data contract, all datatypes used by the wcf service must be described in metadata to enable other application to interoperate with the service
+    the primitive(native) datatypes is not necessary to define any data contract
+    
+    namespace MyWCF.EasyNorthwind.DataContracts
+    {
+        /// <summary>
+        /// Data Contract Class - Product
+        /// </summary>
+        [System.Runtime.Serialization.DataContract(
+        Namespace = 
+        "http://MyCompany.com/ProductService/EasyWCF/2008/05",
+        Name = "Product")]
+        public partial class Product 
+        {
+            private int productID;
+            private string productName;
+            [System.Runtime.Serialization.DataMember(
+            Name= "ProductID")]
+            public int ProductID
+            {
+                get { return productID; }
+                set { productID = value; }
+            }
+            [System.Runtime.Serialization.DataMember(
+            Name = "ProductName")]
+            public string ProductName
+            {
+                get { return productName; }
+                set { productName = value; }
+            }
+        }
+    }
+
+    + Fault contract, if an error is returned to the caller the caller should be warned of that error, these error tyeps are defined as fault contracts
+    
+    namespace MyWCF.EasyNorthwind.FaultContracts
+    {
+        /// <summary>
+        /// Data Contract Class - ProductFault
+        /// </summary>
+        [System.Runtime.Serialization.DataContract(
+        Namespace = 
+        "http://MyCompany.com/ProductService/EasyWCF/2008/05", 
+        Name = "ProductFault")]
+        public partial class ProductFault 
+        {
+            private string faultMessage;
+            [System.Runtime.Serialization.DataMember(
+            Name = "FaultMessage")]
+            public string FaultMessage
+            {
+                get { return faultMessage; }
+                set { faultMessage = value; }
+            }
+        }
+    }
+    
+- endpoint, message are send between endpoints, a endpoint contain 
+    + an address, two or more endpoint may share same address
+    + a binding, specifies how communicate with the world, such as transport protocol(TCP, HTTP), encoding(text, binary), and security requirements(SSL, SOAP message security)
+    + a service contract
+   
+- behavior, is a type of settings to extend the functionality of the original type
+    + transaction timeout
+    + maximum concurrent instances of the service
+    + publishes metadata or not
+    + behavior is configure in configuration file
+    
+- hosting, wcf must be host in an environment
+- self hosting, a wcf can be self-hosted
+- windows service hosting, this kinds of hosting may lacks some critical features(such as versioning) for wcf services
+- iis or windows activation services hosting
+    + starting from iis7, window activation services(WAS) is the process activation mechanism for hosting wcf services
+    
+    WAS allow non-http communication protocol with iis features
+    
+- channels, the concrete implementation of a binding element is called a channel, here is a channel stack of an applicaiton
+
+Application
+Protocol Channel
+...
+Protocol Channel
+Transport Channel
+
+- metadata, a service describes the characteristics of the service that an external entity needs to understand in order to communicate with the service 
+
+ServiceModel Metadata Utility Tool(Svcutil.exe) to generate a wcf client proxy
+
+meta data include
+    + xml schema documents, define the data contract of the service
+    + WSDl documents, which describe the methods of the service
+    
+enable a wcf service metadata publishing for http transport protocol
+<serviceMetadata httpGetEnable="true"/>
+
+- wcf production and development environment
++-----------------------------------------------------------------------------+
+clr .net    components                                          visual studio
++-----------------------------------------------------------------------------+
+4.0 4.5     Metro       html5       portable class library      2012
+ -----------------------------------------------------------------------------
+    4.0     parallel    dynamic     covariance                  2010+
+            computing               and contravariance
++-----------------------------------------------------------------------------+
+2.0 3.5sp1  asp.net     entity      linq to     cloud           2008+
+            mvc         framework   entities    computing
+    3.5     linq            asp.net rest        rss
+            linq to sql     ajax
+            linq to xml
+            linq to object
+    3.0     wcf         wpf     wf      cardspace               
++-----------------------------------------------------------------------------+    
+    2.0     winforms    asp.net         ado.net                 2005+
++-----------------------------------------------------------------------------+
+1.0 1.1     winforms    asp.net         ado.net                 2003
+    1.0                                                         2002
+
+
+# implementation a basic helloWorld wcf service
+- create a wcf service
+    + show solution explorer
+    ctrl+alt+l
+    + create a class library and change the default name space by the property page of the project
+    + add assemble reference of System.ServiceModel and System.Xml.Linq
+    + add a interface named IHellowWorldService.cs file
+    + add using statement
+    using System.ServiceModel
+    
+    + add ServiceContract attribute to the interface this will designate the interface as a wcf service contract interface
+    [ServiceContract]
+    
+    + add a getMessage method to the interface and mark with [OperationContract] attribute
+    + implementing the HelloWorldService service contract
+    
+    + hosting the wcf service in IIS express
+        * add new web site project
+        * select asp.net empty web site
+        * set the website as start up project
+        * reference the previous wcf project
+        * run the solution (ctrl + f5, start without debugging)
+        * modify web.config to specify the service to be hosted, add a *.svc file, from .net 4.0 we can also use the file-less(svc-less) activation service to accomplish this
+        add the serviceModel node into the configure file
+        <?xml version="1.0"?>
+        <!--For more information on how to configure your ASP.NET application, 
+        please visit
+        http://go.microsoft.com/fwlink/?LinkId=169433
+        -->
+        <configuration>
+            <system.web>
+                <compilation debug="true" targetFramework="4.5"/>
+                <httpRuntime targetFramework="4.5"/>
+            </system.web>
+            <system.serviceModel>
+                <serviceHostingEnvironment >
+                    <serviceActivations>
+                        <add factory="System.ServiceModel.                        Activation.ServiceHostFactory" 
+                        relativeAddress="./HostDevServer/HelloWorldService.svc" 
+                        service="MyWCFServices.HelloWorldService"/>
+                    </serviceActivations>
+                </serviceHostingEnvironment>
+                <behaviors>
+                    <serviceBehaviors>
+                        <behavior>
+                            <serviceMetadata httpGetEnabled="true"/>
+                        </behavior>
+                    </serviceBehaviors>
+                </behaviors>
+            </system.serviceModel>
+        </configuration>
+        * use ctrl+f5 to run the wcf service without debug, will display the wsdl xml file information
+        * creating a client to consume the wcf service, create a console application
+        * generating the proxy and configuration files, in order to consume a non-restful wcf service, a client application must first obtain or generate a proxy class
+        
+        use svcutil.exe tool
+        start the helloWorld wcf service website
+        
+        open command-line window, change the directory to your client application folder, svcutil.exe may locate differently path
+        "C:\Program Files\Microsoft SDKs\Windows\v8.0A\bin\NETFX 4.0 Tools\SvcUtil.exe" http://localhost:1054/HostDevServer/HelloWorldService.svc?wsdl/out:HelloWorldServiceRef.cs /config:app.config
+        
+        two file will be generated, one for the proxy(HelloWorldServiceRef.cs) and the configuration(app.config)
+       
+        you cal also create a proxy dynamically at runtime or call the service through a channel factory approach, you may have to share your interface dll with the clients
+        
+        * customizing the client application
+        reload the app.config
+        add the proxy file to the project
+        add a reference to System.ServiceModel namespace
+        add these code to consume the service
+        
+        //use the default constructor means the client runtime will look for the default client
+        //endpoint in the app.config file, which is present due to use of SvcUtil
+        HelloWorldServiceClient client = new HelloWorldServiceClient();
+        client.GetMessage("Mike");
+        
+        * setting the service application to autostart
+        right click solution file, select solution properties, Common Properties|Startup Project|Multiple startup projects
+        adjust the project start sequence and set the start up action such as Start without debugging, Start, None
+        
+        * change the web.config to enable debugging
+        
+        
+- iis express, it only supports the http and https protocols
+    + start iis express outside the visual studio
+    C:\Program Files\IIS Express\iisexpress /path:c:\myapp\ /port:1054 /clr:v4.0
+    
+    for example, start the helloworld wcf service
+    "C:\Program Files\IIS Express\iisexpress" /path:C:\SOAwithWCFandLINQ\Projects\HelloWorld\HostDevServer /port:1054 /clr:v4.0
+    
+    in x64 system, it should locate in x86 directory
+    
+    
+# hosting and debugging the hellowWorld wcf service
+- hosting the helloworld wcf service
+- major difference of iis and iis express
+    + express associates the incoming request with the context fo the current logged in user
+    + express, every request is prcessed by the asp.net runtime
+    + iis, associates a security context
+    + iis, a request is processed by the asp.net runtime only if the request comes from an asp.net resource(like asp.net web page)
+    + change the hosting by the right-click the hosting application project and select the use visual studio development server...
+    
+- hosting the service in a managed application
+    + it's easy to debug, deploy
+    + drawback, you have to start the hosting application manually 
+
+- hosting the service in a console application
+    + add reference to a wcf service project
+    + add reference to service.model assemblies
+    + add configuration into app.config file
+    
+    <?xml version="1.0" encoding="utf-8" ?>
+    <configuration>
+        <startup> 
+            <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.5" />
+        </startup>
+        <system.serviceModel>
+            <behaviors>
+                <serviceBehaviors>
+                    <behavior>
+                        <serviceMetadata httpGetEnabled="true"/>
+                    </behavior>
+                </serviceBehaviors>
+            </behaviors>
+        </system.serviceModel>
+    </configuration>
+
+    + add service host into program.cs
+    using System.ServiceModel
+    ServiceHost host = new ServiceHost(typeof(MyWCFServices.HelloWorldService), new Uri("http://localhost:1054/HostCmdLineApp/HelloWorldSerivce.svc"));
+    host.Open();
+    Console.WriteLine("HelloWorldSerivce is now running.");
+    Console.ReadKey();
+    host.Close();
+
+    not when you run the program may get an error message of System.ServiceModel.AddressAccessDeniedException, Your process does not have access rights to this namespace. this because windows runs application under a limited-rights ruser account, you have to run VisualStudio as an administrator to solve this
+
+    or you coudl register the namespace using tools such as HttpSysConfig
+    http://httpsysconfig.codeplex.com/
+    
+- consuming the service hosted in a console application
+    + use the SvcUtil.exe to regenerate the client proxy 
+    + or change the configuration of the endpoint from
+    <endpoint address="http://localhost:1054/HostDevServer/HelloWorldService.svc"
+    to
+    <endpoint address="http://localhost:1054/HostCmdLineApp/HelloWorldService.svc"
+    
+    only required to change the project name
+
+
+- hosting the service in a windows service, this add more features
+    + recovery ability when failures occure
+    + security identity
+    + supports all bindings and transports
+    + limitations, you have to deploy it with an installer and it doesn't fully support high availability, versioning or deployment
+    + create installer by the .net framework Installutil.exe utility
+    
+- hosting the service in the internet information services server using the http protocol
+    + preparing the folders and files
+        * create folder
+            ..\
+            ..\bin
+        * copy files, copy the *.dll and *.pdb to ..\bin
+        * copy the config file to ..\
+        * modify the web.config, for iis hosting, change the ./HostDevServer/HelloWorldService.svc to ./HelloWorldService.svc
+    + turn on iis, Internet Information Services
+        * add window feature, turn on iis(should turn on before install visual studio to simplify configuration)
+        * enable wcf, run aspnet_regiis.exe to enable aspnet_isapi as a web service extension, then run ServiceModelReg.exe to register the required script maps in IIS 
+        or just reinstall the .net framework
+
+    + creating the iis application
+        * control panel|administrative tools
+        * expand to Default Web Site
+        * right click and New|Add Application
+        * enter the Alias field and choose the ..\ folder
+        * leave DefaultAppPool as Application pool, click select to version pool is .net 4.0.30319, if not create your own application pool
+        * testing the service, view in browser
+        http://localhost/HelloWorldService/HelloWorldService.svc
+
+        * don't forget to change the configuration of the client application to consume the service
+
+- hosting the service in the internet information services server using the tcp protocol
+    + benefits
+        * support connection-based, stream-oriented delivery services with end-to-end error detection and correction
+        * the fastest wcf binding for scenarios that involve communication between different machines
+        * support duplex communication
+        * it has reliable data delivery capability
+        
+    + preparing the folders and files
+        * create folder
+        * copy files
+        * modify web.config file
+        <services>
+            <service name="MyWCFServices.HelloWorldService">
+            <endpoint address="" binding="netTcpBinding" contract="MyWCFServices.IHelloWorldService"/>
+            <host>
+                <baseAddresses>
+                    <add baseAddress="net.tcp://localhost/HelloWorldServiceTcp/"/>
+                </baseAddresses>
+            </host>
+            </service>
+        </services>
+
+        * host relative address is ./HelloWorldService.svc
+        then we can invoke the service by 
+        http://localhost/HelloWorldServiceTcp/HelloWorldService.svc
+        
+        * for the file-less wcf activation, if no endpoint is defined explicitly, http and https endpoints will be defined by default. 
+
+        * there may be more endpoint in the configuration file of the client application, to consume the service, you need to specify which endpoint is chosen
+        
+        * enabling the non-Http wcf activation for the hosting machine, by default which is disabled
+        Control Panel|Programs|Turn Window features on or off
+        Expand Microsoft .net framework 3.5.1
+        Check Windows Communication Foudnation Non-Http activation
+
+        * repair .net 4.5 framework, Control Panel|Uninstall a program and uninstall and repair
+        * creating the iis application
+        create the application
+        select physical folder
+        make sure the pool is .net 4.0.30319
+        enable the tcp protocol for the application, right-click on HelloWorldServiceTcp select Advanced Settings and add net.tcp to enable Protocols. separate it from existing http protocol with a comma
+        http,net.tcp
+        
+    + other wcf service hosting options
+        * in visual studio there is a build-in general-purpose wcf service host WcfSvcHost.exe
+        * create a wcf service using an application template which case wcf service project itself is a website
+        
+- debugging the hellowWorld wcf service
+    + host wcf in iis express
+    + press f5 to debug
+    
+    during the debugging there is a Script Documents folder has been added to the solution, this folder is the actual content of the content of the web page
+    
+- starting the client application, there are two ways to start the program
+    + right-click, Debug|Start new instance
+    + go to the %output%\bin\debug directory and duoble-click the exe file
+    
+- attaching to a running wcf service process, to debug a wcf is run in non-debug mode
+    + debug when hosted in iis
+        * change the web.config and change the debug value to True
+        * you have to start VS as administrator
+        * in VS, Debug|Attach to Process... 
+        select the process w3wp.exe and attach
+
+    
+# implementing a wcf service in the real world
+- a real-world service
+    + separate the service interface layer
+    + separate business logic layer, it will check the precondition of each operation
+    + add a data access layer, access the underlying databases, handle transaction processing and concurrency controlling
+- understanding the Microsoft Software Factory, http://www.codeplex.com/servicefactory
+- create and test wcf service by these steps
+    + create a wcf service project
+    + creating service operation contracts
+    + creating dta contract
+    + adding a product business domain object(BDO)
+    + adding a business logic layer project
+    + calling the business logic layer from te service interface layer
+    + testing the service
+    + modifying the app.config file
+        * change all the instances of the service except the on in baseAddress to NameSpace.ServiceName
+        * change the baseAddress
+        * change the service address port
+        * remove the Design_Time_Address
+        * change all instances of the service name including the ones in the endpoint nodes
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    

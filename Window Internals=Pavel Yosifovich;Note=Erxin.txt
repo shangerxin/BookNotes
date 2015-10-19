@@ -1,0 +1,2191 @@
+﻿Window Internals=Pavel Yosifovich;Note=Erxin
+
+# Introductions 
+- reference 
+http://blogs.microsoft.co.il/blogs/pavely
+pavely@codevalue.net
+- contents 
+    + course objectives 
+    + window versions 
+    + tools 
+- course objectives
+    + understand windows features and architecture 
+    user-mode, high level .net 
+    uncover internal mechanisms relevant for developers 
+    enhance ability to write better software for windows 
+    
+- window versions 
+    + windows NT 3.1(july 1993), 64bit version, 32bit 
+    + window 3.5 september 1994
+    + window 3.51, may 1995 
+    + window nt, 4.0 july 1996
+    + window xp, august 2001 
+    + window server 2003, march 2003 
+    + windows vista, (january 2007)
+    + window server 2008(February 2008)
+    + window 7& 2008 R2(October 2009)
+    + window 8 & window server 2012(october 2012)
+    + window 8.1("blue") (expected august 2013)
+    
+    the overall architecture is the same for window nt 
+    
+- tools 
+    + window built in 
+    task manager, resource monitor, performance monitor, others 
+    
+    + sysinternals 
+    obtained from 
+    http://wwww.sysinernals.com(redirect to http://microsoft.technet/sysinternals)
+    most written by mark russinovich 
+    no installation needed 
+    free 
+    
+    + debugging tools for windows 
+        * now part of the windows sdk 
+        * no installation needed 
+        * free 
+        
+        
+# Basic Concepts 
+- Contents
+    + user mode vs kernel mode 
+    + processes 
+    + threads 
+    + virtual memory 
+    + objects and handles 
+    
+- user mode vs kernel mode 
+    + thread access mode 
+    + user mode 
+        * allow access to non-operating system code & data only 
+        * no access to the hardware 
+        * protects user application from crashing the system 
+        
+    + kernel mode 
+        * privileged mode for use by the kernel and device drivers only 
+        * allows access to all system resources 
+        * can potentially crash the system 
+        
+    when open a file in a normal user-mode application will access through the user-mode api which is access to the kernel model code to open the file 
+- Processes 
+    + process a set of resources used to execute a program, process doesn't run, thread run 
+    + a process consists of 
+        * a private virtual address space 
+        * an executable program, referring to an image file on disk which contains the initial code and data to be executed 
+        * a table of handles to various kernel objects 
+        * a security context(access token ), used for security checks when accessing hsared resources 
+        * one or more threads that execute code 
+        
+- demo win7 task manager 
+    + task manager 
+    process tab choose the process currently running, click the show processes from all users will display all the process 
+    
+    + with view|set column will display more information for the processes 
+    
+    + another tab is application, with some windows, should have window should have title. the process have some userinterface. task is not defined in window, task is come from 16bit window which have only one process 
+    
+- demo window 8, task manager
+    + view detail 
+    + tabs, apps process have userinterface 
+    + background processes a group into other sub menu 
+    + use View|Suspend will show the suspended process 
+    + use detail to added more information 
+    
+- process explorer, property|Compatibility tab and select run this program as administrator will give more privileges 
+    + all yellow process are running .net applications 
+    + the brown process represent a process under a job 
+    + pink color represent window service 
+    + use property will 
+    
+    + Option|Configure Color, could configure the display color 
+    
+    + processes is group with parent-child relationship, the child process is start by the parent process but there is not effect when parent process die. the process without a parent which means it is started from kernel process 
+    
+    the child process will hold the parent process id, the new created process will not use this id 
+    
+    + lower pane could display selected information in the toolbar will display all the loaded model, include dll, the view Handle, will display the handles for the perticular process, by default process explorer will only show the handles that have names. use View|Show Unnamed Handle Mapping 
+    
+- thread, is the entity that is scheduled by the kernel to execute code 
+    + a thread contains, the state of cpu registers 
+    + current access mode(user mode or kernel mode)
+    + two stacks, one in user space and one in kernel space 
+    + a private storage area, called thread local storage(TLS)
+    + some application or i/o will use the errno global variable that is part of c runtime library. it is used to be a global variable. because it is global it have a synchronization issue for multiple thread access it in the same time 
+    TLS provide a single cell for the errno 
+    + optional security token, thread by default run under its parent process security content. thread can assume a different identity using something called impersonation and do some operation on behalf of another user. and return to normal default content 
+    + optional message queue and windows the thread creates, by default it is worker thread without window. 
+    if thread call any win32 api in user.dll or TDI 32 dlls, it's getting a message queue. then it is a ui thread
+    + a priority using in thread scheduling, from 0 ~ 31, 31 is the highest priority 
+    + a state, running, ready, waiting 
+    
+- demo thread 
+    + check the performance tab in the task manager 
+    + process explorer could show more thread information, view each thread use property window, check the thread tab 
+    
+    thread id and process id is come from the same pool, at the same time there will be no same value, we could check the call stack of the thread 
+    
+    the call stack information is base on the symbol information 
+    
+    we could use procexplorer to suspend a thread or kill a thread to determin if a thread s consume to much system resource for debug purpose
+
+- virtual memory 
+    + each process "sees" a flat linear memory 
+    + internal virtual memory may be mapped to physical 
+    + process access memory regardless of where it actually resides 
+        * the memory manager handles mapping of virtual to physical pages 
+        * processes cannot(and need not) know the actual physical address of a given address in virtual memory 
+        process is configure run under demand paging, process alwasy match virtual memory to physical address but the actual address is unknown
+        
+        kernel code could get actual physical memory 
+        
+        + example 
+        virtual memory 
+        process A      ----> physical memory  ----------> disk  
+                                                           A
+        vritual memory ----->                              |
+        process B      ------------------------------------+      
+    
+        dynamic link dll are shared, some of the physical memory may shared 
+        
+        by default 32bit process have 2gb user mode memory 
+        
+        the other 2gb is saved system space, low address is for user process, high address is saved for system space 
+        
+        x64 bit process, each user process have 8tb address, kernel space have 6657GB address, there are lots of unmapped physical memory in the current system, due to CPU restriction 
+        
+- virtual memory 
+    + the process manager the details memory column display the current occupied physical memory, only indicate the private memory, the shared memory is not included 
+    
+    we need select the column Memory(shared working set) and Commit size which is the better counter 
+    
+    + use task manager use property, select the process memory select 
+    private bytes, virtual size, page fault delta, working set size, ws private bytes... 
+    
+    we could get the base address by select the display column in the detail pane 
+    + another tool is use VMMap which is a system internal tool
+    it show the layout of actual virtual memory, the large address space is system space 
+    
+- objects and handles, window is composed with objects 
+    + objects are runtime instances of static structures, examples, process, mutex, event, desktop, file 
+    + reside in system memory space 
+    + kernel code can obtain direct pointer to an object 
+    + user mode code can only obtain a handle to an object 
+        * shields user code from directly accessing an object 
+        * use mode code use a handle which is a indirect reference to the object, then security check could be made 
+        * objects are reference counted, the user mode object and close a handle. the relative object state is not sure to delete or not. can only sure the handle is delete from the handle table. use that again would simply fail 
+        
+        * object maintain its own reference count, if it is become to zero, it delete itself 
+        * the object manager is the entity responsible for creating obtaining and otherwise manipulating objects 
+
+- demo object and handles 
+    + we could check the handles with process explorer, each process have its own handle table. select the handle in the handle table. the handle of other process is meaning less to the current process, because it may point to different objects 
+    
+    handle value is always mutiple 4 
+    
+    we could add column access mask and object address to the handle pane, object address is the actual kernel space address. the object address is always 5 F above, 0xFFFFFxxx... always ends in 0 it aligned with the lower 4 bits always 0 on a 64bit system. for 32bit system always align to 3bits so it ends with 0 or 8  
+    
+    access mask is some flag represent what we can do with the particular object 
+    
+    + check the property of a handle will give more information 
+    
+    event handle will display event type and signaled state 
+    
+    with process explorer support close a handle in other process. it is normally not possible to close a handle in other process. but process explorer have kernel driver 
+    
+    + example kill the mutex lock to open mutiple media player 
+    
+- summary 
+    + process is a management container for threads to execute code 
+    + a thread executes code on a cpu 
+    + multiple threads can execute concurrently on multiple cpus 
+    + per process virtual memory provides a private address space isolated from other processes 
+    + kernel objects are accessed from user mode using private process handles 
+
+    
+# System architecture 
+- content 
+    + windows design goals 
+    + windnows editions 
+    + general architecture overview 
+    + function call flow 
+
+- window design goals 
+    + separate address space per process 
+        * one process cannot (easily ) corrupt another's memory 
+        
+    + protected kernel 
+        * user mode applications cannot crash kernel 
+        * only can crash kernel is device drivers 
+    + preemptive multitasking and multi-threading, this means the os can stop a thread and give the processor to another thread 
+    + multiprocessing support, several thread can run at the same time and not just time slice sharing 
+    + internationalization support using unicode, utf-16, every character compose 2bytes in kernel 
+    + security throughout the system 
+    + integrated networking 
+    
+    + powerful file system(NTFS), support protection, compression and encryption 
+    + run most 16 bit windows and dos apps, on 32 bit systems. if dos code try to maniputlate the interrupt controller the apps will be closed 
+    
+    an nt virtual dos machine ntvdm.exe, provide a kinds of simulator for old applications 
+    
+    + run POSIX 1003.1 and OS/2 applications, POSIX is a kind of a unix MS stil support POSIX and not support OS/2 now. supply service for unix to enhance POSIX system 
+    
+    + portable across processors and platforms 
+    + be a great client as well as server platform 
+    
+- unicode in the windows api 
+    + create a c++ console application 
+    + add header in the stdafx.h, the name is from the historical MVC days 
+    #include <windows.h> //include all window api 
+    
+    //in the project.cpp 
+    int _tmain(int argc, _TCHAR* argv[])
+    {
+        HANDLE hFile = CreateFile("c:\\temp\\data.txt", GENERIC_WRITE, 0, nullptr, CREATE_AWAYS, 0, 0);
+        CloseHandle(hFile);
+        return 0;
+    }
+
+    these code will get compile error because the CreateFile is a macro which call the CreateFileA or CreateFileW. for ascii or unicode version. W is wide
+    this because a compilation symbol called unicode is defined automatically when call the CreateFile macro so the ascii version will failed 
+    
+    use CreateFileW need to add prepending L to the path argument 
+    
+    check the project property the Configuration Properties|General|Character Set is default set to Unicode 
+    
+    in window 95, 98 is base on ascii 
+    
+    use _T to make the string compile right for unicode or ascii 
+    
+    today we should use unicode version function because ascii version will also call the unicode version function and call the W function 
+    
+    today we could just use the L prepending string 
+    
+    + use dependency walker depends.exe, we could download it from dependencywalker.com. we could the export of a dll 
+    
+    most of the function in windows api that take a string in some of the parameter is not a real function it is macro 
+    
+    use TCHAR macro we could use it to expand to char or wchar_t versions 
+    
+    window support unicode natively 
+    
+- window editions 
+    + windows xp home 
+    + windows professional, 2000, xp, vista, 7, 8 
+    + window server standard advanced datacenter editions ...
+    + other variations 
+    
+    + there are actually professional vs server
+        * same core system files 
+        * differences 
+        number of processors supported 
+        maximum amount of RAM that can be used 
+        maximum of concurrent network connections supported for file and print sharing 
+        some services only appear in service versions, such as domain control 
+        other system policies and default settings, such as thread quantum 
+        
+    + os type can be discovered by calling GetVersionEx(Win32) or RTlGetVersion(WDK) window driver kit 
+    
+    + windows numeric versiosn 
+    nt 4, 4.0 
+    2000, 5.0 
+    xp, 5.1 
+    2003, 2003 r2, 5.2 
+    7, 2008 r2, 6.1 
+    8, server 2012, 6.2 
+    8.1, server 2012 r2 6.3 
+    these values an be obtained using GetVersionEx(Win32) or RTlGetVersion(WDK), in .net use Environment.OSVersion 
+    
+- demo to get window version 
+    + create console application 
+    + include windows.h in stdafx.h 
+    + use GetVersionEx window api to get window version structure 
+    
+    OSVERSIONINFOEX osv = {sizeof(osv)}; //the first member is the sizeof the structure, a typically window structure
+    /// init the member osv.dwOSVersionInfoSize
+    GetVersionEx((OSVERSIONINFO*)&osv);
+    printf("version, %d, %d", osv.dwMajorVersion, osv.dwMinorVersion);
+    
+    + with .net we could complete with 
+    var version = Environment.OSVersion;
+    Console.WriteLine(version.Version.Major, version.Version.Minor)
+    
+- general architecture overview 
+        system process, services environment, subsystem, User application 
+user mode               |
+                   subsystem dll, such as the create file is in kernel32.dll 
+                        |
+                   NTDLL.DLL, the lowest layer it is used to transfer user mode to kernel mode of the particular thread that is executing right now 
+                        |
+                        V
+-----------------------------------------------------------------
+kernel mode         Executive, does some security checks 
+                        |
+                        V
+                Graphics(win32k.sys)    Device Drivers      Kernel 
+                Hardware abstraction layer (HAL)
+
+
+for window 32 the subsystem is csrss.exe, it is window subsystem process
+services, win32 process regular process, they can start when window start, they interact with SCM service contour manager. 
+
+- function call flow 
+                    function call flow 
+                            |
+                            call fread      application 
+                            |
+                            call ReadFile   msvcrt.dll in .net 
+                            |
+                            call NtReadFile return to caller    Kernel32.dll 
+                            |
+                            sysenter(32bit)/syscall(64bit) return caller      NtDll.DLL which is undocumented 
+                            |
+                            V
+user mode 
+-----------------------------------------------------------
+kernel mode         call NtReadFile /NtWriteFile    NtOskrnl.EXE, different function will have different number 
+                            |
+                            V 
+                        NtReadFile, call driver return to caller        NtOskrnl.EXE 
+                            |
+                            V
+                       initiate I/O return to caller        driver.sys 
+
+
+- brief overview of windbg 
+    + windbg is part of the debugging tools for windows 
+    + other debuggers in the tools, NTSD, CDB, KD 
+    + all debggers are based on the same engine, DbgEng.Dll 
+    + NTSD & CDB are user mode debuggers 
+        * practically idetical, NTSD spawns a new console window if launched from a console window 
+        
+    + KD is a kernel mode debugger, the way to debug device drivers allow us to attach to a machine, break a executing machine.
+    + WinDbg can serve as a user mode or kernel mode debugger at the same time 
+    + WinDb is the only one with a graphical user interface, don't have advantage over NTSD or CDB 
+    + most important window is the command window 
+        * can do any thing 
+        * shortcuts available through the menu 
+        
+- demo function call 
+    + open windbg 
+    + open executable, notepad.exe 
+    + set symbol path, File|Symbol File Path 
+    path0*path1*uri_to_symbol_server 
+    
+    or use command to connect microsoft symbol server 
+    .symfix 
+    
+    best way to add a environment variable to _NT_SYMBOL_PATH, it will be pick up automatically by windbg, visual studio, process explorer ... 
+    
+    _NT_SYMBOL_PATH=SRV*c:\Symbols*http://msdl.microsoft.com/download/symbols 
+    
+    + check the symbol is load currently by check ntdll says pdb symbols then it is current, if it display export only then the symbol is bad 
+    ....
+    00000000`76d90000 00000000`76f39000   ntdll      (export symbols)       C:\windows\SYSTEM32\ntdll.dll
+    
+    symbol OK 
+    00000000`76d90000 00000000`76f39000   ntdll      (pdb symbols)          C:\WinDDK\7600.16385.
+    
+    use .reload the force reload the symbol, the call stack doesn't contain a function in the dll, windbg will not load the symbol. it is the default behavior 
+    
+    + we can use the tilde ~ command, to look at the thread that are currently in the process 
+    0:000> ~
+    .  0  Id: 2bbc.2bfc Suspend: 1 Teb: 000007ff`fffde000 Unfrozen  
+    
+    the Id is the client id consist of two numbers, ProcessID.ThreadID
+    
+    use question mark ? hex_value, will display decimal value 
+    0:000>  ?2bbc
+    
+    we could check the thread id by process explorer 
+    
+    use g command the continue execute the debuggee 
+    > g 
+    
+    use ctrl+break to break at any time 
+    check the thread and stack 
+    > ~
+       0  Id: 2bbc.2bfc Suspend: 1 Teb: 000007ff`fffde000 Unfrozen
+    .  1  Id: 2bbc.2db0 Suspend: 1 Teb: 000007ff`fffdc000 Unfrozen
+    
+    the thread start with dot means it is the current thread, the k command will display the stack for the current thread 
+    > k 
+    00000000`02a4fb28 00000000`76e81e88 ntdll!DbgBreakPoint
+    00000000`02a4fb30 00000000`76c859dd ntdll!DbgUiRemoteBreakin+0x38
+    00000000`02a4fb60 00000000`76dba651 kernel32!BaseThreadInitThunk+0xd
+    00000000`02a4fb90 00000000`00000000 ntdll!RtlUserThreadStart+0x1d
+    
+    switch to thread by ~0s command 
+    > ~0s
+    
+    use bp command to break in the CreateFile function use A/W 
+    > bp kernel32!CreateFileW 
+
+    use bl to check the setted break point list 
+    
+    and continue execute, click the file menu in the notepad 
+    
+    when the breakpoint hit, check the call stack by k command 
+    
+    create another breakpoint in the ntdll create file 
+    0:000> bp ntdll!NtCreateFile
+    
+    continue execute will hit the function in the ntdll 
+    
+    use u command to display the assembly codes 
+    00000000`76ddc420 4c8bd1          mov     r10,rcx
+    00000000`76ddc423 b852000000      mov     eax,52h
+    00000000`76ddc428 0f05            syscall
+    
+    use p/F10 to step forward 
+    ntdll!NtCreateFile+0x3:
+    00000000`76ddc423 b852000000      mov     eax,52h
+    0:000> p
+    ntdll!NtCreateFile+0x8:
+    00000000`76ddc428 0f05            syscall
+    
+    the number is 52h move to eax it the service call number which will be used to map to kernel service call table 
+    
+- demo, local kernel debugging, use kernel debug to view the window service table 
+    + open window debug 
+    + open kernel debugging 
+    File|Kernel Debugging 
+    
+    + set the connection methods, COM, 1394, USB2.0, NET, local 
+    in the local mode we could only check the structure of the kernel but can't set break point 
+
+    enable local debugging by 
+    $ bcdedit -debug on 
+    to enable local debugging 
+
+    we don't required to do it by use a systeminternal tool, livekd.exe and copy it to the windbg folder
+    open administrator command promp, execute command 
+    $ livekd -w 
+    will open windbg window, without -w will only use console window 
+
+    + use x command to look the symbol in the kernel 
+    > x nt!KiService*
+
+    use dd, display doulbe word command 
+    > dd nt!KiServiceTable 
+    fffff800`036d2f00  04172800 02f39100 fff6f400 02e6ee05
+    fffff800`036d2f10  031b3506 03125c05 02b87101 02b1c600
+    fffff800`036d2f20  0313da40 03f04000 02c54400 02e64700
+    fffff800`036d2f30  02f4cd00 02ddc401 02daa701 02d68500
+    fffff800`036d2f40  02dce602 02f04100 02a9f6c0 02cc0001
+    fffff800`036d2f50  02cd1e02 02f4e502 03101d01 03218b01
+    fffff800`036d2f60  04622d05 02ebddc0 02afbc43 ffecca00
+    fffff800`036d2f70  04477f00 02f34540 02c19801 03137a00
+
+    all these should be function names 
+
+    use u command and one of the table value to check the function entry 
+    kd> u fffff800`036d2f00
+    fffff800`036d2f00 0028            add     byte ptr [rax],ch
+    fffff800`036d2f02 17              ???
+    fffff800`036d2f03 0400            add     al,0
+    fffff800`036d2f05 91              xchg    eax,ecx
+    fffff800`036d2f06 f30200          rep add al,byte ptr [rax]
+    fffff800`036d2f09 f4              hlt
+    fffff800`036d2f0a f6ff            idiv    bh
+    fffff800`036d2f0c 05eee60206      add     eax,602E6EEh
+
+- core system files 
+    + Ntoskrnl.exe for 64 bit system, 
+    + NtKrnlPa.exe for 32 bit system have the physical address extension to access over 4gb memory 
+    
+    + Hal.dll, the a layer that insulates drivers and the kernel from actual hardware and installation media of windows, hardware abstraction layer 
+    + Win32k.sys, kernel component of window system recall windowing and GDI graphics, graphic relative function go to this module and not go to ntdll, handle windowing and GDI 
+    
+    + NtDll.dll, the lower layer of the user mode space, native api are not documented, and not guarantee consistent in the future 
+        * system support routines and native API dispatcher to executive services 
+        
+    + Kernel32.dll, user32.dll, gdi32.dll, advapi32.dll, official subsystem dll for user mode application to call the kernel functions
+    
+    advapi32.dll, is advanced api 
+    
+    + CSRSS.exe(client server runtime subsystem), is the process manager widnows subsystem, it is always running, kill it will cause system blue screen 
+    
+
+- demo core system files 
+    + open process explorer 
+    + check the system process 
+    + view dll 
+    + find the hall.dll 
+
+    + and also could check other previous introduced files. exe and sys extension is same, they are all dll and loaded into kernel spaces 
+
+    + we could also use depends tool to open the kernel file it self, we could get the api that kernel have NTOSKRNL.EXE 
+    most of the functions are undocumented 
+    
+    + check any user mode process will contain the ntdll, native api of ntdll are also undocumented, these function set the number of system service function 
+    
+- symmetric multiprocessing, smp, all cpus are the same and share main memory and have equal access to peripheral devices(no master/slave). every process are equal 
+
+    + basic architecture supports up to 32/64 cpus 
+    windows 7 64 bit & 2008 R2 support up to 256 cores 
+    uses a new concept of processor group 
+    
+    we need to paralize stuff 
+    
+    + actual number of cpus determined by licensing and product type
+    
+- demo SMP
+    + process explorer have a system information in the View menu 
+
+- subsystems, is a special view of the OS, subsystem expose services via subsystem dlls 
+    + original nt shipped with win32, os/2 and posix 1003.1 
+    windows xp dropped support for os/2, its ware to be used 
+    
+    enhanced POSIX version is available with the services for unix product  
+    
+    + the window subsystem must always be running
+    owner of keyboard, moust and display 
+
+    + some api functions use the advanced local procedure call (ALPC) to notify CSRSS of relevant events 
+    
+    + other subsystems configured to load on demand, will contact he SMSS, session manager that will load the particular subsystem processes 
+    HKLM\System\CCS\Control\Session Manager\Subsystems 
+
+    + subsystem dlls, every image belongs to exactly one subsystem, value stored in image PE header, can view with dependency walker(depends.exe)
+    
+    allows the windows loader to make correct decisions 
+    
+    + a image of a certain subsystem calls api functions exposed through the subsystem dlls 
+    kernel32.dll, user32.dll, etc 
+
+    the NTFS is case sensitive if function call from POSIX system could create files with same name but different cases in the same location 
+    
+    + some images belong to no subsystem, native images, they can only use NTDLL.DLL
+    
+    + native API, implemented by NTDLL.DLL used by subsystem dlls and native images, undocumented interface, lowest layer of user mode code 
+    
+    + contains various support function, ntdll supply sprintf, memcpy, native images can link to c runtime library. image don't required c runtime library when use with ntdll 
+    
+    dispatcher to kernel services, most of them accessible using windows api "wrappers"
+    
+- demo subsystems and ntdll, RtlXxxxx, it is runtime library NtXXxxx function will be transfer to kernel mode 
+    + use dependency walker open notepad 
+    + select the kernel32.dll at the left panel, the lower part we can see that these are the functions exported by kernel32.dll most of the function are documented as window api 
+
+    the upper part is shows the imported functions that means these functions that are actually used from kernel32 by notepad.exe 
+    
+    right click the notepad.exe and select the Highlight Matching Module in list. the module list which is the lowest panel will focus the notepad.exe 
+    the subsystem column is GUI, which means the PE file contain the information to execute without console 
+    
+    for example SMSS.EXE is a native subsystem 
+
+- system process 
+    + idle process, represent the idle time, has process id 0, not a real process, does not run any executable image, one thread per cpu(core), accounts for idle time 
+    
+    + system process, kernel's address space. has a fixed PID 4, represent the kernel address space and resources, hosts system threads. other threads created by device drivers. the number threads is depends on the request 
+    
+    created using the PsCreateSystemThread kernel API, documented in the WDK, that is not depend on any particular process for existence 
+    
+    allocated memory for memory managed 
+    
+    + session manager, smss.exe , session 
+        * the first user mode process created by the system 
+        * running the image \windows\system32\smss.exe 
+        * main tasks 
+        create system environment variables 
+        launches the subsystem process, normally just csrss.exe 
+        launches itself in other sessions, loads WINLOGON and CSRSS in that session then terminates 
+        * finally, waits forever for csrss instances to terminates, if any of them dies, crashes the system. smss terminates also cause system crash 
+        
+        * waits for subsystem creation requests 
+        * wait for terminal services session creation requests 
+        
+        
+    + window subsystem, crss.exe
+    + logon process, winlogon.exe, help manage logons and others  
+        * image system32\winlogon.exe 
+        handles interactive logons and logoff 
+        if terminated logs off the user session 
+        notified of a user request by the secure attention sequence (SAS), typically ctrl+alt+del 
+        authenticates the user by presenting a username/password dialgo(through LogonUI.exe), can be replaced the UI known as cretencial provider 
+        sends captured username and password to LSASS, if successfully authenticated the user, initiates the user's session 
+    + service control manager, scm, services.exe, interacting window service 
+    system32\services.
+    responsible for starting, stopping and interacting with service processes 
+    services communicate services through named pip, similar to unix daemon processes, normal windows executables, can started automatically, can run under special accounts, localsystem, network service, localservice 
+    
+    + local security authentication server, lass.exe, authentication service in charge of authentication users 
+    system32\lsass.exe 
+    calls the appropriate authentication package 
+    upon successful authentication, creates a token 
+    returns information to winlogon 
+    
+    + local session manager, lsm.exe, local helper of smss.exe 
+    managers terminal session on the local machien 
+    lsm.dll 
+    host in a standard svchost.exe 
+
+- demo services 
+    + use task manager display the services list 
+    
+    + use service manager, services.msc 
+    
+    delayed start, will be start after user login in two minutes 
+    
+    + log on tab, specify the user login account 
+    
+    + svchost.exe, it is generic service host process the services is implemented as dll but extension name is exe 
+    
+    scm provide named pip for each service to enable it communicate with other processes 
+    
+- Wow64, 32bit, each process have 2gb memory, execute old process on 64 bit 
+    + allows execution of win32 binaries on 64-bit windows 
+    wow64 intercepts system calls from the 32-bit application 
+        * converts 32-bit data structure into 64-bit aligned structure 
+        * issues the native 64-bit system call 
+        * return any data from the 64-bit syste call 
+        
+    + the IsWow64Process function can tell whether a process is running under Wow64 
+    + address space is 2bg or 4bg(if image is linked with LARGEADDRESSAWARE flag)
+    
+    + device drivers must be native 64 bit, Wow is only for user mode process, the kernel mode 64 then it only works with 64 bit program 
+    + file system, every 64 bit system have two set of images 
+    
+    windows\system32 contains 64 bit images 
+    windows\syswow64 contains 32 bit images 
+    
+    + Wow 64 architecture 
+32 bit EXE, DLLs 
+|
+V
+32 bit NtDll.Dll, a special NtDll.Dll (32bit) will call the Wow64.Cpu.DLL 
+|
+V
+Wow64Cpu.Dll 
+|-----------------+
+V                 V
+Wow64.Dll         Wow64Win.Dll 
+|                       |
+V                       |
+64 bit NtDll.Dll        |
+------------------------+---------------------
+|                       |
+V                       V
+NtOsKrnl.Exe          Win32k.Sys
+    
+    
+    + restrictions 
+        * a 64 bit process cannot load a 32 bit dll and vice versa, the exception is resource only dlls
+        except resource only dll, which can be loaded cross-architecture 
+        
+        * some apis are not supported by Wow64 process, e.g ReadFileScatter, WriteFileGather, AWE functions 
+        
+        these function assume particular format of memory 
+        the function allow 32-bit process access more than 4gb memory function are not support in wow64 
+        
+        
+    + file system redirection, system directories names ahve not changed in l64 bit windows 
+    windows\system32 contains 64 bit images 
+    
+    32 bit application must use their own directory 
+    32 bit image \windows\system32 maps to windows\syswow64 
+    
+    any time a 32 bit application try to access system32 it really accesses syswow64. that's transparent to the application 
+    such as call GetSystemDirectory() 
+    
+    32 bit installed in \program files (x86)
+    64 bit installed in \program files 
+    
+    matlab provide 32 and 64 bit version 
+    
+    + some directory are not redirected 
+    
+    + registry redirection 
+        * components try to register as 32 bit and 64 bit will clash, com component 
+        
+        * 32 bit component are redirected to the wow64 registry node (Wow6432Node)
+        HKYE_LOCAL_MACHINE\Software 
+        HKEY_CLASSES_ROOT 
+        HKEY_CURRENT_USER\Software\Classes 
+        
+        * new flags for registry apis allow access to the 64 bit or 32 bit nodes 
+        KEY_WOW64_64KEY, open a 64 bit key 
+        KEY_WOW64_32KEY, open a 32 bit key 
+        
+- demo Wow64 
+    + check the \windows\system32, all the system file are 64 bit 
+    + check the windows\SysWow64, only be used by 32 bit process 
+    + one of the benefits for wow64 for 32 bit process is to get access to 4 gb future memory instead of 2gb 
+    
+        * open visual studio 
+        * property of project 
+        * Configuration Properties|Linker|System enable large address set to yes 
+        * visual studio itself is enable this feature 
+        * for .net there is no way to do it 
+        use editbin to enable it for .net application 
+        
+        $ editbin /largeaddressaware:yes xxx.exe
+        
+        * open the registry, 
+        local_machine\software\wow6432node\microsoft\
+        there are lots of application which are 32 bit 
+        
+        the computer\class_root\clsid\ 
+        contain all the registered 64 bit com key 
+        class_root\wow6432NOde\clsid 
+        contain all the registered 32 bit com 
+        
+        although the content is 
+        
+- summary 
+    + a process executes under a specific subsystem 
+    + the primary subsystem is the windows subsystem 
+    + ntdll is the gateway to kernel mode 
+    + wow64 allows running 32 bit processes on 64 bit system 
+   
+   
+# Processes and Threads 
+- introduction 
+    + processes 
+    + threads 
+    + thread scheduling 
+    + thread synchronization 
+    + thread pools 
+    + jobs 
+    
+- process 
+    + management and containment object 
+    owns, private virtual address space(2gb/3gb on 32bit, 8tb on 64 bit)
+
+    working set(physical memory owned by process)
+    
+    private handle table to kernel objects, that table is on a process base 
+    
+    access token, determines the security token
+    
+    + has a priority class (from win32), provide the basis thread priorities in that particular process 
+    affects all threads running in that process. priority class 
+    
+    basic creation functions, CreateProcess have 9 arguments, CreateProcessAsUser have 10 the additional one is the user token 
+    
+    create doc, handled by ShellExecute, or ShellExecuteEx from window shell api it will call CreateProcess with the relative application 
+    
+    + terminated when any of the following occurs 
+        * all threads in the process terminate 
+        * win32 programming, when the main thread which is the first thread created by the process terminated the process terminated. it not supply by the kernel. that really part of the c-runtime, when the main thread return call the ExitProcess function. in the kernel there is no main thread. any thread call ExitProcess the process end which is a polite way to exit a process. The function have to be called by thread of the process 
+        
+        TerminateProcess can be called by anyone assuming we can get a proper handle to that process. this causes the process exit in-politely 
+
+        * all resource not shared with other process is free 
+        
+- process creation 
+    + flow of process creation 
+    + open the image file, is the executable itself that holds the main function or WinMain an the other startup stuff that's required for the process. check the file structure 
+    + create kernel executive process object. kernel manage the process several structure, such as KPROCESS it is the lowest level structure and wrapped by EPROCESS, both of these are undocumented 
+    
+    the header file in window driver kit don't provide enough information to work with it 
+    
+    such as address space and information 
+    
+    + create initial thread, then it could create other required additional thread. KTHREAD and ETHREAD structure is used by kernel to manage the thread 
+    
+    + notify CSRSS of new process and thread. CSRSS provides some management and some helper work with processes that are user mode processes. kernel will send local procedure call message to it to notify the process and thread changed messages 
+    
+    + complete process and thread initialization. all this stuff is still done by the creator. the creator is some process now create new process. now we need to init the created process 
+        * load required dlls and initialize 
+        * there are several path window will load and search dll, such as subsystem dll
+        * DllMain function called with DLL_PROCESS_ATTACH reason for each dll means dll is attached to a new process 
+        
+        in a normal process ExitProcess will call all DllMain when process exist with reason DLL_PROCESS_DETACH, When call TerminateProcess, not all dll are called DllMain with DLL_PROCESS_DETACH
+        
+        in this part of the process, DllMain is called by the main thread in the context of the new process for all the dlls that have been currently loaded 
+        
+- demo create a process 
+
+    + create a window console application 
+    + include windows.h in the stdafx.h 
+    + in the _tmain function 
+TCHAR name[] = _T("notepad")
+//BOOL isSuccess = CreateProcess(
+//  _In_opt_    LPCTSTR               lpApplicationName,
+//  _Inout_opt_ LPTSTR                lpCommandLine,
+//  _In_opt_    LPSECURITY_ATTRIBUTES lpProcessAttributes,
+//  _In_opt_    LPSECURITY_ATTRIBUTES lpThreadAttributes,
+//  _In_        BOOL                  bInheritHandles,
+//  _In_        DWORD                 dwCreationFlags,
+//  _In_opt_    LPVOID                lpEnvironment,
+//  _In_opt_    LPCTSTR               lpCurrentDirectory,
+//  _In_        LPSTARTUPINFO         lpStartupInfo,
+//  _Out_       LPPROCESS_INFORMATION lpProcessInformation
+//);
+
+STARTUPINFO si = {
+    sizeof(si)
+}; //CC++ rule the other members will be zero out 
+PROCESS_INFORMATION pi;
+BOOL isSuccess = CreateProcess(
+    nullptr,
+    name, //use the second parameter because it provide default path search like console input 
+          //it must be in some writeable buffer
+    nullptr, //lpProcessAttributes security relative attribute, nullptr means it is default security process, which means we can do any thing with that process 
+    nullptr, //lpThreadAttributes,
+    false, //bInheritHandles, that used to copy some handle tables from the creator handle table to the created handle table. that a way to share handles between processes 
+    0, //dwCreationFlags, such as one flag called CreateSuspended, the aim process is created in a suspended state till we call the ResumeThread function then start execute the main function of the process 
+    null, //lpEnvironment, null means use the same environment variable as the creator process  
+    null,//lpCurrentDirectory, null keep same 
+    &si, //lpStartupInfo
+    &pi //lpProcessInformation
+);
+if(isSuccess)
+{
+    pi.hProcess, pi.dwProcessId, pi.dwThreadId
+    
+    //wait for the new created process ended 
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    cout << "the process is ended" << endl;
+    GetExitCodeProcess(pi.hProcess, &code);
+}
+else 
+{   
+    cout << GetLastError() << endl;
+}
+return 0;
+    
+- demo process internals, using the kernel debugger 
+    + start livekd, which means we use a dump file provides a way to into looking at system memory 
+    
+    + check all the executing processes by 
+    > !process 0 0 
+    PROCESS fffffa80187e09c0
+    SessionId: 0  Cid: 0674    Peb: 7fffffd5000  ParentCid: 013c
+    DirBase: 16943000  ObjectTable: fffff8a034508100  HandleCount: 120.
+    Image: WmiPrvSE.exe
+
+    PROCESS fffffa801528d600
+        SessionId: 1  Cid: 37ac    Peb: fffdf000  ParentCid: 1b90
+        DirBase: 38077e000  ObjectTable: fffff8a03f51a750  HandleCount: 114.
+        Image: vcpkgsrv.exe
+
+    PROCESS fffffa80153807a0
+        SessionId: 1  Cid: 3120    Peb: 7efdf000  ParentCid: 2f10
+        DirBase: 1855d3000  ObjectTable: fffff8a0297411d0  HandleCount:  54.
+        Image: livekd.exe
+
+    PROCESS fffffa800efda570
+        SessionId: 1  Cid: 0610    Peb: 7fffffd8000  ParentCid: 3120
+        DirBase: 24154f000  ObjectTable: fffff8a034501d20  HandleCount:  83.
+        Image: livekd64.exe
+    
+    every process follow an address such as fffffa800efda570... that the address of EPROCESS structure 
+    
+    check the process detail of the process by the EPROCESS address 
+    > !process fffffa800efda570
+PROCESS fffffa8019021060
+    SessionId: 1  Cid: 2a9c    Peb: 7fffffd3000  ParentCid: 0b5c
+    DirBase: 1b48f2000  ObjectTable: fffff8a03eaeb4e0  HandleCount: 445.
+    Image: Console.exe
+    VadRoot fffffa801c3ebf30 Vads 298 Clone 0 Private 5512. Modified 806. Locked 0.
+    DeviceMap fffff8a00290af10
+    Token                             fffff8a01aa2c060
+    ElapsedTime                       1 Day 01:09:06.900
+    UserTime                          00:00:00.390
+    KernelTime                        00:00:01.123
+    QuotaPoolUsage[PagedPool]         0
+    QuotaPoolUsage[NonPagedPool]      0
+    Working Set Sizes (now,min,max)  (11824, 50, 345) (47296KB, 200KB, 1380KB)
+    PeakWorkingSetSize                13217
+    VirtualSize                       211 Mb
+    PeakVirtualSize                   286 Mb
+    PageFaultCount                    57826
+    MemoryPriority                    BACKGROUND
+    BasePriority                      8
+    CommitCharge                      8867
+
+        THREAD fffffa801c12cb50  Cid 2a9c.21c0  Teb: 000007fffffde000 Win32Thread: fffff900c313fc10 WAIT: (WrUserRequest) UserMode Non-Alertable
+            fffffa80140d5e90  SynchronizationEvent
+        Not impersonating
+        DeviceMap                 fffff8a00290af10
+        Owning Process            fffffa8019021060       Image:         Console.exe
+        Attached Process          N/A            Image:         N/A
+        Wait Start TickCount      10917290     
+        Context Switch Count      192540                 LargeStack
+        UserTime                  00:00:01.700
+        KernelTime                00:00:07.347
+        Win32 Start Address 0x00000001400a3230
+        
+    the THREAD information also follow by the ETHREAD structure address. we could check the EPROCESS structure itself 
+    display type commnd 
+    > dt nt !_EPROCESS 
+   +0x000 Pcb              : _KPROCESS
+   +0x160 ProcessLock      : _EX_PUSH_LOCK
+   +0x168 CreateTime       : _LARGE_INTEGER
+   +0x170 ExitTime         : _LARGE_INTEGER
+   +0x178 RundownProtect   : _EX_RUNDOWN_REF
+   +0x180 UniqueProcessId  : Ptr64 Void
+   +0x188 ActiveProcessLinks : _LIST_ENTRY
+   +0x198 ProcessQuotaUsage : [2] Uint8B
+   +0x1a8 ProcessQuotaPeak : [2] Uint8B
+   +0x1b8 CommitCharge     : Uint8B
+   +0x1c0 QuotaBlock       : Ptr64 _EPROCESS_QUOTA_BLOCK
+   +0x1c8 CpuQuotaBlock    : Ptr64 _PS_CPU_QUOTA_BLOCK
+   +0x1d0 PeakVirtualSize  : Uint8B
+   ....
+    another structure is interesting is process environment block or PEB. PEB is unique in that it resides in the user space. not kernel space. that requried by some of the WIN32 APIS 
+    > dt nt!_PEB 
+   +0x000 InheritedAddressSpace : UChar
+   +0x001 ReadImageFileExecOptions : UChar
+   +0x002 BeingDebugged    : UChar
+   +0x003 BitField         : UChar
+   +0x003 ImageUsesLargePages : Pos 0, 1 Bit
+   +0x003 IsProtectedProcess : Pos 1, 1 Bit
+   +0x003 IsLegacyProcess  : Pos 2, 1 Bit
+   +0x003 IsImageDynamicallyRelocated : Pos 3, 1 Bit
+   +0x003 SkipPatchingUser32Forwarders : Pos 4, 1 Bit
+   +0x003 SpareBits        : Pos 5, 3 Bits
+   +0x008 Mutant           : Ptr64 Void
+   +0x010 ImageBaseAddress : Ptr64 Void
+   +0x018 Ldr              : Ptr64 _PEB_LDR_DATA
+   +0x020 ProcessParameters : Ptr64 _RTL_USER_PROCESS_PARAMETERS
+   +0x028 SubSystemData    : Ptr64 Void
+   +0x030 ProcessHeap      : Ptr64 Void
+   +0x038 FastPebLock      : Ptr64 _RTL_CRITICAL_SECTION
+   +0x040 AtlThunkSListPtr : Ptr64 Void
+   +0x048 IFEOKey          : Ptr64 Void
+   ...
+   
+   there is a command !PEB to show the current process's PEB information 
+   > !peb 
+   switch the actual process. with a meta command to change the implicit process of windbg then !peb will display the aim process 
+   > .process fffffa800efda570
+   > !peb 
+    PEB at 000007fffffd3000
+        InheritedAddressSpace:    No
+        ReadImageFileExecOptions: No
+        BeingDebugged:            No
+        ImageBaseAddress:         0000000140000000
+        Ldr                       0000000076ebc640
+        Ldr.Initialized:          Yes
+        Ldr.InInitializationOrderModuleList: 00000000001c4dc0 . 0000000008ee6a10
+        Ldr.InLoadOrderModuleList:           00000000001c4cb0 . 0000000008ee69f0
+        Ldr.InMemoryOrderModuleList:         00000000001c4cc0 . 0000000008ee6a00
+                Base TimeStamp                     Module
+    ...
+    
+    in user mode debug we could directly use the !peb and don't required to change the implicit process 
+- threads 
+    + instance of a function executing code, owns 
+    context, registers, etc, 2 stacks (user mode and kernel mode)
+    
+    optionally, message queue and windows, any a thread calls any function in user32 or gdi32 subsystem dlls. windows create message queue for that thread. all messages all activity related to windows created by that thread are sent to that message queue. that means thread have to some message pumping otherwise the user interface will become not responding 
+    
+    optional security token of its parent. thread support impersonation. 
+    
+    scheduling state
+        * priority, 0~31, 31 is the highest 
+        * state, ready wait running 
+        * a system with x processors or x logical process there may be no more than x thread running at the same time 
+        * current access mode (user or kernel )
+        
+    + basic creation function, CreateThread, that may be independent of the thread that created it 
+    + destroyed 
+        * thread function returns (Win32) only work in user mode. in kernel mode we have to create a function and terminate the thread explicitly 
+        * thread calls ExitThread (Win32), polite way to exit a thread, it also calls DllMain for all dlls want to know thread is exit 
+        
+        * TerminateThread, the DllMain function may not be called. thread may require some lock that will not be release 
+        
+- demo creating threads, calculate prime number 
+
+struct PrimeData {
+int first, last;
+int count;
+}
+const int NumThreads = 4; 
+
+int _tmain(int args, _TCHAR* argv[]){
+    int first = 3, last = 20000000;
+    
+    PrimeData = data[NumThreads];
+    
+    HANDLE hThread[NumThreads];
+    
+    //chop up entire data base on the thread number 
+    int dela = (last - first + 1)/NumThreads;
+    
+    DWORD start = timeGetTime();
+    for(int i = 0; i< NumThreads; i++){
+        data[i].first = first + delta * i;
+        data[i].last = i == NumThreads - 1? last:(first + delta * (i+1) - 1);
+        
+//HANDLE WINAPI CreateThread(
+//  _In_opt_  LPSECURITY_ATTRIBUTES  lpThreadAttributes,
+//  _In_      SIZE_T                 dwStackSize,
+//  _In_      LPTHREAD_START_ROUTINE lpStartAddress,
+//  _In_opt_  LPVOID                 lpParameter,
+//  _In_      DWORD                  dwCreationFlags,
+//  _Out_opt_ LPDWORD                lpThreadId
+//);
+        
+        hThread[i] = CreateThread(null, 
+        0, 
+        CalcPrims, // the function have to fit for the pattern DWORD WINAPI FUNC(PVOID), calling convention is __stdcall 
+        &data[i],
+        0, //means start right away 
+        nullptr, //almost no use, to access the thread used the thread handle which is the return value 
+        )
+    }
+    
+    //wait for all the thread finished executing 
+    WaitForMultipleObject(NumberThreads, hThread, TRUE, INFINITE);
+    DWORD elapsed = timeGetTime() - start; 
+    
+    int count = 0;
+    for(int i = 0; i < NumThreads; i ++){
+        count << "Thread " << i << "count: " data[i].Cout << endl; 
+        count += data[i].Count;
+    }
+    return 0;
+}
+    
+DWORD WINAPI CalcPrims(PVOID p){
+...
+}
+
+the thread number base on the physical logic processor number is a ideal definition. This is depend on the work load should be separated equally and balanced for each thread. then this will be the most effective. But in real world some times the work load is not equal for each thread, the thread number could be set to a little more higher than the real processor number 
+    
+- threads stacks 
+    + ever user mode thread has two stacks 
+    in kernel space(12k (x86)), 24k (x64). stack. every thread executing in kernel mode executes on that kernel stack 
+    
+    device drive should not use large stack space that would cause a stack overflow exception, which is in kernel mode blue screen. when need more memory drivers should allocate dynamically rather than on stack. the kernel stack is resides in the physical memory(most of the time). the reason is make sure user code can't interfere kernel operation. the stack can't be garbled b any user mode code
+    
+    the other reason being related to interrupt 
+    
+    + in user space(may be large), 2gb or 8tb, by default 1mb is reserved 64 kb committed up front. committed means that memory is ready to use and mapped to physical memory or if need be, paged out to the system page file. the stack can grow from 64kb to 1mb 
+    
+    a guard page is placed just below the last committed page. the guard page calls us a special exception to happen if the stack grows in that direction and causing that guard page to try to allocate memory from. the exception is handled by the memory manager. then the manager commit that page and move the guard page to the next page up to that 1mb limit. after that you will get stackoverflow exception in user mode and terminate the process
+
+    + can change the initial size
+        * using linker settings as new defaults 
+        * on a thread by thread basis in the call to CreateThread/CreateRemoteThread(Ex), as the second parameter, will be rounded up to closed pages 
+        the api can specify a new committed or reserved size, but not both 
+        
+        committed is assumed, unless the flag STACK_SIZE_PARAM_IS_A_RESERVATION is used 
+        
+        it a good idea to reduce the stack size of a thread. the thread uses the virtual memory spaces. whenever a thread created the committed memory will be occupied 
+        
+- demo threads stacks 
+    + project property | Configuration properties | linker | system | stack commit size, stack reserved size is used to set the value 
+    
+    this will change the default thread creating settings 
+    
+    + use CreateThread memory 
+//HANDLE WINAPI CreateThread(
+//  _In_opt_  LPSECURITY_ATTRIBUTES  lpThreadAttributes,
+//  _In_      SIZE_T                 dwStackSize,  //set the stack setting 
+//  _In_      LPTHREAD_START_ROUTINE lpStartAddress,
+//  _In_opt_  LPVOID                 lpParameter,
+//  _In_      DWORD                  dwCreationFlags, //STACK_SIZE_PARAM_IS_A_RESERVATION use this to set the reserved size 
+//  _Out_opt_ LPDWORD                lpThreadId
+//);
+
+    in .net, stack is always commit up front 
+    
+- thread priorities 
+    + thread priorities are between 1 and 31 
+    + priority 0 is reserved for the zero page thread, that relative to memory management 
+    + the window api mandates thread priority be based on a process priority class(base priority). it doesn't provide a direct way to change the thread's priority. 
+    
+    + a thread's priority can be changed around the base priority 
+    + apis, win32 
+        * SetPriorityClass, changing process base priority, this will effect all threads that process running.  
+        * SetThreadPriority, change the thread priority offset from the parent's base priority 
+    + api, kernel 
+        + KeSetPriorityThread, change thread priority to some absolute value. we could write a driver for user mode code to help directly set the priority number 
+        
+    + Thread priorities, win32 view 
+    
+Normal priorities                     |  Realtime Priorities 
+                                                   real time 
+                          high 
+                 above normal 
+        default 
+1 4  6   8          10    13        15 16          24          31 
+
+    below normal 
+  idle 
+priority number 
+
+by SetThreadPriority we have +/- 1,2 offset base on the process process priorities 
+
+there are two more options, called saturation values that we can set for the thread, priority can be go to 15 or 1, in normal priority process we can only set 7 level thread priorities in windows 
+
+realtime priorities start from 16 
+
+above normal priority class, the default base is 10, the other is same is normal 
+
+high priority class, default is 13, only have 6 possible values 
+
+window can't guarantee some maximum values for a latency of interrupts or anything like that, real time means higher than the rest in window 
+
+- demo thread priorities 
+use CPU stress, it is cpu internal site, it is not a system internal tool, it is a learning tool 
+
+CPUSTRES.EXE 
+
+there are two kids of priority, base priority and dynamic priority. the realtime priority is the dynamic priority. the adjustment is base on window 
+
+to set priority to realtime by process explorer
+- thread scheduling 
+one cpu, there is a ready queue, there are threads arranged by priorities 
+
+priority is the most important factor, execute a thread quantum of time 
+
+if some higher priority thread enter to a wait state which will be signal by a lower thread event. when the event happen the higher priority thread will be resume running after that the lower priority thread will continue consume its quantum of time. 
+
+- demo thread scheduling 
+- simple thread scheduling 
+    + priority based preemptive, time-sliced 
+        * highest priority thread runs first 
+        * if time slice (quantum) elapses and there is another thread with the same priorit in the ready state it runs 
+        other wise the same threads runs again 
+        
+        * if thread a runs and thread b(with a higher priority) receives something it waited upon(message, kernel object signaling etc), thread A is preempted and thread b becomes the running thread 
+        
+    + voluntary switch, a thread entering a wait state is dropped from the scheduler's ready list 
+    + typical time slice is 30 msec on client, 180 msec on server on an mp system with n logical processors, n concurrent threads may be running 
+    + on an mp system with n lgoical processors, n concrernt threads may be running. from the kernel point of view, if a process have 100 threads and another process have 1 thread, all of the threads have the same priority then the threads will get its thread quantum in turn. the process only have one thread will not any more special treatment 
+- thread states 
+Init(0) ----> read,(1) deferred ready(7) --> standby (3)  -------+
+                    A                                |           |
+                    |preempt                         |           |
+                    +-another thread may be selected +           |
+                    |                                            V
+                    +-preemption(higher p t run)or quantum end---running(2)
+                    +-----------------+                          |
+          kernel stack outswap-----waiting-----Voluntary switch--+
+                  Transition(6)                                  |
+                                                                 V
+                                                                 Terminate(4)
+                    
+kernel stack page out threads that relative to interrupt. kernel stack is swap out of physical memory                                          
+                    
+- the scheduler 
+    + scheduling routines are called when scheduling events occur 
+    interval timer interrupts checks for quantum end and timed wait completion 
+    + i/o completion calls 
+    
+    + changes in thread priority 
+    + changing state of waitable object other threads are waiting on 
+    + entering a wait on one or more objects 
+    
+- demo thread states 
+    + use performance monitor, run tool performance monitor 
+    + we could add new counter into the performance monitor 
+    + we could add some thread for a process 
+    + we demo with cpu stress and performance monitor to check the thread states changing 
+    + the thread state 2 is busy and 5 is ready, 1 is waiting 
+    + could use the process manager to set the application execute on how many processes executed on 
+- quantum 
+    + secheduler clock tick is typically 
+    10 msec(uniprocessor)
+    15 msec(multiprocessor)
+    
+    use system internal tools, clockres.exe the tool will display the system interval times 
+    
+    + can determine with clockres.exe utility from system internal 
+    + default client quantum is 2 clock ticks 
+    + default server quantum is 12 clock ticks 
+    + quantum can be modified by using the registry or a job 
+    + quantum boosting, provide for client operation system only for the foreground process. if a process created a foreground windows will get triple quantum by default when its priority is above idle 
+    
+    + quantum control 
+        * registry key 
+        HKLM\SSYTEM\CCS\Control\PriorityControl 
+        
+        * value Win32PrioritySeparation 
+        short vs long,  variable vs fixed       foreground priority boost 
+        
+        * short vs. long 
+        1=long, 2=short 
+        0, 3=default(long for server, short for client)
+        
+        * foreground quantum boost 
+        index into a table, we can only set the quantum boost base on the table 
+                        short                   long 
+        variable 6  12     18        |   12     24      36
+        fixed    18 18     18        |   36     36      36
+- demo quantum, use computer property 
+    + advanced system setting| performance |setting | advanced |processor scheduling|program or background services 
+    
+    the program is the default setting for client os, background service is for server os 
+    
+    this setting is influence the quantum of window os 
+- priority boosts 
+    + window boosts the priority of threads in a number of scenarios 
+    completion of i/o operations 
+    
+    after waiting for events or semaphores 
+    
+    during waiting for an executive resource 
+    
+    after threads in the foreground process complete a wait operation 
+    
+    when gui threads wake up because of windowing activity 
+    
+    when a thread is starved, be a ready state a long time 
+    
+    + thread priorities in the realtime range don't receive any boost, only the dynamic range can be changed(below priority 15)
+    
+    + completion of i/o request or wait be be specifie by a driver or the executive 
+        KeSetEvent(Event, Increment)
+        IoCompleteReqest(Irp, PriorityBoost)
+        
+    + after a boost threads runs for one quantum at that priority, then drops one level, runs another quantum
+    then drops another level, etec, until back to base priority 
+    
+    + recommended boost values defined in <ntddk.h> in window driver develop recommend 
+    
+    #define IO_SERIAL_INCREMENT 2 
+    #define EVENT_INCREMENT     1 //we can't directly change the event increment value 
+    #define IO_KEBOARD_INCREMENT 6
+    
+    + foreground processes wait boost +2 by default 
+        * foreground process, contains the thread who is owner(and creator) of the foreground window 
+        
+        * after a thread running in the foreground process completes a wait on a kernel object 
+        * receives a boost in the amount of the value set in the registry for foreground priority boost 
+        
+    + GUI thread wakeup, receive a priority boost of 2 when they wake up due to a widow message arriving 
+        * provided by Win32k.sys 
+        * improves their chance of running sooner, giving a better responsiveness to the user 
+        
+    + priority inversion/starvation 
+    wait  12 ---------+
+    run   7           |
+    ready Ready ------|
+                      V 
+                      run 
+                      
+        * priority inversion, high-priority thread waits on something locke by a lower priority thread which can't run because of a middle priority thread running 
+        
+        * boosts thread to avoid priority inversion in windows to prevent consume too much cpu time 
+        threads stay in ready state in a long time(four seconds) get a big boost to priority 15 get to run for 3 quantum at this special boost 
+        then priority drops to base 
+            
+        * technically, starvation avoidance 
+        * implemented by the balance set manager 
+        scans at most 16 threads per pass 
+        boosts at most 10 threads per pass 
+        
+        to prevent executive work balance 
+    windows priority reversion, some realtime os have some mechanism is use some algorithm to detect it 
+- demo priority boots 
+    + use the performance monitor select the priority current will display the current thread priority may be have been boosted 
+    
+    + user mode thread will not pass 15 
+    
+    + the resolution time of performance monitor is 1 second 
+- multiprocessor scheduling 
+    + ideal processor 
+    every thread has an ideal processor 
+    default value set in round-robin within each process, a random starting value 
+    can override with SetThreadIdealProcessor 
+    
+    on hyper-threaded systems the next ideal processor selected is from the next physical core(not logical)
+    
+    + multiprocessing hard affinity
+        * threads can run on any cpu unless hard affinity is set for that thread, set bit mask 1 stands for processor we can use and 0 for a processor we can't use 
+        SetThreadAffinityMask 
+        
+        * the mask is a bit mask of allowed cpus to run that thread, default is process affiit mask which defalts to all processors 
+        
+        * calling SetProcessAffityMask changes priority mask for all threads running under that process and future created threads in that process 
+        
+    + using hard affinity may result in threads getting less cpu time 
+    
+    + single cpu scheduling is relatively simple use the highest priority thread 
+    + multi cpu sstem complicate things 
+        * window attempt to balance priority needs with thread's preferred and previous cpus 
+        
+        * the only guarantee is that one of the highest priority threads is running on some cpu 
+    + NUMA(non uniform memory architecture) complicate things further, some cpu access some memory block faster in one of these case 
+    
+    + scheduling on multi-cpu system (simplified)
+    thread is ready ---> is there an idle cpu? ---y---> is ideal cpu idle? --y--> use it 
+                               |                             |
+                               N                         is previous cpu idle?--y--> use it 
+                               |                             |
+       is ideal cpu running lower priority thread?    is curernt cpu idle ? --y--> use it 
+                |           |                               |
+                y           |                               N 
+                |           |                               |
+             use it         |                               V
+                            |                           find and use first numbered idle cpu 
+                            N
+                            |
+                            V 
+                    add to the ideal cpu queue 
+                    
+ready queue is not a system wide queue, it is the processor queue                     
+- thread synchronization 
+    + threads sometimes need to coordinate work 
+    + canonical example
+        * accessing a linked list concurrently from multipe threads 
+    + synchronization is based upon waiting for some condition to occur 
+    + the kernel provides a set of synchronization (dispatcher) primitives on which threads can wait efficiently 
+    
+    such as provide for linked list scenario but there are others 
+    
+    + kernel dispatcher objects, maintain a state(signaled or non-signaled) the meaning of signaled depends on the object type 
+    
+    + can be waited to change to the signaled state 
+    window api, WaitForSingleObject, WaitForMultipleObject and their variants 
+    
+    kernel model, KeWaitForSingleObject, KeWaitForMultipleObjects they are not using handles but use actual objects 
+    
+    dispatcher object types, Process, thread, event, mutex, semaphore, timer, file, i/o completion port 
+    
+    higher level wrappers exist, they will actually call the kernel objects 
+        * MFC, CSyncObject(abstract base of CMutex, CSemaphote and others)
+        * .net WaitHandle(abstract base of Mutex, Semaphore and others )
+        
+    + process, the process has terminated, it's signaled, every process hold the process handle seem that a signaled handle 
+    
+    + thread, the thread has terminated 
+    
+    + mutex, the mutex is free 
+    
+    + event, the event flag is raised 
+    
+    + semaphore count is greater than zero 
+    
+    + file, i/o completion port, i/o operation completed 
+    
+    + timer, interval time expires 
+    
+- synchronization primitives 
+mutex, allows one thread to enter some critical block of code that needs to happen or execute on a single thread in the system at any one time 
+    + mutex, mutual exclusion
+    + called mutant in kernel terminology, in process explorer it also called mutant 
+    + allows a single thread to enter a critical region 
+    + the thread that enters the critical region(its wait has succeeded) is the owner of the mutex 
+    + releasing the mutex allows one(single) thread to acquire it and enter the critical section 
+    + recursive acquisition is ok (increments a counter), the same number of calls to release mutex have to be called 
+        * if the owning thread does not release the mutex before it terminates, the kernel release it and the next wait succeeds with a special code (abandoned mutex ). this means the other thread terminate the mutex prematurely 
+        
+        
+semaphore, 
+    + maintains a counter (set at creation time), CreateSemaphore function, set the maximum counter the semaphore will use 
+    + allow x callers t "go through" a gate, each thread calls WaitForSingleObject gets in and the counter of the semaphore decrements eventually the counter will get to 0 so the next thread calling WaitForSingleObject will have to wait. When calls ReleaseSemaphore that thread will increment the counter of the semaphore 
+    + when a thread succeeds a wait, the semaphore counter decrease 
+        * when the counter reaches zero, subsequent waits do not succeed state is non-signaled 
+        * releasing the semaphore increments its counter, releasing a thread that is waiting 
+    + is a semaphore with a maximum count of one equivalent to a mutex? NO, 
+    does not maintain any ownership, one thread requires same semaphore multiple times may cause dead lock. mutex can be only release by the thread requires by the mutex. other thread can release of the semaphore
+    mutex if for protecting data 
+    + example, use semaphore to create a queue 
+    
+event, a boolean flag 
+    + event types 
+        * manual reset(notification in kernel technology)
+        * auto reset(synchronization)
+        
+    + when set(signaled) threads waiting for it success the wait 
+        * manual reset event release any number of threads 
+        * auto reset eent releases just one thread, an the event goes automatically to the non-signaled state 
+        
+    + event is a flow synchronization
+    + useful when no other object fits the bill 
+    
+critical section, it is not a kernel object, it doesn't have same api, have better performance, an be used only to synchronize threads within a single process 
+    + user mode replacement for a mutex 
+    + operates on a structure of type CRITICAL_SECTION 
+    + cheaper than a mutex when no contention exists, no transition to kernel mode in this case 
+    + use EnterCriticalSection and LeaveCriticalSection API functions, no way to specify a timeout other than infinite and zero 
+        * zero is accomplished with TryEnterCriticalSection 
+    + .net 
+        * a similar effect is achieved with the lock c# keyword 
+        * calls the framework's Monitor.Enter/Exit in a try/finally block 
+all kernel object can be shared by providing a name, one process can set a particular event and all other process waiting for the same event could get the event 
+- demo, thread synchronization
+    + write a file with two application instances 
+    + without process synchronization will get a error, use error look up in visual studio Tool|Error Lookup 
+    input the error code will get the error message 
+    
+    + create mutex to share the resource 
+    HANDLE hm = CreateMutex(nullptr, FALSE, "myMutex");
+    ...
+    WaitForSingleObject(hm, INFINITE);
+    ...
+    ReleaseMutex(hm);
+- more threading 
+    + thread pools 
+    simplifies thread management 
+    potentially boosts perfromance as thread don't need to be created/destroyed explicitly 
+    
+    + c++ and .net provide helpers for fork/join scenarios 
+    parallel_for(c++), parallel.for(.net)
+    
+    simplify operations wehre order is unimportant 
+    
+    + other higher level threading helpers exists in c++ 11 and .net 4+ 
+    manual thread management considered low level 
+    understanding threads can help the right chocies and sovle problem 
+- demo, c++ automatic parallelization 
+#include <ppl.h> 
+
+using namespace concurrency;
+...
+
+paralle_for(first, last+1, [&count](int i){
+  ...
+  
+  InterlockIncrement(&count); //use in parallel context 
+});
+- demo .net automatic parallelization 
+
+Parallel.For(first, last+1, (int i)=>{
+    ...
+    Interlocked.Increment(ref count);   //which call the InterlockIncrement native window api 
+});
+- jobs 
+    + kernel object that allows managing one (or more) processes as a unit 
+    + system enforces job quotas and security on perticular job 
+        * total and per process cpu time, working sets, cpu affinity and priority class quantum length (for long, fixed quantum only )
+        
+        * control security limits 
+        * control ui limits 
+        
+    + api, have simple works with job 
+        * CreateJobObject/OpenJobObject 
+        * AssignProcessToJobObject, add process to a job. it is a one way operation, when a process inside job we can't get it out 
+        * TerminateJobObject, this is a shortcut to call TerminateProcess on all the processes that are part of the job 
+        * SetInformationJobObject, a humungous function which has a lot of possible parameters to set all those limitations. when set it take effect until revoked by another call to SetInformationJobObject
+- demo jobs 
+    + use procexp.exe to check the job 
+    + select to display job color 
+    + select one of the process, and check the property of the process, check the job tab will display all the processes in the same job 
+    
+    + demo job in code 
+    
+    HANDLE hj = CreateJobObject(nullptr, nullptr);
+    
+    BOOL isSuccess = CreateProcess(nullptr, name, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+    
+    if(isSuccess)
+    {
+        AssignProcessToJobObject(hj, pi.hProcess);
+        CloseHandle(pi.hProcess);
+    }
+    
+    TerminateJobObject(hj, exitCode);
+    CloseHandle(hj);
+    
+- summary 
+    + process is a management object 
+    + threads are the real workers 
+    + windows schedules threads to run on processors 
+    + 
+    
+    
+# Object management 
+- introduction 
+    + the object manager, for managing object in various ways 
+    + object structure 
+    + objects and handles 
+    + sharing objects 
+    + object names 
+    + user and GDI objects are managed differently compare to kernel objects 
+- object management 
+    + object manager is a part of the executive, the executive is the up layer of the entire staff known as kernel 
+    
+    + manages creating, deleting and otherwise tracking objects, such as mutex, semaphores, ... 
+    + maintains objects in a tree-like structure, like file system or directory but in memory, we could check the structure with winobj from system internal 
+    + user mode clients can obtain handles to objects, cannot touch actual memory structure 
+    + kernel mode clients can do either 
+    
+    
+- demo object management hierarchy 
+    + use Winobj.exe sugget execute under administrator privileged 
+    
+    + will display a file system like directory and objects 
+    
+    + the \ObjectTypes directory will display all the available object on this system 
+    
+    some undocumented objects: 
+    EtwConsumer, event tracing consumer object 
+    Composition, 
+    ALPC, asynchronous local procedure call 
+    
+    + \GLOBAL?? directory, this holds something known as symbolic links, these link accessible by user mode code create file function 
+    
+    when execute procexp.exe there will be a addtional symbol link added to the directory named as PROCEXP152 which is a driver used by procexp 
+    
+    drivers could create and add symbol link into this folder 
+    
+    + \Sessions will list all the current sessions, 0 is the system, the greater than 1 is user session 
+    
+    + BaseNameObjects, is also parts of session holds all the objects create from user mode which have a name 
+
+    we could check property for any object 
+
+- object structure, window is object based system but not fully support polymorphism
+owned by the object manager, object name
+                             object directory 
+                             security descriptor 
+                             open handle count, include user mode and kernel mode 
+                             open handle list, relative to process 
+                             pointer count
+                             object type   ----------------------+
+                                                                 |
+owned by the executive, can host several kernel objects          |
+                                                                 |
+                                                                 V Type object 
+                                                                 Type Name 
+                                                                 
+                                                                 Sychronizable? indicate whether the object can be used with WaitForSingleObject
+                                                                 
+                                                                 Pageable? when instance structure need to be allocated, it will come from the page pool or the non-page pool in kernel space 
+                                                                 
+                                                                 Object methods 
+                                                                 
+executive object 
+
+object don't require to have a name 
+
+object destroy when pointer count and handle count both are zero 
+
+    + object tyypes exposed by the window api 
+    Process(CreateProcess, OpenProcess)
+    
+    Thread(CreateThread, OpenThread)
+    
+    Job(CreateJobObject, OpenJobObject)
+    
+    File mapping(section)(CreateFileMapping, OpenFileMapping) share between processes 
+    File(CreateFile)
+    
+    Token(LogonUser, GetProcessToken)
+    
+    Mutex(Mutant)(CreateMutex(Ex) OpenMutext)
+    
+    Event(CreateEvent(Ex), OpenEvent)
+    
+    Semaphore(CreateSemaphore, OpenSemaphore)
+    
+    Timer(CreateWaitableTime, OpenWaitableTimer)
+    
+    I/o Completion Port(CreteIoCompletionPort)
+    
+    Window Station(CreateWindowStation, OpenWindowStation), hold a desktop may be more than one desktop, also host clipboard. each session has its own window station, at least one 
+    
+    Desktop(CreateDesktop, OpenDesktop), part of window station holds windows and menu and hooks 
+    
+- looking at objects, we could check the detail by kernel debugger 
+livekd.exe -w 
+
+check process information by 
+> !process 0 0 
+PROCESS fffffa8012532440
+    SessionId: 1  Cid: 037c    Peb: 7fffffde000  ParentCid: 0330
+    DirBase: 41a159000  ObjectTable: fffff8a0017d4280  HandleCount: 134.
+    Image: winlogon.exe
+
+PROCESS fffffa8014f7d060
+    SessionId: 0  Cid: 03ac    Peb: 7fffffdf000  ParentCid: 0340
+    DirBase: 418528000  ObjectTable: fffff8a0017ed920  HandleCount: 370.
+    Image: services.exe
+    
+the address is the EPROCESS structure in kernel space 
+
+we can look at this object using the !DT command with eprocess type 
+
+but this time we want to check more generate information, we use the command !object 
+> !object fffffa8012532440
+Object: fffffa8012532440  Type: (fffffa800e294f30) Process
+    ObjectHeader: fffffa8012532410 (new version)
+    HandleCount: 10  PointerCount: 79
+    
+the pointerCount is not the really one 
+
+we could check the object header by dt command 
+> dt nt!_OBJECT_HEADER fffffa8012532410
+   +0x000 PointerCount     : 0n79
+   +0x008 HandleCount      : 0n10
+   +0x008 NextToFree       : 0x00000000`0000000a Void
+   +0x010 Lock             : _EX_PUSH_LOCK
+   +0x018 TypeIndex        : 0x7 ''
+   +0x019 TraceFlags       : 0 ''
+   +0x01a InfoMask         : 0x8 ''
+   +0x01b Flags            : 0 ''
+   +0x020 ObjectCreateInfo : 0xfffff800`03805940 _OBJECT_CREATE_INFORMATION
+   +0x020 QuotaBlockCharged : 0xfffff800`03805940 Void
+   +0x028 SecurityDescriptor : 0xfffff8a0`00004472 Void
+   +0x030 Body             : _QUAD
+
+the object header just precedes the actual object the actual EPROCESS structure in this case 
+
+check the object type structure 
+kd>  dt nt!_OBJECT_TYPE fffffa800e294f30
+   +0x000 TypeList         : _LIST_ENTRY [ 0xfffffa80`0e294f30 - 0xfffffa80`0e294f30 ]
+   +0x010 Name             : _UNICODE_STRING "Process"
+   +0x020 DefaultObject    : (null) 
+   +0x028 Index            : 0x7 ''
+   +0x02c TotalNumberOfObjects : 0xab
+   +0x030 TotalNumberOfHandles : 0x7e6
+   +0x034 HighWaterNumberOfObjects : 0xce
+   +0x038 HighWaterNumberOfHandles : 0x7fa
+   +0x040 TypeInfo         : _OBJECT_TYPE_INITIALIZER
+   +0x0b0 TypeLock         : _EX_PUSH_LOCK
+   +0x0b8 Key              : 0x636f7250
+   +0x0c0 CallbackList     : _LIST_ENTRY [ 0xfffff8a0`012296d0 - 0xfffff8a0`012296d0 ]
+
+- objects and handles 
+    + when a process creates or opens an object, it receives a handle to the object 
+    used as an opaque, indirect pointer to the underlying object 
+    
+    handle is a number as an index to a table that is maintained by the EPROCESS structure. it is a indirect pointer. we can't get the exact address of an object from user mode code 
+    
+    allows sharing objects across processes 
+    
+    + in .net handles are used internally by types such as FileStream, Mutex, Semaphore, AutoResetEvent and other synchronization objects are derive from a class called wait handle etc 
+    
+    + Each process has a private handle table, there are three ways to share object handle between processes from user mode 
+    
+    + Viewing process handles
+        * process explorer(GUI), handle.exe(console), useful to works with batch tool 
+        
+        * resource monitor, is part of windows, start in window vista 
+        
+        * !handle debugger command in window debugger 
+        
+- demo: viewing handles, by default process explorer only show the handles with names. to check the unnamed handle by View|Show Unnamed Handles 
+
+the object address column, is the exact address in kernel space start with 800 or upper with 32 bit, ffff in 64 bit 
+64 bit always ends with 0, 32 bit always ends with 8 or 0 for alignment purposes  
+
+find specific handle by name in process explorer Find|Find Handle by names 
+
+    + example search a particular file and check the handles and close relative process to release a locked file 
+    
+    + there are two ways to closes handle of an object from other process 
+        * from driver in kernel 
+        * inject code into other process and use some undocumented NT dll api 
+
+- handle usage, get handle 
+    + user mode processes retrieve a handle by calling an appropriate Create * function or Open* function 
+        * a handle is returned upon success 
+        * call CloseHandle when done with the handle 
+
+    there is a exception, there is only CreateFile function no OpenFile function, file can never be named from user mode function. when we create file we give a path not the object name  
+    
+    Open* should recieve some name or identifier 
+    
+    + if object is named, Create* with same name returns a handle to the existing object 
+    GetLastError() returns ERROR_ALREADY_EXISTS 
+    
+    + kernel code can obtain handles that reside in system space and are visible in any process context 
+    
+    + alternative kernel code can obtain a direct pointer to underlying object given a handle 
+        * kernel by calling ObReferenceObjectbyHandle, could transfer the handle into an object reference that is a pointer, also increase reference counter to the object 
+        
+        * must release reference with ObDerefernceObject 
+        
+    + sharing objects 
+        * handle is private to its containing process 
+        * sometimes an object need to be shared between process 
+        * sharing is possible through 
+        process handle inheritance, create a process and copy some of the required handles from the parent process to the child process 
+        
+        opening an object by name, it have some security risk, the name is global 
+        
+        duplicating a handle at a context of of some context of some target process. we need to provide information to the target process saying i have duplicated a handle for you 
+
+- demo sharing by name if object is named, Create* with same name returns a handle to the existing object 
+    GetLastError() returns ERROR_ALREADY_EXISTS 
+
+- sharing by inheritance, the convenience here is that the hindered values themselves are the same as for the creating process 
+//the parent process 
+
+SECURITY_ATTRIBUTES sa = {sizeof(sa)};
+sa.bInheritHandle = TRUE;       //mark handle inheritable another way is call SetHandleInformation then change the handle to inheritable
+
+HANDLE he = CreateEvent(&sa, TRUE, FALSE, nullptr);
+
+PROCESS_INFORMATION pi; 
+STARTUPINFO si = {sizeof(si)};
+
+
+WCHAR name[128];
+swprintf(name, 128, L"ShareClient.exe %d", he);
+if(CreateProcess(nullptr, name, nullptr, nullptr, TRUE // all the marked inheritable handles are pass to the child process 
+, nullptr, &si, &pi)){
+    SetEvent(he);
+}
+
+CloseHandle(he);
+
+
+//in she ShareClient child process code 
+HANDLE he = (HANDLE)_wtoi(argv[1]);
+
+WaitForSingleObject(he, INFINITE);
+cout << "event signaled";
+CloseHandle(he);
+
+- demo sharing by handle duplication, such as a file don't have a name to shared or a process is already created 
+
+HANDLE he = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+HWND hCalcWnd = FindWindow(nullptr, L"Calculator");
+// a window is created by a thread, the thread is contain in a process 
+if(hCalcWnd == nullptr){
+    cout << "no calc around!";
+    return 1;
+}
+DWORD pid;
+GetWindowThreadProcessId(hCalcWnd, &pid);
+
+HANDLE hp = OpenProcess( PROCESS_ALL_ACCESS, //access mask DWORD,
+                         FALSE, 
+                         pid);
+                         
+if(hp){
+    HANDLE ht; 
+    DuplicateHandle(GetCurrentProcess(), he, hp, &ht, 0, FALSE, DUPLICATE_SAME_ACCESS);
+    CloseHandle(hp);
+}
+
+GetCurrentProcess function return a pesudo handle 
+
+the calc doesn't know the handle is inject into the child process, we need to use some cross process information to tell the window such as 
+Window Message, an RPC call or COM call 
+
+- handle entry layout 
+    + a handle is an index to a table pointed to by the EPROCESS structure to prevent one process access the handle table of another process 
+    + each entry in that table maintains information for the handle. it 
+    
+    31                              0 
+    Pointer to object header    A I L
+    Access mask:32
+    
+    
+    I, inheritance bit, indicate that this handle should be inherited in case this current process is creating a new process and specifies the fifth parameter to TRUE indicate it want to copy all the inheritance handle to the target process  
+    Access mask, says what can this handle do. when we create a handle always need a access mask 
+    
+    63                              0 
+    pointer to object header    A I L 
+    Access mask:32
+    
+    
+    there is the pointer to the object header, actual object structure kernel space
+
+- demo handle access mask 
+
+HANDLE he = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+
+HWND hCalcWnd = FindWindow(nullptr, L"Calculator");
+// a window is created by a thread, the thread is contain in a process 
+if(hCalcWnd == nullptr){
+    cout << "no calc around!";
+    return 1;
+}
+DWORD pid;
+GetWindowThreadProcessId(hCalcWnd, &pid);
+
+HANDLE hProcess = OpenProcess(SYNCHRONIZE, //ask the access mask base on your needs 
+                              FALSE, pid);
+                              
+if(hProcess)
+{
+    WaitForSingleObject(hProcess, INFINITE);
+    cout << "calc is terminated";
+    CloseHandle(hProcess);
+}
+else 
+{
+    count << "error" << GetLastError();
+}
+
+we could also terminate a process by the handle 
+TerminateProcess(hProcess, exitCode);
+
+in this time we need the mask SYNCHRONIZE|PROCESS_TERMINATE in the OpenProcess function 
+
+- object names and sessions 
+    + each session should have its own objects 
+    + the object manager creates a session directory with a session id subdirectory, for window 8 store application, another subdirectory is created. this means two windows store application cannot communicate using these kinds of object. every store application is isolated 
+    
+    when we create a object name as abs the os also add session id into it 
+    
+    + process can access the global session objects by prefixing object names with "Global\" then the object will be created under session 0 but this is not work for window store app 
+    
+    + create private namespaces for tightened security use CreatePrivateNamespace function 
+    
+- object names and sessions 
+    + open winobj 
+    + the \BasenamedObjects are all created with session 0 
+    + the \Sessions contain the objects by each session 
+    + the objects in the session id > 0 are created in the user mode code 
+
+    + use mode api doesn't provide a full name with all the subdirectories that we may want or desire. the full name will be pretended by the kernel 
+
+    + \Sessions\#\AppContainerNamedObjects is a new object folder added in window 8 this is contain the private folder for the objects for each window store application 
+
+    this is known as AppContainer 
+    
+    + for kernel code we could create any object in any folder 
+    
+- user and GDI object original graphics API for windows 
+    + the object manger is responsible for kernel objects only 
+    + user and GDI objects are managed by Win32k.sys which recall the win32 kernel mode component. technically it is not an integral part of the kernel 
+    
+    + api functions in user32.dll and gdi32.dll don't go through NtDll.dll. Instead these API invoke the sysenter/syscall instructions directly while placing first the system service number inside EAX register and then switch the kernel and continue execute from there in the user way 
+    
+    GDI start from win7 it don't have hardware 
+    
+    + user and GDI objects 
+    
+        * user objects, Windows(HWND), menus(HMENU), and hooks(HHOOK) all are handles those handle are always pass to the function 
+        
+        specific hoos are obtained by the function SetWindowsHookEx that's basically a way to intercept window messages and do some special stuff with it 
+        
+        check detail function for SetWindowsHookEx
+        
+        * user object handles, they have different semantic for kernel mode handles 
+        no reference/handle counting compare to kernel handle 
+        
+        private to a window station not like kernel mode handle which is private to each processes. window station is contained within a session and a window session contains desktops, also hold clipboards which is also relative to each session 
+        
+        user objects automatically shareable between processes under the same window station
+
+        * gdi objects such as Device context(HDC), pen(HPEN), brush(HBRUSH), bitmap(HBITMAP) and others it doesn't support 3d  
+        
+        no reference/handle counting 
+        
+        private to process no way to share cross processes 
+
+
+    we could check the number of handles in the process explorer or task manager 
+    
+- summary 
+objects are structured entities managed by the object manager 
+objects are reference counted 
+object can be shared between processes 
+user mode code works with handles 
+
+
+# Memory Management 
+- overview 
+memory management basics 
+virtual page state 
+page sharing 
+address space layout 
+virtual to physical translation  
+
+- memory manager fundamentals 
+    + each process sess a virtual address space 
+    2gb(32bit default), 8tb(x64), 7tb(ia-64) Itanium system 
+
+    + memory manager tasks, mapping virtual addresses to physical addresses 
+
+    for example 0x100000 will be different physical address in different processes 
+    
+        * using page files to backup pages that cannot fit in physical memory. page file can backup data that not used frequently 
+
+        * provide memory management service to other system components such as allocating, reserving and freeing memory 
+
+- managing memory 
+    + memory is managed by chunks called pages, page size is something is compromise relative to CPU 
+    + window uses two page size, relative to memory allocate or de allocate are always per page 
+    
+    architecture    small page size         large page size 
+    x86             4kb                     2MB(PAE, physical address extension kernel), 4MB(Non PAE)
+    x64             4kb                     2MB 
+    IA-64           8kb                     16MB 
+
+- virtual page states
+    + each page in virtual memory may be in one of three states 
+    free    
+        * unallocated page 
+        * any access causes an access violation exception 
+        
+    + committed, use malloc or new in c++ will be allocated committed memory, we could access the memory. the page may be not in physical memory 
+    
+        * allocated page that can be accessed 
+        * may have a backup on disk 
+        
+    + reserved 
+        * unallocated page causing access violation on access 
+        * address range will not be used for future allocations unless specifically request. the stack is not allocate up front. only the first page is committed. only when the thread using more and more space more and more memory have been committed 
+
+    the memory state is describe by the virtual address descriptor, named as VADs 
+    
+    + call view the VMMap tool, from system internals 
+    
+- demo VMMap 
+    + open VMMap 
+    + select a process  
+    + three parts are displayed
+        * first is committed memory, the entire memory 
+        Committed, occupied memory 
+        private bytes 
+        working set, the amount of physical memory used by the process 
+        
+        * second is the memory partitioning of the memory types the application used 
+        
+        * the detail information about the selected type 
+
+    + the colors display the different kinds of memory allocated 
+    the category is list at the bottom of the tool 
+
+    image file, is occupied by dll something like that 
+    mapped file, which is used as memory map file object 
+    shareable, 
+    private byte, which means is private byte not shareable, allocated by malloc or VirtualAllocate functions. this memory may backup by the page file if it need raises 
+    managed heap, .net application will contain this memory type 
+    stack, stack for thread, WS column means actual physical memory current used, the detail panel will display detail information, such as Guard page. the size of a stack is the maximum size of each thread can occupied
+    private data, each thread have its own environment block 
+
+    the dlls not execute any code may not resident in the physical memory 
+    
+    + press f5 will fresh the memory 
+    
+        * every thread have its own private block 
+        * process PEB block is only one 
+
+- sharing pages
+                    
+Process A                 RAM                   Process B 
+kernel32.dll code         Kernel32.dll code     Kernel32.dll code 
+
+                          Process B code <----- Process B code 
+Exe code           -----> Process A code
+
+memory manager support sharing physical memory between processes 
+
+code by default readonly 
+
+if there are five notepad process, the code address of the five executable should map to the same physical memory 
+
+    + code page are shared between processes 
+        * 2 or more proccesses based on the same images 
+        * dll code 
+        however, dlls must be loaded in same address 
+        
+        if the dll already taken by other dll or some other memory allocation, the code of the dll will be changed. the dll will be reallocated. then the dll could not be shared  
+        
+    + data pages(read/write) are shared at first until some process try to write that pages, copy-on-write 
+    
+    if one process changes the data, an exception is caught by the memory manager, which creates a private copy of the accessed page for that process
+        * removing the copy-on-write protection 
+        
+    + data page can be created without copy-on-write 
+
+    everything is always on granularity 
+    
+- demo sharing dll, 
+    + open process explorer  
+    
+    + view the mapped images and section to the address space 
+    
+    + check the address of the kernal32.dll in different process, the address will be the same 
+    
+    + when address is occupied by other processes, the dll will be reallocated and the loader will change the offset of the variables
+
+    Image Base is the prefer address of a dll 
+    
+    Base address is the actual loaded physical address 
+    
+    Option|Configure Color, select the reallocated dll. will highlight the reallocated dll process 
+    
+    we could rebase a dll's address, rebase.exe tool which is shiped with window SDK we could set them up one after the other in close proximity but they would not overlap 
+
+ craete sharing dll data 
+    + create new project in visual studio, win32 project not console project 
+    
+    + select application type dll 
+    
+    + the dll main is the entry function  
+    
+    + create a data segment in the dllmain.cpp 
+#pragma data_set("shared")
+__declspec(dllexport) int Counter = 0; 
+//we need initialize it not let the linker replace it to other segment 
+#pragma data_seg()
+
+
+//set some attribute to the data segment section, we could do it in linker command line or source 
+#pragma comment(linker, "/section:shared,RWS") 
+//tell the linker want the data section shared be readable, writable and shared 
+
+    + create another project, console application 
+    
+    add include for windows.h in the stdafx.h  
+    
+    link with the created dll we could use property pages or in code 
+#pragma comment(lib, "..\\debug\\shareddll.lib") 
+
+__declspec(dllimport) int Counter; //import the counter variable 
+
+int _tmain(int argc, _TCHAR* argv[])
+{
+    for(;;){
+        int number;
+        cin >> number; 
+        if(number < 0)
+            break;
+            
+        Counter += number;
+    }
+    return 0;
+}
+
+    + we could two instance of our console application instance 
+    + whenever we add a number the shared value in two instance will be changed. if remove the S from the dll, the variable will be located in different location 
+#pragma comment(linker, "/section:shared,RW")
+
+- dll load address, specify the base address of a dll prefer to load 
+project property| configuration properties |linker | base address, there is a feature randomize base address. use some possible address for particular dll from the point window startup this feature added from window vista 
+
+this is used to prevent malicious code to guess the address 
+
+default base address is 0x10000000 in 32 bit 
+                        0x18000000 00000000 in 64 bit 
+
+use the rebase.exe tool to change the dll. if the dll is signed, the rebase address 
+
+- x86 virtual address space layout 
+    + each process sees its own private address space 
+    + system space is part of the entire address space that is visible, but not accessible by user mode code 
+    + the layout depends on the bitness(32bit, 64bit) of the OS and the specific process 
+
+    + x86 address space layout, 2gb 
+FFFFFFFF                                 -
+system cache paged pool,                 |
+non paged pool                           |
+C0800000                                 |
+C07FFFFF                                 SYSTEM SPAPCE only accessible to kernel model code 
+process page tables hyperspace           2bg 
+                                         |
+C0000000                                 |
+BFFFFFFF                                 |
+kernel & executive                       |
+HAL                                      |
+drivers                                  |
+80000000                                 -
+7FFFFFFF                                 -
+                                         |
+application                              |
+code global                              |
+variables                                |
+per thread stacks                        user mode application space
+dll code                                 2bg
+                                         |
+00000000                                 -
+
+there is other options to 32-bit system is allowed user process get 3bg memory, the entity suffer in this mode is the file system cache. 
+
+    + window can be configure for 3gb address space per process 
+        * using the boot configuration database(BCD) on vista and up, use bcd edit to set it up 
+        * or with the /3bg  in the boot.ini switch (windows 2003 and lower)
+    
+    + each process gets a 3bg address space 
+    no returned pointer will be above 2gb unless the image is compiled with the LARGEADDRESSWARE linker flag 
+    
+    to prevent breaking applications that depend on 31 bit addresses   
+FFFFFFFF 
+1 gb 
+system space 
+80000000
+BFFFFFFF
+
+3bg user address 
+space 
+
+00000000
+
+- demo enabling large addresses 
+    + create 32bit project in vs 
+    + project property | configuration | linker | enable large addresses 
+    + set enable alrge address support by select yes 
+    + if a 32-bit app run 64 bit os with this setting enable we will get 4gb memory not 3gb memory 
+    
+    without setting it we will only get 2bg 
+    + go to configuration manager, create new configuration 
+    + the setting it is only effect executables has no meanings for dll 
+    
+    + for .net project, we could only do it with editbin and give executable, and set /largeaddressaware:yes that well set option as a linker flag 
+    
+- 64 bit address layout, system space is unaccessable from user mode code 
+FFFFFFFF'FFFFFFFF 
+                  Reserved for HAL 
+FFFFFFFF'80000000
+                  Non paged pool(128gb)
+FFFFFAC0'00000000
+                  System PTE pool(128gb)
+FFFFFAA0'00000000
+                  System mapped views(max 1tb)
+                  Start of paged pool area (128gb)
+FFFFFA80'00000000
+                  System cache(1 tb)
+FFFFF980'00000000
+                  Session space(512gb)
+FFFFF900'00000000
+                  kernel/HAL/Driver 
+FFFFF800'00000000 
+FFFFF780'00000000 SYstem working set(512gb)
+
+                  hyperspace 
+                  process page tables 
+                  (512 gb )
+FFFFF700'00000000   
+                  4 level page table map(512 gb)
+FFFFF680'00000000                   
+                  Start of system space 
+FFFF0800'00000000 
+                  unmapped 
+000007FF'00000000 
+                  Per process space 
+                  (8tb)
+00000000'00000000                   
+
+
+there are umapped region 
+    + 64 bits of addresses can reach to 2^64 = 16EB(Kilo,Mega,Giga,Tera,Peta,Exa)
+    unimaginable amount of memory 
+    
+    + current CPU architecture only support 48 bit addressing 
+    2^48 = 2^40 + 2^8 = 256tb 
+    
+    + current kernel implementation can work with 16 tb at most 
+        * for efficiency reasons that have to do with single list entry structures, SLIST_ENTRY, do some things to that entry in an atomic single instruction way that works with 64-bit address in a certain way with a certain size
+
+    + result user address space is 8tb and system address space is 8tb as well, starting from the top 
+    
+- virtual address translation 
+    + hardware translates each virtual address to a physical address 
+    virtual address 
+                            virtual page number| byte within page 
+                            |                             |
+     page tables            |                             |
+     page directory ---->    Address translation(CPU)      |
+     translation lookaside          |                     |
+                                    |                     |
+                                    V                     V
+                            physical page number| byte within page 
+    
+    start from 386 intel processor support virtual address 
+
+    some page may not map to physical page, may be the page is located in the page file 
+    
+- x86 virtual address translation 
+virtual address 
+31                            0 
+10 bits   | 10 bits | 12 bits  
+
+2^12 is 4kb which is actually the page size 
+
+1024 entries         -------->      RAM 
+
+page directory, it is always reside in physical memory 
+one per process 
+
+
+
+

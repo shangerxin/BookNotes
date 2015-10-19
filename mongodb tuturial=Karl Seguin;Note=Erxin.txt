@@ -1,0 +1,279 @@
+﻿mongodb tuturial=Karl Seguin;Note=Erxin
+
+# The Little MongoDB Book 
+- refenrece in github
+https://github.com/karlseguin/the-little-mongodb-book/blob/master/en/mongodb.markdown
+
+## Getting started
+- file info
+mongod is the server process 
+mongo is the client shell 
+- config database
+    + Create a new text file in the bin subfolder named mongodb.config
+    + add database path configuration at the first line
+    dbpath=PATH_TO_WHERE_YOU_WANT_TO_STORE_YOUR_DATABASE_FILES
+    + launch mongod --config abs_path_to_mongodb.config
+    + normally the server is running
+- run the client by mongo
+
+## Chapter 1, the basics
+- MongoDB instance can have zero or more databases
+- A database can have zero or more collections. like traditional table
+- collections have zero or more documents, like traditional row
+- a document made up of one or more fields, like columns
+- indexes like their in RDBMS counterparts
+- cursors,  ask MongoDB for data, it returns a cursor, which we can do things to, such as counting or skipping ahead, without actually pulling down data
+- Collections can be indexed, which improves lookup and sorting performance
+- difference between relational database
+That is to say that each document within a collection can have its own unique set of fields. As such, a collection is a dumbed down container in comparison to a table, while a document has a lot more information than a row.
+- global commands
+    + help or exit
+- Commands that you execute against the current database are executed against the db object, such as db.help() or db.stats()
+- commands that you execute against the current collection db.COLLECTION_NAME.command
+- the default command shell is javascript shell, so if call a method without () will display the implementation of the method
+- switch between database, use [database_name]
+- Internally MongoDB uses a binary serialized JSON format
+- db common used commands
+db.getCollectionNames(). 
+ //We can simply insert a document into a new collection.
+db.unicorns.insert({name: 'Aurora',  gender: 'f', weight: 450})
+The collection system.indexes is created once per database and contains the information on our database's index.
+_id field is indexed - which explains why the system.indexes collection was created. 
+db.collections.find(), to list all the documents
+db.collections.remove([selector]), remove the documents
+
+## mastering selectors
+- A MongoDB query selector is like the where clause of an SQL statement.  A selector is a JSON object
+- {},  which matches all documents (null works too)
+- select female in previous example {gender:'f'}
+- operators
+    + {field1: value1, field2: value2} is how we do an and statement. The special $lt, $lte, $gt, $gte and $ne are used for less than, less than or equal, greater than, greater than or equal and not equal operations
+    db.unicorns.find({gender: {$ne: 'f'},
+                               weight: {$gte: 701}})
+    + The $exists operator is used for matching the presence or absence of a field, for example
+    db.unicorns.find({
+        vampires: {$exists: false}})
+    + want to use OR rather than AND we use the $or
+    db.unicorns.find({gender: 'f',
+                            $or: [{loves: 'apple'},
+                                {loves: 'orange'},
+                                {weight: {$lt: 500}}]})
+    but the loves field is an array. MongoDB supports arrays as first class objects. 
+    + The most flexible being $where which lets us supply JavaScript to execute on the server. These are all described in the Advanced Queries
+    + the object id mongo created could be find as 
+    db.unicorns.find({_id: ObjectId("TheObjectId")})
+
+## Updating
+- Replace Versus $set, update takes 2 arguments: the selector (where) to use and what field to update with.
+db.unicorns.update({name: 'Roooooodles'},
+                              {weight: 590})
+the update found a document by name and replaced the entire document with the new document (the 2nd parameter). This is different than how SQL's update command works. 
+- Update modifiers, best to use MongoDB's $set modifier,  It won't overwrite the old fields since we didn't specify them.
+db.unicorns.update({name: 'Roooooodles'},
+                              {$set: {weight: 590}})
+- $inc modifier is used to increment a field by a certain positive or negative amount. 
+db.unicorns.update({name: 'Pilot'},
+                              {$inc: {vampires: -2}})
+- Upserts, update is that it fully supports upserts. An upsert updates the document if found or inserts it if not. To enable upserting we set a third parameter to true.
+db.hits.update({page: 'unicorns'},
+                       {$inc: {hits: 1}},
+                       true);
+db.hits.find();
+- Multiple updates,  a fourth parameter must be set to true:
+db.unicorns.update({},
+                              {$set: {vaccinated: true }}
+                              false, 
+                              true);
+db.unicorns.find({vaccinated: true});
+-  The driver and library you use could alter these default behaviours or expose a different API. For example, the Ruby driver merges the last two parameters into a single hash: {:upsert => false, :multi => false}. 
+
+## Mastering find
+-  result from find is a cursor. We'll now look at exactly what this means in more detail.
+- get all of the unicorns' names by executing:
+db.unicorns.find(null, {name:1})
+By default, the _id field is always returned. We can explicitly exclude it by specifying {name:1, _id: 0}.
+Aside from the _id field, you cannot mix and match inclusion and exclusion. 
+- ordering, use sort 1 for ascending and -1 for descending
+//heaviest unicorns first
+db.unicorns.find().sort({weight: -1})
+
+//by unicorn name then vampire kills:
+db.unicorns.find().sort({name: 1,
+                                    vampires: -1})
+- paging
+db.unicorns.find()
+    .sort({weight: -1})
+    .limit(2)
+    .skip(1)
+- count, count directly on a collection
+db.unicorns.count({vampires: {$gt: 50}})
+
+## Data modeling
+- No join,  MongoDB's lack of joins.  joins are generally seen as non-scalable. Setting our data up isn't any different than declaring a foreign key in a relational database.
+db.employees.insert({_id: ObjectId(
+                                "4d85c7039ab0fd70a117d730"),
+                                name: 'Leto'})
+(It's worth repeating that the _id can be any unique value. Since you'd likely use an ObjectId in real life, we'll use them here as well.)
+- Arrays and Embedded Documents, It turns out that this is incredibly handy when dealing with many-to-one or many-to-many relationships. 
+db.employees.insert({_id: ObjectId(
+                                "4d85c7039ab0fd70a117d733"),
+                                name: 'Siona',
+                                manager: [ObjectId(
+                                "4d85c7039ab0fd70a117d730"),
+                                ObjectId("4d85c7039ab0fd70a117d732")] })
+db.employees.find({manager: ObjectId("4d85c7039ab0fd70a117d730")})
+- MongoDB also supports embedded documents
+db.employees.insert({_id: ObjectId(
+                                "4d85c7039ab0fd70a117d734"),
+                                name: 'Ghanima',
+                                family: {mother: 'Chani',
+                                    father: 'Paul',
+                                    brother: ObjectId(
+                                "4d85c7039ab0fd70a117d730")}})
+ embedded documents can be queried using a dot-notation
+ db.employees.find({'family.mother': 'Chani'})
+- DBRef, A DBRef includes the collection and id of the referenced document. when documents from the same collection might reference documents from a different collection from each other.
+- Denormalization, NoSQL don't have joins denormalization as part of normal modeling is becoming increasingly common
+You could even do so with an embedded document, like user: {id: ObjectId('Something'), name: 'Leto'}. Yes, if you let users change their name, you'll have to update each document (which is 1 extra query).
+- How to choose array or embedded doc to instead of the join. An individual document is currently limited to 16 megabytes in size, mostly for small pieces of data which we want to always pull with the parent document.
+- few or many collection,  if it would be a table in a relational database, it'll likely be a collection in MongoDB 
+
+## When to use mongodb
+- Where one might see Lucene as enhancing a relational database with full text indexing, or Redis as a persistent key-value store, MongoDB is a central repository for your data.
+- writes,  MongoDB can fit a specialized role is in logging
+MongoDB has something called a capped collection. So far, all of the implicitly created collections we've created are just normal collections. We can create a capped collection by using the db.createCollection command and flagging it as capped:
+Capped collections are fixed-size collections that support high-throughput operations that insert, retrieve, and delete documents based on insertion order. Capped collections work in a way similar to circular buffers: once a collection fills its allocated space, it makes room for new documents by overwriting the oldest documents in the collection.
+Capped collections have some interesting properties. For example, you can update a document but it can't grow in size. Also, the insertion order is preserved, so you don't need to add an extra index to get proper time-based sorting.
+- Durability, MongoDB supports replication, To enable it add a new line with journal=true to the mongodb.config file we created when we first setup MongoDB (and restart your server if you want it enabled right away). MongoDB's lack of single-server durability
+- Full text search, hopefully come to MongoDB in a future release. 
+- Transactions, MongoDB doesn't have transactions. It has two alternatives
+    + The first is its many atomic operations.
+    + The second, when atomic operations aren't enough, is to fall back to a two-phase commit. A two-phase commit is to transactions what manual dereferencing is to joins. It's a storage-agnostic solution that you do in code. 
+
+## Data processing
+- MongoDB relies on MapReduce for most data processing jobs.  MongoDB's implementation relies on JavaScript, which is single-threaded. 
+- MongoDB is its support for geospatial indexes. This allows you to store x and y coordinates within documents and then find documents that are $near a set of coordinates or $within a box or circle. 
+- MongoDB adaptor for hadoop, https://github.com/mongodb/mongo-hadoop
+- Tools and maturity, lack of support for base-10 floating point numbers will obviously be a concern for systems dealing with money
+
+## MapReduce
+- MapReduce can be paralleled, allowing very large sets of data to be processed across many cores/CPUs/machines. As we just mentioned, this isn't something MongoDB is currently able to take advantage of. 
+- The second benefit of MapReduce is that you get to write real code to do your processing. 
+- Theory
+    + MapReduce is a two-step process. First you map, and then you reduce. 
+        * The mapping step transforms the input documents and emits a key=>value pair (the key and/or value can be complex). Then, key/value pairs are grouped by key, such that values for the same key end up in an array.
+        * The reduce gets a key and this array of values emitted for that key, and produces the final result. We'll look at each step, and the output of each step.
+    + ex. 
+    map function split the data into key value pairs the value is an array which will be used in the reduce step
+    function() {
+        var key = {resource: this.resource,
+            year: this.date.getFullYear(),
+            month: this.date.getMonth(),
+            day: this.date.getDate()};
+        if (this.resource == 'index' &&
+            this.date.getHours() == 4) {
+            emit(key, {count: 5});
+        } else {
+            emit(key, {count: 1});
+        }
+    }
+    output will be
+    {resource: 'index', year: 2010, month: 0,
+    day: 20} => [{count: 5}, {count: 1}, {count:1}]
+    reduce function takes each of these intermediary results and output a final results
+    function(key, values) {
+    var sum = 0;
+    values.forEach(function(value) {
+            sum += value['count'];
+        });
+        return {count: sum};
+    };
+- practical 
+With MongoDB we use the mapReduce command on a collection. mapReduce takes a map function, a reduce function and an output directive. 
+var map = function() {
+    var key = {resource: this.resource,
+        year: this.date.getFullYear(),
+        month: this.date.getMonth(),
+        day: this.date.getDate()};
+    emit(key, {count: 1});
+};
+
+var reduce = function(key, values) {
+    var sum = 0;
+    values.forEach(function(value) {
+        sum += value['count'];
+    });
+    return {count: sum};
+};
+db.collection.mapReduce(map, reduce, {out: {inline:1}})
+out to inline means that the output from mapReduce is immediately streamed back to us. This is currently limited for results that are 16 megabytes or less. We could instead specify {out: 'hit_stats'} and have the results stored in the hit_stats collections:
+
+## Performance and Tools
+- indexes
+    + Indexes are created via ensureIndex
+    // where "name" is the fieldname
+    db.unicorns.ensureIndex({name: 1});
+    + And dropped via dropIndex
+    db.unicorns.dropIndex({name: 1});
+    + A unique index can be created by supplying a second parameter and setting unique to true
+    db.unicorns.ensureIndex({name: 1}, {unique: true});
+    + Indexes can be created on embedded fields (again, using the dot-notation) and on array fields. We can also create compound indexes
+    db.unicorns.ensureIndex({name: 1,vampires: -1});
+    The order of your index (1 for ascending, -1 for descending) doesn't matter for a single key index, but it can have an impact for compound indexes when you are sorting or using a range condition.
+- Explain, use a explain method on cursor, display the current cursor's info
+db.unicorns.find().explain()
+- Fire and Forget writes
+write is that an error is not returned when an insert/update violates a unique constraint. In order to be notified about a failed write, one must call db.getLastError() after an insert. Many drivers abstract this detail away and provide a way to do a safe write - often via an extra parameter.
+- Sharding, auto-sharding. Sharding is an approach to scalability which separates your data across multiple servers. should your needs grow beyond a single server
+- Replication
+Writes are sent to a single server, the master, which then synchronizes itself to one or more other servers, the slaves. You can control whether reads can happen on slaves or not, which can help distribute your load at the risk of reading slightly stale data. If the master goes down, a slave can be promoted to act as the new master.
+Combining replication with sharding is a common approach.
+- Stats, the database and collection object support stats() method to return the current status
+- WebInterface,  MongoDB's startup was a link to a web-based administrative tool, browser to http://localhost:28017, you'll want to add rest=true to your config and restart the mongod process. The web interface gives you a lot of insight into the current state of your server.
+- Profiler, You can enable the MongoDB profiler by executing
+db.setProfilingLevel(2);
+With it enabled, we can run a command:
+db.unicorns.find({weight: {$gt: 600}});
+And then examine the profiler:
+db.system.profile.find()
+disable the profiler by calling setProfileLevel again but changing the argument to 0. Another option is to specify 1 which will only profile queries that take more than 100 milliseconds. Or, you can specify the minimum time, in milliseconds, with a second parameter:
+//profile anything that takes
+//more than 1 second
+db.setProfilingLevel(1, 1000);
+- Backups and Restore
+Within the MongoDB bin folder is a mongodump executable. Simply executing mongodump will connect to localhost and backup all of your databases to a dump subfolder
+--db DBNAME, with parameter to backup specify database
+--collection COLLECTIONNAME 
+use the mongorestore executable restore a previously made backup. Again, the --db and --collection can be specified to restore a specific database and/or collection.
+    + ex. backup
+    mongodump --db learn --out backup
+    + ex. restore
+    mongorestore --collection unicorns backup/learn/unicorns.bson
+
+# pyMongo tutorial
+- http://api.mongodb.org/python/current/tutorial.html
+- json_util – Tools for using Python’s json module with BSON documents
+http://api.mongodb.org/python/current/api/bson/json_util.html#module-bson.json_util
+- api doc
+http://api.mongodb.org/python/current/api/index.html
+    
+# References
+- mongodb manual
+http://docs.mongodb.org/manual/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

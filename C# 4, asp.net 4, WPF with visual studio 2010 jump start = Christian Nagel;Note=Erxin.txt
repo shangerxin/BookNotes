@@ -1,0 +1,803 @@
+﻿C# 4, asp.net 4, WPF with visual studio 2010 jump start = Christian Nagel;Note=Erxin
+
+# professional c# 4 and .net 4
+- covariance and contra variance
+    + covariance with generic interfaces, A generic interface is covariant if the generic type is annotated with the outkeyword. This also means that type Tis allowed only with return types.
+    public interface IIndex<out T>
+    {
+        T this[int index]{get;}
+        int Count {get;}
+    }
+    public class Shape{}
+    public class Rectangle:Shape{}
+    public class RectangleCollection:IIndex<Rectangle>
+    {...}
+    //use the covariance class
+    IIndex<Rectangle> rectangles = RectangleCollection.GetRectangles();
+    IIndex<Shape> shapes = rectangles;
+    + contra-variance with generic interface, A generic interface is contra-variant if the generic type is annotated with the in keyword. This way the interface is only allowed to use generic type T as input to its methods
+    public interface IDisplay<in T>
+    {
+        void Show(T item);
+    }
+- tuple, Arrays combine objects of the same type; tuples can combine objects of different types. Tuple<T1>contains one element, Tuple<T1, T2>contains two elements, and so on.
+var result =  Tuple.Create<int, int>(result, reminder);
+// access the result
+result.Item1, result.Item2;
+- dynamic type, The dynamictype allows you to write code that will bypass compile time type checking. 
+dynamic dynamicPerson = new Person();
+dynamicPerson.GetFullName(“John”, “Smith”);
+    + the behind sense of dynamic type is that the c# compiler do the extra works reference the two namespace System.Runtime.CompilerServices.CallSiteand,  System.Runtime.CompilerServices.CallSiteBinder.
+    The CallSiteis a type that handles the lookup at runtime. When a call is made on a dynamic 
+    object at runtime, something has to go and look at that object to see if the member really exists. The call site caches this information so the lookup doesn’t have to be performed repeatedly.
+    the CallSiteBinderis invoked. It takes the information from the call site and generates an expression tree representing the operation the binder is bound to.
+- code contracts, Design-by-contracts is an idea from the Eiffel programming language. Now .NET 4 includes classes for static and runtime checks of code within the namespace System.Diagnostics.Contractsthat can be used by all .NET languages.
+Contract information can be compiled both into the debug and the release code. It is also possible to define a separate contract assembly, and many checks can also be made statically without running the application. 
+    + in visual studio 2010, the project properties could set the code contracts, setting the perform runtime contract checking to full defines the symbol CONTRACTS_FULL. because many contract methods are annotated with the attribute [Conditional("CONTRACTS_FULL")], all runtime checks are only done with this setting
+    + To work with code contracts you can use classes that are available with .NET 4 in the namespace System.Diagnostics.Contracts. However, there’s no tool included with Visual Studio 2010. You need to download an extension to Visual Studio from Microsoft DevLabs: http://msdn.microsoft.com/en-us/devlabs/dd491992.aspx. For static analysis with this tool, the Visual Studio Team System is required; for runtime analysis, Visual Studio Standard edition is enough.
+    + code contract failed handler
+    Contract.ContractFailed += (sender, e)={};
+    + preconditions, Preconditions check the parameters that are passed to a method. Requires()and Requires<TException>()
+    Contract.Requires(min <=max);
+    Contract.Requires<ArgumentNullException>(o != null,“Preconditions, o may not be null”);
+    + Postconditions, define guarantees about shared data and return values after the method has completed. 
+    Contract.Ensures(sharedState <6);
+    With EnsuresOnThrow<TException>(), it is guaranteed that a shared state succeeds a condition if a specified exception is thrown.
+    + invariants, Invariants define contracts for variables during the method lifetime. Contract.Requires() defines input requirements
+    Contract.Invariant(x >5);
+    + contracts for interfaces, With interfaces you can define methods, properties, and events that a class that derives from the interface must implement. 
+    [ContractClass(typeof(PersonContract))]
+    public interface IPerson
+    {
+        string FirstName { get; set; }
+    }
+    The class PersonContractimplements the interface IPersonand defines code contracts for all the members. The attribute PureAttributemeans that the method or property may not change state of a class instance. 
+    [ContractClassFor(typeof(IPerson))]
+    public sealed class PersonContract : IPerson
+    {
+        string IPerson.FirstName {[Pure]get {return Contract.Result<string>();}
+                                  set {Contract.Requres(value != null);}}
+    }
+    // the class which implement the IPerson is restricted by the Cotract define in the PersonContract
+- tasks, .NET 4 includes the new namespace System.Threading.Tasks, which contains classes to abstract threading functionality. behind the scenes, ThreadPool is used
+    + start task, either the TaskFactoryor the constructor of the Taskand the Start(), the RunSynchronously() method will make the task run in the current thread
+    // using task factory
+    TaskFactory tf = new TaskFactory();
+    Task t1 = tf.StartNew(TaskMethod); 
+    // using the task factory via a task
+    Task t2 = Task.Factory.StartNew(TaskMethod);
+    // using Task constructor
+    Task t3 = new Task(TaskMethod);
+    t3.Start(); 
+    TaskCreationOptions. Setting the option LongRunning, you can inform the task scheduler that the task takes a long time, so the scheduler will more likely use a new thread. 
+    Task t4 = new Task(TaskMethod, TaskCreationOptions.PreferFairness);
+    t4.Start();   
+    + continuation tasks
+    Task t1 = new Task(DoOnFirst);
+    Task t2 = t1.ContinueWith(DoOnSecond);
+    + task hierarchies
+    If the parent task is finished before the child task, the status of the parent task is shown as WaitingForChildrenToComplete. The parent task is completed with the status RanToCompletion as soon as all children are completed as well.
+    static void ParentAndChild()
+    {
+        var parent = new Task(ParentTask);
+        parent.Start();
+        Thread.Sleep(2000);
+        Console.WriteLine(parent.Status);
+        Thread.Sleep(4000);
+        Console.WriteLine(parent.Status);
+    }
+    static void ParentTask()
+    {
+        Console.WriteLine(“task id {0}”, Task.CurrentId);
+        var child = new Task(ChildTask);
+        child.Start();
+        Thread.Sleep(1000);
+        Console.WriteLine(“parent started child”);
+    }
+    static void ChildTask()
+    {
+        Console.WriteLine(“child”);
+        Thread.Sleep(5000);
+        Console.WriteLine(“child finished”);
+    }
+    + result from tasks, When a task is finished, it can write some stateful information to a shared object. Such a shared object must be thread-safe. Another option is to use a task that returns a result. 
+    A method that is invoked by a task to return a result can be declared with any return type. The example method TaskWithResultreturns two intvalues with the help of a Tuple. 
+    static Tuple<int, int> TaskWithResult(object division)
+    {
+        Tuple<int, int> div = (Tuple<int, int>)division;
+        int result = div.Item1 / div.Item2;
+        int reminder = div.Item1 % div.Item2;
+        Console.WriteLine(“task creates a result...”);
+        return Tuple.Create<int, int>(result, reminder);
+    }
+    When defining a task to invoke the method TaskWithResult, the generic class Task<TResult>is used.
+    var t1 = new Task<Tuple<int,int>>(TaskWithResult, 
+                                      Tuple.Create<int,int>(8, 3));
+    t1.Start();
+    Console.WriteLine(t1.Result);
+    t1.Wait();
+    Console.WriteLine(“result from task: {0} {1}”, t1.Result.Item1, 
+    t1.Result.Item2);
+- parallel class, While the Parallel.For()and Parallel.ForEach()methods invoke the same method several times, Parallel.Invoke()allows invoking different methods concurrently.
+    + With the For()method, the first two parameters define the start and end of the loop. The sample has the iterations from 0 to 9. The third parameter is an Action<int>delegate. 
+    ParallelLoopResult result =
+    Parallel.For(0, 10, i =>
+    {
+        Console.WriteLine(“{0}, task: {1}, thread: {2}”, i,
+        Task.CurrentId, Thread.CurrentThread.ManagedThreadId);
+        Thread.Sleep(10);
+    });
+    Console.WriteLine(result.IsCompleted);
+    the order is not guaranteed. This run of the program had the order 0-5-1-6-2… with three tasks and three threads.
+    + You can also break the Parallel.For()early. A method overload of the For()method accepts a third parameter of type Action<int, ParallelLoopState>. By defining a method with these parameters, you can influence the outcome of the loop by invoking the Break()or Stop()
+    ParallelLoopResult result =
+    Parallel.For(10, 40, (int i, ParallelLoopState pls) =>
+    {
+        Console.WriteLine(“i: {0} task {1}”, i,Task.CurrentId);
+        Thread.Sleep(10);
+        if (i > 15)
+            pls.Break();
+    });
+    Console.WriteLine(result.IsCompleted);
+    Console.WriteLine(“lowest break iteration: {0}”, 
+    result.LowestBreakIteration);
+    With the help of the LowestBreakIterationproperty, you can decide to ignore results from other tasks.
+    + initialization that should be done with every thread, you can use the Parallel.For<TLocal>()method.
+    The generic version of the Formethod accepts — besides the fromand tovalues — three delegate parameters. The first parameter is of type Func<TLocal>.  This method is invoked only once for each thread that is used to do the iterations.
+    The second delegate parameter defines the delegate for the body.  Func<int, ParallelLoopState, TReturnFromTheInitMethod, TheBodyMethodReturnType>.
+    The last parameter of the For()method specifies a delegate, Action<TLocal>;It's the thread exit method
+    Parallel.For<string>(0, 20,
+        () =>
+        {
+            // invoked once for each thread
+            Console.WriteLine(“init thread {0}, task {1}”, 
+            Thread.CurrentThread.ManagedThreadId, Task.CurrentId);
+            return String.Format(“t{0}”, 
+            Thread.CurrentThread.ManagedThreadId);
+        },
+        (i, pls, str1) =>
+        {
+            // invoked for each member
+            Console.WriteLine(“body i {0} str1 {1} thread {2} task {3}”, i, 
+            str1,
+            Thread.CurrentThread.ManagedThreadId,
+            Task.CurrentId);
+            Thread.Sleep(10);
+            return String.Format(“i {0}”, i);
+        },
+        (str1) =>
+        {
+            // final action on each thread
+            Console.WriteLine(“finally {0}”, str1);
+        }
+    );
+    + parallel.ForEach method, Parallel.ForEachiterates through a collection implementing IEnumerablein a way similar to the foreachstatement, but in an asynchronous manner. 
+    string[] data = {“zero”, “one”, “two”, “three”, “four”, 
+                    “five”, “six”, “seven”, “eight”, “nine”, 
+                    “ten”, “eleven”, “twelve”};
+    ParallelLoopResult result = Parallel.ForEach<string>(data, s =>
+                                                        {
+                                                        Console.WriteLine(s);
+                                                        });
+     An overload of the ForEach()method can also be used to access an indexer to get the iteration number as shown.
+    Parallel.ForEach<string>(data,
+    (s, pls, l) =>
+    {
+    Console.WriteLine(“{0} {1}”, s, l);
+    });
+    + invoke multiple methods with parallel.invoke, you can use the Parallel.Invoke()method. Parallel.Invoke()allows the passing of an array of Action delegate
+    Parallel.Invoke(ACTION0, ACTION1, ...);
+- Cancellation framework, .NET 4 includes a new cancellation framework to allow the canceling of long-running tasks in a standard manner. 
+    + A method that supports cancellation accepts a CancellationTokenparameter. This class defines the property IsCancellationRequested. Among the technologies that offer this mechanism already are tasks, concurrent collection classes, and Parallel LINQ, as well as several synchronization mechanisms
+    + Other ways for a long operation to check for cancellation are to use a WaitHandleproperty that is signaled when the token is canceled. 
+    + or to use the Register()method. The Register() method accepts parameters of type Actionand ICancelableOperation. The method that is referenced by the Action delegate is invoked when the token is canceled.
+    + Cancellation of Paralle.For, With the ParallelOptions, you can pass a CancellationToken. The CancellationTokenis generated by creating a CancellationTokenSource. CancellationTokenSourceimplements the interface ICancelableOperationand, thus, can be registered with the CancellationTokenand allows cancellation with the Cancel()method. 
+    var cts = new CancellationTokenSource();
+    cts.Token.Register(() => 
+    Console.WriteLine(“*** token canceled”));
+    // start a task that sends a cancel after 500 ms 
+    new Task(() =>
+    {
+        Thread.Sleep(500);
+        cts.Cancel(false);
+    }).Start();
+    try
+    {
+        ParallelLoopResult result =
+        Parallel.For(0, 100,
+            new ParallelOptions()
+            {
+                CancellationToken = cts.Token,
+            },
+            x =>
+            {
+                Console.WriteLine(“loop {0} started”, x);
+                int sum = 0;
+                for (int i = 0; i < 100; i++)
+                {
+                Thread.Sleep(2);
+                sum += i;
+            }
+            Console.WriteLine(“loop {0} finished”, x);
+        });
+    }
+    catch (OperationCanceledException ex)
+    {
+        Console.WriteLine(ex.Message);
+    }
+    + Cancellation of Tasks, almost same as cancel parallel for
+    var cts = new CancellationTokenSource();
+    cts.Token.Register(() => 
+    Console.WriteLine(“*** task canceled”));
+    // start a task that sends a cancel to the 
+    // cts after 500 ms 
+    Task.Factory.StartNew(() =>
+    {
+        Thread.Sleep(500);
+        cts.Cancel();
+    });
+    var factory = new TaskFactory(cancellationSource.Token);
+    Task t1 = factory.StartNew(new Action<object>(
+            f =>
+            {
+                Console.WriteLine(“in task”);
+                for (int i = 0; i < 20; i++)
+                {
+                Thread.Sleep(100);
+                CancellationToken ct = (f as TaskFactory).CancellationToken;
+                if (ct.IsCancellationRequested)
+                {
+                    Console.WriteLine(“canceling was requested, “ + 
+                    “canceling from within the task”);
+                    ct.ThrowIfCancellationRequested();
+                    break;
+                }
+                Console.WriteLine(“in loop”);
+            }
+            Console.WriteLine(“task finished without cancellation”);
+            }), 
+            factory, cts.Token);
+    try
+    {
+        t1.Wait();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(“exception: {0}, {1}”, ex.GetType().Name, 
+        ex.Message);
+        if (ex.InnerException != null)
+            Console.WriteLine(“inner exception: {0}, {1}”, 
+                                ex.InnerException.GetType().Name, 
+                                ex.InnerException.Message);
+    }
+    Console.WriteLine(“status of the task: {0}”, t1.Status);
+    The task is canceled and throws a TaskCanceledException, which is initiated from the method call ThrowIfCancellationRequested(). With the caller waiting for the task, you can see that the exception AggregateExceptionis caught and contains the inner exception TaskCanceledException.
+- taskbar and jump list
+    + To configure the taskbar item, the namespace System.Windows.Shellcontains a dependency property for the Windowclass to add taskbar information. 
+    + The TaskbarItemInfoproperty can contain a TaskbarItemInfoelement. With TaskbarItemInfo, you can set the Description property, which is shown as tooltip information. With the properties ProgressStateand ProgressValue, feedback can be given on a current state of the application. ProgressStateis of type TaskbarItemProgressState, which defines the enumeration values None, Intermediate, Normal, Error, and Paused. Depending on the value of this setting, progress indicators are shown on the taskbar item. 
+    The taskbar item can contain a ThumbButtonInfoCollection, which is assigned to the TumbButtonInfosproperty of the TaskbarItemInfo
+    Customizing the Jump List is done by adding a JumpListto the application class. This can either be done in code by invoking the static method JumpList.SetJumpList()or by adding JumpListelements as a child of the Applicationelement.
+    
+# asp.net 4 in c# and vb
+- chart server control, base on the Chart control of Dundas charting company, including
+point, doughnut, fastPoint, stock, bubble, candlestick, line, range, spline, splineRange, stepLine, rangeBar, fastLine, rangeColumn, bar, radar, stackedBar, polar, stackedbar100, errorBar, column, boxPlot, stackedColumn, renko, stackedcolumn100, threeLineBreak, area, kagi, splineArea, pointAndFigure, stackedArea, funnel, stackedArea100, pyramid, pie
+- asp.net ajax control toolkit, it's the default install of VS2010
+http://www.asp.net/ajaxlibrary
+it could be download as source code or dll
+    + add ajax tool into VS2010
+        * download the .zip library and unzip it
+        * add new tab for the toolbox 
+        * right click and select choose toolbox items
+        * select the ajaxControltoolkit.dll from the download 
+    + color picker extender, 
+    <asp:TextBox ID="Textbox1" runat="server"></asp:TextBox>
+    <asp:ColorPickerExtender ID="cpe" runat="server" TargetControlID="Textbox1">
+    </asp:ColorPickerExtender>
+    the end result will be display in the text box in hexdecimal format
+    + extending <outputcache>
+    extend how the OutputCachedirective works and have it instead work off your own custom means to caching. 
+    it support outputCache directive to any type of caching by create a output-cache provider as a class and this class will inherit from the new system.web.caching.outputCacheProvider
+    <outputCache> eleemnt is found within the <caching> section of the configuration file
+    <caching>
+        <outputCache defaultProvider=”AspNetInternalProvider”>
+            <providers>
+                <add name=”myDistributedCacheExtension”
+                type=”Wrox.OutputCacheExtension.DistributedCacheProvider,
+                DistributedCacheProvider” />
+            </providers>
+        </outputCache>
+    </caching>
+    With your own output cache provider in place, you can now point to this provider through the OutputCachedirective on the page as defined here:
+    <%@ OutputCache Duration=”90” VaryByParam=”*” providerName=”myDistributedCacheExtension” %>
+    + object caching option, the driver of caching is Driving this is the System.Runtime.Caching.dll
+    NET team will be making its investments into the 
+    System.Runtime.Cachingnamespace rather than System.Web.Caching. 
+    + use the caching in c#
+    CacheItemPolicy policy = new CacheItemPolicy();
+    policy.ChangeMonitors.Add(new
+    HostFileChangeMonitor(userFilePath));
+    XDocument xdoc = XDocument.Load(@”C:\Username.xml”);
+    var query = from u in xdoc.Elements(“usernames”)
+    select u.Value;
+    usernameFromXml = query.First().ToString();
+    cache.Set(“userFromXml”, usernameFromXml, policy);
+    + historical debugging with intellitrace
+    enable the feature in the VS menu Tools|Options|selecting intellitrace form the item in the left side
+    + debugging multiple threads, in VS threads dialog
+- ASP.net MVC, model-view-controller, 
+    + define of MVC
+    model, a set of classes that describes the data you're working with as well as the business rules for hwo the data can be changed and manipulated
+    view, the application's user interface
+    controller, a set of classes that handles communication from the user, overall application flow and application-specific logic
+    + asp.net MVC pattern
+    model, represent the domain in which you are interested, these domain objects often encapsulate data stored in a database as well as code used to manipulate the data and enforce domain-specific business logic. this most likely a data access layer of some kind of using a tool like LINQ to SQL, entity framework, or nHibernate, combined with custom code containing domain-specific logic
+    view, dynamically generated page, in asp.net mvc, you implement it via the system.web.Mvc.ViewPage class, which inherits from System.Web.UI.Page
+    controller, is a special class that manages the relationship between the view and model, it talks to the model and it decides which view to render(if any). in asp.net mvc, this class is conventionally denoted by the suffix "Controller"
+- model-view-controller and asp.net
+    + MVC frameworks used on web usually share in some fundamental tenets.
+        * convention over configuration
+        * don't repeat yourself, DRY principle
+        * plugability whenever possible
+        * try to be helpful, but if necessary, get out of the developer's way
+    + MVC and web form are parallel alternative
+    mvc live in System.Web.Mvc and asp.net live in System.Web, so MVC is a sub namespace in web package
+    MVC is a separately downloadable web component today for users of visual studio 2008
+    + why not web forms?
+    ASP.NET MVC offers absolute control over HTML, doesn’t deny the existence of HTTP, and was designed from the ground up with an eye towards testability.
+    Web forms concepts like ViewState and the Postback event model have their place, but many developers want a lower-level alternative that embraces not only HTML but also HTTP itself.
+    + asp.net mvc is totally different
+    + asp.net > asp.net MVC == true
+    + install MVC in VS 2008 download the mvc package at http://www.asp.net/mvc  ASP.NET MVC future releases at www.codeplex.com/aspnet. 
+    + using WCF data services
+    Entity Data Model (EDM) and what these models bring to your application’s re usability. 
+    WCF service layer
+    Data Source(SQL, Oracle, XML file)=> entity Data model=>WCF data services => client
+    + creating your first service
+        * add ado.net entity data model into the project
+        the connection string and locations of mapping detail are going to store in the web.config file
+    + creating the service in the project
+    + enable read ability to the tables
+    config.SetEntitySetAccessRule(“*”,EntitySetRights.AllRead);
+- build a asp.net web package, it's a new ability of web deployment tool, right click on the project within the visual studio solution explorer and select the publish option from the provided menu
+right solution and click to choose create package to create deployment package
+
+# WPF
+- event name attributes
+    + the first way to attach code-behind to a control's events uses an attribute in the xaml code
+    <ButtonContent=”Apply”IsDefault=”True” Name=”btnApply”Click=”btnApply_Click”/>
+    //...
+    private voidbtnApply_Click(objectsender, RoutedEventArgse)
+    {
+        this.Background = borSample.Background;
+    }
+- resource, each resource is an element such as an object(LinearGridientBrush, Thickness or Label) or a simple value(a string or integer), each resource need a unique x:Key attribute to identify it.
+<Window.Resources>
+    <LinearGradientBrush x:Key=”brButton” StartPoint=”0,0” EndPoint=”0,1”>
+        <GradientStopColor=”Red” Offset=”0”/>
+        <GradientStopColor=”White” Offset=”0.5”/>
+        <GradientStopColor=”Blue” Offset=”1”/>
+    </LinearGradientBrush>
+    <BitmapEffectGroup x:Key=”bmeButton”>
+        <DropShadowBitmapEffect/>
+    </BitmapEffectGroup>
+</Window.Resources>
+- merged resource dictionary, A resource dictionary lets several controls share the same values. Merged resource dictionaries let several windows or even applications share the same resource values.
+<ResourceDictionary
+xmlns=”http://schemas.microsoft.com/winfx/2006/xaml/presentation”
+xmlns:x=”http://schemas.microsoft.com/winfx/2006/xaml”
+xmlns:sys=”clr-namespace:System;assembly=mscorlib”>
+    <!-- Resource dictionary entries should be defined here.  -->
+    <sys:Doublex:Key=”rectWidth”>140</sys:Double>
+    <sys:Doublex:Key=”rectHeight”>50</sys:Double>
+    <sys:Doublex:Key=”rectRadX”>5</sys:Double>
+    <sys:Doublex:Key=”rectRadY”>20</sys:Double>
+    ... More resources omitted ...
+</ResourceDictionary
+<Window.Resources>
+    <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionarySource=”RectangleResources.xaml”/>
+        </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+</Window.Resources>
+- use the resource, The value you give the attribute should have the format {StaticResource resource_name}, where you replace resource_namewith the name of the resource.
+- styles and property triggers
+A style packages property values that should be set as a group. It begins with a Style element contained in a resource dictionary. 
+    + styles scope
+    You can place the Stylein any resource dictionary depending on how widely you want it to be available. For example, if you want a Styleto be visible to the entire project, place it in the Application.Resourcessection in the App.xaml file; if you want the Style visible to every control on a window, place it in the Window.Resourcessection;
+    In contrast, if you omit the attribute and include a TargetType, then the resulting unnamed style applies to all controls of the TargetTypewithin the style’s scope. 
+    + target
+    A style can have an x:Key attribute to give it a name and a TargetTypeattribute to indicate the kind of control to which it should apply. 
+    + style sub elements
+    Inside the Style element, Setter and EventSetterelements define the style’s property values and event handlers, respectively.
+    + use the style
+    <RectangleStyle=”{StaticResourceRedRectStyle}”/>
+    + triggers, Styles can also define triggers, objects that apply setters or start other actions only under certain conditions. 
+    To make a property Trigger, create a Style and give it a Style.Triggers property element. Inside the Style.Triggers section, you can add Trigger elements.
+    The Value property of the trigger element define the active value, add the setters inside the trigger that you want the trigger to execute
+    <Style TargetType="Button">
+        <Style.Triggers>
+            <TriggerProperty=”IsMouseOver”Value=”True”>
+                <SetterProperty=”Width”Value=”105”/>
+                <SetterProperty=”Height”Value=”50”/>
+                <SetterProperty=”FontSize”Value=”20”/>
+                <SetterProperty=”FontWeight”Value=”Bold”/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    + event triggers and animation, each event trigger's event handler will send RoutedEvent as a parameter and the name of the it is the class raising the event
+    normally an event trigger's actions use a begin storyboard element to invoke a storyboard
+    use the event trigger a animation
+    <ButtonWidth=”100”Height=”50”Content=”Click Me”>
+        <Button.Triggers>
+            <EventTrigger RoutedEvent=”Button.MouseEnter”>
+                <EventTrigger.Actions>
+                    <BeginStoryboard Storyboard=”{StaticResourcesbBigScale}”/>
+                </EventTrigger.Actions>
+            </EventTrigger>
+        </Button.Triggers>
+    </Button>
+    + storyboards in styles,  put the triggers in a style to simplify the Button’s code. You can then make the Style simpler by placing the Story board in its own resource.
+    <Style x:Key=”btnEventSbSize” TargetType=”Button”>
+        <SetterProperty=”Width”Value=”100”/>
+        <SetterProperty=”Height”Value=”50”/>
+        <Style.Triggers>
+            <EventTriggerRoutedEvent=”Button.MouseEnter”>
+                <EventTrigger.Actions>
+                    <BeginStoryboardStoryboard=”{StaticResourcesbBigSize}”/>
+                </EventTrigger.Actions>
+            </EventTrigger>
+            <EventTriggerRoutedEvent=”Button.MouseLeave”>
+                <EventTrigger.Actions>
+                    <BeginStoryboardStoryboard=”{StaticResourcesbSmallSize}”/>
+                </EventTrigger.Actions>
+            </EventTrigger>
+        </Style.Triggers>
+    </Style>
+    use the style with a button then the button will contain the defined event trigger and animations
+    <ButtonStyle=”{StaticResourcebtnEventSbSize}” Content=”New Size”/>
+    + storyboards, A storyboardis an object that defines a timeline for one or more animations.
+    <Storyboardx:Key=”sbImg1”>
+        <DoubleAnimation Duration=”0:0:0.5” To=”120”
+                         Storyboard.TargetName=”img1”
+                         Storyboard.TargetProperty=”(Canvas.Left)”/>
+    </Storyboard>
+    + animation types
+    boolean, int16, int32, point3d, string, byte, quaternion, thickness, char, int64, rect, vector, color matrix, rotation3d, vector3d, decimal, object, single, double, point, size
+    + any object could be treat as data source or resource, the property of the resouce could be used to assign the data source variable, for example the PathGeometry is a defined path object and could be used in the storyboard as the datasource
+    <PathGeometry x:Key=”pathMove”
+        Figures=”M 10,85
+        A 100,70 0 1 1 210,85
+        A 100,70 0 1 0 410,85
+        A 130,70 0 1 0 150,85
+        A 70,70 0 1 1 10,85”/>
+    <Storyboard x:Key=”sbMoveButton” RepeatBehavior=”Forever”>
+            <DoubleAnimation UsingPathDuration=”0:0:4”
+            Storyboard.TargetName=”btnMover”
+            Storyboard.TargetProperty=”(Canvas.Left)”
+            Source=”X”
+            PathGeometry=”{StaticResourcepathMove}”/>
+    </Storyboard>
+    + Media and timelines, The BeginStoryboard, PauseStoryboard, and other Storyboard control classes are really just action wrappers — objects that perform actions rather than representing “physical” objects such as buttons
+    Another useful action wrapper is SoundPlayerAction
+    <Storyboard x:Key=”sbBounce”RepeatBehavior=”Forever”>
+        <!-- Play the sound after 1 second.  -->
+        <ParallelTimelineBeginTime=”0:0:0”>
+            <MediaTimeline BeginTime=”0:0:1” Source=”boing.wav”
+            Storyboard.TargetName=”medBoing”/>
+        </ParallelTimeline>
+        <!-- Move the ball and its shadow.  -->
+        <ParallelTimeline BeginTime=”0:0:0” AutoReverse=”True”>
+            <DoubleAnimationUsingKeyFrames
+            Storyboard.TargetName=”ellBall”
+            Storyboard.TargetProperty=”(Canvas.Top)”>
+            <SplineDoubleKeyFrameKeyTime=”0:0:1”
+            KeySpline=”0.5,0 1,1”
+            Value=”120”/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames
+            Storyboard.TargetName=”ellShadow”
+            Storyboard.TargetProperty=”Opacity”>
+            <SplineDoubleKeyFrameKeyTime=”0:0:1”
+            KeySpline=”0.5,0 1,1”
+            Value=”1”/>
+            </DoubleAnimationUsingKeyFrames>
+        </ParallelTimeline>
+    </Storyboard>
+- templates
+Properties and styles determine a control’s appearance and behavior. 
+In contrast, templates determine a control’s structure. They determine what components make up the control and how those components interact to provide the control’s features.
+A template determines what the pieces are that make up a control. It determines the control’s components together with their styles, triggers, and everything else that is needed by the control. 
+   + content presenter, is an object that WPF provides to display whatever it is that the control should display.
+    <Window.Resources>
+        <ControlTemplatex:Key=”temSimpleLabel”TargetType=”Label”>
+            <Border BorderBrush=”Red”BorderThickness=”1”>
+                <ContentPresenter/>
+            </Border>
+        </ControlTemplate>
+    </Window.Resources>
+   + template binding, a template can learn about some of the properties set on the client control by using a template binding.
+    a better version of the Labeltemplate that honors several of the control’s background and foreground properties:
+    <ControlTemplatex:Key=”temBetterLabel”TargetType=”Label”>
+        <Border
+            Background=”{TemplateBinding Background}”
+            BorderBrush=”{TemplateBinding BorderBrush}”
+            BorderThickness=”{TemplateBinding BorderThickness}”>
+            <ContentPresenter Margin=”4”
+                HorizontalAlignment=”{TemplateBindingHorizontalContentAlignment}”
+                VerticalAlignment=”{TemplateBindingVerticalContentAlignment}”/>
+        </Border>
+    </ControlTemplate>
+   + template events, To make a template control respond to events, you can add property and event triggers to the template much as you previously added them to styles.
+   <ControlTemplate.Triggers>
+        <Trigger Property=”IsEnabled” Value=”False”>
+            <SetterTargetName=”canDisabled”
+            Property=”Opacity” Value=”0.5”/>
+            <SetterTargetName=”txtbContent”
+            Property=”Foreground” Value=”Gray”/>
+        </Trigger>
+    </ControlTemplate.Triggers>
+    + researching control templates,  need to learn what behaviors the control provides for you and what behaviors you need to provide for it.
+    One good source of information is Microsoft’s “Control Styles and Templates” web page at http://msdn.microsoft.com/en-us/library/cc278075%28v=vs.95%29.aspx
+    to show any wpf control's template
+    private voidbtnShowTemplate_Click(objectsender, RoutedEventArgse)
+    {
+        XmlWriterSettingswriter_settings = new XmlWriterSettings();
+        writer_settings.Indent = true;
+        writer_settings.IndentChars = “ “;
+        writer_settings.NewLineOnAttributes = true;
+        StringBuildersb = new StringBuilder();
+        XmlWriterxml_writer = XmlWriter.Create(sb, writer_settings);
+        XamlWriter.Save(Target.Template, xml_writer);
+        txtResult.Text = sb.ToString();
+    }
+- skins, themes let a program automatically change to match the rest of the system's appearance. skin is a packaged set of appearances and behaviors that can give an application(or part of an application) a distinctive appearance while still allowing it to provide its key features
+    + resource skin, dynamic update the application's resource dictionary to change the application style in runtime
+    <Window.Resources>
+        <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionarySource=”ResBlue.xaml”/>
+        <ResourceDictionarySource=”ResRed.xaml”/>
+        </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    private voidctxSkin_Click(objectsender, RoutedEventArgse)
+    {
+        // Get the context menu item that was clicked.
+        MenuItemmenu_item = (MenuItem)sender;
+        // Create a new resource dictionary, using the
+        // menu item’s Tag property as the dictionary URI.
+        ResourceDictionarydict = new ResourceDictionary();
+        dict.Source = new Uri((String)menu_item.Tag, UriKind.Relative);
+        // Remove all but the first dictionary.
+        while(App.Current.Resources.MergedDictionaries.Count > 1)
+        {
+        App.Current.Resources.MergedDictionaries.RemoveAt(1);
+        }
+        // Install the new dictionary.
+        App.Current.Resources.MergedDictionaries.Add(dict);
+    }
+    + animated skins, Another way to change property values is to use property animation. This section explains briefly how to use animation to provide skinning.
+    + dynamically loaded skins, loading XAML files and wiring up their event handlers. 
+    // Load the skin file and wire up event handlers.
+    private voidLoadSkin(stringskin_file)
+    {
+        // Load the controls.
+        FrameworkElementelement =
+        (FrameworkElement)Application.LoadComponent(
+        new Uri(skin_file, UriKind.Relative));
+        this.Content = element;
+        // Wire up the event handlers.
+        Buttonbtn;
+        Polygonpgn;
+        Rectanglerect;
+        Gridgrd;
+        Ellipseell;
+        switch(element.Tag.ToString())
+        {
+            case “Red”:
+            btn = (Button)element.FindName(“btnRepairDisk”);
+            btn.Click += new RoutedEventHandler(btnRepairDisk_Click);
+            Code for other controls omitted 
+            break;
+            case “Blue”:
+            Lots of code omitted 
+            // Uses the same event handler as rectMove.
+            ell = (Ellipse)element.FindName(“ellMove”);
+            ell.MouseDown +=
+            newSystem.Windows.Input.MouseButtonEventHandler(
+            rectMove_MouseDown);
+            grd = (Grid)element.FindName(“grdExit”);
+            grd.MouseDown +=
+            newSystem.Windows.Input.MouseButtonEventHandler(
+            grdExit_MouseDown);
+            break;
+        }
+    }
+- printing visual objects, use print dialog class, add some codes 
+    + printing code-generated output
+    print multiple pages, The PrintDialog object’s PrintDocument method takes a DocumentPaginatorobject as a parameter. That object generates the pages of a printout, and the PrintDocument places them in a single print job.
+- Data binding, bind a target to a data source so the target automatically displays the value in the data source. 
+    + make a listbox display an array of values
+    + make a listbox display a list of objects created in code-behind
+    + make a treeView build a hierarchical display of objects created in code-behind
+    + make textboxes, labels and other controls display additional detail about the currently selected item in a listbox, combobox or treeview
+- binding basics, have these four basic pieces
+    + target, the object that will use the result of the binding
+    + target property, the target object's property that will use the result
+    + source, the object that provides a value for the target object to use
+    + path, a path that locates the value within the source object
+    examples, binding a label's content property to a textbox so that the label will display the input text of the textbox
+    the target is the label
+    the target property is Content
+    the source is the textbox
+    the path is Text(the path to the data in the source object, in this case the Text property)
+    + reference the custom namespace in XAML code
+    xmlns:local=”clr-namespace:PersonSource”
+    + The following code shows how the program’s XAML code defines a static resource named a_person that is a Personobject:
+    <Window.Resources>
+        <local:Personx:Key=”a_person” FirstName=”Bill” LastName=”Gates”NetWorth=”40000000000”/>
+    </Window.Resources>
+    use the resource
+    <LabelGrid.Row=”1”Grid.Column=”1” Content=”{BindingSource={StaticResourcea_person},Path=FirstName}”/>
+    + relative source, The binding’s RelativeSourceproperty lets you specify a source object by its relationship to the target control. One situation in which this is useful is when you want to bind two properties on the same control.
+    example, binding a background color of a TextBox to its Text property
+    <TextBox Margin=”10” Height=”30” VerticalAlignment=”Top” Background=”{Binding RelativeSource={RelativeSourceSelf},Path=Text}”/>
+    + The ListBox and ComboBoxcontrols have an ItemTemplateproperty that determines how each item is displayed. 
+    <ListBox.ItemTemplate>
+        <DataTemplate>
+            <DataTemplate.Resources>
+            <!-- The ListBoxItem style must be set
+            in ListBox.Resources.  -->
+                <Style TargetType=”TextBlock”>
+                    <SetterProperty=”Margin”Value=”3”/>
+                    <SetterProperty=”HorizontalAlignment” Value=”Left”/>
+                    <SetterProperty=”VerticalAlignment” Value=”Center”/>
+                    <SetterProperty=”FontSize” Value=”20”/>
+                    <SetterProperty=”FontWeight” Value=”Bold”/>
+                    <SetterProperty=”Foreground” Value=”Blue”/>
+                </Style>
+            </DataTemplate.Resources>
+            <StackPanel>
+                <Grid>
+                    <TextBlockText=”{Binding Name}”/>
+                    <ImageSource=”{Binding Picture}”
+                    Height=”50”/>
+                </Grid>
+                <TextBoxText=”{Binding Stats}”/>
+            </StackPanel>
+        </DataTemplate>
+    </ListBox.ItemTemplate>
+    + treeView template, In a TreeView, you must specify two things at each node in the tree — the data to display for that node and the path to follow deeper into the tree.
+        *  HierarchicalDataTemplate objects in their Resources sections to describe what the control should do at each node.
+        <HierarchicalDataTemplate
+        DataType=”{x:Typelocal:Region}”
+        ItemsSource=”{BindingPath=Departments}”>
+            <TextBlockText=”{BindingPath=RegionName}”Foreground=”Red”>
+            <TextBlock.BitmapEffect>
+            <OuterGlowBitmapEffect/>
+            </TextBlock.BitmapEffect>
+            </TextBlock>
+        </HierarchicalDataTemplate>
+    + binding database objects
+- Transformations, A transformation alters an object’s geometry before it is drawn. there are several kinds of transformations stretch, rotate, squash, skew and move.
+    + RotateTransform, rotate object the Angle property determines the number of degrees
+    + ScaleTransform, scales the object vertically and horizontally, ScaleX and ScaleY
+    + SkewTransform, skews the object by rotating its X and Y axes through an angle given by the AngleX and AngleY properties
+    + TranslateTransform, this transformation moves the object, X and Y properties determine how far the object is moved horizontally and vertically.
+- Use the transformation
+To apply a transformation to an object, give that object a LayoutTransformor RenderTransformproperty element that contains one of the four basic transformations. When you use a LayoutTransform, WPF modifies the control before it arranges the controls. When you use a RenderTransform, WPF arranges the controls first and then modifies the control.
+    + example, create a label with layout transform
+    <LabelCanvas.Left=”140”Canvas.Top=”50”
+    Background=”LightGreen”Foreground=”Red”
+    Content=”Rotate 45 degrees”>
+        <Label.LayoutTransform>
+            <RotateTransformAngle=”45”/>
+        </Label.LayoutTransform>    
+    </Label>
+- Effects, bitmap effects modify the way in which an object is drawn. To add an effect to an object, give it a BitmapEffectproperty element that contains an effect object.
+    + example
+    <CanvasWidth=”100”Height=”100”>
+        <Canvas.BitmapEffect>
+            <DropShadowBitmapEffect/>
+        </Canvas.BitmapEffect>
+        <EllipseStroke=”Blue” Fill=”Yellow” Width=”100” Height=”100”/>
+        <PathData=”M 20,50 A 30,30 180,1,0 80,50” Stroke=”Blue” StrokeThickness=”2”/>
+    </Canvas>
+    + bitmap effect classes
+        * BevelBitmapEffect, adds beveled edges to the object
+        * BlurBitmapEffect, Blurs the object radius determines how large the blurring is
+        * DropShadowBitmapEffect, adds a drop shadown behind the object
+        * EmbossBitmapEffect, Embosses the object
+        * OuterGlowBitmapEffect, adds a glowing aura around the object
+    + use multiple effects
+    <Canvas.BitmapEffect>
+        <BitmapEffectGroup>
+            <EmbossBitmapEffect/>
+            <BevelBitmapEffectBevelWidth=”10”/>
+        </BitmapEffectGroup>
+    </Canvas.BitmapEffect>
+- Documents, WPF documents can contain a wide variety of objects such as
+Paragraphs, Tables, Lists, Floaters, Figures, User interface elements such as Buttons and TextBoxes, Three-dimensional objects
+Contain two kinds of document
+    + fixed documents, A fixed document displays its contents in exactly the same size and position whenever you view it, similar to a PDF file
+        * When it defined fixed documents, Microsoft also defined XML Paper Specification(XPS) files. An XPS file is a fixed document saved in a special format that can be read and displayed by certain programs such as recent versions of Internet Explorer.
+        * microsoft word contain a plugin to export pdf and xps file for word 2007
+        * display XPS file by a control of WPF, DocumentViewer, add the reference in visual studio ReachFramework
+        * load XPS file
+        private voidWindow_Loaded(objectsender, RoutedEventArgse)
+        {
+            // Note: Mark the file as “Copy if newer”
+            // to make a copy go in the output directory.
+            XpsDocumentxps_doc = new XpsDocument(“Fixed Document.xps”,
+            System.IO.FileAccess.Read);
+            docViewer.Document = xps_doc.GetFixedDocumentSequence();
+        }
+        * save XPS files, 
+        using System.Windows.Xps; 
+        using System.Windows.Xps.Packaging;
+        
+        XpsDocumentxps_doc = new XpsDocument(dlg.FileName,
+        System.IO.FileAccess.Write);
+        // Make an XPS document writer.
+        XpsDocumentWriterdoc_writer =
+        XpsDocument.CreateXpsDocumentWriter(xps_doc);
+        doc_writer.Write(fdContents);
+        xps_doc.Close();
+    + flow documents, A flow document rearranges its contents as necessary to fit the container that is holding it. If you make the viewing control tall and thin
+    WPF display flow documents inside one of three kinds of viewers
+        * FlowDocumentPageViewer
+        * FlowDocumentReader
+        * FlowDocumentScrollViewer
+    A FlowDocumentobject represents the flow document itself. The FlowDocument’s children must be objects that are derived from the Blockclass. These include BlockUIContainer, List, Paragraph, Section, and Table.
+- Three-dimensional drawing, WPF 3d drawing is simpler than direct3d as it automatic handle the hardware detection
+    + basic structure
+       * the viewport3D control display a 3D scene
+       * the viewport3d object's Camera property defines the camera used to view the scene
+       * the viewport3d object should contain one or more ModelVisual3D objects that define the items in the scene. and the Content proeprty should contain the visual objects
+       * the content property could holds a collection of GeometryModel3D or a single GeometryModel3D object
+       * each GeometryModel3D object can define any number of triangles, and the triangles don't need to connected with each other
+       * Two import properties of GeometryModel3D object are Material and Geometry. 
+       * The Geometry property should contain a single MeshGeometry3D object that defines the triangles that make up the object
+       * MeshGeometry3D has four key properties that define its triangles: Positions, TriangleIndices, Normals, and TextureCoordinates.
+       Positions, is a list of 3d point cooridnate values, for ex. "1, 0, 1 -1, 0, 1" use space to separate each 3d point
+       TriangleIndices, gives a list of indexes into the positions array that give the points that make up the object's triangles
+       Outward Orientation, a vector that points perpendicularly to a triangle is called a normal or surface normal for the triangle, sometimes people require that the normal have length 1, which is called unit normal
+       * The right-hand rule lets you use the order of the points that define the triangle to determine which normal is which.
+       the triangle's A is the origin point, B is x axis, C is Y axis
+       your thumb points toward the triangle's outside
+       * why should care about the outwardly-oriented normals? 
+        Direct3D uses the triangle’s orientation to decide whether it should draw the triangle. If the outwardly-oriented normal points toward the camera’s viewing position, then Direct3D draws the triangle. If the outwardly-oriented normal points away fromthe camera’s viewing position, then Direct3D doesn’t draw the triangle.
+    + normals, it also help determine the triangle's color
+    The MeshGeometry3D object’s Normals property lets you tell the drawing engine what normals to use to color the triangle
+    + textureCoordinates, The TextureCoordinatesproperty is a collection that determines how points are mapped to positions on a material’s surface.
+    The coordinates on the brush begin with (0, 0) in the upper left with the first coordinate extending to the right and the second extending downward. the bottom right will be (1, 1)
+    draw a MeshGeometry3D
+    <MeshGeometry3D
+    Positions=”-1,1,1 -1,-1,1 1,1,1 1,-1,1”
+    TriangleIndices=”0,1,2 2,1,3”
+    TextureCoordinates=”0,0 0,1 1,0 1,1”
+    />
+    + camera, The camera determines the location and direction from which a 3D scene is viewed. Properties of camera are
+        * position
+        * lookDirection, should be pointed relative to its current position
+        * upDirection, determines the camera's roll or tilt
+        * two most useful kinds of cameras in WPF
+        perspective and orthographic
+    + lighting, The color that you see in a scene depends on both the lights in the scene and on the materials used by the objects.
+    WPF provides several kinds of light effects
+        * Ambient light, This is light that comes from all directions and hits every surface equally.
+        * Directional light, This light shines in a particular direction as if the light is infinitely far away. 
+        * Point light, This light originates at a point in space and shines radially on the objects around it. . the light itself is invisible, so there is no lightbulb in the scene
+        * Spot light, This light shines a cone into the scene. 
+    + Materials, WPF provides three kinds of materials: diffuse, specular, and emissive.
+        * A diffuse material’s brightness depends on the angle at which light hits it, but the brightness does not depend on the angle at which you view it.
+        * A specular material is somewhat shiny. In that case, an object’s apparent brightness depends on how closely the angle between you, the object and the light sources matches the object's mirror angle
+        * an emissivematerial, glows. An emissive material glows but only on itself. 
+        * a MaterialGroup could combin all three types of materials.
+        MakeSingleMeshSphere(Sphere00, new DiffuseMaterial(Brushes.Green), 1, 20, 30);
+        MaterialGroupcombined_material = new MaterialGroup();
+        combined_material.Children.Add(new DiffuseMaterial(Brushes.Green));
+        combined_material.Children.Add(new EmissiveMaterial(Brushes.DarkGreen));
+    
+    

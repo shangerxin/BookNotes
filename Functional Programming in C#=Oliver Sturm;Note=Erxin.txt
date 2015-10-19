@@ -1,0 +1,1163 @@
+﻿Functional Programming in C#=Oliver Sturm;Note=Erxin
+
+# introduction
+- download source code from 
+www.wrox.com
+- errata
+www.wrox.com/misc-pages/booklist.shtml
+- functional implementation in github
+https://github.com/rmoritz/PortableFCSLib
+
+# introduce functional programming
+
+# putting functional programming into a modern context
+- managing side effect 
+you still need to do a lot of potentially complex structural work on your codebase in order to parallelize it
+- agile programming methodologies
+    + programmers work along simple requirement specifications
+    + do only what's necessary in each step to satisfy these requirements
+    + refactoring becomes an important part of the concept
+- declarative programming
+The target of declarative programming is to specify the goal, the logic of what a program, or a part of a program, should do, without describing the steps necessary to achieve that goal, such as html, xml and sql
+- functional programming as a mindset
+- the feasibility of functional programming in c#
+- concurrency programming model is the push power of functional programming
+
+# C# foundations of functional programming
+- functions, delegates and lambda expressions
+- flexible typing with generics
+- lazy listing with iterators
+- encapsulating data in closures
+- code is data
+
+# anonymous functions and lamda expressions
+- since .net 3.5 and c# 3.0 there is a feature called expression trees, this is a framework feature that allows runtime storage of functions in a non-compiled format, coupled with a language feature that can translate lambda expressions into the storage format
+- extension method
+- referential transparency
+In .NET 4.0 and Visual Studio 2010, Microsoft introduced the feature of code 
+contracts. You might not be aware of this yet, because the tools required to utilize the feature are still a separate download. Code contracts are certainly worth a recommendation
+
+
+# Flexible typing with Generics
+- generic fucntions
+static void OutputThing < T > (T thing) {
+    Console.WriteLine(“Thing: {0}”, thing);
+} 
+- generic classes
+- constraining types
+- other generic types
+classes, structs, delegates and interfaces can also have type parameters
+- covariance and contravariance
+In C# version 4.0 as well as .NET 4.0, variance support in generics has been cleaned up, and it is now possible to use the new keywords in and out with generic type parameters. They can define and restrict the direction 
+of data flow for a particular type parameter, allowing variance to work.
+
+object[] objects = new object[3];
+objects[0] = new object( );
+objects[1] = “Just a string”;
+objects[2] = 10;
+
+string[] strings = new string[] { “one”, “two”, “three” };
+objects = strings; 
+After all, while string derives from object, string[] doesn ’  t derive from object[]. The language support for covariance in this example makes the assignment possible anyway
+
+// Runtime exception here - the array is still of type string[],
+// ints can’t be inserted
+objects[2] = 10;
+// Compiler error here - covariance support in this scenario only
+// covers reference types, and int is a value type
+int[] ints = new int[] { 1, 2, 3 };
+objects = ints; 
+
+
+contravariance example
+
+public class Person : IPerson {
+public Person( ) {
+}
+}
+public class Woman : Person {
+public Woman( ) {
+}
+} 
+
+static void WorkWithPerson(Person person) {
+}
+static void WorkWithWoman(Woman woman) {
+} 
+
+delegate void AcceptWomanDelegate(Woman person);
+static void DoWork(Woman woman, AcceptWomanDelegate acceptWoman) {
+acceptWoman(woman);
+} 
+
+Woman woman = new Woman( );
+DoWork(woman, WorkWithWoman);
+DoWork(woman, WorkWithPerson); 
+
+the previous code not work in .net 4.0 but works in 4.5
+
+public interface IEnumerable < out T > : IEnumerable {
+...
+} 
+For this interface, the data flow of type T objects is clear: they can only ever be retrieved from 
+methods supported by this interface, not passed into them. 
+
+# lazy listing with iterators
+- meaning of laziness 
+    + lazy enumeration, data should be fetched only when it is actually needed. 
+- .net enumeration interfaces
+public interface IEnumerable {
+IEnumerator GetEnumerator( );
+} 
+The only thing the interface IEnumerableactually allows you to do is to query another interface ( IEnumerator ) from a class. Here's the declaration of IEnumerator: 
+public interface IEnumerator {
+    object Current { get; }
+    bool MoveNext( );
+    void Reset( );
+} 
+- iterator functions
+in c# 2.0 allows you to create implementations of the IEnumerable/IEnumerator combination without ever implementing either of those interfaces manually
+
+public static IEnumerable < int > EndlessListFunction( ) {
+int val = 0;
+while (true)
+yield return val++;
+} 
+- returning IEnumerator
+use a class implement the IEnumerable<T> interface on the class iteself
+- chaining iterators
+public static IEnumerable < int > Take(int count, IEnumerable < int > source) {
+    int used = 0;
+    foreach (var item in source)
+    if (count > used++)
+    yield return item;
+    else
+    yield break;
+} 
+
+you could also create a apply function works with types other than int
+public static IEnumerable < T > Apply < T > (this IEnumerable < T > values,
+Func < T, T > calculation) {
+    foreach (T val in values)
+    yield return calculation(val);
+} 
+
+
+# Encapsulating Data in Closures
+- Constructing functions dynamically by anonymous function
+- the problem with scope
+static void Closures( ) {
+    //60
+    Console.WriteLine(GetClosureFunction( )(30));
+}
+static Func < int, int > GetClosureFunction( ) {
+    int val = 10;
+    Func < int, int > internalAdd = x = > x + val;
+    //20
+    Console.WriteLine(internalAdd(10));
+    val = 30;
+    //40
+    Console.WriteLine(internalAdd(10));
+    return internalAdd;
+} 
+one anonymous class will be created and add an anonymous function associate with the lambda expression
+- simplify the one called callback to anonymous function, demo to use webrequest
+private static void QueryVersion2(string clientId, string query) {
+    // Unrelated to this demo, but important: in the real world, make sure
+    // ‘query’ has been checked to be safe!
+    var request = WebRequest.Create(“http://www.google.com/search?q=” + query);
+    request.BeginGetResponse(
+    (IAsyncResult ar) = > {
+    var response = request.EndGetResponse(ar);
+    FeedBackToClient(clientId, response.GetResponseStream( ));
+    response.Close( );
+    }, null);
+} 
+
+
+# code is data
+- expression trees in .net
+    + support expression such as in LISP (list processs) language's eval
+    + triggered by the dynamic language runtime(DLR) development
+    + create a expression tree equal to anonymous lambda function
+    Func<int, int, int>add = (x, y)=>x + y;
+    Expression<Func<int, int, int>> addExpr = (x, y)=>x + y;
+    
+    the difference is the type variable holds the lambda expression, devrived from System.Linq.Expressions.Expression addExpr is an abstract representation of lambda, it can't be executed directly, .net can compile an expression tree at runtime
+    Func<int, int, int> addCompiled = addExpr.Compile();
+    
+    addCompiled has the same signature as the lambda, then it can be used as a function
+- analyzing expression
+treating code as data is that enables you to analyze the code at runtime, a class called ExpressionDumper which walks through an expression tree and outputs information
+ExpressionDumper.Output(), render the following
+LambdaExpression (
+    Parameters:
+        ParameterExpression (x)
+        ParameterExpression (y)
+    Body:
+        BinaryExpression:Add (
+            Left:
+                ParameterExpression (x)
+            Right:
+                ParameterExpression (y)
+        )
+)  
+Predicate<T> is functionally equivalent to Func < T, bool >
+- generating expressions
+- .net 4.0 specifics, lambda expression
+Func < int, int > fact = x = > {
+    int result = 1;
+    for (int m = 2; m < = x; m++)
+    result *= m;
+    return result;
+}; 
+
+construct the expression tree for the lambda expression
+
+static Func < int, int > ConstructRuntimeFact( ) {
+    var param = Expression.Parameter(typeof(int), “x”);
+    var resultVar = Expression.Variable(typeof(int), “result”);
+    var mVar = Expression.Variable(typeof(int), “m”);
+    var loopEnd = Expression.Label()
+    return Expression.Lambda < Func < int, int > > (
+            Expression.Block(
+                new[] { resultVar },
+                Expression.Assign(resultVar, Expression.Constant(1)),
+                Expression.Block(
+                    new[] { mVar },
+                    Expression.Assign(mVar, Expression.Constant(2)),
+                    Expression.Loop(
+                    Expression.Block(
+                    Expression.IfThen(
+                    Expression.Not(
+                    Expression.LessThanOrEqual(mVar, param)),
+                    Expression.Break(loopEnd)),
+                    Expression.MultiplyAssign(resultVar, mVar),
+                    Expression.PostIncrementAssign(mVar)),
+                loopEnd)),
+            resultVar),
+        param).Compile();
+} 
+
+
+# Implementing Well-known Functional Techniques in C#
+
+## Currying and Partial Application
+- decoupling parameters
+calling a function with an incomplete list of parameters
+- manual currying
+currying is a transformation technique that starts with a function with multiple parameters and converts it into a sequence that each accept only one parameter at a time
+Applying currying to this function means creating a function that accepts only one parameter, returns another function that takes the second parameter, and then returns the result of the addition. 
+    + example
+    Func < int, Func < int, int > > curriedAdd = delegate(int x) {
+        return delegate(int y) {
+            return x + y;
+        }
+    };
+    
+    use c# 2.0 later syntax, use lambda expression
+    
+    Func < int, Func < int, int > > curriedAdd = x = > y = > x + y;
+- automatic currying
+Here is the function Curry , which takes another function as a parameter and returns a curried 
+format function: 
+public static Func < T1, Func < T2, TR > > Curry < T1, T2, TR > (
+this Func < T1, T2, TR > func) {
+    return par1 = > par2 = > func(par1, par2);
+}
+- calling curried functions
+int result = curriedAdd(5)(3)
+- the class context, it is useful to use properties instead of fields to publish curried versions of functions
+    + the precise mechanism used to "prepare" the function before it's published can be much more complex than simple currying, such as include memoization and precomputation
+    + when the cost of preparing functions and the number of functions prepared in some way rise 
+    + when a create-on-demand technique is used, the static constructor is not needed any more
+    + properties provide encapsulation of implementation logic which is the typical reason to use properties for anything at all. 
+- What FCSlib Contains
+There are nine variations of Curry that work with Func < ... > , where the difference is the number of parameters the original function accepts. Such as
+public static Func < T1, Func < T2, TR > > Curry < T1, T2, TR > (
+    this Func < T1, T2, TR > func) {
+    return par1 = > par2 = > func(par1, par2);
+}
+public static Func < T1, Func < T2, Func < T3, TR > > > Curry < T1, T2, T3, TR > (
+this Func < T1, T2, T3, TR > func) {
+    return par1 = > par2 = > par3 = > func(par1, par2, par3);
+}
+public static Func < T1, Func < T2, Func < T3, Func < T4, TR > > > > 
+Curry < T1, T2, T3, T4, TR > (this Func < T1, T2, T3, T4, TR > func) {
+    return par1 = > par2 = > par3 = > par4 = > func(par1, par2, par3, par4);
+}
+- calling parts of functions
+the most important reason to use a curried format function is that it becomes possible to call this function with only some, but not all the parameters that are needed for the computation
+- why parameter order matters
+The important thing to decide about parameter order is which parameter in your function is most likely to be partially applied. 
+
+
+## Lazy Evaluation
+- what's good about being lazy
+    + c# compiler will automatic evaluate the expression pass into a function, which is different with Haskell program language
+    + to make lazy calculate some functions use delegate syntax in c#
+    private static void HigherOrderDoSomething(Func < int > a, Func < int > b) {
+        Console.WriteLine(“HigherOrderDoSomething called”);
+        if (a() != 0)
+        Console.WriteLine(b());
+    }     
+
+    HigherOrderDoSomething(() = > 0, BigCalculation); 
+- explicit lazy function
+    + uses an encapsulation of a function call, FCSlib provides a class Lazy<T> the implementation is below
+    public sealed class Lazy < T > {
+        public Lazy(Func < T > function) {
+            this.function = function;
+        }
+        public Lazy(T value) {
+            this.value = value;
+        }
+        readonly Func < T > function;
+        T value;
+        bool forced;
+        object forceLock = new object( );
+        Exception exception;
+        public T Force( ) {
+            lock (forceLock) {
+                return UnsynchronizedForce( );
+            }
+        }
+        public T UnsynchronizedForce( ) {
+            if (exception != null)
+                throw exception;
+            if (function != null & & !forced) {
+                try {
+                    value = function( );
+                    forced = true;
+                }
+                catch (Exception ex) {
+                    this.exception = ex;
+                    throw;
+                }
+            }
+            return value;
+        }
+        public T Value { get { return Force( ); } }
+        public bool IsForced { get { return forced; } }
+        public bool IsException { get { return exception != null; } }
+        public Exception Exception { get { return exception; } }
+    }
+    
+    The final feature of Lazy < T > is its thread safety
+
+    + use lazy<T> to calculate the bigdatacalue function
+    var lazyCalc = new Lazy < int > (BigCalculation); 
+    
+    + In .NET version 4.0, Microsoft has included Lazy < T > in the framework as System.Lazy <T>
+    
+- comparing the lazy evaluation techniques
+    + usability
+    if you have existing functions that take values as parameters it is easy change to replace with lazy<T>
+    + efficiency
+    make sure the calculation aren't executed when they are not needed
+- how lazy can you be
+
+
+## Caching Techniques
+- The need to remember
+    + computers are great at remembering things and computer things
+    + in functional programming, focus is on applying functions as opposed to handling state
+    
+    + two main cases
+        * precomputations, which is when you purposefully compute values before the actual algorithm runs
+        
+        * second is the situation in which you have function calls that are 
+        
+    + optimization says it's almost always a bad idea when it hanppens prematurely
+    
+    + Lazy<T> used a type of caching to prevent multiple evaluation of the same computation
+    
+    + in c# caching is an option, while in haskell it's not
+- Precomputation, it's a technique with which most programmers are familiar in one or another manifestation for example trigonmetric calculations are very important for 3d animation, often used
+    static void ImperativePrecomputation( ) {
+    double[] sines = new double[360];
+    for (int i = 0; i < 360; i++) {
+    sines[i] = Math.Sin(i);
+    }
+    // Now your algorithm is just going to look up the sine
+    // values in ‘sines’ instead of having to calculate them.
+    } 
+    
+    + the normalize function in C# which used % operator is different in python
+    class MainClass6
+    {
+        static void Main()
+        {
+            Console.WriteLine(5 % 2);       // int
+            Console.WriteLine(-5 % 2);      // int
+            Console.WriteLine(5.0 % 2.2);   // double
+            Console.WriteLine(5.0m % 2.2m); // decimal
+            Console.WriteLine(-5.2 % 2.0);  // double
+        }
+    }
+    /*
+    Output:
+    1
+    -1
+    0.6
+    0.6
+    -1.2
+    */
+    
+    python will treat negative int same as positive int value
+    
+    + example to use functional programming
+    static void DumbDemo1( ) {
+        string[] strings = {
+        “One”, “Two”, “Three”, “Four”, “Five”,
+        “Six”, “Seven”, “Eight”, “Nine”, “Ten”
+        };
+        Console.WriteLine(IsInListDumb(strings, “Three”));
+        Console.WriteLine(IsInListDumb(strings, “NotInList”));
+    } 
+    
+    change to this version to avoid the initialization strings for each function call
+    
+    var curriedLookup =
+    Functional.Curry < IEnumerable < string > , string, bool > (IsInListDumb < string > );
+    var precomputedLookup = curriedLookup(strings);
+    Console.WriteLine(precomputedLookup(“Three”));
+    Console.WriteLine(precomputedLookup(“NotInList”)); 
+    
+    Use this function to replace the curriedLookup will achieve the goal to lazy initialize and call the function    
+    static Func <T, bool> CleverListLookup <T> (IEnumerable < T > list) {
+        var hashSet = new HashSet<T>(list);
+        return item = > hashSet.Contains(item);
+    } 
+
+    use this function by
+    var lookup = CleverListLookup(strings);
+    Console.WriteLine(lookup(“Three”));
+    Console.WriteLine(lookup(“NotInList”))
+- functional solution for rotation example
+static Func < PointF, Func < double, PointF > > CreateFunctionalRotator( ) 
+{
+    Func < double, double > toRad = x = > x * Math.PI / 180.0;
+    Func < double, double > toDeg = x = > x / (Math.PI / 180.0);
+    
+    float[] sines = Functional.InitArray < float > (360,
+    i = > (float) Math.Sin(toRad(i)));
+    float[] cosines = Functional.InitArray < float > (360,
+    i = > (float) Math.Cos(toRad(i)));
+    
+    Func < int, int > normalize = v = > ((v % 360) + 360) % 360;
+    Func < int, float > sin = v = > sines[normalize(v)];
+    Func < int, float > cos = v = > cosines[normalize(v)];
+    Func < float, float > square = x = > x * x;
+    
+    return p = > a = > {
+        double polarLength = Math.Sqrt(square(p.X) + square(p.Y));
+        double polarAngle = toDeg(Math.Atan(p.Y / p.X));
+        int newAngleInt = (int) Math.Round(polarAngle + a);
+        float cartesianX = (float) polarLength * cos(newAngleInt);
+        float cartesianY = (float) polarLength * sin(newAngleInt);
+        return new PointF(cartesianX, cartesianY);
+    };
+} 
+
+use the CreateFunctionalRotator
+var rotate = CreateFunctionalRotator( );
+Console.WriteLine(rotate(new PointF(4, 3))(3));
+Console.WriteLine(rotate(new PointF(10, 25))(74)); 
+
+the function creates several local elements, the helper functions and the lookup arrays. These are stored in a closure by the compiler, so they stay available when the newly constructed function is returned to the caller. 
+- Memoization
+memoization is a technique to cache values that have been returned previously by function calls. 
+There is a distinction between internal and external memoization
+
+Referential transparency, the function returns the same value for every call that uses the same set of parameters and the function doesn't have side effects
+
+use internal memorization to create square function
+static Dictionary < int, int > squareInternalMemory;
+
+private static int SquareInternalMemoized(int x) {
+    if (squareInternalMemory == null)
+        squareInternalMemory = new Dictionary < int, int > ( );
+    if (!squareInternalMemory.ContainsKey(x)) {
+        int result = x * x;
+        squareInternalMemory[x] = result;
+        return result;
+    }
+    return squreInternalMemory[x];
+}
+The example in FCSlib, the approach of calling ContainKey, followed by a separate indexer access has been used occasionally
+
+static int SquareInternalAutoMemoized(int x) {
+    var memory = Memoizer < int, int > .GetMemory(“SquareInternalAutoMemoized”);
+    if (!memory.HasResultFor(x)) {
+        int result = x * x;
+        memory.Remember(x, result);
+        return result;
+    }
+    return memory.ResultFor(x);
+} 
+
+external memoization, use a helper function to create memory function
+static Func <P, R> Memoize <P, R> (this Func <P, R> f) {
+    var memory = new Dictionary < P, R > ( );
+    return arg = > {
+        if (!memory.ContainsKey(arg))
+            memory[arg] = f(arg);
+        return memory[arg];
+    };
+} 
+
+It is also possible to use the Memoizer helper class in the definition of Memoize inplementation in FCSlib 
+static Func < P, R > Memoize < P, R > (this Func < P, R > f, string memoryKey) {
+    return arg = > {
+        var memory = Memoizer < P, R > .GetMemory(memoryKey);
+        if (!memory.HasResultFor(arg))
+            memory.Remember(arg, f(arg));
+        return memory.ResultFor(arg);
+    };
+}
+- Deep memoization
+    + one problem with memoization techniques, only works with one parameters, if more that one then the data structures needed for the memory get complex very quickly
+    The type safe of generic functions in .net makes it difficult to write a helper that performs nested memoization automatically, but it's possible with the help of a bit of reflection
+    private static MethodInfo deepMemoizeMethodInfo;
+    private static MethodInfo DeepMemoizeMethodInfo {
+        get {
+            if (deepMemoizeMethodInfo == null) {
+                deepMemoizeMethodInfo = typeof(Functional).GetMethod(
+                    “DeepMemoize”, 
+                    BindingFlags.Public | BindingFlags.Static);
+            }
+            return deepMemoizeMethodInfo;
+        }
+    }    
+
+    public static Func < P, R > DeepMemoize < P, R > (this Func < P, R > f) {
+        return arg = > {
+            MethodInfo fInfo = f.Method;
+            string memoryKey = GetDefaultMemoryKey(fInfo);
+            var memory = Memoizer < P, R > .GetMemory(memoryKey);
+            if (!memory.HasResultFor(arg)) {
+                R result = f(arg);
+                Type resultType = typeof(R);
+                if (typeof(System.Delegate).IsAssignableFrom(resultType)) {
+                    Type[] parameterTypes = resultType.GetGenericArguments();
+                    MethodInfo typedDeepMemoizeMethod =
+                    DeepMemoizeMethodInfo.MakeGenericMethod(parameterTypes);
+                    R memoizedResult = (R) typedDeepMemoizeMethod.Invoke(
+                        null, 
+                        new object[] { result }
+                    );
+                    memory.Remember(arg, memoizedResult);
+                }
+                else
+                    memory.Remember(arg, result);
+            }
+            return memory.ResultFor(arg);
+        };
+    }
+    
+    the relative Memoize function
+    public static Func < P1, P2, R > Memoize < P1, P2, R > (Func < P1, P2, R > f) {
+        var memory = new Dictionary < P1, Dictionary < P2, R > > ( );
+        return (a, b) = > {
+            Dictionary < P2, R > aMemory;
+            bool created = false;
+            if (!memory.ContainsKey(a)) {
+                aMemory = new Dictionary < P2, R > ( );
+                created = true;
+            }
+            else
+                aMemory = memory[a];
+            if (created || !(aMemory.ContainsKey(b))) {
+                var result = f(a, b);
+                aMemory[b] = result;
+                return result;
+            }
+            else
+                return aMemory[b];
+        };
+    } 
+    the number of lookups that need to be performed to get to the correct nested dictionary still depends on the number of parameter you are handling
+- Considerations on Memoization, these are some general considerations for and against memoization as well as the details of its optional implementation for any given scenario
+    + data types for the cache, use dictionary type for cache have good performance but not thread save
+    use of immutable data structures for caching is a possibility and makes the cache thread-safe might enable lockless operation
+    
+    + cache expiry
+    indefinite growth of caches over long periods of time can be prevented
+    it becomes possible to use memoization with functions that are not pure
+
+    
+## Calling Yourself
+- Recursion in C#
+- Tail Recursion
+tail call, is a call that happens at the end of the function execution, example
+static void Recurse(int x) {
+    Console.WriteLine(“Value: “ + x);
+    if (x == 100000000)
+        return;
+    Recurse(x + 1);
+} 
+- Accumulator Passing Style
+make lambda expression do the recursive call by add a delegate variable and assigning null to it at first. Allow implement recursive algorithms using tail calls
+static int CalcLengthAccWrapper < T > (FCSColl::List < T > list) {
+    Func < FCSColl::List < T > , int, int > accumulator = null;
+    accumulator =
+    (l, acc) => l.IsEmpty ? acc : accumulator(l.Tail, acc + 1);
+    return accumulator(list, 0);
+} 
+
+- Continuation Passing Style, CPS
+it is a technique that can be used for same purpose as a accumulator, allowing the implementation of recursive algorithms using tail calls
+static int SumCPS(FCSColl::List < int > list) {
+Func < FCSColl::List < int > , Func < int, int > , int > recursor = null;
+    recursor = (l, cont) = > 
+        l.IsEmpty ?
+        cont(0) :
+        recursor(l.Tail, x = > cont(x + l.Head));
+    return recursor(list, x = > x);
+} 
+
+- Indirect Recursion
+    + direct recursion, one single function involved that called iteself
+    + indirect recursion, several functions depend upon one another
+    
+
+# Standard Higher Order Functions
+- well know higher order functions are, Map, Filter, Fold( also called reduce in python other other kinds of language)
+- implementation of map in c#, FCSlib library
+Using iterators in C#, Mapcan be implemented lazily. Here is the implementation from FCSlib: 
+static IEnumerable < R > Map < T, R > (Converter < T, R > function, IEnumerable < T > list) 
+{
+    foreach (T sourceVal in list)
+        yield return function(sourceVal);
+} 
+- filter, is a function that applies criteria to elements in a list
+public static IEnumerable < T > Filter < T > (Predicate < T > predicate,
+IEnumerable < T > list) {
+    foreach (T val in list)
+    if (predicate(val))
+        yield return val;
+} 
+- fold implementation in FCSlib, The most important ones are the left and the right fold. the sequence of numbers is added up in a particular order from left to right
+public static R FoldL < T, R > (Func < R, T, R > accumulator, R startVal,
+IEnumerable < T > list) {
+    R result = startVal;
+    foreach (T sourceVal in list)
+        result = accumulator(result, sourceVal);
+    return result;
+} 
+
+a simple call to sum up values
+var sumof1to10 = Functional.FoldL((r,v)=> r+v, 0, Enumerate.Range(1, 10));
+- Map, Filter, Fold in LINQ
+- Standard Higher other functions
+
+
+# Sequences
+- understanding list comprehensions, A list, on the other hand, is a collection of elements that exist in memory and can be readily read, 
+typically using direct indexed access
+- a functional approach to iterators to create sequences can be constructed
+public static IEnumerable<T> Sequence<T>(Func<T, T> getNext, T startVal, Func<T, bool> endReached)
+{
+    if (getNext == null)
+    {
+        yield break;
+    }
+    yield return startVal;
+    T val = startVal;
+    while (endReached == null || !endReached(val))
+    {
+        val = getNext(val);
+        yield = return val;
+    }
+}
+
+use the sequence function
+var oddNumbersFrom1To19 = Functional.Sequence(x = > x + 2, 1, x = > x > = 19);
+- working with ranges, Range < T >  is a class defined in the FCSlib.Data namespace, there are also other implementations not use classes at all, but the disadvantage is they cannot be used for certain functionality like cheking is a value is with the range or not
+first few lines of the implementation of Range
+
+public class Range < T > : IRange < T > {
+    public Range(T start, T end, Func < T, T > getNext, Comparison < T > compare) {
+        this.start = start;
+        this.end = end;
+        this.compare = compare;
+        this.sequence = Functional.Sequence < T > (getNext, start,
+        v = > compare(getNext(v), end) > 0);
+    }
+    public Range(T start, T end, Func < T, T > getNext) :
+    this(start, end, getNext, Compare) { }
+
+    private static int Compare < U > (U one, U other) {
+        return Comparer < U > .Default.Compare(one, other);
+    }
+} 
+- Restrictions
+syntax and performance
+
+
+# Constructing Functions from Functions
+- function composition, there are two main technique, use partial application and other is compoistion
+- partially applying algorithms
+- composing functions
+FCSlib contains a helper function called Compose that automates help to compose functions. Here it is: 
+public static Func < TSource, TEndResult > Compose < TSource, TIntermediateResult, TEndResult > (
+    this Func < TSource, TIntermediateResult > func1,
+    Func < TIntermediateResult, TEndResult > func2) 
+{
+    return sourceParam = > func2(func1(sourceParam));
+} 
+
+use example
+Func < int, int > calcB = a = > a * 3;
+Func < int, int > calcC = b = > b + 27;
+var calcCFromA = Functional.Compose(calcB, calcC);
+// Alternatively:
+var calcCFromA_ = calcB.Compose(calcC); 
+
+- Advanced partial application
+currying is the conversion step from a multi - parameter function to a chain of single -parameter functions.
+
+Using one of those helper functions, the line to create a curried Mapfunction to work with int types can be rewritten like this: 
+var curriedMap = Functional.Curry(Functional.MapDelegate < int, int > ()); 
+The function MapDelegate in FCSlib looks like this: 
+public static Func < Converter < T, R > , IEnumerable < T > , IEnumerable <R>> MapDelegate < T, R > ( ) {
+    return Map < T, R > ;
+} 
+
+public static Func < T2, T3, TR > Apply < T1, T2, T3, TR > (Func < T1, T2, T3, TR > function, T1 arg) {
+    return (arg2, arg3) = > function(arg, arg2, arg3);
+} 
+
+use the apply function to overwrite FoldL method for specific <int, int> summary, both of the implements are equivalent to each other
+var sumList = Functional.Apply(Functional.FoldLDelegate < int, int > ( ), (r, v) = > r + v, 0);
+var sumList = Functional.Apply(Functional.FoldLDelegate < int, int > ( ), (r, v) = > r + v); 
+
+- Combining approaches
+example compose add N for a variable
+
+Func < int, Func < int, int > > add = x = > y = > x + y;
+var add5PA = add(5);
+Func < int, int > add5 = x = > add(5)(x); 
+
+var avgCalculator = Functional.Compose(Functional.Apply(Functional.FoldLDelegate < decimal, 
+                                    Tuple<decimal, decimal>> (),
+                                    (r, v) = > Tuple.Create(r.Item1 + 1,
+                                                            r.Item2 + v),
+                                    Tuple.Create(0m, 0m)),
+                                    t = > t.Item2 / t.Item1); 
+
+
+# Optional Values
+- The meaning of nothing
+null is meaning nothing in C but in memory there is always a value and no built-in way of saying this byte is contains nothing
+- Optional values in functional programming or .net nullable variable is used to solve the C nothing relative problems
+there is a Option<T> in F#
+- The implementation of an Option type which is not the actual implementation in FCSlib
+public sealed class Option < T > {
+    private readonly T value;
+    public T Value 
+    {
+        get { return value; }
+    }
+    
+    private readonly bool hasValue;
+    public bool HasValue 
+    {
+        get { return hasValue; }
+    }
+    public bool IsSome {
+    get { return hasValue; }
+    }
+    
+    public bool IsNone 
+    {
+        get { return !hasValue; }
+    }
+    
+    public Option(T value) 
+    {
+        this.value = value;
+        this.hasValue = true;
+    }
+    
+    private Option(){}
+    public static readonly Option < T > None = new Option < T > ( );
+} 
+
+
+# Keeping data from changing
+- change is not always good
+persistent data is simple for a particular purpose, in a unity of work the data is not changed
+- simple immutable data types, .net framework msdn will significantly mark up data structure is thread save or not
+public class MutableProduct 
+{
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+    }
+    public class MutableOrderLine 
+    {
+        public MutableProduct Product { get; set; }
+        public int Count { get; set; }
+        public decimal GetValue( ) {
+        return Product.Price * Count;
+    }
+}
+
+[TestFixture]
+public class EphemeralTests {
+    [Test]
+    public void TestOrderLineValue( ) {
+        var product = new MutableProduct { Name = “Rubber boat”, Price = 16.99m };
+        var line = new MutableOrderLine { Product = product, Count = 3 };
+        Assert.AreEqual(50.97m, line.GetValue( ));
+    }
+} 
+- Being static is good, use readonlyl keyword in C# to make sure the data is unchangeable after assign a value 
+public class PersistentProduct 
+{
+    public readonly string Name;
+    public readonly decimal Price;
+    public PersistentProduct(string Name, decimal Price) 
+    {
+        this.Name = Name;
+        this.Price = Price;
+    }
+}
+note this implementation have a few interesting details
+    + readonly keyword
+    + constructor provides the only way of setting the values
+    + public fields are being used to store the values
+    + implementation of GetValue don't need to be changed
+    + one of the major reason to use properties is they are fully compatible with standard data binding mechanisms implemented by .net windows forms
+- question to use persistent data
+    + when do you call a data structure persistent?
+    + what happens if data really needs to change?
+    + are persistent data structures always the best answer?
+- a matter of depth
+    + cloning
+    + automatic cloning, FCSlib implements some functionality that can be useful to automate the process of cloning to a certain extent
+    var chicken = new PersistentProduct(“Rubber Chicken”, 10.99m);
+    var orderLine = new PersistentOrderLine(chicken, 5);
+    chicken = chicken.CloneWith(new Dictionary < string, object > {
+        {“Price”, 8.49m}
+    });
+    orderLine = orderLine.CloneWith(new Dictionary < string, object > {
+        {“Product”, chicken}
+    });
+    
+    The method CloneWith < T >  is implemented as an extension method: 
+    
+    public static T CloneWith < T > (this T source, 
+                                     Dictionary <string,object> newValues) {
+        return (T)GetCreator(typeof(T))(source, newValues);
+    }
+    
+    GetCreator() is a function that returns a function to create a new object of a certain type
+    
+    static ConcurrentDictionary<Type, 
+                                Func<object, IDictionary <string, object>, 
+                                object>> creators =
+        new ConcurrentDictionary <Type, 
+                                  Func<object, IDictionary<string,object>,
+                                  object>>();
+    static Func < object, IDictionary < string, object > , object > GetCreator(Type type) {
+        return creators.GetOrAdd(type, k = > CreateCreator(k));
+    } 
+    
+    when a creator needs to be generated, the function CreateCreator does the heavy lifting
+    
+    static Func <object, IDictionary <string, object>, object> CreateCreator(Type type) 
+    {
+        var ctors = type.GetConstructors( );
+        if (ctors.Length > 1)
+            throw new InvalidOperationException(String.Format(“Can’t clone type {0} because it has more than one constructor.”, type));
+        var ctor = ctors[0];
+        var cparams = ctor.GetParameters( );
+        var paramCount = cparams.Length;
+        var paramArray = new Expression[paramCount];
+        var sourceParam = Expression.Parameter(typeof(object), “s”);
+        var dictParam = Expression.Parameter(typeof(IDictionary < string, object > ), “d”);
+        
+        for (int i = 0; i < paramCount; i++) 
+        {
+            ConstantExpression paramName = Expression.Constant(cparams[i].Name);
+            paramArray[i] = Expression.Convert(
+                Expression.Call(
+                    Expression.Call(GetOptionValueMethod, 
+                                    dictParam, 
+                                    paramName),
+                    OptionObjectGetValueMethod,
+                    Expression.Lambda(
+                        Expression.Invoke(
+                            Expression.Call(GetAccessorMethod,             
+                                            Expression.Constant(type),
+                                            paramName),
+                            sourceParam))),
+                cparams[i].ParameterType);
+        }
+        Expression <Func <object,IDictionary <string, object>, object>> exp =
+            Expression.Lambda <Func <object, IDictionary<string,object>, object>> (Expression.New(ctor, paramArray), 
+                      sourceParam, 
+                      dictParam);
+        return exp.Compile( );
+    }
+    
+    static Option <object> GetOptionValue(IDictionary <string, object> dict, string key)
+    {
+        object result;
+        if (dict.TryGetValue(key, out result))
+            return result.ToOption();
+        return Option.None;
+    }
+    
+    static MethodInfo getOptionValueMethod;
+    static MethodInfo GetOptionValueMethod {
+        get {
+            if (getOptionValueMethod == null) {
+                getOptionValueMethod =
+                new Func < IDictionary < string, object > , string,
+                Option < object > > (GetOptionValue).Method;
+            }
+            return getOptionValueMethod;
+        }
+    }
+    
+    static MethodInfo optionObjectGetValueMethod;
+    static MethodInfo OptionObjectGetValueMethod {
+        get {
+            if (optionObjectGetValueMethod == null) {
+                optionObjectGetValueMethod =
+                typeof(Option <object> ).GetMethod(“GetValue”,
+                BindingFlags.Instance | BindingFlags.Public);
+            }
+            return optionObjectGetValueMethod;
+        }
+    }
+    
+- look at locking
+    + is restricts how exactly concurrent execution can occur
+        + locking has a cost
+        + locking prevents parallelization
+        + locking is very hard to get right
+- The persistent data list for concurrent handling
+FCSlib.Data.Collections.List<T>, the list element will keep available until no reference to it
+- alternatives to immutable data types
+- Queue, it has two lists internally, "front" and "rear"
+    + you will understand the specific state of the queue with
+- Unbalanced Binary Tree, don't save the dummy or equal values
+public sealed class UnbalancedBinaryTree < T > : IEnumerable < T > 
+{
+    private readonly bool isEmpty;
+    public bool IsEmpty { get { return isEmpty; } }
+    
+    private readonly UnbalancedBinaryTree < T > left;
+    public UnbalancedBinaryTree < T > Left {
+        get {
+            return left;
+        }
+    }
+    
+    private readonly UnbalancedBinaryTree < T > right;
+    public UnbalancedBinaryTree < T > Right {
+        get {
+            return right;
+        }
+    }
+    
+    private readonly T value;
+    public T Value {
+        get {
+            return value;
+        }
+    }
+    
+    public static readonly UnbalancedBinaryTree < T > Empty = new UnbalancedBinaryTree < T > ( );
+    
+    public UnbalancedBinaryTree( ) {
+        isEmpty = true;
+    }
+    
+    public UnbalancedBinaryTree(UnbalancedBinaryTree < T > left, T value, UnbalancedBinaryTree < T > right) {
+        this.left = left;
+        this.right = right;
+        this.value = value;
+    }
+    
+    public static UnbalancedBinaryTree < T > Insert(T value,
+    UnbalancedBinaryTree < T > tree) {
+        if (tree.IsEmpty) {
+            return new UnbalancedBinaryTree < T > (Empty, value, Empty);
+        }
+        else {
+            int compareResult = Comparer < T > .Default.Compare(value, tree.Value);
+            if (compareResult < 0)
+                return new UnbalancedBinaryTree < T > (Insert(value, tree.Left),
+                                                       tree.Value,
+                                                       tree.Right);
+            else if (compareResult > 0)
+                return new UnbalancedBinaryTree < T > (tree.Left,
+                                                       tree.Value,
+                                                       Insert(value, tree.Right));
+            else
+                return tree;
+        }
+    }
+...
+}
+- Red/Black Tree
+Imagine each node in a usual binary search tree to have a color in addition to the value and left and right members that tree nodes usually have. 
+The color can be either red or black. 
+There are a number of rules that define how  the nodes are colored and which color combinations are allowed when looking at a parent node and its children. 
+During the insertion there is a blancing operation
+a tree of little depth can be searched faster than one of great depth
+- Alternatives to persistent data types
+    + .net 4.0 have namespace System.Collections.Concurrent namespace has a few collection types that are both thread save and generically typed
+    + lock less algorithms, is another big research area, have a chance to dip into it with the Interlocked class as well as the new .NET 4.0 collection classes. 
+    Interlock can take advantage of certain CPU-level features of modern computers, to implement very basic operations on variables in a way that is atomic
+
+
+# Monads
+- what's in typeclass
+    + Obtain a type
+    + Decide on a typeclass
+    + create a typeclass
+- what's in a monad, Haskell
+monad abstraction is that a data type should exist taht wraps other data, there should be functions declared that can perform a/the wrapping itself
+- two sample monads
+- why linq doesn't do it for monads
+- binding with selectmanay, System.Linq.Enumerable class, function SelectManay method
+
+# Putting functional programming into Action
+## Integrating Functional Programming Approaches
+- functional programming in refactoring
+- PLINQ
+parallel.ForEach
+- Writing New Code
+- Use Static Methods
+static methods is a general guideline, any pure function can be made static
+a commonly discussed question is how to handle method paremeters when the values received by the method as parameters are ones are already available in the class
+public class DataThing 
+{
+    private int field1;
+    private int field2;
+    ...
+    private string field13;
+    public void DoSomethingWithFields1And5() 
+    {
+        // doing something that involves fields 1 and 5
+    }
+    public int CalculateWithFields() 
+    {
+        // use all or several of the fields in the class to perform some
+        // calculation and return the result
+    }
+} 
+
+keep the method CalcaulateWithFields with required parameters in the class or not. If pass all the parameters the member function will be come a pure function which is fit for called by multi threading
+
+a guideline to recommend when you are written a method that does not require access to any field in the class it lives in, make it static!
+
+- Prefer anonymous methods over named ones
+anonymous methods can't be reused in object oriented programming, on the other hand named methods don't have support for closures.
+- Prefer Higher Order Functions over Manual Algorithm Implementation
+    + template method pattern is a design approach 
+private static void SumIntsImperative(IEnumerable < int > ints) 
+{
+    int result = 0;
+    foreach (int v in ints)
+    result += v;
+    Console.WriteLine(result);
+}
+private static void SumIntsFunctional(IEnumerable < int > ints) 
+{
+    var result = Functional.FoldL((s, v) = > s + v, 0, ints);
+    Console.WriteLine(result);
+} 
+
+use higher order functions only benefit for all the developer understand the functional programming
+- Prefer immutable data, which is required for multi threading or distribute system, such as use the readonly keyword
+- Watch Behavior implementation in classes
+- finding likely candidates for functional programming
+    + F#
+    
+    
+# The MapReduce Pattern
+- basic concept is simple to describe, google use the canonical example of counting word occurrences in text
+    + map step splits the text into a list of word, mapReduce generally works with key/value pairs, so example usually use a data type for this with a pair of the word and a 1
+    + for each unique key in the list of pairs, the reduce step is executed. the reduce step then accumulates the data and return the result
+- several things noteworthy about 
+    + the group data structure has a mutable values list
+    + the group function uses a helper dictionary to facilitate fast lookups
+    + before grouping is performed, an extraction function is executed to retrieve the element from the source data
+- abstracting the problem
+
+
+# Applied functional modularization
+- executing sql code from an application
+static void FillDatabase( ) {
+using(var conn = new SqlCeConnection(DBCONNSTR)) 
+{
+    conn.Open( );
+    try 
+    {
+        using (var trans = conn.BeginTransaction( )) 
+        ExecuteSQL(trans, “create table people(id int, name ntext)”);
+        trans.Commit();
+    }
+    finally
+    {
+        conn.Close();
+    }
+}
+simplify the less used utility function into lambda expression to simplify the codes
+
+- rewriting the function with partial application and precomputation in mind
+
+# Existing Projects Using Functional Techniques
+- The .net framework
+IEnumerable and IEnumerator interfaces provide one example of framework feature that allows for all the lazy evaluation goodness of sequences in functional languages
+- LINQ
+- MapReduce implementations
+one complex implementation is called Hadoop, created by Doug Cutting, which is a open source project
+MongoDB has built-in support for the MapReduce pattern which is normally controlled by JavaScript
+- NUnit
+
+    
+
+
+    
+    
+    
+- why remembering previous results is important in functional programming
+- computing information before you need it
+- caching data as you go
+- considerations on memoization
+
+
+
+
+## Calling Yourself
+## Standard Higher Order Functions
+## Sequences
+## Constructing Functions from Functions
+## Optional Values
+## Keeping Data from Changing
+## Monads
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

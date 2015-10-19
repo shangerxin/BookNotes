@@ -1,0 +1,182 @@
+CLR Threading; Note=Erxin
+
+## Process & Threads
+- threads execute code, in process address space
+	+ all threads have access all data within that process
+	+ managed threads within an AppDomain which is sub domain of win32 process
+	+ each thread has its own callstack & copy of the cpu registers
+	+ in window where there is no thread exists in process, window will turn down that process
+- multi-threading use-case
+	+ parallelizing
+	+ i/o process
+	+ keep UI alive
+- Thread.sleep(), will make current thread sleep 
+- multi-threading caveats
+	+ slower execution on single core machine
+	+ add program complexity
+- starting threads
+include System.Threading module
+Thread t = new Thread(static_function_name);
+t.Name = thread_name;
+t.Priority = ThreadPriority.BelowNormal
+- get current threadid by Thread.CurrentThread.ManagedThreadId
+- thread is a register and stack wrapper of the execute codes for each process
+- thread entry point methods
+	+ void EntryPointMethod(), msdn/threadstart
+	+ void EntryPointMethod(object stateArg), msdn/parameterizedThreadStart
+	+ method may be instance or static, the method also could be a class instance method
+	+ ex.
+	Thread t = new Thread(method_name);
+	t.Start(parameters);
+	static void method_name(object stateArg){}
+- Thread lifetime
+	+ as a result of standard method return
+	+ as result of unhandled exception
+		* encountered by the thread itself
+		* induced by another thread using Interrupt or Abort
+	+ IsAlive is a snapshot of the specify thread state
+- Coordinating Thread Shutdown
+	violate type flag;
+	Thread t = new Thread(method_name);
+	t.Start(parameters);
+	flag = cancel;
+	t.join([wait_time]); //join method will block the caller thread to wait for the specify thread(t) to end
+	...
+	static void method_name(object stateArg)
+	{
+		while(check_the_flag){}
+	}
+- thread pool
+	+ a thread have a property have a IsBackGround property is means the same as DeamonThread property in python
+	+ thread is a resouce in clr
+	+ three styles of interaction with the thread pool
+		* threadPool.QueueUserWorkItem
+		* delegate.BeginInvoke
+		* asynchronouse i/o
+	+ ThreadPool.QueueUserWorkItem, this will make the clr to greate a thread if there is no thread in the pool
+	ThreadPool.QueueUserWorkItem(functionName, functionParameters);
+	multiple reader threads means callback invocation order is not guaranteed
+	+ use the interact window when debug type in the command 
+	!threadpool to check current running threads
+	!threads, dump all the threads info
+	!dumpheap
+	!do object_address
+- use delegate with thread pool
+	+ delegate keyword is use to define a function type, the compiler will generate the BeginInvoke and EndInvoke method and clr will implement the BeginInvoke and EndInvoke method when the codes run.
+	+ the delegate's BeginInvoke method could be call directly, during this time the clr will queue them to the threadpool to run the method pointed by the delegate
+	+ deleaget is a class when the clr implement it
+	ex.
+	delegate void BinaryOperation(int, int);
+	BinaryOperation bo = Add;
+	bo.BeginInvoke(2, 2, null, null);  //the two null parameters are callback and state object;
+- AsyncI/O, it's difference with the delegate or ThreadPool.QueueUserWorkItem
+	+ AsyncI/O only send the request to the hardware and until the I/O operation finished then it will dispatch the a thread from the threadpool to deal with the data but the delegate and queueUserWorkItem are dispatch the thread immediately when they are called.
+	
+## Thread synchronization
+- critical section, it is action by multiple threads and have shared resource
+- race condition solution
+	+ atomic updates, most processors support atomic updates of word-sized data
+	atomic operation means can't be interrupt
+	word-sized data means cpu related date size, such as 32 bit cpu means 32 bit data size.
+		* processor related asm
+		mov ecx, dword ptr [sum] 			;get the memory variable sum's address into ecx
+		mov eax, 1
+		lock xadd dword ptr [ecx], eax  ;lock the operation and read the data from the address in ecx and add
+		* interlock class for .net programmer
+		System.Threading.Interlocked.Xxx
+		Interlocked.Increment(ref varable);
+- Wait based Synchronization primitives
+all clr object have a header of lock which will be manage by the clr lock table to do the multithread lock operation
+	* locks type in System.Threading namespace
+		+ monitor, gated access to a resource, thread enter and exit the monitor  to use the resource
+			* monitor ex.
+			Monitor.Enter(object);
+			...	//The codes between enter and exit are syncronized
+			Monitor.Exit(object);
+			Note: if the codes throw unhandled exception main cause dead lock, to solve this use
+			Monitor.Enter(object);
+			* safe use
+			try
+			{...}
+			finally
+			{Monitor.Exit(object);}
+			All above equals to lock
+			* equal to lock
+			lock(object)
+			{...}
+			* Hold & Wait with monitors
+			Queue<type> _queue = new Queue<type>();
+			...
+			lock(_queue)
+			{
+				//It's must to use the while key word to check the flag again when thread wake up
+				while(_queue.Count == 0) 
+				{
+					Monitor.wait(_queue); //This will make the current thread sleep and temply release the lock
+				}
+			}
+			...
+			lock(_queue)
+			{
+				_queue.Enqueue(object);
+				Monitor.PulseAll(_queue); 	//This will send the signal to wake up all the waiting thread to continue
+			}
+		+ mutex
+		+ readerWriterLockSlim
+		+ ManualResetEvent, AutoResetEvent
+		Once it has been signaled, ManualResetEvent remains signaled until it is manually reset. That is, calls to WaitOne return immediately.
+		 AutoResetEvent remains signaled until a single waiting thread is released, and then automatically returns to the non-signaled state. If no threads are waiting, the state remains signaled indefinitely.
+		+ Semaphore	
+		The count on a semaphore is decremented each time a thread enters the semaphore, and incremented when a thread releases the semaphore. When the count is zero, subsequent requests block until other threads release the semaphore. 
+		There is no guaranteed order, such as FIFO or LIFO.
+		The Semaphore class does not enforce thread identity on calls to WaitOne or Release.
+		 local semaphores and named system semaphores. If you create a Semaphore object using a constructor that accepts a name, it is associated with an operating-system semaphore of that name. Named system semaphores are visible throughout the operating system, and can be used to synchronize the activities of processes. You can create multiple Semaphore objects that represent the same named system semaphore, and you can use the OpenExisting method to open an existing named system semaphore.
+	* aquire lock -> use resource -> release lock
+- dead lock
+	* can occur but not necessary when more thread competing for the same set of locks
+	* probability increase as of threads/processors/cores increase
+	* may only be temporary, if timeouts are used in all lock acquisition calls
+	* Avoid dead lock
+	When multiple thread have to use same set of locks to avoid dead lock should make protocol to make sure all the thread get the lock at the same sequence and release at the reverse sequence
+- Mutexes
+	* a mutex is a win32 kernel object
+	* System.Threading.Mutex, provides an FCL wrapper of managed code
+	* benefits
+		+ support timeout lock
+		+ nameable, enabling cross-process thread synchronization
+		+ enable deadlock free multiple lock via WaitHandle.WaitAll
+		+ tradeoff
+		incur roundtrip to/from kernel mode, .net will automatically release the mutext object but GC make cause a delay mean while the relative object of mutex will still keep the memory during this time
+	* ex.
+	Mutex _lock = new Mutex();
+	...
+	if(_lock.waitone([timeout_millisecond]))
+	{
+		try
+		{
+			handle_some_thing;
+		}
+		finally
+		{
+			_lock.ReleaseMutex();
+		}
+	}
+	...
+	//Get the mutex lock together by WaitAll(lock);
+	Mutex[] _locks = {first_lock, second_lock};
+	if(WaitHandle.waitAll(locks)
+	{
+		try
+		{
+			...
+		}
+		finally
+		{
+			foreach(var lock in _locks)
+			{
+				lock.ReleaseMutex();
+			}
+		}
+	}
+
+

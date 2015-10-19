@@ -1,0 +1,302 @@
+﻿Python Gray Hat=Justin.Seitz;Note=Erxin
+
+# Foreword
+- high-level languages for exactly this sort of thing 
+http://philosecurity.org/2009/01/12/interview-with-an-adware-author
+- python is the natural leader in the hacking programming language 
+- all source will be post to 
+http://www.nostarch.com/ghpython.htm
+
+# setting up your development environment 
+- the world is your osyster, show you how to crack it open 
+- operation system requirements, window 32 bit 
+- install python
+    + on linux
+    $ wget http://python.org/ftp/python/2.5.1/python-2.5.1.tgz
+    $ tar -zxvf python-2.5.1.tgz
+    $ mv python-2.5.1 python25
+    $ cd python25
+    $ ./configure --prefix=/usr/local/python25
+    $ make && make install 
+    
+    $ export PATH=/usr/local/Python25/:$path
+
+- hacker's best friend, ctypes, enable call function in dynamically linked libraries and has extensive capabilities for creating complex C datatypes, and low level memory manipulation 
+
+- using dynamic libraries 
+    + dynamic link library is a compiled binary that is linked at runtime to the main process executable 
+    on window called dynamic link library(dll), on linux called shared objects(so) 
+    these binary expose functions through exported names which get resolved to actual addresses in the memory 
+    in ctypes all the dirty works is already done 
+    
+    + three ways to load dynamic libraries in ctypes 
+        * cdll(), is used for loading libraries that export functions using the standard cdecl calling convention 
+        * windll(), load dll that export functions using stdcall calling convention which is native win32 api
+        * oledll(), exactly like windll(), however it assumes that the exported functions return a window hresult error code which is used for specifically for error messages returned from microsoft component object model(COM) functions 
+
+    + example, resolve the printf() function 
+        * on window c runtime is msvct.dll located in %windir%\system32
+        >>> from ctypes import *
+        >>> msvcrt = cdll.msvcrt
+        >>> message_string = "Hello world!\n"
+        >>> msvcrt.printf("Testing: %s", message_string)
+        
+        * on linux 
+        >>> from ctypes import *
+        >>> libc = CDLL("libc.so.6")
+        >>> message_string = "Hello world!\n"
+        >>> libc.printf("Testing: %s", message_string)
+    + calling convention, includes the order of how function parameters are allocated and pushed onto stack or passed to registers 
+        * cdecl, parameters are pushed from right to left and caller of the function is responsible for clearing the arguments from the stack which is used by most C on x86 architecture 
+        
+        example in call
+        int python_rocks(reason_one, reason_two);
+        in x86 assembly 
+        push reason_two
+        push reason_one
+        call python_rocks
+        add esp, 8
+        
+        increment esp(stack pointer) 8 bytes, there are two parameters and each is 4 bytes 
+        
+        * stdcall, in stdcall the clear stack is done by the function not the caller which is used by win32 api
+        in C
+        int python_rocks(reason_one, reason_two);
+        
+        in x86 assembly 
+        push color_two
+        push color_one
+        call my_socks
+        
+        * in both convention, the return value are stored in EAX register 
+
+- construct C datatypes, python to C datatype mapping 
+C Type                      Python Type                     ctypes Type
+        
+char                        1-character string              c_char
+wchar_t                     1-character Unicode string      c_wchar
+char                        int/long                        c_byte
+char                        int/long                        c_ubyte
+short                       int/long                        c_short
+unsigned                    short int/long                  c_ushort
+int                         int/long                        c_int
+unsigned                    int int/long                    c_uint
+long                        int/long                        c_long
+unsigned                    long int/long                   c_ulong
+long                        long int/long                   c_longlong
+unsigned                    long long int/long              c_ulonglong
+float                       float                           c_float
+double                      float                           c_double
+char* (NULL terminated)     string or none                  c_char_p
+wchar_t* (NULL terminated)  unicode or none                 c_wchar_p
+void*                       int/long or none                c_void_p
+
+ctypes could be initialized with a value, it has to be property type and size 
+>>> from ctypes import *
+>>> c_int()
+c_long(0)
+>>> c_char_p('hello world')
+c_char_p('hello world')
+>>> c_ushort(-5)
+c_ushort(65531)
+>>> seitz = c_char_p('loves the python')
+>>> print(seitz)
+c_char_p('loves the python')
+>>> seitz.value
+'loves the python'
+
+use value property to reference value from ctypes 
+
+- git for linux kernel
+- build software better, use github.com 
+    + create repository in github 
+    + from visual studio choose include project in source control
+    
+- passing parameters by reference, using the byref() function, whenever a function expects a pointer as a parameter, you could call it by 
+function(byref(parameter))
+
+- defining structures and unions 
+structure beer_recipe
+{
+    int amt_barley;
+    int amt_water;
+};
+
+python 
+class beer_recipe(Structure)
+    _fields = [("amt_barely", c_int),
+               ("amt_water", c_int)]
+               
+union, specify the same value in different types. the example is allowed to display a number in three different ways
+union {
+    long barley_long;
+    int barley_int;
+    char barley_char[8];
+}barley_amount;
+
+python 
+class barley_amount(Union):
+     _fields_ = [
+     ("barley_long", c_long),
+     ("barley_int", c_int),
+     ("barley_char", c_char * 8),
+     ]
+     
+demo python codes 
+from ctypes import *
+class barley_amount(Union):
+ _fields_ = [
+ ("barley_long", c_long),
+ ("barley_int", c_int),
+ ("barley_char", c_char * 8),
+ ]
+value = raw_input("Enter the amount of barley to put into the beer vat:")
+my_barley = barley_amount(int(value))
+print "Barley amount as a long: %ld" % my_barley.barley_long
+print "Barley amount as an int: %d" % my_barley.barley_long
+print "Barley amount as a char: %s" % my_barley.barley_char
+
+the output will be 
+C:\Python25> python chapter1-unions.py
+Enter the amount of barley to put into the beer vat: 66
+Barley amount as a long: 66
+Barley amount as an int: 66
+Barley amount as a char: B
+C:\Python25>
+
+
+# Debuggers and debuggers design 
+- debugger, normal debugger like in vs is trace through their source code with a high degree of control, white-bx debugger. A black-box debugger black-box debuggers: user mode and kernel mode. 
+    + use mode debugger lists 
+    user-mode debuggers commonly used by reverse engineers and hackers: 
+    WinDbg, from Microsoft,  
+    OllyDbg, a free debugger from Oleh Yuschuk. 
+    When debugging on Linux, you’d use the standard GNU Debugger (gdb). All three of these debuggers are quite powerful,
+
+    + intelligent debuger 
+    PyDbg by Pedram Amini and Immunity Debugger from Immunity
+
+- general-purpose CPU registers 
+    + x86 cpu use eight general purpose registers, EAX, EDX, ECX, ESI, EDI, EBP, ESP
+    EAX, accumulator register, performing calculations as well as storing return values from function calls. you can easily determine if a function call has failed or succeeded based on the value stored in EAX
+    
+    The EDX register is the data register. This register is basically an extension of the EAX register, and it assists in storing extra data for more complex calculations like multiplication and division. 
+    
+    The ECX register, also called the count register, is used for looping operations. An important point to understand is that ECX counts downward, not upward. 
+
+    ESI register is the source index for the data operation and holds the location of the input data stream. 
+    The EDI register points to the location where the result of a data operation is stored, or the destination index. 
+    process data rely on the ESI and EDI registers for efficient data manipulation
+
+    The ESP and EBP registers are the stack pointer and the base pointer, respectively. managing function calls and stack operations. When a function is called, the arguments to the function are
+    pushed onto the stack and are followed by the return address. The ESP register points to the very top of the stack, and so it will point to the return address. The EBP register is used to point to the bottom of the call stack. 
+    In some circumstances a compiler may use optimizations to remove the EBP register as a stack frame pointer; in these cases the EBP register is freed up to be used like any other general-purpose register.
+    
+    The EBX register is the only register that was not designed for anything specific. It can be used for extra storage.
+    
+    One extra register that should be mentioned is the EIP register. This register points to the current instruction that is being executed. 
+    
+    A debugger must be able to easily read and modify the contents of these registers. Each operating system provides an interface for the debugger to interact with the CPU and retrieve or modify these values. 
+    
+- the stack, is a First In, Last Out (FILO) 
+The ability to capture the stack frame inside a debugger is very useful for tracing functions, capturing the stack state on a crash, and tracking down stack-based overflows.
+
+- debug events, run as endless loop and wait for a debug event occur, common events debugger must trap are these:
+    + beakpoint hit 
+    + memory violation(also called memory access violations or segmentation faults)
+    + exception generated by the debugged program 
+    
+    + operation specific events 
+        * thread/process creation 
+        * loading dynamic library at runtime 
+    + advantage of scripted debugger is the ability to build custom event handlers to automate certain debugging tasks 
+    
+- break points, three primary breakpoint types
+    + soft breakpoint, A soft breakpoint is a single-byte instruction that stops execution of the debugged process and passes control to the debugger’s breakpoint exception handler. 
+        * understand the how this work is 
+        difference between an instruction and an opcode in x86 assembly
+        
+        example 
+        MOV EAX, EBX
+        
+        move value from EBX to EAX, the CPU does not know how to interpret that instruction; it needs it to be converted into something called an opcode(operation code)
+        
+        the operation code of the previous instruction is 
+        8BC3
+        
+        for example address 0x44332211, a common representation as breakpoint 
+        0x44332211: 8BC3 MOV EAX, EBX #before breakpoint is set 
+        0x44332211: CCC3 MOV EAX, EBX #after breakpoint is set 
+        the address, the opcode, and the high-level assembly instruction. In order to set a soft breakpoint at this address and halt the CPU
+        we have to swap out a single byte from the 2-byte 8BC3 opcode. This single byte represents the interrupt 3 (INT 3) instruction, The INT 3 instruction is converted into the single-byte opcode 0xCC.
+        
+        When the debugger is told to set a breakpoint at a desired address, it reads the first opcode byte at the requested address and stores it. writes the CC byte to that address
+        then checks to see if the instruction pointer (EIP register) is pointing to an address on which it had set a breakpoint
+        
+        * sequence 
+        debugger is instructed to set a breakpoint on 0xxx; it reads in and store the first byte -> overwrite the first byte with 0xCC(INT 3) -> when the CPU hits the breakpoint, the internal lookup occurs, and byte is flipped back 
+        
+        * two kinds of break point 
+        one-shot soft breakpoint
+        persistent breakpoint, gets restored after the CPU has executed the original opcode, entry in the breakpoint list is maintain 
+        
+        * soft breakpoints have one caveat, when you cahnge a byte of the executable in memory, you change the running software's cyclic redundancy check(CRC). mailware may testing its running code by CRC to prevent be set soft breakpoint on it
+        
+    + hardware breakpoint, when the aim software itself cannot be modified. 
+    set at the CPU level in special registers called debug registers, typical CPU has eight debug registers(registers DR0 through DR7), which is used for managed hardware breakpoint, DR0 to DR3 are reserved for the addresses of the breakpoints, DR4 and DR5 are reserved, DR6 is used as the status register which determines the type of debugging event triggered by the breakpoint. DR7 is essentially the on/off switch for the hardware breakpoints and also stores the different breakpoint conditions 
+        * break when an instruction is executed at a particular address 
+        * break when data is written to an address 
+        * break on reads or writes to an address but not execution 
+        
+        Breakpoint Flags
+        00 – Break on execution 00 – 1 byte
+        01 – Break on data writes 01 – 2 bytes (WORD)
+        11 – Break on reads or writes but not execution 11 – 4 bytes (DWORD)
+        Breakpoint Length Flags
+        
+        hardware breakpoints use interrupt 1 (INT1). The INT1 event is for hardware breakpoints and singlestep events
+        
+        CPU attempt to execute an instruction, it first checks to see whether the address is currently enabled for a hardware breakpoint. It also checks to see whether any of the instruction operators access memory that is flagged for a hardware breakpoint. If the address is stored in debug registers DR0–DR3 and the read, write, or execute conditions are met, an INT1 is fired and the CPU halts. If the address is not currently stored in the debug registers, the CPU executes the instruction and carries on to the next instruction, where it performs the check again, and so on.
+        
+        * limitation  only four individual breakpoints at a time, you can also only set a breakpoint on a maximum of four bytes of data
+        
+    + memory breakpoint, aren’t really breakpoints at all. It is changing the permissions on a region, or page, of memory. A memory page is the smallest portion of memory that an operation. page permissions 
+        * page execution, enable execution but throw an access violation if the porcess attempts to read or write to the page 
+        * page read, only read from the page, any writes or execution attempts causes an access violatoin 
+        * page write
+        * guard page, any access to guard page results in a one-time exception and then the page returns to its original status 
+    most OS allow to combine permissions and query current memory permission 
+    
+    the guard page is very useful 
+        * separating the heap from the stack or ensuring that a portion of memory doesn't grow beyongd an expected boundary 
+        * halting a processw when it hits a particular section of memory 
+        example when debugging a network app, set memory break point at the memory where payload of a package is stored after it's received. this would enable us to determine when and how the applicaton uses received package content, any access would halt CPU and throwing a gurad page debugging exception 
+system handles. 
+
+ 
+# Building a windows debugger 
+- pydbg, a pure python win32 debugger 
+https://github.com/OpenRCE/pydbg
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+

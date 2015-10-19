@@ -1,0 +1,1317 @@
+﻿WCF Design Concepts=Aaron Skonnard;Note=Erxin
+
+# Overview
+- wcf serializers
+    + xmlSerializer
+    + netDataContractSerializer
+    + DataContractSerializer
+    
+- DataContractSerializer
+    + Mapping details
+    
+- Advanced serialization topics 
+    + known types 
+    + collections and generics 
+    + serialization events 
+    
+- WCF message processing 
+    + WCF provides a message-oriented programming framework 
+        * all messages modeled by the WCF message class 
+        * moving between raw streams and message objects is called encoding 
+        
+    + WCF makes it easy to avoid the message object altogether 
+        * transforming message objects into .net objects is called serialization 
+        * this process is performed by a serializer at runtime 
+        
+        
+    rawmessage stream -> encoding -> wcf message -> serialization -> .net object 
+    xml, mtom, json, binary, etc     similar to a lgoical soap       customer.invoice, order, etc 
+        
+- wcf serializers
+    + xmlSerializer, since .net 1.0
+    + NetDataContractSerializer
+    + DataContractSerializer, default 
+    + DataContractJsonSerializer, .net 3.5
+    
+    wcf message -deserialize-> serializer -----------> .net objects 
+                <------------- .net class-serialize- 
+        
+    + specifying a serializer 
+    wcf uses DataContractSerializer by default with service contracts
+        * you can tell it to use a specific serializer using special attributes 
+        * you can apply the attribute to the contract or per method 
+        * only xmlSerializer/DataContractSerializer can be specified this way 
+        * NetDataContractSerializer requires a custom behavior attribute 
+        
+        
+    [XmlSerializerFormat]
+    [SerivceContract]
+    public interface ICustomerService 
+    {
+        [OperationContract]
+        void AddCustomer(Customer customer);
+    }
+        
+    + importing/exporting serializer types 
+        * each serializer supports a different mapping algorithm 
+        they look for their own attributes and influence mapping 
+        each serialize will produce a slightly different message 
+        
+        * you can use SvcUtil.exe to move between .net types and XSD 
+        you can export an XSD that describes what the serializer expects 
+        you can import an XSD to produce types for a specific serializer 
+        
+        XSD types ---> svcutil.exe import/export --> .net types 
+        in design time 
+        
+        during runtime, we use the serializer 
+        
+- demo serialization and svc util.exe 
+static void Serialize()
+{
+    Eval eval = new Eval();
+    eval.Submitter = "Aaron";
+    eval.Timesent = DateTime.Now;
+    eval.Comments = "Serialization is magic";
+    
+    using (FileStream fs = new FileStream("eval.xml", FileNode.Create))
+    {
+        DataContractSerializer dcs = new DataContractSerializer(typeof(Eval));
+        dcs.WriteObject(fs, eval);
+    }
+}
+
+static void Deserialize()
+{
+    using(FileStream fs = new FileStream("eval.xml", FileMode.Open))
+    {
+        DataContractSerializer dcs = new DataContractSerializer(typeof(Eval));
+        Eval eval = dcs.ReadObjects(fs) as Eval;
+        Console.WriteLine("Eval from {0} --he says: {1}", eval.Submitter, eval.Comments);
+    }
+}
+        
+use svcutil.exe /dconly EvalServiceLibrary.dll
+only generate the data contract type, will generete the *.xsd file for the specify serialize object xml file 
+        
+use svcutil.exe /dconly EvalServiceLIbrary.xsd, will generate the EvalServiceLIbrary.cs file for .net
+
+- XmlSerializer
+    + wcf continues to support xmlSerializer from .net 1.0 
+        * Found in System.Xml.Serialization 
+        * use by default with ASP.net web service(ASMX)
+        * supports nearly the full-range of XSD constructs 
+        * generates read/write code, hence public visibility required 
+        
+    Primary usage scenarios 
+    backwards compatibility with ASMXwhen integrating with non-WCF services 
+    when using contract-first design techniques 
+
+- NetDataContractSerializer
+    + is analogous to .net remoting formatters 
+        * it implements IFormatter and it's compatible with [Serializable] types 
+        * serializes .net types information into the message 
+        * you get the same type (same version even ) when deserializing 
+        * uses reflection during serialization, hence privates are serializable 
+        
+    when you have WCF both side you could use 
+    when you need typefidelity across the wire 
+    easier migration for .net remoting application 
+
+    not recommended for service-oriented design 
+    
+- DataContractSerializer 
+    + the new default serializer for WCF 
+        * does not serialize type information into the message
+        * but doesn't support the full-range of XSD constructs either 
+        * constrains messages to an "interop-safe" subset of XSD 
+        Any time you duel with xml content with attributes then you have to turn to XmlSerializer
+        
+        * uses reflection to serialize, hence privates are serializable 
+
+    primary usage scenarios 
+    use by default unless you have a good reason not to 
+    typically the best choice for code-first design 
+    
+- support types use DataContractSerializer
+    + CLR primitive types (int, double, string, etc)
+    + byte array, datetime, timespan, GUID, uri
+    + xmlqualifiedName, xmlEmeent and xmlNode array
+    + enums without any annotations 
+    + types marked with [DataContract] or [CollectionDataContract]
+    + types that implement IXmlSerializable 
+    + Array/collection classes including generics 
+    + types marked with [Serializable] or implementing ISerializable
+
+    If you need to serialize a type that isn't supported use a data contract surrogate(advanced), you could check the msdn 
+    
+- DataContractSerializer looks for [DataContract] attributes 
+    + mapping attributes found in System.Runtime.Serialization 
+    
+    + Explict opt-in model 
+    the type must be annotated with [DataContract]
+    only members annotated with [DataMember] are included 
+    
+    [DataContract]
+    public class Invoice {
+        public string CustomerId;
+        [DataMember]
+        public DataTime InvoiceDate;
+        public string SomePrivateData;
+    }
+
+    + default mapping for [DataContract] and [Serializable] types 
+        * class name becomes element & (complex type) name 
+        * Field/property names become local element names 
+        * local elements are mapped in alphabetical order 
+        * xml namespace derived from the type's .net namespace
+        
+    + customizing mapping details
+    [DataContract], Name/NameSpace controls the XSD type/root element 
+    
+    [DataMember], Name/IsRequired/Order/EmitDefaultValue, controls the local element definition 
+    
+    + mapping properties vs. fields 
+    with [Serializable] types, only fields are included in the message, properties are always ignored 
+    
+    + with [DataContract] you can map fields or properties 
+        * simply annotate property with [DataMember]
+        * property must have set&get methods(used during serialization )
+
+    + public vs. private 
+    unlike XmlSerializer, DCS uses reflection to implement serialization 
+        * support all kinds of members 
+        * only members marked with [DataMember]
+
+    + Optional vs nillable 
+        * both reference and value types show up as optional in the schema 
+        set IsRequired= true to make members required 
+        
+        * reference types show up the schema as nilable by default 
+        while value types are not nillable by default 
+        you can make value types nillable by using nullable<T>
+        
+        * during serialzation, default values are emitted by default 
+        set EmitDefaultvValue = false to drop the element from the message 
+        during deserialization, default values are used for missing elements 
+
+
+    [DataContract]
+    public class Inovice 
+    {
+        [DataMember]
+        public string InvoiceId;
+    }
+        
+    with EmitDefaultValue = true (default), the result will be set to default value in the output xml file 
+    
+    <Invoice xmlns="..." xmlns:i="...">
+        <Age>0</Age>
+    </Invoice>
+        
+- using [DataContract] and [DataMember]
+[DataContract]
+public class Inovice 
+{
+    [DataMember(IsRequired=True, Name="Id", EmitDefaultValue=false)]
+    public string? InvoiceId;
+}
+        
+use Order parameter to control the output xml sequence
+        
+- composition derivation and known types 
+[DataContract] types may be composed from other serializable types 
+[Serializable]
+public class Address
+{
+    public string Street;
+}
+
+[DataContract]
+enum CompanyType
+{
+    [EnumMember]
+    LLC,
+}       
+
+ [DataContract]
+ public class Company 
+ {
+    public CompanyType CT;
+    public Address address;
+ }
+ 
+ all types within the inheritance hierarchy must be serializable 
+        
+in c# you can subsittiue a derive type for a base type at runtime 
+with WCF service it's not quite that easy 
+    + wcf must "know" about all possible substitution ahead of time 
+    + you specify possible substitution using [KnownType]
+    [KnownType(typeof(Contract)]
+    [DataContract]
+    public class Person 
+    {
+    }
+    
+    you could add method for the knowntype to let xml serialzer call the method when run deserialization
+    
+    [KnownType(typeof(GetMyKnownTypes)]
+    [DataContract]
+    public class Person 
+    {
+        static IEnumerable<Type> GetMyKnownTypes()
+        {
+            List<Type> knownTypes = new List<Type>();
+            knownTypes.Add(typeof(Contract));
+            knownTypes.Add(typeof(Customer));
+            return knownTypes;
+        }
+    }
+        
+    + service known types 
+    you can also annotate the service contract with known types 
+        * use [ServiceKnownType] on the contract or on specific operations 
+        * useful when you can't annotate the base type 
+        * only makes substitution possible on the annotated contract 
+        
+        [SerivceContract]
+        public interface IContactService{
+            [ServiceKnownType(typeof(Contact))]
+            [ServiceKnownType(typeof(Customer))]
+            [OperationContract]
+            void AddContact(Person p);
+        }
+        
+        if you used the attribute on the service contract level, it will add to all the service methods
+        
+    + Configuring known types 
+    you can also specify known types in the application configuration file 
+        * within <system.runtime.serialization> under <dataContractSerializer> 
+        * add each <knownType> within the <declaredTypes> element 
+        
+        <configuration>
+            <system.runtime.serialization>
+                <dataContractSerializer>
+                    <add type="Person,MyAssembly,Version=1.0.0.0,...">
+                        <knownType type="Contact,MyAssembly,Version=1.0.0.0,.."/>
+                    </add>
+                </dataContractSerializer>
+            </system.runtime.serialization>
+        </configuration>
+        
+        
+- Enumerations
+    + Enums are serializable by default without any annotations 
+    all enum values are included in the schema type 
+    + you can exclude specific values or change their names if desired 
+    annotation enum with [DataContract]
+    annotate each value you wish to include with [EnumMember[(Value=CustomValue)]]
+    
+- DataSet, array and collection 
+    + are statistically one of the most commonly used data types 
+    simply a generic table structure for hoding rows of data 
+    
+    + using dataset in your data contract can be problematic 
+    xsd will end up with a wildcard(meaning anything can go there)
+    the other side will have to use an xml api to process 
+    
+    + however, dataset can be deserialized on the other side if it's wcf 
+    <Emplyees>
+        <xs:schema id="NewDataSet" xmlns:xs="..." xmlns:msdata="...">
+            <xs:element name="NewDataSet" msdata:IsDataSet="true" ...>
+            </xs:element>
+        </xs:schema>
+    </Emplyees>
+    
+    the property indicate the dataset type 
+    
+    + instead of DataSet, you're usually better off using a typed array 
+    Consumers can easily map to array types in their environment 
+    
+    + both arrays& collections map to the same XSD format(sequence)
+        * array, arraylist and collections(IEnumerable, IList, ICollection)
+        * generic collections(IEnumerable<T>, IList<T>, ICollection<T>)
+        * Iterators(.net 3.5+ only )
+    + when generating code from XSD, you can choose the array type from the service reference window 
+    
+    + custom collections
+        * annotate the class with [CollectionDataContract]
+        [CollectionDataContract(Name="employees", ItemName="employee")]
+        public class EmployeeCollection:Collection<string>
+        {..}
+        
+        will may employees instead EmpolyeeCollection and employee to string 
+    
+        for generic type could use 
+        [CollectionDataContract(Name="MyFancyCollection{0}")]
+        public class MyFancyCollection<T>:IEnumerable<T>{
+        
+        }
+        the {0} will be replace with type name of T 
+        
+    
+- Demo, Using collections vs. DataSet 
+[DataContract(Namespace="http://www.pluralsight.com")]
+public class DetailedEval:Eval
+{
+    [DataMember(Name="additional")]
+    public string AdditionalComments;
+    
+    [DataMember]
+    public DataSet Questions;
+}
+
+this will be problem for non .net client 
+
+use List or collection instead 
+[DataContract(Namespace="http://www.pluralsight.com")]
+public class DetailedEval:Eval
+{
+    [DataMember(Name="additional")]
+    public string AdditionalComments;
+    
+    [DataMember]
+    public List<QuestionRating> Questions;
+}
+
+
+[DataContract(Namespace="http://pluralsight.com/evals")]
+public class QuestionRating
+{
+    [DataMember]
+    public string QuestionText;
+}
+
+- serialization events 
+    + constructors are not called uring deserialization 
+    however property set/get method are called 
+    
+    + callback methods are provided at each serialization stage 
+        * mark the callback method with serialization stage attribute 
+        * method must accept a signle argument of type StreamingContext 
+        [DataContract]
+        public class Company 
+        {
+            [OnDeserializaing]
+            void OnDeserializaing(StreamingContext cx){...}
+        }
+
+- demo, hooking the serialization events 
+- demo bring it all together, all the process will be done by wcf client proxy automatically 
+- use svcUtil.exe to map between .net and XSD types 
+
+
+# Service Contract 
+- Overview 
+    + architecture, understanding service contracts 
+    + service contract details 
+        * dispatching 
+        * importing/exporting 
+        * mapping attributes 
+        
+    + designing operations 
+        * one-way, you would don't have return type 
+        * duplex, you have to use fill difference, have two interface, on is for income and another for outcome interface 
+        
+- a service contract is simply a logical group of operations 
+    + the operations are usually related in some way 
+    + each operation is assigned an action, which is its official name 
+        * the action is a uri and it's carried each message 
+        * the runtime dispatches based on the action by default 
+        
+    + each operation also defines a message exchange 
+        * the parameter list defines the request message 
+        * the return type defines the (optional) response message 
+        
+- mutiple services can all implement the same service contract 
+    + allows a single client to talk to all services the same way 
+                          host application, IFoo MyService 
+    client IFoo->         host application, IFoo MyService
+
+    + a single wcf service can implement more than one service contract 
+        * you expose each service contract through a distinct endpoint
+        host application, endpoints 
+        +----------------+
+        |IFoo            |
+        |IBar MyService  |
+        |IBaz            |
+        +----------------+
+        public class MyService:IFoo, IBar, IBaz{}
+
+
+
+    + service contract inheritance support derivation 
+        * but each interface in the hierarchy must carry [ServiceContract]
+        * you can use the bottom-most contract exposes all operations 
+        * or you can expose individual contracts via different endpoints
+
+    [ServiceContract]
+    public interface IFoo
+    {
+        [OperationContract]
+        void One();
+    }
+    
+    [ServiceContract]
+    public interface IBar:IFoo
+    {
+        [OperationContract]
+        void Two();
+    }
+
+- demo multiple service contracts 
+namespace MultipleServiceContract
+{
+    public interface IFoo 
+    {
+        string SayHello(string name);
+    }
+    
+    public interface IBar 
+    {
+        string SayGoodBye(string name);
+    }
+    
+    public interface IBaz
+    {
+        string SaySomethingNice(string name);
+    }
+}
+
+public class MyService:IFoo, IBar, IBaz
+{
+    ...
+}
+
+//update the service contract 
+<services>
+    <service behaviorConfiguration="MultipleServiceContract.ServiceBehavior" name="MultipleServiceContracts.MyService">
+        <endpoint address="" binding="wsHttpBinding" contract="MultipleServiceContracts.IFoo"/>
+        <endpoint address="" binding="wsHttpBinding" contract="MultipleServiceContracts.IBar"/>
+        <endpoint address="" binding="wsHttpBinding" contract="MultipleServiceContracts.IBaz"/>
+    </service>
+    <host>
+        <baseAddresses>
+            <add baseAddress="http://locahost:8080/myservice"/>
+        </baseAddresses>
+    </host>
+</services>
+there will be three service endpoint exposed as IFoo, IBar, IBaz
+if make the interface inherit from each other will only expose one service endpoint 
+- runtime dispatching 
+    + service contract drive the runtime dispatching process 
+        * action is normally used for selecting the method but that's extensible 
+        * the webHttpBehavior looks at the HTTP method + the URI 
+        * the dispatcher uses a serializer to map messages into object 
+        soap message action="http://xyz" -> dispatcher (service contract) -> service interface (method foo action="http://abc", method bar action="http://xyz")
+        
+        if you doing soap message, dispatch will base on the action 
+        if you doing rest will base on the http uri 
+- importing/exporting 
+    + wcf provides svcutil.exe for moving between .net types and wsdl 
+        * you can export a wsdl definition that describes a wcf service contract 
+        * you can import a wsdl definition to generate a wcf service contract 
+        * metadata behavior provides automatic metadata generation(?wsdl)
+        
+        wsdl -(import)-> svcUtil.exe -------> .net types 
+            <----                   <-export-
+            
+- demo: importing/exporting with svcutil.exe 
+    + use the wsdl defination to generate .net types 
+    http://localhost:port/ServiceName?wsdl
+    
+    use the visual studio command prompt 
+    $ svcutil /t:metadata wsdl_uri 
+    
+    open the download file with text editor 
+    
+    use svcutil.exe to generate the wsdl schema 
+    $ svcutil temuri.org.wsdl tempuri.org.xsd schema.microsoft.com.2003.10.Serialization.xsd 
+    the output will be the interface for the wsdl definiation 
+    
+- service contract mapping 
+    + you define service contracts in .net with an interface or a class 
+        * annotate the type with [ServiceContract]
+        * annotate each method you wish to include with [OperationContract]
+        [ServiceContract]
+        public interface IInoviceService
+        {
+            [OperationContract]
+            void SubmitInvoice(Invoice invoice);
+            [OperationContract]
+            InvoiceStatus GetStatus(Invoice invoice);
+            void CancelInvoice(Invoice invoice);
+        }
+
+        the method not annotate with OperationContract will not be export to the outside world 
+        + default mapping 
+            * default target namespace is http://tempuri.org 
+            * type name becomes the service contract name 
+            * DataContractSerializer is automated by default 
+            
+        + default mapping for [OperationContract]
+            * method name becomes the operation name 
+            * Action = target namespace + service contract name + operation name 
+            * all methods are request-reply by default
+
+        + basic customization 
+            * [ServiceContract]
+            name, namespace 
+            * [OperationContract]
+            name, action, reply action, IsOnWay 
+            
+        [ServiceContract(Name="InvoiceContract", Namespace="http://pluralsight/invoice")]
+        public interface IInoviceService
+        {
+            [OperationContract(IsOnWay=true)]
+            void SubmitInvoice(Invoice invoice);
+            [OperationContract(Name="SubmitWithUserId", Action="urn:submit-with-userid")]
+            InvoiceStatus GetStatus(Invoice invoice);
+            void CancelInvoice(Invoice invoice);
+        }
+        
+        in wsdl is not allowed method overload, so give the method a different name for the overload methods
+
+- demo: customizing service contracts 
+- designing operations 
+    + wcf supports three different types of messages exchange patterns 
+    client request -reply (defaut)-> service 
+                    <-------------
+                    
+                    ---one-way ----> 
+                    
+                    <---duplex------
+                    ----duplex -----> 
+                    
+- one-way operations
+    + you make operation one-way using IsOneWay=true 
+    method return type must be void 
+    
+    + Service cannot return faults to client 
+    + One-way operations are dispatched differently than request-reply 
+        * dispatcher returns control to client as soon as message is queued
+        * client has no way direct way to know if call succeeded 
+    
+- demo: one-way operations 
+click the solution property to make mutlple project as start up project, this is fit for the isolate wcf service and client project 
+- duplex contracts 
+    + a duplex contract is a relationship between two service contracts 
+        * service implements an incoming contract 
+        * the client implement a callback contract 
+        * you associate the callback contract with the incoming contract 
+        * you associate the callback contract with the incoming contract 
+        //asslocaite with incoming contract
+        [ServiceContract(CallbackContract=typeof(IQuoteNotification)]
+        public interface IRequestStockQuotes
+        {
+            [OperationContract]
+            void RequestNotification(string symbol);
+        }
+        
+        //callback contract 
+        [ServiceContract]
+        public interface IQuoteNotification
+        {
+            [OperationContract]
+            void SendQuote(StockQuote quote);
+        }
+
+- demo: duplex contracts 
+    + duplex contracts require a bi-directional communication channel 
+        * NetTcpBinding & NetNamedPipeBinding are bi-directional by name 
+        * the standard HTTP bindings are not bi-directional
+        
+    + wcf provides a special http binding for duplex contracts 
+        * WSDualHttpBinding creates two underlying HTTP channels 
+        * One for receiving messages and another for sending messages 
+        
+    + WCF provides a special channel factory for creating duplex channels 
+        * Use DuplexChannelFactory<T> for creating duplex channels 
+        * svcUtil.exe creates proxy classes that derive from DuplexClientBase 
+        
+    + calling the callback channel 
+        * you can retrieve a proxy to the callback channel via OperationContract
+        client endpoint details provided in the request messge 
+        
+        public class RequestStockQuoteService: IRequestStockQuotes
+        {
+            public void ReuqestNotfications(string symbol)
+            {
+                StockQuote quote = GetRealtimeQuote(symbol);
+                IQuoteNotification callback = OperationContext.Current.GetCallbackChannel<IQuoteNotification>();
+                callback.SendQuote(quote);
+            }
+        }
+        
+        + using a duplex proxy on the client 
+        client side service implementation 
+        public class QuoteNotificationService:IQuoteNotification
+        {
+            public void SendQuote(StockQuote quote){
+                Console.WriteLine("Quote {0} {1}", quote.Symbol, quote.Last);
+            }
+        }
+        
+        class Program 
+        {
+            static void Main(string[] args)
+            {
+                InstanceContext ctx = new IntstanceContext(new QuoteNotificationService());
+                ReuqestStockQuotesServiceProxy proxy = new RequestStockQuoteServiceProxy(ctx);
+                proxy.RequestQuote("MSFT");
+            }
+        }
+- mapping methods to message 
+    + the default mapping for an [OperationContract] to messages 
+        * a wrapper element is expected/used for request/response 
+        * wrapper elements named after operation name 
+        
+    + request wrapper element named the same as operation name 
+        * parameter are serialized within the wrapper element 
+        
+    * return type serialized within a response wrapper element 
+        * named after operation name + "response"
+        * return object serialized as operation name + "result"
+    [DataContract]
+    public class MyType 
+    {
+        [DataMember]
+        public string Something;
+        
+    }
+    
+    [ServiceContract]
+    public interface ISampleService
+    {
+        [OperationContract]
+        MyType DoSomething(MyType input);
+    }
+    
+    request message 
+    <s:Envelop xmlns:s="...">
+        <s:Body>
+            <DoSomething xmlns="http://tempuri.org/">
+                <input xmlns:b="...">
+                    <b:Something>something</b:Something>
+                </input>
+            </DoSomething>
+        </s:Body>
+    </s:Envelope>
+    
+    <s:Envelope xmlns:s="...">
+        <s:Body>
+            <DoSomethingResponse xmlns="http://tempuri.org/">
+                <DoSomethingResult xmlns:b="...">
+                    <b:Something>something</b:Something>
+                </DoSomethingResult>
+            </DoSomething>
+        </s:Body>
+    </s:Envelope>
+- message contracts 
+    + you can customize this mapping using message contract types 
+        * message contracts map data contracts to SOAP envelops 
+        * annotate the class with [MessageContract]
+        * Map members to the body using [MessageBodyMemeber]
+        * Map members to headers using [MessageHeader]
+        
+    + Then use the message contract types in the method signature 
+        * the parameter list should contain a single [MessageContract] type 
+        * if the request is a message contract, the response must be also 
+    + defining message contracts 
+        * the message contact attributes allow you to control the mapping 
+        you can control wrapper behavior, order, header processing etc.
+        
+        supported annotation items 
+        [MessageContract]
+        * IsWrapped 
+        * WrapperName 
+        * WrapperNamespace 
+        
+        [MessageBodyMemeber]
+        * Name
+        * Namespace 
+        * Order
+        
+        [MessageHeader]
+        * Name
+        * Namespace 
+        * MustUnderstand 
+        * Actor 
+        * Relay 
+        
+    + Demo 
+[DataContract(Namespace="http://pluralsight.com/math"]
+public class MathInputs 
+{
+    public double x;
+    public double y;
+}
+
+[MessageContract(IsWrapped=false)]
+public class MathRequest
+{
+    [MessageBodyMember]
+    public MathInputs inputs;
+    [MessageHeader]
+    public string userId;
+}
+
+[MessageContract(IsWrapped=false)]
+public class MathResponse 
+{
+    public MathResponse(){}
+    public MathResponse(double res) {this.result = res;}
+    [MessageBodyMember]
+    public double result;
+}
+
+//change the service contract to use the message data 
+[ServiceContract(Name="SimpleMath", Namespace="http://pluralsight.com/math")]
+public interface IMath
+{
+    [OperationContract(Name="add")]
+    MathReponse Add(MathRequest request);
+    
+    [OperationContract(Name="sub")]
+    MathResponse Subtract(MathRequest request);
+}
+
+//add implementation
+[ServiceBehavior(InstanceContextMode=InstanceContextMode.PerCall)]
+public class MathService:IMath
+{
+    #region IMath Members
+    public MathResponse Add(MathRequest request)
+    {
+        return new MathReponse(request.inputs * request.inputs);
+    }
+    
+    public MathReponse Subtract(MathRequest request)
+    {
+        return new MathResponse(request.inputs.x - request.inputs.y);
+    }
+}
+
+//client 
+MathInputs inputs = new MathInputs();
+inputs.x = x;
+inputs.y = y;
+
+Console.WriteLine("add: {0}", client.add(userid, inputs));
+
+use visual studio command prompt, open the *.svclog 
+svctraceviewer.exe is a sdk tool Microsoft Service Trace Viewer
+- generic contracts 
+    + the universal operation 
+    you cal also choose to process the raw wcf message object 
+    setting Action="*" defines a catch all operation 
+    
+    + dispatcher calls this method when it doesn't find a matching action 
+    + only one method per contract can be annotated this way 
+    [ServiceContract]
+    public interface IUniversalOneWay
+    {
+        [OperationContract(Action="*", IsOneWay=true)]
+        void ProcessMessage(Message msg);
+    }
+    
+    //Same thing but for a request-reply operation 
+    [ServiceContract]
+    public interface IUniversalTwoWay
+    {
+        [OperationContract(Actoin="*", ReplyAction="*")]
+        Message ProcessMessage(Message msg);
+    }
+- demo, generic contracts 
+[ServiceContract(Name="SimpleMath", Namespace="http://pluralsight.com/math")]
+public interface IMath
+{
+    [OperationContract(Name="add")]
+    MathReponse Add(MathRequest request);
+    
+    [OperationContract(Name="sub")]
+    MathResponse Subtract(MathRequest request);
+    
+    [OperationContext(Action="*", ReplyAction="*")]
+    Message CatchAll(Message request);
+}
+
+public Message CatchAll(Message request)
+{
+    XmlDocuement doc = new XmlDocument();
+    doc.Load(request.GetReaderAtBodyContent());
+    Console.WriteLine(doc.InnerXml);
+    throw new FaultException("You called a unsupported operation... please refresh the wsdl");
+}
+
+
+# Faults and Exceptions 
+- How to expect the unexpected 
+- Outline 
+    + Exceptions and faults 
+    Moving between the two 
+    
+    + Undeclared exceptions 
+    Controlling what the client sees 
+    
+    + FaultException and FaultException<T>
+        * Throwing & catching faults 
+        * [FaultContract]
+        
+    + Global exception handling 
+        * IErrorHandler 
+        
+    + Handling exceptions on the client 
+
+- Exceptions and faults 
+    + exceptions are technology specific 
+    Hence, they cannot cross the service boundary 
+    
+    + SOAP defines a standard representation for errors 
+        * referred to as SOAP faults 
+        
+    + WCF knows how to translate between the two 
+        * Java client 
+        * SOAP 
+        * .net service 
+
+
+    Java Client <---- SOAP (fault) <-----  .net service 
+     catch(Exception e){}                   throw exception 
+     
+    + SOAP faults 
+    1.1 and 1.2, 1.1 only have the body and fault element 
+    <s:Envelop xmlns="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Body>
+            <s:Fault>
+                <s:Code>
+                    <s:Value>s:Sender</s:Value>
+                    <s:SubCode><s:Value>errors:My Code</s:value>
+                </s:Code>
+            </s:Fault>
+            <s:Reason>
+                <s:Text xml:lang="en-US">Processing error <s:Text>
+            </s:Reason>
+            <s:Detail>
+            </s:Detail>
+        <s:Body>
+    </s:Envelop>
+                         
+    + wcf built-in exception handling 
+        * what happens when a service operation produces an exception ?
+        the dispatcher catches it and transmits a SOAP fault to the client 
+        it doesn't take down the process, but it might fault the channel 
+        
+        * what information does it send back to the client ?
+        the depends on what type of exception it is 
+        if it's a FaultException(or a derivative), all details are transmitted 
+        if it's anything else a generic fault is transmitted by default 
+        this is by design to prevent undesired system disclosures
+
+
+    Note: faults cannot be returned from one-way operations 
+
+    + The generic fault, the generic SOAP fault produced by a non-FaultException the dispatcher only translate this kinds of exception by default 
+    <s:Envelope xmlns="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Body>
+        </s:Body>
+    </s:Envelope>
+
+    including exception details by 
+        * use either [ServiceBehavior] or <serviceDebug> to enable 
+        * useful for debugging purpose not recommended in production 
+        
+    <configuration>
+        <system.serviceModel>
+            <behaivors>
+                <behavior name="Default">
+                    <serviceDebug includeExceptionDetailsInFaults="true"/>
+                </behavior>
+            </behaivors>
+        </system.serviceModel>
+    </configuration>
+
+- demo default exception handling, right click to edit the app.config and web.config file 
+    + Use wcf configuration tool to enable the MessageLogging, DisableMessageLogging from 
+    Diagnostics|Message Logging|LogEntireMessage, change it to true 
+
+    + Open the svctraceviewer.exe at .net installation directory 
+    + Open the message log trace from the solution folder 
+
+    + Enable the exception detail in the client fault object 
+        * use attribute annotation to enable 
+        [ServiceBehavior(InstanceContextModel=InstanceModel.Single, IncludeFaultDetail=true)]
+        public void ServiceContract:IService{}
+
+        * Add service debug behavor to change 
+        <behaviors>
+            <serviceBehaviors>
+                <behavior name="Default">
+                    <serviceMetadata httpGetEnable="true"/>
+                    <serviceDebug includeExceptionDetailsInFaults="true"/>
+                </behaivior>
+            </serviceBehaviors>
+        </behaviors>
+
+- Fault Exception
+    + you can explicitly throw a SOAP fault using the FaultException class 
+        * you can specify the fault reason and code when you create it 
+        * when you do this, the fault details do indeed travel to the client 
+        
+    public void DoSomething(string input)
+    {
+        throw new FaultException("Something bad happen");
+    }
+    
+    + catching FaultException will be re-throw as a FaultException on the client-side 
+        * clients can simply use a traditional try/catch block to handle it 
+        * the fault code/reason will be available within the instance 
+        try{    
+            client.InvokeMethod();
+        }
+        catch(FaultException ex)
+        {
+        }
+        
+    
+- Typed faults, throwing typed faults 
+    + FaultException produces a simple SOAP fault with a code/reason 
+        * makes it difficult for clients to distinguish between different error
+        
+    + A better technique is to throw typed faults 
+        * define a data contract type to represent the fault information 
+        * throw the typed fault using FaultException<T>
+        
+    + Throwing a typed fault 
+        * Simply throw an instance of FaultException<T>
+        where T is the type of fault you wish to throw 
+        public class InvoiceService: IInvoiceService 
+        {
+            public void SubmitInovice(Invoice invoice)
+            {
+                if(!CheckId(invoice))
+                {
+                    throw new FaultException<InValidId>(new InvalidId());
+                }
+            }
+        }
+        
+        this will throw a specified faulttype 
+        
+    + Fault contracts, you advertise fault types via [FaultContract] your service contracts 
+        * Use [FaultContract] to specify each fault type it can throw 
+        * The detail type must be serializable with DataContractSerializer
+        * You cannot use [FaultContract] on one-way operations 
+            
+        [ServiceContract]
+        public interface InVoiceService
+        {
+            [FaultContract(typeof(InvalidId)]
+            [FaultContract(typeof(InvalidDate))]
+            [FaultContract(typeof(MaximumAmountExceeded))]
+            [OperationContract]
+            void SubmitInvoice(Invoice invoice);
+        }
+        
+    + handing typed faults on the client 
+        * the [FaultContract] information is included in the service metadata 
+        when clients import the metadata the fault types are generated 
+        and the client's contract is also annotated with [FaultContract]
+
+        * so, clients can catch specific fault types using FaultException<T>
+        or clients can simply handle all faults by catching FaultException
+        
+        FaultException
+        
+        
+        * demo 
+        
+        [DataContract(Namespace="http")]
+        public class BadEvalSubmission
+        {
+            [DataMember]
+            public string Problem;
+        }
+        
+        [ServiceContract]
+        public interface IEvalService
+        {
+            [FaultContract(typeof(BadEvalSubmission))]
+            [OperationContract]
+            void SubmitEval(Eval eval);
+        }
+        
+        //check the wsdl definition of the service will be 
+        <wsdl:operation>
+            <wsdl:input wsaw:Action="http://tempuri.org/IEvalService/SubmitEval" message="tns:IEvalService_SubmitEval_InputMessage"/>
+            <wsdl:output wsaw:Action="http://tempuri.org/IEvalService/SubmitEvalResponse" message="tns:IEvalService_SubmitEval_OutputMessage"/>
+            <wsdl:fault wsaw:Action="http://tempuri.org/IEvalService/SubmitEvalBadEvalSubmissionFault" name="BadEvalSubmissionFault" message="tns:IEvalService_SubmitEval_BadEvalSubmissionFault_FaultMEssage"/>
+        </wsdl:operation>
+        
+        //client code 
+        try{
+            client.SubmitEval(new Eval());
+        }
+        catch(FaultException<BadEvalSubmission> e)
+        {
+        }
+        catch(FaultException e)
+        {}
+        
+        //service implementation 
+        throw new FaultException<BadEvalSubmission>(new BadEvalSubmission("problem description"));
+        
+- Global exception handling 
+    + wcf makes it possible to implement a global exception handler 
+        * allow you to shield clients form all undeclared exceptions 
+        * allow you to perform a mapping to your declared fault types 
+        * allow you to centralize error logging/notification logic 
+        
+    + you accomplish this by implementing the IErrorHandler interface 
+        * then you write a custom behavior to apply your implementation at runtime 
+        
+- IErrorHandler 
+    + Implement IErrorHandler when you want to customize error handling 
+    Defines two methods, ProvideFault and HandleError 
+    
+    + ProvideFault is called immediately after an exception is thrown 
+    allows you to generate a custom fault message 
+    
+    + HandleError is called on a separate thread after return client 
+    allows you to perform more time-consuming error logging techniques 
+    
+    public inteface IErrorHandler
+    {
+        bool HanldeError(Exception error);
+        void ProvideFault(Exception error, MessageVersion, ref Message fault);
+    }
+    
+    + applying the IErrorHandler
+        * you inject your IErrorHandler implementation using a behavior 
+        implement a service behavior (derive from IServiceBehavior)
+        add it to the ChannelDispatcher's ErrorHandlers property 
+        
+        * you can apply your behavior to the wcf runtime a few different ways 
+        add it explicitly to the ServiceHost.Description.Behavor property 
+        make the behavor an attribute an add the attribute to the service 
+        define a behavior extension element and add via configuration 
+        
+    + implementing ErrorHandler
+    
+    public class MyErrorHandler:IErrorHandler
+    {
+        #region IErrorHandler Memebers 
+        public bool HandleError(Exception error)
+        {
+            Log(error);
+        }
+        
+        public void ProvideFault(Exception error, ref System.ServiceModel.Channels.Message fault)
+        {
+            fault = Message.CreateMessage(MessageVersion version, FaultCode.CreateSenderFaultCode("BadEvalSubmission", namespace="http://"), reason="bad eval submission", detail=new BadEvalSubmission(), action="http://.../SubmitBadEvalSubmissionFault");
+        }
+        #endregion 
+    }
+    
+    //apply the error handler to the service 
+    public class MyErrorHandlerAttribute:Attribute, IServiceBehavior 
+    {
+        #region IServiceBehavior Memebers 
+        public void AddBindingParameters(ServiceDescription servieDescription,)
+        {
+        }
+        
+        public void ApplyDispatchBehavior(ServiceDescription serviceDescription, )
+        {
+            foreach(ChannelDispatcher cd in serviceHostBase.ChannelDispatchers)
+                cd.ErrorHandlers.Add(new MyErrorHandler());
+        }
+        
+        public void Validate(ServiceDescription serviceDescription, ServiceHost)
+        {
+        }
+    }
+    
+    //apply the service behavior 
+    [MyErrorHandler]
+    [ServiceContract]
+    public class EvalService:IEvalService
+    {
+    }
+- client-side exception handling 
+    + handling exceptions within clients 
+    client channels need to be prepared for three main exception types 
+    1. FaultException or FaulException<T>, user-defined faults 
+    
+    2. CommunicationException, Various runtime communication errors, FaultException derives from this 
+    
+    3. TimeoutExceptoin, Send timeout limit exceeded, throw by underlying transport channel 
+    
+    typically handle the exception in this order
+    
+    FaultException is derived from CommunicationException
+- Fault channels
+    + what happens when a client channel receives an exception? 
+    it depends on the type of fault and type of channel 
+    
+    + what causes the channel to enter a faulted state is not documented 
+        * it usually happens when sessionful channels receive InternalServiceFault 
+        * once the client channel has faulted, you can only call Abort 
+        * check the channel's State property to be sure 
+        
+    + FaultException-derive types never fault the client channel 
+        * FaulException<T> derives from FaultException
+        
+    when you use session channel this may happen, when client receive a InternalServiceFault exception, channel may enter fault state, means need to recreate a channel to communicate with the server 
+- Proper disposing techniques, Gotcha with "using" auto close channel 
+    + You will be tempted to wrap the client channel in a using statement 
+    doing so automates the call to close when leaving scope 
+
+    + However, close can also throw communication/timeout exceptions 
+    close always throws an exception on faulted channels 
+
+    using(InvoiceServiceClient client = new InvoiceServiceClient("httpEndpoint"))
+    {
+        client.SubmitInovice(invoice);
+    }
+    if service return a fault, client may enter "fault" state, Dispose calls close causing another exception 
+       
+    + proper disposing techniques 
+        * either don't use the "using" statement
+        
+        * or override Dispose in a partial class as follows:
+        
+        public partial class InvoiceServiceClient:IDisposable
+        {
+            void IDisposable.Dispose()
+            {
+                try
+                {
+                    if(this.State == CommunicationState.Faulted)
+                    {
+                        this.Abort();
+                    }
+                    else 
+                    {
+                        this.Close();
+                    }
+                }
+                catch
+                {
+                    this.Abort();
+                }
+            }
+        }
+       
+       
+       
+# Security 
+- Overview 
+    + wcf provides three important security features 
+        * confidentiality
+        * integrity 
+        * authentication 
+    + security is on by default in almost all bindings 
+        * you configure transport vs message using the security mode 
+        * you configure authentication via the client credential type 
+    
+- the CIA of security 
+    + is security important? 
+        * do you have resources that have value to an adversary? 
+        * if so then you must expect to be attacked
+        
+    + wcf provides basic protections that you need: CIA 
+    confidentiality    integrity                        authentication    
+    encrypting         signing                          proof of identity 
+    messages           messages                         mitigates
+    mitigates          mitigates                        spoofing and impersonation attacks
+    eavesdropping      tampering and replay attacks
+    attacks 
+
+- demo secure by default 
+endpoint use, wsHttpBinding
+endpoint use, netTcpBinding 
+
+use the identity name 
+
+ServiceSecurityContext.Current.PrimaryIdentity.Name 
+
+the name will be the computer/user 
+
+by default the messages are encrypted at the transport layer 
+- security choices you need to make 
+    + the protection level required by your services 
+    should the data be signed, encrypted or both 
+    
+    + transport vs. message security on bindings 
+    can also use a hybrid of the two 
+    
+    + authentication, or "who are you?"
+    you choose the type of credentials you want the client to use and wcf pick an appropriate authentication protocol 
+    
+    + authorization or "what are you allowed to do?"
+    impersonate the caller letting someone else handle 
+    provide your own authorization management 
+    
+- declaring the required protection level 
+    + the developer of a service doesn't ultimately control how it's exposed 
+    so what if the host application exposes unsecured endpoints ?
+    + hence developers can set the required protection level on contracts
+    this host will fail if the required protection level isn't met by an endpoint 
+    
+    + you can set the protection level at different scopes 
+        * on a particular message 
+        * on individual operations and fault contracts 
+        * on a service contract 
+        
+    + protection level 
+        * simple use the ProtectionLevel property on the appropriate attribute 
+        it comes with three values: None, Sign, and EncryptAndSign 
+        
+        //required the message to be signed 
+        [MessageContract(IsWrapped=false, ProtectionLevel=ProtectionLevel.EncryptAndSign)]
+        public class MathRequest
+        {
+        }
+        
+        //required all operation to be sign
+        [ServiceContract(Name="SimpleMath", ProtectionLevel=ProtectionLevel.Sign)]
+        public interface IMath{
+        
+        //requires this operations to be signed and encrypted
+            [OperationContract(Name="add", ProtectionLevel=ProtectionLevel.EncryptAndSign)]
+            MathResponse Ad(MathRequest request);
+        }
+        
+- reliability 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+        
+        
+        
+        
+        
+        
