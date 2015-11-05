@@ -1721,31 +1721,315 @@ Remoting
         
         change the Precompiled Header to Use(/Yu)
         
-        * select the property of the precompiled.h. the change Precompiled Header to Create(/Yc)
+        * select the property of the precompiled.cpp for creating the precompile header. the change Precompiled Header to Create(/Yc)
         
         * add content to the precompiled.h add window runtime library header 
 #pragma once 
 
-#include <wrl.h> 
+#include <wrl.h>  //reference the window runtime library 
 
-        * switch to the precompiled.cpp and include the precompiled header. as a com client have to deal with lots of hresults 
+        * switch to the precompiled.cpp and include the precompiled header. as a com client have to deal with lots of hresults. if a client is not a COM server it is make sense to handling HRESULT by throwing exception if the HRESULT indicate failier 
+       
+        
+struct COMException
+{
+    HRESULT result;
+    explicit COMException(HRESULT const value):result(value)
+    {
+    }
+};
+
+inline void HR(HRESULT const result)
+{
+    _ASSERT(S_OK == result); //this method is WRL pull in from the CRT to help debugging, whenever there is a invalide result the debugger will stop before throw exception
+
+    if(S_OK != result)
+    {
+        throw COMException(result);
+    }
+}
+
+//to make COM managable, a general rule is you should not initialize runtime for thread which is not created by yourself 
+struct COMRuntime 
+{
+    COMRuntime()
+    {
+        //first parameter is reserved, the second parameter define the concurrency model for the runtime 
+        HR(CoInitializeEx(nullptr, CONINIT_MULTITHREADED));
+    }
+    
+    ~COMRuntime()
+    {
+        CoUninitialize();
+    }
+}
+
+//Client.cpp 
 #include "precompiled.h"
 
 using namespace Microsoft::WRL;
 
 int main()
 {
-
+    COMRuntime runtime;
 }
 
-//not finished to 3:53 
+//this is the main process to COM object such as in directx 
+//then the client is ready for use the COM server 
+- Preparing the Server         
+    + add new project 
+    + pick win32 project 
+    + create dll and start with empty project 
+    
+    + add precompile header and source file 
+    + add server source file 
+    + add module definition file(.def)
+    
+    + setup visual C++ project settings, select all configuration 
+    + set general to warning level 4 and change the precompile source precompile.cpp property|C/C++|All Options|Precompiled Header to Create and precompile header file to Precompiled.h  
+
+    + add code to precompiled.h use the normal com implement way to give more detail instead of WRT 
+//precompiled.h
+#pragma once 
+#include <windows.h>
+#include <memory>
+
+#include <atlbase.h>
+#define ASSERT ATLASSERT 
+#define TRACE ATLTRACE 
+
+//precompiled.cpp 
+#include "precompiled.h"
+
+//server.cpp 
+#include "precompiled.h"
+
+    + set project dependency for the client project 
+
+- Servers, Classes, and Classes Objects 
+    + COM Server contains COM classes, located in the same package 
+    + COM class implement a set of COM interfaces and identity rules to hold the interface together 
+    + in the client is CreateHen->IHen to create a specific interface, the client don't need to know the concret implementation 
+    + COM runtime provide refering class instead of interface. window runtime takes it further  
+    + CLSID is a COM class identifier is a GUID. client only need to know the GUID 
+    + CLSIDs point to "class objects" when client request a COM object the server doesn't create a instance of the COM class. you could think "class object" is a activation factory for the COM class or static interface for the class. it provide methods to create COM class or provide method to act like a singleton 
+
+- Class Objects on the server 
+    + class objects are just COM classes (C++ classes) implement some of the interface and IUnknown 
+    
+    + runtime must be able to get a pointer to a class object pointer inteface via a exported function called DllGetClassObject
+    
+    + client and server use class object and COM class to share same defination 
+
+- Demo: Describing Classes and Class Object 
+demo how to implement a class object to let the COM runtime to retrieve it 
+    + create a server header file 
+    //Server.h describe the COM interface and the GUID 
+    #pragma once 
+    #include <unknown.h>
+    
+    struct __declspec(uuid("xxx-xx-xx-xx-...")) Hen;
+    
+    struct __declspec(uuid("xxx-x--x-x-x-")) IHen:IUnknown 
+    {
+        virtual void __stdcall Cluck() = 0;
+    };
+    
+    //define the class object 
+    struct __declspec(uuid("")) IHatchery: IUnknown 
+    {
+        //this is similar to the COM library directly exported function but this is for the COM runtime 
+        virtual HRESULT __stdcall CreateHen(IHen** hen) = 0;
+    };
+
+    + generate a uuid from visual studio commandline tool, by 
+    $ uuidgen|clip
+
+    + include a header into the server implementation 
+    //server.cpp 
+    //the COM exception COM runtie classes and the HR function are moved to the precompiled.h file 
+    #include "precompiled.h"
+    #include "..\server\server.h"
+    
+    
+    using namespace Microsoft WRL;
+    
+    int main()
+    {
+        COMRuntime runtime;
+    }
+
+- Demo: Implementing classes and class objects on the server. they are just c++ classes implemented IUnknown interfaces 
+
+//server.cpp 
+#include "precompiled.h"
+#include "server.h"
+
+struct Hen: IHen 
+{
+    long m_count;
+    Hen() :m_count(0) {}
+    
+    UNLONG __stdcall AddRef() override 
+    {
+        return _InterlockedIncreatement(&m_count);
+    }
+    
+    UNLONG __stdcall Release() override 
+    {
+        ULONG result = _InterlockedDecrement(&m_count);
         
+        if(0 == result)
+        {
+            delete this;
+        }
         
+        return result;
+    }
+    
+    HRESULT __stdcall QueryInterface(IID const& id, void** result) override 
+    {
+        ASSERT(result);
+        
+        if(id == __uuidof(IHen) ||
+           id == __uuidof(IUnknown))
+           {
+           * result = static_cast<IHen*>(this);
+           }
+        else 
+        {
+            *result = 0;
+            return E_NOINTERFACE;
+        }
+        
+        static_cast<IUnknown*>(*result)->AddRef();
+        return S_OK;
+    }
+    
+    void __stdcall Cluck() override 
+    {
+        TRACE(L"Cluck!\n");
+    }
+};
 
 
+//Hatchery will implement as singleton so it does need to implement the AddRef or Release, so just require to return some non-zero value 
+struct Hatchery: IHatchery 
+{
+    ULONG __stdcall AddRef() override 
+    {
+        return 2;
+    }
+    
+    UNLONG __stdcall Release() override
+    {
+        return 1;
+    }
+    
+    HRESULT __stdcall QueryInterface(IID const& id, void** result) override 
+    {
+        ASSERT(result);
+        
+        if(id == __uuidof(IHatchery) ||
+           id == __uuidof(IUnknown))
+        {
+            *result = static_cast<IHatchery *>(this);
+        }
+        else 
+        {
+            *result = 0;
+            return E_NOINTERFACE;
+        }
+        
+        return S_OK;
+    }
+    
+    HRESULT __stdcall CreateHen(IHen** result) override 
+    {
+        ASSERT(result);
+        
+        *result = new (std::nothrow)Hen;
+        
+        if(0 == *result)
+        {
+            return E_NOINTERFACE;
+        }
+        
+        (*result)->AddRef();
+        return S_OK;
+    }
+};
 
 
+//COM runtime will call this function. The other functions are not exposed directly 
+HRESULT __stdcall DllGetClassObject(CLID const& clsid, 
+                                    IID const& iid, 
+                                    void** result)
+{
+    ASSERT(result);
+    
+    *result = nullptr;
+    
+    if(__uuidof(Hen) == clsid)
+    {
+        static Hatchery hatchery;
+        return hatchery.QueryInterface(iid, result);
+    }
+    
+    return CLASS_E_CLASSNOT_AVAILABLE;
+}                                    
 
+//add module definition file, server doesn't export any functions. by DllGetClassObject
+//export.def 
+EXPORTS 
+DllGetClassObject PRIVATE 
+
+//private tell the linker not include this export in the result of the lib file to let the linker resolve import for the client application 
+//this will let the client app to explicitly or dynamicly use the LoadLibrary and GetProAddress function. The COM runtime will call these function dynamically the client will never require to directly link to the function 
+//the keyword have no impact for the dll itself 
+
+- Class Objects on the Client 
+    + the runtime calls DllGetClassObject this will shield the client to how where the COM server is deployed
+    
+    + The client calls CoGetClassObject, com activation infrastructure will bring the client and server together. client give the right class id com runtime will go and find the server dll load it and call it's DllGetClassObject implmentation  
+
+    assumming the server support the given class id interface pointer to the client. then the client and server could communicate directly 
+    
+    + demo 
+    
+//client.cpp 
+#include "Precompiled.h"
+#include "..\Server\Server.h"
+
+using namespace Microsoft::WRL;
+
+int main()
+{
+    ComRuntime runtime;
+    ComPtr<IHatchery> hatchery;
+    
+    HR(CoGetClassObject(__uuidof(Hen), 
+                        CLSCTX_INPROC_SERVER,
+                        nullptr,
+                        __uuidof(hatchery),
+                        reinterpret_cast<void **>(hatchery.GetAddressOf())));
+                        
+    ComPtr<IHen> hen;
+    HR(hatchery->CreateHen(hen.GetAddressOf()));
+    hen->Cluck();
+}
+
+COM provide a wrapper for the create process to simple the calling process. each server is required to register itself to let the client call by this process. 
+
+- summary 
+    + the server exports DllGetClassObject
+    + the client calls CoGetClassObject
+
+# Registration 
+- introduction 
+- the registry 
+- dlls and self-registration 
+- demos: dlls and self-registration 
 
 
 

@@ -1,5 +1,474 @@
-ï»¿Microsoft Window DLL Topic=Document;Note=Erxin
+Microsoft Window DLL Topic=Document;Note=Erxin
 
 # all the dll information about Microsoft VC 
 - reference 
 https://msdn.microsoft.com/en-us/library/aa248995%28v=vs.60%29.aspx
+
+- difference between win16 and win32 dll 
+
+    + There is no separate startup module that you have to link with. The DLL startup sequence is handled directly by C/C++ run-time library code linked into your DLL.
+      
+    + The run-time library code initializes any static non-local C++ objects by calling the appropriate constructors. Each process gets its own copy of all the DLL's static data, including objects.
+      
+    + You no longer need the function called LibMain or a WEP (Windows Exit Procedure). Where you add initialization and termination code for your DLL depends on the kind of DLL you are building. Instead of LibMain, you provide DllMain which is called for both for both entry and exit.
+      
+    + You can import and export symbols directly in your source code. If you use the __declspec(dllexport) attribute (similar to __export in Windows 3.x), you do not need to use a separate module-definition file for exports.
+      
+    + Executables that use __declspec(dllimport) to import data, objects, and functions from a DLL cause the compiler to generate more efficient code.
+      
+    + The timing of calls to routines registered with atexit can differ.
+      
+    + In addition to Win32 non-MFC DLLs, Visual C++ offers three kinds of MFC DLLs.
+
+- export from dll 
+    + dll layout very similar to an .exe file. with one important difference. dll contain a exports table. exports table contain the name of very function that dll exports to other executables 
+    
+    these function are the entry points into the dll 
+    
+    only the functions in the exports table can be accessed by other executables. other functions are private to the dll 
+    
+    exports table can be view by tool DUMPBIN(which is a visual studio tool could be access from the developer command line )
+
+- you can export functions from a dll with two methods. when exporting functions with either method, make sure to use the __stdcall calling convention 
+    + create a module definition file (.def) use .def file when building the dll. 
+A module-definition (.DEF) file is a text file containing one or more module statements that describe various attributes of a DLL.
+
+if you are not using __declspec(dllexport) then the dll's functions require a .def file contain in the module-definition statements 
+
+The EXPORTS statement lists the names and, optionally, the ordinal values of the functions exported by the DLL. You assign the function an ordinal value by following the function’s name with an at sign (@) and a number. you could also export function by ordinal rather than by name by .def file. 
+
+If you want to optimize your DLL’s file size, use the NONAME attribute on each exported function. With the NONAME attribute, the ordinals are stored in the DLL’s export table rather than the function names. This can be a considerable savings if you are exporting many functions.
+
+you could add description statement for describe the purpose of the dll 
+
+        * example a dll contains the code to implement a binary search tree 
+LIBRARY   BTREE
+DESCRIPTION "Implements a binary tree."
+EXPORTS
+   Insert   @1
+   Delete   @2
+   Member   @3
+   Min   @4
+   
+        * mfc wizard will automatic create the .def file for you. for other dll you need create the .def file by yourself 
+        
+if you are exporting functions in C++ you will have to either place the decorated names in the .def file or define your exported fuctions with standard c linkage by using extern "C".  if you need to place the decorated names in the .def file. you can obtain them by using the tool DUMBIN or use linker swith /MAP. 
+
+!decorated names produced by the compiler are compiler specific. if you place the decorated names produced by the visual c++ compiler into a .def file, application that link to your dll must also be built using the same version of visual c++ 
+
+        * if you build a extension dll and exporting using a .def file. you have to place the following code at the begin and end of your header files. 
+        these lines MFC variables that are used internally or that are added to your classes are exported (or imported) from your extension DLL.
+#undef AFX_DATA
+#define AFX_DATA AFX_EXT_DATA
+// <body of your header file>
+#undef AFX_DATA
+#define AFX_DATA
+
+        * when building the dll, the linker uses the .def file to create an export(.EXP) and an import library (.LIB) file. the linker then uses the export file to build the .dll file and executables that implicitly link to the dll link to the import library when they are built 
+
+         .DEF files to export functions and classes from the MFCx0.DLL.
+
+        * the LINK command is avaliable in the developer commnand line tool. the reference document could be found at https://msdn.microsoft.com/en-us/library/aa270751%28v=vs.60%29.aspx
+        
+        * check the dll export table by command line tool DUMPBIN, reference https://msdn.microsoft.com/en-us/library/aa294174%28v=vs.60%29.aspx
+        
+
+    + use keyword __declspec(dllexport) in the function's definition. it is export function by name. if you use If you use __declspec(dllexport), you do not need a .DEF file for exports. 
+
+        * exporting from a dll using __declspec(dllexport) 
+        You can export data, functions, classes, or class member functions from a DLL by using the __declspec(dllexport) keyword. If you use __declspec(dllexport), you do not need a .DEF file for exports.
+        
+__declspec(dllexport) void __cdecl Function1(void);        
+        
+        * export all the public data of a class by 
+class __declspec(dllexport) CExampleExport : public CObject
+{ ... class definition ... };
+
+- extension dlls overview, an MFC extension dll is a dll that typically implements reusable classes derived from existing MFC library calsses. it use dynamic-link library version of MFC known as shared version of MFC. only MFC executable taht are built with the shared version of MFC cn use an extension dll
+
+with an extension dll, you can derive new custom classes from MFC and then offer this "extension" version of MFC 
+
+AFXDLL is no longer used in the Visual C++ documentation. An extension DLL has the same characteristics as the former AFXDLL.
+
+    + reference, https://msdn.microsoft.com/en-us/library/aa278957%28v=vs.60%29.aspx
+
+    + export and import using AFX_EXT_CLASS macro, https://msdn.microsoft.com/en-us/library/aa278937%28v=vs.60%29.aspx
+    
+- export C++ function for use in C-Language Executables. you should declare these functions with C linkage instead of C++ linkage(name decoration)
+
+extern "C" __declspec( dllexport ) int MyFunc(long parm1);
+
+- export C functions for use in C or C++ language executables,  have functions in a DLL written in C that you want to access from a C-language or C++-language module, you should use the __cplusplus preprocessor macro to determine which language is being compiled. 
+
+// MyCFuncs.h
+#ifdef __cplusplus
+extern "C" {  // only need to export C interface if
+              // used by C++ source code
+#endif
+
+__declspec( dllimport ) void MyCFunc();
+__declspec( dllimport ) void AnotherCFunc();
+
+#ifdef __cplusplus
+}
+#endif
+
+if the header file doesn't use the above technology then use extern "C" to wrap the import header in C++ could link the C functions to your C++ executable
+extern "C" {
+#include "MyCHeader.h"
+}
+
+- determine which exporting method to use 
+
+you need ask following question 
+    + will you continue to add additional exported functions ? 
+    + who is using your dll? a third party dll used by many executables that you cannot rebuild or is the dll used only by applications that you can easily rebuild 
+    
+    + pros and cons of using .def files 
+        * advantage 
+Exporting functions in a .DEF file gives you control over what the export ordinals are. When you add additional exported functions to your DLL, you can assign them higher ordinal values (higher than any other exported function). When you do this, applications using implicit linking do not have to relink with the new import library that contains the new functions. This is very important, for example, if you are designing a third-party DLL for use by many applications. You can continue to enhance your DLL by adding additional functionality while at the same time ensuring that existing applications will continue to work properly with the new DLL. The MFC DLLs are built using .DEF files.
+
+Another advantage to using a .DEF file is that you can export functions using the NONAME attribute, which places only the ordinal in the exports table in the DLL. For DLLs with a large number of exported functions, using the NONAME attribute can reduce the size of the DLL file.
+
+        * disadvantage 
+        
+The major disadvantage of using .a DEF file is that if you are exporting functions in a C++ file, you will either have to place the decorated names in the .DEF file or define your exported functions with standard C linkage by using extern “C” to avoid the name decoration done by the compiler. 
+
+If you need to place the decorated names in the .DEF file, you can obtain them by using the tool DUMPBIN or by using the link switch /MAP. Note that the decorated names produced by the compiler are compiler specific. If you place the decorated names produced by the Visual C++ compiler into a .DEF file, applications that link to your DLL must also be built using the same version of Visual C++ 
+
+    + pros and cons of using __declspec(dllexport)
+        * advantage, convenient 
+        * disadvantage, you need to use the dll for an appliaction under your control. whenever the dll is rebuild you need to rebuild the application 
+
+- rules for module definition. syntax rules apply to all statement in a .def file. other rules that apply to specific statements are described with each statement 
+
+    + Statements and attribute keywords are not case sensitive. User-specified identifiers are case sensitive.
+    
+    + Long filenames containing spaces or semicolons (;) must be enclosed in quotation marks (").
+    
+    + Use one or more spaces, tabs, or newline characters to separate a statement keyword from its arguments and to separate statements from each other. A colon (:) or equal sign (=) that designates an argument is surrounded by zero or more spaces, tabs, or newline characters.
+    
+    + A NAME or LIBRARY statement, if used, must precede all other statements.
+    
+    + Most statements appear at most once in the .DEF file and accept one specification of arguments. The specification follows the statement keyword on the same or subsequent line(s). If the statement is repeated with different arguments later in the file, the later statement overrides the earlier one.
+    
+    + The SECTIONS, EXPORTS, and IMPORTS statements can appear more than once in the .DEF file. Each statement can take multiple specifications, which must be separated by one or more spaces, tabs, or newline characters. The statement keyword must appear once before the first specification and can be repeated before each additional specification.
+
+    Many statements have an equivalent LINK command-line option. See the description of the corresponding LINK option for additional details.
+
+    Comments in the .DEF file are designated by a semicolon (;) at the beginning of each comment line. A comment cannot share a line with a statement, but it can appear between specifications in a multiline statement. (SECTIONS and EXPORTS are multiline statements.)
+
+    Numeric arguments are specified in decimal or C-language notation.
+
+    If a string argument matches a reserved word, it must be enclosed in double quotation marks (").
+
+- import into an application using __declspec(dllimport)
+
+a program that uses public symbols defined by a dll is said to import them when create header files for application that use your dlls to build with __declspec(dllimport) on the declarations of the public symbols. The keyword __declspec(dllimport) works whether you export with .DEF files or with the __declspec(dllexport) keyword. 
+
+    + to make your code more readable by 
+#define DllImport   __declspec( dllimport )
+
+DllImport int  j;
+DllImport void func();
+
+you can use the same header file for both the dll and the client application. to do this, use a special preprocessor symbol which indicate you are building the dll or building the client application 
+
+#ifdef _EXPORTING
+   #define CLASS_DECLSPEC    __declspec(dllexport)
+#else
+   #define CLASS_DECLSPEC    __declspec(dllimport)
+#endif
+
+class CLASS_DECLSPEC CExampleA : public CObject
+{ ... class definition ... };
+
+- prepare the win32 dll for use 
+    + on the project menu, add to project then click files to add your source code files to the project 
+    + if needed, add a function called DllMain, add the initialization and termination code for the dll to this function 
+    + make sure you have exported the entry points to your dll by using either the __declspec(dllexport) keyword or by listing the functions in the dll's .def file 
+    
+    prepare a header file that includes the programs using your dll. should contain the declarations of the appropriate functions 
+
+    compiled for a DLL, use the __declspec(dllexport) keyword to export from the DLL. When the header file is compiled for a program that uses the DLL, use the declspec(dllimport) keyword.
+
+    if your dll uses __declspec(dllexport) or a .def file an import library will be automatically created. if not you need to preare an import library to link with by link with switch /IMPLIB.   
+    This option overrides the default name for the import library that LINK creates when it builds a program that contains exports. The default name is formed from the base name of the main output file and the extension .LIB.
+
+- __declspec(extended-attribute) declarator 
+extended-attribute
+    + allocate(“segname”), This declaration specifier specifies a data segment in which the data item will be allocated. The name segname must be declared using #pragma data_seg, #pragma code_seg, #pragma init_seg, or #pragma const_seg.
+    
+    + dllimport
+    + dllexport
+    
+    The dllexport and dllimport storage-class attributes are Microsoft-specific extensions to the C and C++ languages. They enable you to export and import functions, data, and objects to and from a DLL. These attributes explicitly define the DLL’s interface to its client, which can be the executable file or another 
+    
+    // Example of the dllimport and dllexport class attributes
+    __declspec( dllimport ) int i;
+    __declspec( dllexport ) void func();
+    
+    + naked, For functions declared with the naked attribute, the compiler generates code without prolog and epilog code. You can use this feature to write your own prolog/epilog code using inline assembler code. Naked functions are particularly useful in writing virtual device drivers.
+    
+    // Example of the naked attribute
+__declspec( naked ) int func( formal_parameters )
+{
+    // Function body
+}
+    
+    + noreturn, This __declspec attribute tells the compiler that a function does not return. As a consequence, the compiler knows that the code following a call to a __declspec(noreturn) function is unreachable. 
+    
+    __declspec(noreturn) extern void fatal ()
+    {
+       // Code omitted
+    }
+
+    int gloo()
+    {
+       if(...)
+         return 1;
+       else if(...)
+         return 0;
+       else
+         fatal();
+    }
+    
+    + nothrow, This is a __declspec extended attribute which can be used in the declaration of functions. This attribute tells the compiler that the declared function and the functions it calls never throw an exception.
+#define WINAPI __declspec(nothrow) __stdcall
+
+void WINAPI foo1();
+void __declspec(nothrow) __stdcall foo2();
+void __stdcall foo3() throw();
+     
+    + novtable, should only be applied to pure interface classes, that is classes that will never be instantiated on their own. The _declspec stops the compiler from generating code to initialize the vfptr in the constructor(s) and destructor of the class. to reduce code size 
+     
+    + property({get=get_func_name|, put=put_func_name}), can be applied to non-static virtual data members in a class or structure definition 
+    
+ __declspec( property( get=get_func_name ) ) declarator
+
+__declspec( property( put=put_func_name ) ) declarator
+
+__declspec( property( get=get_func_name, put=put_func_name ) ) declarator
+
+This attribute can also be used in the declaration of an empty array in a class or structure definition. For example:
+
+__declspec(property(get=GetX, put=PutX)) int x[];
+
+The above statement indicates that x[] can be used with one or more array indices. In this case, i=p->x[a][b] will be turned into i=p->GetX(a, b), and p->x[a][b] = i will be turned into p->PutX(a, b, i);
+     
+    + selectany, This attribute tells the compiler that the declared global data item is a pick-any. for example A global data item can normally be initialized only once in an EXE or DLL project. This attribute can be used in initializing global data defined by headers, when the same header appears in more than one source file. This attribute is available in both the C and C++ compilers.
+    
+    it can only be applied to the actual initialization of global data items that are externally visible.
+//Correct - x1 is initialized and externally visible
+__declspec(selectany) int x1=1;
+
+//Incorrect - const is by default static in C++, so
+//x2 is not visible externally (This is OK in C, since
+//const is not by default static in C)
+const __declspec(selectany) int x2 =2;
+
+//Correct - x3 is extern const, so externally visible
+extern const __declspec(selectany) int x3=3;
+
+//Correct - x4 is extern const, so it is externally visible
+extern const int x4;
+const __declspec(selectany) int x4=4;    
+
+/Incorrect - __declspec(selectany) is applied to the uninitialized
+//declaration of x5
+extern __declspec(selectany) int x5;
+     
+    + thread,  Thread Local Storage (TLS) is the method by which each thread in a given multithreaded process allocates storage for thread-specific data.
+     
+    + The thread extended storage-class modifier is used to declare a thread local variable. The thread attribute must be used with the __declspec keyword.
+     
+    + declare a thread local variable, see also Thread Local Storage (TLS). 
+     // Example of the thread attribute
+     __declspec( thread ) int tls_i = 1; 
+     
+    + uuid(“ComObjectGUID”), The compiler attaches a GUID to a class or structure declared or defined (full COM object definitions only) 
+
+struct __declspec(uuid("00000000-0000-0000-c000-000000000046")) IUnknown;
+struct __declspec(uuid("{00020400-0000-0000-c000-000000000046}")) IDispatch;
+
+The keyword __uuidof can be applied to retrieve the constant GUID attached to a user defined type.
+    
+The __declspec keyword specifies that an instance of a given type is to be stored with a Microsoft-specific storage-class attribute.
+
+- importing and exporting inline functions 
+
+Imported functions can be defined as inline. The effect is roughly the same as defining a standard function inline; calls to the function are expanded into inline code, much like a macro. This is principally useful as a way of supporting C++ classes in a DLL that may inline some of their member functions for efficiency.
+
+One feature of an imported inline function is that in C++, you can take its address. The compiler returns the address of the copy of the inline function residing in the DLL. Another feature of imported inline functions is that unlike global imported data, you can initialize static local data of the imported function.
+
+Caution   You should exercise care when providing imported inline functions because they can create the possibility of version conflicts. An inline function gets expanded into the application code; therefore, if you later rewrite the function, it does not get updated unless the application itself is recompiled. (Normally, DLL functions can be updated without rebuilding the applications that use them.)
+
+- Mutual Imports, two dlls import symbols from each other similar to mutually-recursive functions 
+
+The problem with mutually-importing executable files (usually DLLs) is that neither can be built without building the other first.
+
+the solution is use LIB utility with the /DEF option, which produces an import library without building the executable file. with it ou can build all the import libraries ou need 
+
+    + take each dll in turn, if all the needed import libraries exist and are current, run LINK to build the executable file (DLL). This produces an import library. Otherwise, run LIB to produce an import library.
+
+    Running LIB with the /DEF option produces an additional file with an .EXP extension. The .EXP file must be used later to build the executable file.
+    
+    + After using either LINK or LIB to build all the import libraries, go back and run LINK to build any executable files that were not built in the previous step. Note that the corresponding .EXP file must be specified on the LINK line.
+
+    If you had run the LIB utility earlier to produce an import library for DLL1, LIB would have produced the file DLL1.EXP as well. You must use DLL1.EXP as input to LINK when building DLL1.DLL.
+
+    + example DLL1 and DLL2 are mutual imports 
+Step 1 is to run LIB, with the /DEF option set, on DLL1. Step 1 produces DLL1.LIB, an import library, and DLL1.EXP. In step 2, the import library is used to build DLL2, which in turn produces an import library for DLL2's symbols. Step 3 builds DLL1, by using DLL1.EXP and DLL2.LIB as input. Note that an .EXP file for DLL2 is not necessary because LIB was not used to build DLL2's import library.
+
+    + limitation of _AFXEXT, You can use the _AFXEXT preprocessor symbol for your extension DLLs as long as you do not have multiple layers of extension DLLs. If you have extension DLLs which call or derive from classes in your own extension DLLs, which then derive from the MFC classes, you must use your own preprocessor symbol to avoid ambiguity. 
+    
+    + not exrpoting the entire classes, When you are not exporting an entire class, you have to ensure that the necessary data items created by the MFC macros are exported correctly. This can be done by re-defining AFX_DATA to your specific class' macro. This should be done any time you are not exporting the entire class.
+    
+// A.H
+#ifdef A_IMPL
+   #define CLASS_DECL_A  _declspec(dllexport)
+#else
+   #define CLASS_DECL_A  _declspec(dllimport)
+#endif
+
+#undef  AFX_DATA
+#define AFX_DATA CLASS_DECL_A
+
+class CExampleA : public CObject
+{
+ DECLARE_DYNAMIC()
+ CLASS_DECL_A int SomeFunction();
+ //... class definition ...
+};
+
+#undef AFX_DATA
+#define AFX_DATA
+
+- how do I share data in my dll with an application or with other dlls? 
+Win32 DLLs are mapped into the address space of the calling process. By default, each process using a DLL has its own instance of the DLL global and static variables. If your DLL needs to share data with other Win32 DLLs loaded by a different application or with different mappings of the same DLL, then you can use either of the following approaches: 
+
+    + creaet named data sections using the #pragma statement, new named section, use the #pragma data_seg directive. You then must specify the correct sharing attributes for this new named data section in your .DEF file. 
+    
+    reference artical 
+    "How to Share Data Between Different Mappings of a DLL" (Q125677).
+    "Specifying Shared and Nonshared Data in a DLL" (Q100634)."
+    "How to Specify Shared and Nonshared Data in a DLL" (Q89817).
+    "Sharing All Data in a DLL" (Q109619).
+    
+    + use memory-mapped files, if you need to share a c++ class instance, you should use a memory-mapped file, because each time a process attaches to the dll, the constructor for the object is called for example 
+#pragma  data_seg(".myseg")
+  _declspec(dllexport) CTest Counter1(0);
+  _declspec(dllexport) short Counter2 = 0;
+#pragma data_seg()
+
+Assume that the variables Counter1 and Counter2 are incremented in a function in the DLL. The value of Counter2 increases as expected, but on each process attach, the constructor for Counter1 is called reinitializing it to zero. In order to share Counter1, you must use a memory-mapped file. For more information about memory-mapped files, see in the Win32 SDK documentation.
+
+- using _declspec(dllimport) and __declspec(dllexport) 
+However, you must use __declspec(dllimport) in order to import variables used in a DLL.
+
+
+
+# Create an MFC dll 
+- reference 
+https://msdn.microsoft.com/en-us/library/aa294174%28v=vs.60%29.aspx
+
+- prepare the MFC dll for use 
+    + add code to the starter code generated by AppWizard 
+    
+    + make sure you have exported the entry points to your dll by using either the __declspec(dllexport) keyword or by listing the functions in the DLL's .def file. if exporting c++ classes you may want to use AFX_EXT_CLASS
+
+    prepare a header file to include hte programs using your dll. this header file must contain the declarations of the exported functions and/or exported c++ classes 
+    
+    use __declspec(dllimport) keyword on the declarations of the exported functions and c++ classes in this header file 
+    
+    build the dll 
+    
+when you build your dll, the linker also builds an import library for you this library has the same base name as your dll, but the extension .lib. you may want to provide both a debug and retail(/release) version of your dll. this permits client program to build both debug and retail version of their application with link appropriate debug or retail version of dlls 
+
+if you are building an applicaiton that implicitly links to a dll, add the import library to the object/library modules text box on the link tab in the project settings dialog box. make sure you put the debug version of the import library in the debug settings and release version in the release settings 
+
+- dll version of MFC, MFCxx.DLL and MFCxxD.DLL (where x is the MFC version number) shared dynamic link libraries with MFC applications and extension DLLs
+
+    + how you build an MFC extension dll 
+    + how you build an MFC application that uses the dll version of MFC 
+    + how the MFC shared dynamic-link libraries are implemented 
+
+reference, https://msdn.microsoft.com/en-us/library/hw85e4bb%28v=vs.60%29.aspx
+
+
+# LIB reference 
+- the microsoft 32 bit library manager(LIB.EXE) creates and manages a library of common object file format(COFF) object files. lib can also be used to create export files and import libraries to reference exported definition 
+
+reference, https://msdn.microsoft.com/en-us/library/aa270431%28v=vs.60%29.aspx
+
+The Win32 Portable Executable format is designed to minimize the number of pages that must be touched to fix imports. To do this, it places all the import addresses for any program in one place called the Import Address Table. This allows the loader to modify only one or two pages when accessing these imports.
+
+- reference, Executable and Linkable format 
+https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+
+ELF is accepted among different vendors of unix systems 
+    + tools for ELF file 
+readelf is a Unix binary utility that displays information about one or more ELF files. A free software implementation is provided by GNU Binutils.
+elfutils provides alternative tools to GNU Binutils purely for Linux.[5]
+elfdump is a command for viewing ELF information in an ELF file, available under Solaris and FreeBSD.
+objdump provides a wide range of information about ELF files and other object formats. objdump uses the Binary File Descriptor library as a back-end to structure the ELF data.
+The Unix file utility can display some information about ELF files, including the instruction set architecture for which the code in a relocatable, executable, or shared object file is intended, or on which an ELF core dump was produced
+
+    + for linux 
+All Linux distributions use the same binary format ELF, but there is still some differences:
+1.different cpu arch use different instruction set.
+2.the same cpu arch may use different ABI, ABI defines how to use the register file, how to call/return a routine. Different ABI can not work together.
+3.Even on same arch, same ABI, this still does not mean we can copy one binary file in a distribution to another. Since most binary files are not statically linked, so they depends on the libraries under the distribution, which means different distribution may use different versions or different compilation configuration of libraries. 
+
+So if you want your program to run on all distribution, you may have to statically link a version that depends on the kernel's syscall only, even this you can only run a specified arch.
+
+If you really want to run a program on any arch, then you have to compile binaries for all arches, and use a shell script to start up the right one.
+
+    + ABI, Application Binary Interface
+
+
+    
+# Walkthrough, Creating and Using a Dynamic Link LIbrary(C++)
+- More information about dll
+https://msdn.microsoft.com/en-us/library/1ez7dh12.aspx
+
+
+# IDE and Development Tools, Building C/C++ Program 
+- reference, https://msdn.microsoft.com/en-us/library/z7kx322x.aspx
+
+# Visual C++ in Visual Studio 2015
+- reference https://msdn.microsoft.com/en-us/library/60k1461a.aspx
+
+# Run-Time Library Behavior 
+- reference, https://msdn.microsoft.com/en-us/library/aa295784%28v=vs.60%29.aspx
+- The C/C++ run-time library code performs the DLL startup sequence, eliminating the need to link with a separate module as was necessary in Windows 3.x. Included in the C/C++ run-time library code is the DLL entry-point function called _DllMainCRTStartup. The _DllMainCRTStartup function does several things, including calling CRT_INIT, which initializes the C/C++ run-time library and invokes C++ constructors on static, non-local variables. Without this function, the run-time library would be left in an uninitialized state. 
+
+- you could specify your own entry point function by linker switch /ENTRY but not recommanded, because you need remake the wheel 
+
+- In addition to initializing the C run-time library, _DllMainCRTStartup calls a function called DllMain. Depending on the kind of DLL you are building, Visual C++ provides DllMain for you and it gets linked in so that _DllMainCRTStartup always has something to call. If not you have nothing special you have to do when building your dll 
+
+- Initialize a DLL 
+
+Typically, your DLL has initialization code (such as allocating memory) that must execute when your DLL loads. if not you need do nothing 
+
+    + kinds of dll 
+regular of dll , in the DLL's CWinApp object's InitInstance and ExitInstance 
+extension dll, in the DLLMain function generated by AppWizard
+Non-MFC dll, in a function called DllMain that you provide 
+
+- The C/C++ run-time library code calls constructors and destructors on static, non-local variables. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

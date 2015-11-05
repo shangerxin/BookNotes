@@ -1,0 +1,701 @@
+﻿Mercurial The Definitive Guide=Bryan O'Sullivan;Note=Erxin
+
+# history of revision control
+- git need repack to strink the repo size compare to mercurial 
+
+# a tour of mercurial, the basic 
+- install 
+ubuntu 
+$ apt-get install mercurial
+
+fedora 
+$ yum install mercurial
+
+openSUSE 
+zypper install mercurial
+
+Gentoo 
+emerge mercurial
+
+- check version 
+$ hg version 
+
+- help 
+$ hg help command-name  
+
+- making a local copy of a repo 
+$ hg clone repo-uri 
+
+- a tour through history 
+$ hg log 
+
+changeset: 0:0a04b987be5a
+user: mpm@selenic.com
+date: Fri Aug 26 01:20:50 2005 -0700
+summary: Create a standard "hello, world" program
+
+    + viewing specific revisions 
+$ log -r r-number
+r-number is a revision number or a hexadecimal identifier 
+
+- setting up a username 
+    + specify a -u option to the hg commit command on the command line 
+    
+    + set HGUSER environment variable this is checked next 
+    
+    + create a file at your home directory caled .hgr with a username entry 
+    
+    + EMAIL environment variable will be used next 
+    
+    + mercurial will quiery your system to find out your local user-name and host-name 
+
+- creating a configuration file .hgr content 
+# This is a Mercurial configuration file.
+[ui]
+username = Firstname Lastname <email.address@example.net>
+
+- writing a commit message 
+
+$ hg commit 
+
+- admiring our new handiwork 
+
+$ hg tip -vp 
+
+hg tip will only show newest revision in the repo 
+
+- pulling changset from another repo 
+
+$ hg pull repo-uri 
+$ hg pull -r changeset-name
+
+$ hg incoming repo-uri 
+hg incoming will display what's kinds of changes will be made 
+
+- updating the working directory 
+$ hg update 
+
+hg pull doesn't update the working directory 
+you can use hg update to update the working directory to state it was in any revision in hte history of the repo 
+
+pull-then-update is combine into 
+$ hg pull -u 
+
+    + display current revision of the working directory 
+$ hg parents 
+
+- pushing changes to another repo 
+
+$ hg outgoing repo-uri 
+
+tells us what changes would be pushed into another repo 
+
+$ hg push repo-uri 
+
+- default locations, mercurial record the location of the repository we cloned in the .hg/hgrc file of the new repository the content like 
+[paths]
+default = http://www.selenic.com/repo/hg
+
+for hg push and hg outgoing be different from those for hg pull and hg incoming. We can do this by adding a default-push entry to the [paths] section of the .hg/hgrc file, as follows:
+[paths]
+default = http://www.selenic.com/repo/hg
+default-push = http://hg.example.com/hg
+
+- start a new project 
+$ hg init project-name 
+
+    + add existing files 
+$ hg add file-name
+
+    + check state 
+$ hg status 
+ 
+    + commit 
+$ hg commit -m "message"
+
+
+# merging work 
+- head changesets, a head is a change that has no children. the tip revision thus a head 
+
+    + view the heads 
+$ hg heads 
+
+- performing merge 
+$ hg update 
+
+    + forcing update by 
+$ hg update -C 
+this will revert all the uncommited changes in the current working directory 
+you may not want to do this!!
+
+    + merge between two head 
+$ hg merge 
+$ hg commit -m "message"
+
+    + using a graphical merge tool, after using a merge tool we could use resolve command mark the conflict file is merged 
+$ hg resolve -m conflict-file 
+
+    + simplify pull-merge-commit sequence by fetch command 
+$ hg fetch repo-uri
+
+equal to 
+$ hg update -u 
+$ hg merge 
+$ hg commit -m "message"
+
+fetch is a extensioin we need to enable it at the hg configruation file .hgrc file in your home directory Then add a line that simply reads fetch=:
+[extensions]
+fetch =
+
+(Normally, the right-hand side of the = would indicate where to find the extension, butsince the fetch extension is in the standard distribution, Mercurial knows where to search for it.)
+
+- renaming, copying and merging 
+
+$ hg rename file-name 
+
+
+# Behind the scenes 
+- tracking the history of single file 
+tracks modifications to a file, stores the history in a metadata object called a filelog. it store as files in the .hg/store/data directory 
+
+a file is large or lots of history its stored in separate data(.d suffix) and index(.i suffix)
+
+- managing tracked files 
+hg use a structure manifest to collect together information 
+
+- recording changeset information 
+the changelog contains information about each changeset 
+
+- relationships between revisions 
+changelog a manifest, or a filelog stores a pointer to its immediate parent 
+
+- safe efficient storage, called revlog 
+use delta storage for each revisions 
+
+- revision history, branching and merging 
+hg uses a special hash, called the null ID, to represent the no parent here hash is simple as a string of zeros 
+
+first revisions in a revlog has the null ID in both of its parent slots. For a "normal" revision its first parent slot contains the ID of its parent revision and its contains the null ID, indicating that the revision has only one real parent 
+
+any two revisions that have the same parent ID are branches. a revision that represents a merge between branches has two normal revision IDs in its parent slots 
+
+- working directory, hg stores a snapshot of the files from the repository as of a particular changeset 
+
+dirstate is a special structure that contains hg's knowledge of working directory .hg/dirstate 
+
+normal state working directory has a single changeset as a parent. it's the tip. WD could be think as a changeset about to commit 
+
+WD have two headers but normal only one contain a normal revision number 
+
+- creating a new head 
+
+WD update the changeset other than the current tip will create two head in the repo. then we need to merge the heads. the WD will use the two heads to point to the two heads
+
+- merge changes 
+- network comporession, use zip archive format 
+
+You can tell Mercurial to always use ssh’s compression feature by editing the .hgrc file in your home directory as follows:
+[ui]
+ssh = ssh -C
+
+- concurrent access, hg never needs to lock a repo because it use read/write atomicity way. the process also have a time out strategy 
+
+- avoid seeks, copy on write 
+
+- other contents of the dirstate 
+
+hg add 
+hg remove 
+hg rename 
+hg copy 
+
+hg will update the dirstate 
+
+
+# daily use 
+- which files to track 
+
+$ hg add 
+
+- explicit versus implicit file naming, pass a directory to a add command will add all the contained files 
+
+hg track files not directory, so empty directory will not be present in hg repo 
+
+if you need an empty directory in your repo. there are few ways to do this 
+    + create a directory and add a hidden file, such as start with "."
+    
+    + create it in your automatic build script 
+    
+- stop tracking a file 
+$ hg remove file-name 
+
+this delete the file and tells hg to stop tracking it 
+
+remove files does not affect its history 
+    + it removes the current version of the file from the working directory 
+    
+    + it stops mercurial from tracking changes to the file from the time of the next commit 
+    
+- missing files, which means the files are not exist but not removed with the hg remove command 
+
+to remove the missing file from hg repo 
+$ hg remove --after file-name 
+
+revert a missing file by 
+$ hg revert file-name 
+
+- adding and removing files in one step 
+
+$ hg addremove 
+this command adds untracked files and marks missing files as removed 
+
+hg commit command also provides a -A option that performs this same add-and-remove sequence 
+
+- copying files, hg copy command lets you make a new copy of a file. it treats these copied files specially when you merge your work with someone else's 
+
+- the results of copying during a merge 
+
+$ hg copy file-src file-dst 
+the new copied file will look the same as the other files in hg status command but with -C option(show copy sources) will display the difference. 
+it prings another line of output this is the file that our newly added file was copied from 
+
+$ hg status -C
+A new-file
+  file   //indicate the original source of the new-file 
+$ hg commit -m 'Copied file
+
+when do merging the copied file will be automatic updated whenever the original file is changed 
+
+- why should changes follow copies, the propagation only happends when you merge(only propagation on the first merge)
+
+hg is the only version control have this kinds of features 
+
+behavior of the hg copy command likes unix cp command, if the destination is a directory the copy is recursive 
+
+if you copy a file manually and want to it behavior like a hg copy by 
+$ hg copy --after src dst 
+
+- renaming files, hg makes a copy of each source and deletes it and marks the files as removed 
+
+- divergent renames and merging, two people rename same file into different names, hg will warning about the divergent renames
+
+- convergent renames and merging, two people rename different files into same name. new version of hg is support this 
+
+- recovering from mistakes 
+$ hg revert 
+
+- dealing with tricky merges 
+
+$ hg ci -A -m file-name 
+
+hg ci command commit specific files aor all outstanding changes 
+
+- file resolution states 
+    + a resolved file has been successfully merged 
+    + an unresolved file was not merged successfully 
+    
+check resolve state 
+$ hg resolve -l 
+
+retry to merge all unresolve files 
+$ hg resolve --all/-a 
+
+manually mark a file is resolved by 
+$ hg resolve file-name --mark 
+unresolve by 
+$ hg resolve file-name --unmark 
+
+- more useful diffs 
+
+$ hg diff 
+
+$ hg diff --git/-g 
+will use the new diff format 
+
+normally hg diff command will not known about file permissions. we have to use -g to get the difference 
+
+- which files to manage and which to avoid 
+
+    + files that are very large and incompressible 
+    + files that change a lot form one revision to the next may expensive to store if you edit them frequently 
+    
+- backups and mirroring 
+
+offsite backups and remote mirrors by cron command 
+
+clone a copy of repo and use scripts to updated from others 
+
+
+# Collaborating with other people 
+- web interface, it's http tunneling 
+
+you could browse existing repo such as http://www.selenic.com/repo/hg 
+
+provide web interface for you own repo 
+$ hg serve 
+best suited to short-term lightweight serving 
+
+longer-lived repos you'd like to have is public hosting service 
+
+hg also support CGI and WSGI(web services gateway interface)
+
+- collaboration models 
+
+use hook to prevent people accident write to the release branch 
+
+- a single central repository 
+
+serving over http using cgi 
+
+- a hosted central repository, Bitbucket is that not only do they handle the fiddly server configuration details, such as user accounts authentication
+
+use tag to mark repo get to a milestone 
+$ hg tag v1.0 
+
+wwe can clone the tagged main branch on the server to a new "stable" branch 
+$ hg clone -rv1.0 main stable 
+
+if we need a fix to the stable branch we could clone and fix it in a new branch 
+$ hg clone stable stable-fix 
+
+bring it back by pull to the main 
+$ hg pull stable 
+
+- feature branches 
+develop on feature branch and merge into master 
+
+support release train, features could be added in next release if it finished after the current release train 
+
+- linux kernel model 
+pull only fron linus repo 
+
+linus pick trusable repos to pull from to his tree. each sub projcect have its maintainer 
+
+- pull only versus shared push collaboration 
+
+people only pull changes from others is better than one in which multiple people can push changes to a shared repo 
+
+if you are using a centralized revision control tool there is no way to make a choice. the tool only gives you shared-push 
+
+- where collaboration meets branch management 
+
+sharing changes with your collaborators 
+
+informal sharing with hg serve it will bring up http server. client user could use browser or hg to read data. url pattern like 
+http://host-name.local:8000/
+
+    + allow people to browse the history 
+    
+    + speak hg wire protocol so people can clone, pull changes 
+    
+hg server won't allow remote users to modify repository 
+
+start service on different port 
+$ hg serve -p port 
+
+$ hg serve -v 
+to give more information 
+
+- using secure shell protocol 
+
+ssh url 
+ssh://bos@hg.serpentin.com:22/hg/hgbook 
+
+specify a path relative to another user's home with a tilde 
+ssh://server/~otheruser/hg/repo 
+
+absolute path on the server begin with component with two slashes 
+sh://server//absolute
+
+- finding an ssh client for your system, OpenSSH is come with *nix 
+
+on windows TortoiseHg package is bundled with a version of Simon Tatham's excellent plink command 
+
+- generating a key pair
+
+*nix use ssh-keygen command to generate a key *.pub 
+
+window use puttygen from PuTTY website 
+
+    +advisable to protect it with a passpharse 
+    
+for server use OpenSSH, we need to add public key to the set of authorized keys for whatever user you're logging in remote. adding public key to a list in a file called authorized_keys in their .ssh directory 
+
+- using an authentication agent 
+authentication agent is a daemon that stores passphrases in memory(will forget passphrases if you log out and log back in again). if you don't have authentication agent you need to type passphrase every time 
+
+unix-like system, agent is called ssh-agent, you need to use ssh-add command to add passpharse
+
+on window if using TortoiseHg, pageant command acts as the agent as with puttygen
+
+- configuring the server side properly 
+test ssh connection is ok 
+$ ssh server-name date 
+will return the server date 
+
+check hg is accessable from ssh 
+$ ssh server-name hg version 
+
+enable compression by hg configuration ~/.hgrc 
+[ui]
+ssh = ssh -C 
+
+- serving over http using CGI
+
+- sharing multile repositories with one CGI script 
+hgwebdir.cfi script 
+
+- making mercurial more trusting mercurial will not trust most of the configuration items in a .hg/hgrc file inside a repo which own by a different user 
+for *nix team we use a hgrc file to trust each other's configuration 
+
+# Save this as e.g. /etc/mercurial/hgrc.d/trust.rc
+[trusted]
+# Trust all entries in any hgrc file owned by the "editors" or
+# "www-data" groups.
+
+groups = editors, www-data
+# Trust entries in hgrc files owned by the following users.
+users = apache, bobo
+
+
+# Filenames and pattern matching 
+- execute command without filename 
+
+    + most command will operate on the entire WD. this is what hg add does 
+    
+    + if command has effects that are difficult or impossible to reverse, it requires 
+
+- it is safe to tell you what files it's operating on, name them with -v option 
+
+- using patterns to identify files 
+
+pattern in place of regular name on command line 
+syntax:pattern-body 
+
+use glob syntax 
+
+- shell style global 
+$ hg add 'glob:*.py'
+
+** pattern match any strig and crosses directory boundaries, it's not a standard unix glob 
+
+{} group sub patterns 
+$ hg add 'glob:.{in,py}'
+
+perl-style regexps, mercurial's are rooted 
+'re:xxx'
+
+- filtering files, supply give multiple -I or -X
+    + -I or --include, lets you specify a pattern that filenames must match in order be processed 
+    
+    + -X or --exclude gives you a way to avoid processing files if they match this pattern 
+    
+you can read a -I filter as "process only the files that match this filter"
+$hg status -I '*.in'
+
+- permanently ignoring unwanted files and directories 
+create a file named .hgignore in the root of your repo. it should contain a list of regular expressions 
+
+syntax:glob 
+    + example 
+.hgignore file.
+syntax: glob
+# This line is a comment, and will be skipped.
+# Empty lines are skipped too.
+# Backup files left behind by the Emacs editor.
+*~
+# Lock files used by the Emacs editor.
+# Notice that the "#" character is quoted with a backslash.
+# This prevents it from being interpreted as starting a comment.
+.\#*
+# Temporary files used by the vim editor.
+.*.swp
+# A hidden file created by the Mac OS X Finder.
+.DS_Store
+
+- case sensitivity 
+    + dos-based is cae insensitive 
+    + case preserving but insensitive, window and mac 
+    + case sensitive *nix 
+    
+- safe portable repository storage is case safe, you could use your repo in any os 
+
+- detecting case conflicts 
+if filesystem is case preserving but insensitive, mercurial will treat names that differ only in case as the same 
+
+it is possible to commit a changeset on a case-sensitive which will cause trouble in case-insensitive filesystem. in this time hg will prevent update or merge occuring 
+
+- fixing a case conflict 
+clone to *nix and fix it and repush 
+
+
+# Managing releases and branchy development 
+- give a permanent name to any revision using hg tag command 
+$ hg tag revision-tag-name 
+
+display all the tags 
+$ hg tags 
+
+in the log will also display the relative tags 
+$ hg log 
+changeset: 0:c78e12f9da76
+tag: v1.0
+user: Bryan O'Sullivan <bos@serpentine.com>
+date: Tue May 05 06:44:45 2009 +0000
+summary: Initial commit
+
+any command accept a revision number will also accepts a tag 
+
+remove a tag 
+$ hg tag --remove tag-name 
+
+modify a tag to different revision 
+$ hg tag -r revision-number tag-name 
+there will still be a permanent record of the previous identity of the tag, but hg will no longer use it 
+
+all the tags are listed in a file .hgtags in your repo, every time you run hg tag you will see a correponding changeset in the output of hg log 
+
+- handling tag conflicts during a merge, after you merge the .hgtags file you need to run 
+$ hg tags 
+to verify the merge is successful 
+
+- tags and cloning
+$ hg clone -r tag-name 
+this command will only clone the changeset before the tag revision(even not include the specify tag)
+
+- when permanent tags are too much, use local tag 
+$ hg tag tag-name -l 
+this kind of tags will store in .hg/localtags. the file is not revision controlled 
+
+- the flow of changes big picture versus little picture 
+big picture, represent thte sweep of a project's evolution, people give them names
+little picture branches are artefacts of the day to day activity of developing and merging changes 
+
+- managing big-picture branches in repo 
+tag the main repo and then clone to create branch 
+
+- don't repeat yourself, merging across branches, mercurial can help you to manage these bug fixes without duplicating your work 
+
+$ cd..
+$ hg clone myproject myproject-merge 
+$ cd myproject-merge
+$ hg pull ../myproject-1.0.1 
+$ hg merge 
+$ hg commit -m "merge"
+$ hg push 
+commit to local clone branch 
+
+- naming branches within one repository
+
+there always exists a branch named default 
+
+work with branches with command hg branches command 
+$ hg branches 
+will also display the changeset tip of the current branch 
+
+$ hg branch 
+will tells you what branch the parent of the current changeset is on 
+
+create a new branch 
+$ hg branch branch-name 
+
+switch to branch 
+$ hg update branch-name 
+
+if you commint on a branch the return message will contain the branch 
+
+change the name of a branch by branch command 
+
+- dealing with multiple named branches in a repo, if you have more than one named branch, the update, pull -u command will only update the working directory to the tip of this branch 
+
+to update a revision that's on a different named branch we need use the -C option to hg update 
+
+- branch names and merging, merge in mercurial are not symmetrical, the repos will contain different sequence of checkins after merging 
+
+this affect hg's choice of branch name. after merge hg will retain the branch name of the first parent 
+
+$ hg merge branch-name 
+
+- branch name is generally useful 
+
+you can set up a pretxnchangegroup hook on each that will block incoming changes that have the “wrong” branch name in /.hgrc 
+
+[hooks]
+pretxnchangegroup.branch = hg heads --template '{branches} ' | grep mybranch
+
+# finding and fixing mistakes 
+- erasing local history 
+$ hg rollback 
+use the hg rollback command to revert one commit 
+
+- erroneous pull, use rollback 
+$ hg rollback
+will remove all the changesets that you pulled 
+
+- rolling back is useless once you've pushed, rollback drops nothing when you pushed your changes to another repo 
+
+- you can only roll back once 
+- reverting the mistaken change 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
