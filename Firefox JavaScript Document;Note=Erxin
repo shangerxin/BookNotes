@@ -1,0 +1,329 @@
+﻿Firefox JavaScript Document;Note=Erxin
+
+
+# Web workers
+- reference 
+https://html.spec.whatwg.org/multipage/workers.html
+
+- introduction, scope 
+var worker = new Worker('worker.js');
+worker.onmessage = function (event) {
+    document.getElementById('result').textContent = event.data;
+};
+
+The postMessage() method is used to send a message back to the page when a prime is found
+
+- worker used for background i/o 
+
+var ticker = new Worker('ticker.js');
+
+// SEARCHER
+var searcher = new Worker('searcher.js');
+function search(query) {
+ searcher.postMessage(query);
+}
+
+function select(newSymbol) {
+ symbol = newSymbol;
+ ticker.postMessage(symbol);
+}
+...
+
+ticker.onmessage = function (event) {
+     var data = event.data.split(' ');
+     document.getElementById('symbol').textContent = data[0];
+     document.getElementById('value').textContent = data[1];
+   };
+
+searcher.onmessage = function (event) {
+    var data = event.data.split(' ');
+    var results = document.getElementById('results');
+    while (results.hasChildNodes()) // clear previous results
+        results.removeChild(results.firstChild);
+        
+    for (var i = 0; i < data.length; i += 1) {
+        // add a list item with a button for each result
+        var li = document.createElement('li');
+        var button = document.createElement('button');
+        button.value = data[i];
+        button.type = 'button';
+        button.onclick = function () { select(this.value); };
+        button.textContent = data[i];
+        li.appendChild(button);
+        results.appendChild(li);
+    }
+};
+
+- shared workers introduction
+This section introduces shared workers using a Hello World example. Shared workers use slightly different APIs, since each worker can have multiple connections.
+
+var worker = new SharedWorker('test.js');
+var log = document.getElementById('log');
+worker.port.onmessage = function(e) { // note: not worker.onmessage!
+    log.textContent += '\n' + e.data;
+}
+
+//javascript worker 
+onconnect = function(e) {
+    var port = e.ports[0];
+    port.postMessage('Hello World!');
+}
+    + improved example 
+    
+var worker = new SharedWorker('test.js');
+var log = document.getElementById('log');
+worker.port.addEventListener('message', function(e) {
+    log.textContent += '\n' + e.data;
+}, false);
+worker.port.start(); // note: need this when using addEventListener
+worker.port.postMessage('ping');
+
+//javascript worker 
+onconnect = function(e) {
+  var port = e.ports[0];
+  port.postMessage('Hello World!');
+  port.onmessage = function(e) {
+    port.postMessage('pong'); // not e.ports[0].postMessage!
+    // e.target.postMessage('pong'); would work also
+  }
+}
+
+- sharing state using shared worker 
+
+- delegation, With multicore CPUs becoming prevalent, one way to obtain better performance is to split computationally expensive tasks amongst multiple workers
+var worker = new Worker('worker.js');
+worker.onmessage = function (event) {
+ document.getElementById('result').textContent = event.data;
+};
+
+// settings
+var num_workers = 10;
+var items_per_worker = 1000000;
+
+// start the workers
+var result = 0;
+var pending_workers = num_workers;
+for (var i = 0; i < num_workers; i += 1) {
+  var worker = new Worker('core.js');
+  worker.postMessage(i * items_per_worker);
+  worker.postMessage((i+1) * items_per_worker);
+  worker.onmessage = storeResult;
+}
+
+// handle the results
+function storeResult(event) {
+  result += 1*event.data;
+  pending_workers -= 1;
+  if (pending_workers <= 0)
+    postMessage(result); // finished!
+}
+
+- infrastructure, There are two kinds of workers; 
+    + dedicated workers, and shared workers. 
+    Dedicated workers, once created, are linked to their creator; but message ports can be used to communicate from a dedicated worker to multiple other browsing contexts or workers. 
+    
+    Shared workers, on the other hand, are named, and once created any script running in the same origin can obtain a reference to that worker and communicate with it.
+
+- the event loop, Each WorkerGlobalScope object has a distinct event loop, separate from those used by units of related similar-origin browsing contexts. This event loop has no associated browsing context
+
+Once the WorkerGlobalScope's closing flag is set to true, the event loop's task queues must discard any further tasks that would be added to them (tasks already on the queue are unaffected except where otherwise specified). Effectively, once the closing flag is true, timers stop firing, notifications for all pending background operations are dropped,
+
+
+
+# standard built-in objects 
+- value properties 
+    + Infinity, number infinitiy value 
+console.log(Infinity         ); /* Infinity */  
+console.log(Infinity + 1     ); /* Infinity */  
+console.log(Math.pow(10,1000)); /* Infinity */  
+console.log(Math.log(0)      ); /* -Infinity */  
+console.log(1 / Infinity     ); /* 0 */
+
+    + NaN, not a number 
+NaN === NaN;        // false
+Number.NaN === NaN; // false
+isNaN(NaN);         // true
+isNaN(Number.NaN);  // true
+
+function valueIsNaN(v) { return v !== v; }
+valueIsNaN(1);          // false
+valueIsNaN(NaN);        // true
+valueIsNaN(Number.NaN); // true
+
+    + undefined, primitive value undefined, its a reserved keyword can be used in any scope instead of global scope 
+var x;
+if (x === undefined) {
+   // these statements execute
+}
+else {
+   // these statements do not execute
+}
+
+var x;
+if (typeof x === 'undefined') {
+   // these statements execute
+}
+
+if(x === undefined){ // throws a ReferenceError
+
+}
+
+void operator and undefined 
+var x;
+if (x === void 0) {
+   // these statements execute
+}
+
+// y has not been declared before
+if (y === void 0) {
+   // throws a ReferenceError (in contrast to `typeof`)
+}
+
+    + null, is a literal representing null or "empty" value it's one of the primitive values, differences between equality (==) and identity (===) operators (type-conversion is performed with the former).
+typeof null        // object (bug in ECMAScript, should be null)
+typeof undefined   // undefined
+null === undefined // false
+null  == undefined // true
+
+- primitive type  
+A primitive (primitive value, primitive data type) is data that is not an object and has no methods. In JavaScript, there are 6 primitive data types: string, number, boolean, null, undefined, symbol (new in ECMAScript 2015).
+
+All primitives are immutable (cannot be changed).
+
+- symbol, A symbol is a unique and immutable data type and may be used as an identifier for object properties. The symbol object is an implicit object wrapper for the symbol primitive data type.
+var sym1 = Symbol();
+var sym2 = Symbol("foo");
+
+the creater function will create new symbol in each time 
+Symbol("foo") === Symbol("foo") //false 
+
+var sym = new Symbol(); //typeerror 
+var sym = Symbol("foo");
+typeof sym;     // "symbol" 
+var symObj = Object(sym);
+typeof symObj;  // "object"
+
+when use as a key the wrapper and symbol are same effect 
+var sym = Symbol("foo");
+var obj = {[sym]: 1};
+obj[sym];            // 1
+obj[Object(sym)];    // still 1
+
+To create symbols available across files and even across realms (each of which has its own global scope), use the methods Symbol.for() and Symbol.keyFor() to set and retrieve symbols from the global symbol registry.
+
+The method Object.getOwnPropertySymbols() returns an array of symbols and lets you find symbol properties on a given object. Symbols are not visible in for...in iterations. In addition, Object.getOwnPropertyNames() will not return symbol object properties, however, you can use Object.getOwnPropertySymbols() to get these.
+var obj = {};
+
+obj[Symbol("a")] = "a";
+obj[Symbol.for("b")] = "b";
+obj["c"] = "c";
+obj.d = "d";
+
+for (var i in obj) {
+   console.log(i); // logs "c" and "d"
+}
+
+symbols and json.stringify(), symbol keyed properties will be completely ignored 
+JSON.stringify({[Symbol("foo")]: "foo"});                 
+// '{}'
+
+- function properties 
+    + eval(string), evaluates javascript  code represented as string, is a function property of the global object. Do not call eval() to evaluate an arithmetic expression; javascript will do it automatically 
+
+    If the argument of eval() is not a string, eval() returns the argument unchanged
+    
+    If you use the eval function indirectly, by invoking it via a reference other than eval, it works at global scope rather than local scope;
+    function test() {
+      var x = 2, y = 4;
+      console.log(eval("x + y"));  // Direct call, uses local scope, result is 6
+      var geval = eval;
+      console.log(geval("x + y")); // Indirect call, uses global scope, throws ReferenceError because `x` is undefined
+    }
+
+    eval as a string defining function requires "(" and ")"
+    var fctStr1 = "function a() {}"
+    var fctStr2 = "(function a() {})"
+    var fct1 = eval(fctStr1)  // return undefined
+    var fct2 = eval(fctStr2)  // return a function
+
+    + isFinite(testValue), determine whether the passed number is a finite number 
+    isFinite(Infinity);  // false
+    isFinite(NaN);       // false
+    isFinite(-Infinity); // false
+
+    isFinite(0);         // true
+    isFinite(2e64);      // true
+    isFinite(null);      // true
+
+
+    isFinite("0");       // true, would've been false with the 
+                         // more robust Number.isFinite("0")
+
+    + isNan(testValue), isNaN function has interesting rules; you may alternatively want to use Number.isNaN(). in ECMAScript 6 you can use typeof to determine if the value is Not-A-Number 
+
+isNaN(NaN);       // true
+isNaN(undefined); // true
+isNaN({});        // true
+
+isNaN(true);      // false
+isNaN(null);      // false
+isNaN(37);        // false
+
+// strings
+isNaN("37");      // false: "37" is converted to the number 37 which is not NaN
+isNaN("37.37");   // false: "37.37" is converted to the number 37.37 which is not NaN
+isNaN("");        // false: the empty string is converted to 0 which is not NaN
+isNaN(" ");       // false: a string with spaces is converted to 0 which is not NaN
+
+// dates
+isNaN(new Date());                // false
+isNaN(new Date().toString());     // true
+
+// This is a false positive and the reason why isNaN is not entirely reliable
+isNaN("blabla")   // true: "blabla" is converted to a number. 
+                  // Parsing this as a number fails and returns NaN
+
+    + parseFloat(string), parse a string argument and returns a float. If it encounters a character other than a sign (+ or -), numeral (0-9), a decimal point, or an exponent, it returns the value up to that point and ignores that character and all succeeding characters. Leading and trailing spaces are allowed
+
+    if not success will return NaN 
+    
+    A stricter parse function
+    var filterFloat = function (value) {
+    if(/^(\-|\+)?([0-9]+(\.[0-9]+)?|Infinity)$/
+      .test(value))
+      return Number(value);
+      return NaN;
+    }
+
+    + parseInt(string, radix), radix(the base in mathematical number system) default is 10, An integer between 2 and 36 that represents the radix. 
+
+    string start with 0x 0X will use 16 radix by default 
+    start with 0 will use decimal by ECMAScript 5 but not all browser keep the pace 
+    input string begins with another value is 10 by default 
+
+    + decodeURI(encodedURI), the parameter must be a full uri 
+    decodeURI("https://developer.mozilla.org/ru/docs/JavaScript_%D1%88%D0%B5%D0%BB%D0%BB%D1%8B");
+    // "https://developer.mozilla.org/ru/docs/JavaScript_шеллы"
+
+
+    + decodeURIComponent(), decodeURIComponent("JavaScript_%D1%88%D0%B5%D0%BB%D0%BB%D1%8B");
+// "JavaScript_шеллы"
+
+    + encodeURI(URI), encodeURI by itself cannot form proper HTTP GET and POST requests, such as for XMLHTTPRequests, because "&", "+", and "=" are not encoded. encodeURIComponent, however, does encode these characters.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

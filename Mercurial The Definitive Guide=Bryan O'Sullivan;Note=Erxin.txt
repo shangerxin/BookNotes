@@ -640,7 +640,7 @@ $ hg revert
 
 - dealing with committed changes 
 
-mercurial lets you "back out of it"
+mercurial lets you "back out of it", means revert a changeset to a previous revision 
 
 The hg backout command lets you “undo” the effects of an entire changeset in an automated fashion
 $ hg backout changeset-id  -m "..."
@@ -650,6 +650,235 @@ $ hg backout changeset-id  -m "..."
 $ hg backout --merge -m "backout message" change-set-number 
 
 hg backout command leaves the new backout changeset as the parent of the working directory 
+
+always use the merge option when you use the backout commad 
+
+- finding the source of a bug, to prevent backout a changeset with a bug mercurial provide 
+$ hg bisect [-gbsr] [-c CMD] [REV]
+
+it is a extension command, it will do a subdivision search 
+r, reset 
+g, good 
+b, bad 
+c, command which is used to check the changeset 
+U, noupdate, do not update to target 
+
+
+# handling repository events with hooks 
+- overview of hooks in mercurial, if the hook succeededs, the activity may proceed, if fails the activity is either not permitted or undone 
+changegroup, run after a group of changeset has be brought into the repository 
+commit, run after a new changeset has been created in the local repository 
+incoming, run once for each new changeset that is brought into the repository 
+outgoing, this is run after a group of chagneset has bee transmitted from the repository 
+prechangegroup, run before starting to bring a group of changesets into the repository 
+precommit, run before starting a commit 
+preoutgoing, run before starting into transmit a group of changset from this repo 
+pretag, run before create a tage 
+pretxnchangegroup, run after a gruop of changesets has been brought into the local repo 
+pretxncommit, run after a new changeset has been created in the local repository 
+preupdate, run before starting a update or merge of the working directory 
+tag, run after a tag is created 
+update, run fater an update or merge of the working directory has finished 
+
+- hooks are run with your privileges 
+mercurial will run hooks defiend in that system's ~/.hgrc file 
+
+- hooks do not propagate 
+- hooks can be overridden in the ~/.hgrc file 
+- ensuring that critical hooks are run 
+- example create a commit hook 
+$ cat .hg/hgrc
+[hooks]
+commit = echo committed $HG_NODE
+
+mercurial sorts hooks by extension and executes the hook commands in this sorted order 
+commit.foo0 = command 
+commit.foo1 = command 
+
+- telling mercurial to use a in-process hook 
+[hooks]
+commit.example = python:mymodule.submodule.myhook 
+
+- bundled hooks 
+- configuring the acl hook, must be used as a pretxnchangegroup hook 
+
+- testing and troubleshooting, test the acl hook by 
+[ui]
+debug = true 
+
+- notify, send email notification 
+[hooks]
+changegroup.notify = python.hgext.notify.hook 
+incoming.notify = python:hgext.notify.hook 
+
+a notify configuration 
+[notify]
+#really send email 
+test = false 
+config = /home/hg/repos/notify/notify.conf 
+strip = 4 
+template = X-Hg-Repo: {webroot}\n
+    Subject:{webroot} : {desc|firstline|strip}\n
+    From: {author}
+    changeset{node|short} in {root}
+...
+- extenal hook execution, hook parameter are passed to the hook as environment variables named as 
+HG_NODE, 
+HG_PARENT1 
+HG_PARENT2 
+
+# Customzing the output of mercurial 
+- check the log output with compack style 
+$ hg log --style compact 
+
+changelog stype 
+$ hg log --style changelog 
+
+in the ~/.hgrc file we could set the default style by 
+[ui]
+style = compact 
+
+- common template keywords in log 
+author 
+branches 
+date 
+desc, the tet of the changeset description 
+files, list of strings all files modified 
+file_adds 
+file_dels 
+node, the changeset identification hash 
+parents 
+rev 
+tags 
+
+$ log -r1 --template 'author: {author}\n'
+
+- escape sequences 
+\ 
+\n 
+\r 
+\t 
+\v 
+\{
+\}
+
+- filtering keywords to change their results, mercurial support an optional chain of filters to modify the result of expanding a keyword 
+addbreaks, 
+age 
+basename 
+...
+
+
+# managing changes with mercurial queues 
+- the patch management problem 
+
+- understanding patches, MQ, mercurial queues, it is an extension. enable it by ~/.hgrc file 
+[extension]
+hgext.mq = 
+
+check the extension is working by 
+$ hg help qinit 
+
+$ hg qinit 
+will return nothing if t succeeds 
+
+- creating a new patch 
+
+MQ will use this as the name of an actual file in the .hg/patches directory 
+$ hg qnew first.patch 
+
+- refreshing a patch 
+$ hg qrefresh 
+
+- stacking and tracking patches 
+$ hg qnew second.patch 
+
+$ hg qseries 
+list every patch that MQ knows about in this repo 
+
+$ hg qapplied 
+qapplied command list every patch that MQ has applied in this repo 
+
+- manipulate the patch statck 
+$ hg qpop
+
+- pushing and popping many patches 
+
+$ hg qpush -a 
+
+- safety check and overriding them 
+$ hg qnew add-file.patch 
+
+- delete unwanted patch 
+$ hg qdelete patch.name 
+
+- updating your patches when the underlying code changes 
+$ hg qpop hg -a patches 
+
+and pull changes after that 
+$ hg qpush hg -a patches 
+
+
+# Advanced uses of mercurial queues 
+- the problem of many targets, such as linux kernel changed rapidly
+    + one target is the main linux kernel development tree 
+    + also maintain a number of backports 
+    + make software releases on a schedule 
+    
+- conditionally applying patches with gards, you can tag a patch with a guard, then tell MQ to select specific guards to use 
+- controlling the guards on a patch 
+$ hg qguard  +add_guard 
+
+display gards on current topmost patch  
+$ hg qguard 
+
+- selecting the guards to use 
+$ hg qpop -a 
+$ hg qselect 
+$ hg qselect guard-name 
+$ hg qpush -a 
+
+- MQ's rules for applying patches 
+patch tha has no guards is always applied 
+if the patch has any negative guard that matches any curretnly selected guard the patch is skipped 
+if the patch has any positive guard that matches any curetnly selected guard the patch is applied 
+
+- trimming the work environment 
+
+
+# Addnig Functionality wit extesions 
+- improve performance with inotify extension 
+clone the python inotify binding repo 
+$ hg clone http://hg.kublai.com/python/inotify 
+
+...
+
+- flexibile diff support with the extdiff extension, it is bindle with mercurial 
+[extensions]
+extdiff = 
+
+- defining command aliases 
+[extdiff]
+cmd.vimdiff = vim 
+opts.vimdiff = -f '+next' '+execute "DirDiff" argv(0) arg(1)'
+
+- cherry-picking changes with the transplant extension 
+
+- sending changes via email with patchbomb extension 
+
+$ hg email -n 7:tip 
+
+# Migrate to mercurial
+- convert svn repo 
+$ hg convert http://...svn/trunk   
+
+
+
+
+
+
+
+
 
 
 
