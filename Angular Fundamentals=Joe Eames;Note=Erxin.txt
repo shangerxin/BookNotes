@@ -336,6 +336,7 @@ ngNonBindable, tell angular do not parse inside this binding
 polyfill JSON.stringify 
 http://www.codeproject.com/Articles/369858/Writing-polyfills-in-Javascript
 http://stackoverflow.com/questions/10963723/json-polyfill-json-2-or-json-3
+http://bestiejs.github.io/json3/
 
 No NG tags, IE have custom tag restriction, use attribute form or class form 
 
@@ -497,8 +498,271 @@ testable make your code, thanks for dependency injection, use mock replace
 
 when you create a service, you need to register the service 
 
+- creating your first custom service
+//EventController.js 
+
+eventApp.controller('EventController', EventController($scope, eventData){
+    $scope.sortorder = 'name';
+    $scope.event = eventData.event;
+});
+
+    + add services directory under the js folder 
+/app/js/services 
+
+all built in angular service will start with $, we should not name our service with dollar signe 
+// /app/js/services/EventData.js 
+eventsApp.factory('eventData', function(){
+    return {
+        event:{
+        
+            ...//event data 
+        }
+    };
+});
+//factory method paramter is the name of the service and init method 
+//factory method is used to register angular service into the application 
+
+we could use the created eventData service to inject into the EventController from the parameter 
+
+we also need to add the service script file into the page file 
+
+<script src="/js/service/EventController.js"></script>
+
+- another custom service example 
+    + create a EditProfile.html page 
+<div ng-controller="EditProfileController">
+..
+</div>
+use the ng-controller directive to bind the controller to page 
+
+    + create EditProfileCOntroller.js 
+eventApp.controller('EditProfileController', function EditProfileCOntroller($scope){
+    $scope.user = {};
+    
+    $scope.getGravatarUrl = function(email){
+        return ...
+    }
+});
+
+    + use the getGravatarUrl function in the view 
+    <img ng-src="{{getGravatarUrl(user.emailAddress)}}/>
+    ...
+    <input id="mailAddress" type="email" ng-model="user.emailAddress"/>
+
+    + create a new service for the controller get gravatar logic
+//GravatarUrlBuilder.js 
+eventApp.factory('gravatarUrlBuilder', function(){
+    return {
+        buildGravatarUrl: function(email){
+            return 'http://www.gravatar.com/avatar/'+md5(email)+'.jpg?s=200&r=g';
+        }
+    }
+});
+
+    + use the service method in the controller 
+eventApp.controller('EditProfileController', function EditProfileCOntroller($scope){
+    $scope.user = {};
+    
+    $scope.getGravatarUrl = function(email, gravatarUrlBuilder){
+        return gravatarUrlBuilder.buildGravatarUrl(email);
+    }
+});
+
+    + add the service js reference into the view html 
+<script src="/js/services/GravatarUrlBuilder.js"></script>
+
+- introduction to built-in angular services 
+    + common used 
+$http, 
+$resource 
+$anchorScroll
+$cacheFactory
+$compile 
+$parse
+$locale 
+$timeout
+$exceptionHandler
+$filter
+$cookieStore
+
+    + less used 
+$interpolate 
+$log 
+$rootScope 
+$window 
+$document 
+$rootElement 
+
+    + route relative service 
+$rout 
+$routeParams 
+$location 
+
+    + test relative service 
+$httpBackend 
+$controller 
+
+- using angular's $http service 
+    + update the eventData service 
+//EventData.js 
+eventsApp.factory('eventData', function($http, $log){
+    return {
+        getEvent: function(successcb){        
+            $http({
+                method:'GET', 
+                url: '/data/event/1'
+            })
+            .success(function(data, status, headers, config){
+                successcb(data);
+            })
+            .error(function(data, status, headers, config){
+                $log.warn(data, status, headers(), config);
+            });
+        }
+    }
+});
+
+    + update the event controller to call the event service method 
+eventsApp.controller('EventController', 
+function EventController($scope, eventData){
+    $scpoe.sortorder = 'name';
+    $scope.event = eventData.getEvent(function(event){
+        $scope.event = event;
+    });
+});
+    
+- Updating a node server for json requests, we require a module called body-parser which could be installed by npm 
+
+// /scripts/web-server.js for not node.js script 
+var express = require('EXPRESS');
+var path = require('path');
+var events = require('./eventsController');
+
+var app = express();
+var rootPath = path.normalize(__dirname + '/.../');
+var bodyParser = require('body-parser');
+
+app.use(express.static(rootPath + '/app'));
+app.get('/data/event/:id', events.get);
+app.post('/data/event/:id', events.save);
+
+app.listen(8000);
+console.log('Listening on port' + 8000 + '...');
 
 
+// add event cotnroller script /scripts/eventsContrller.js 
+var fs = require('fs');
+
+module.exports.get = function(req, res){
+    var event = fs.readFileSync('app/data/event/' + req.params.id + '.json', 'utf8');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(event);
+};
+
+module.exports.save = function(req, res){
+    var event = req.body;
+    fs.writeFileSync('app/data/event/' + req.params.id + '.json', JSON.stringify(event));
+    res.send(event);
+}
+
+- updating an IIS server for JSON requests 
+    + create a asp.net MVC4 web API project 
+    
+    + add EventController.cs 
+    
+public class EventController: ApiController 
+{
+    public JToken Get(string id = null)
+    {
+        var path = System.Web.HostingEnvironment.MapPath("/");
+        return JObject.Parse(System.IO.File.ReadAllText(path + "../app/data/event/" + id + ".json"));
+    }
+    
+    public void Post(string id, JObject eventData)
+    {
+        var path = System.Web.Hosting(HostingEnvironment.MapPath("/"));
+        System.IO.File.WriteAllText(path + "../app/data/event/" + id + ".json", eventData.ToString(Formatting.None)); 
+    }
+}
+
+    + add default rout to the api configure 
+//WebApiConfig.cs 
+public static void Register(HttpConfiguration config)
+{
+    config.Routes.MapHttpRoute(
+        name: "DefaultApi",
+        routeTemplate: "{controler}/{id}",
+        defaults: new {id = RouteParameter.Optional}
+    );
+}
+
+    + add the application to iis, make sure your iis contain a asp.net 4 application pool 
+    
+    right click the website and add an application select the asp.net version and choose the physical address of the compiled assembly path 
+    
+- using $http promises, use promise method. http service call return a promise method 
+//EventData.js 
+eventsApp.factory('eventData', function($http, $log){
+    return {
+        getEvent: function(){        
+            return $http({
+                method:'GET', 
+                url: '/data/event/1'
+            });
+        }
+    }
+});
+
+//in the controller we could use the return promise object 
+//EventController.js 
+eventApp.controller('EventController',
+    function EventController($scope, eventData, $log){
+        $scope.sortorder = 'name;
+        eventData.getEvent()
+        .success(function(event){$scope.event = event;})
+        .error(function(event){
+            $log.war(data, status, headers(), config);
+        });
+    }
+);
+
+- using angular's $resource service, it is use same suff as $http, but it assume the webserver use the json data format with ajax call. It means required service support reset api. the resource API doesn't return a promise object. so the return value couldn't directly use then etc. methods. required to use $promise.then to use then method 
+
+//EventData.js 
+eventsApp.factory('eventData', function($resource){
+    return {
+        getEvent:function(){
+            //parameters: url, default-value replace use .get method to get the resource object with the replace parameter 
+            return $resource('/data/event/:id', {id:'@id'}).get({id:1});
+        }    
+    };
+});
+
+    + to use resource service we need to add dependency to the resource module 
+//app.js 
+var eventsApp = angular.module('eventsApp', ['ngResource']);
+
+//EventDetail.html required to include the angular-resource.js 
+</script src='/lib/angular/angular-resource.js"></script>
+
+    + use the resource api in the event controller 
+eventsApp.controller('EventController', function EventController($scope, eventData){
+    $scope.sortorder = 'name';
+    eventData.getEvent()
+    .$promise.then(
+        function(event){$scpe.event = event;}, //success
+        function(response){$console.log(response);} //failure
+    )
+    .catch(function(reponse){console.log(response)});
+    
+    $scope.upVoteSession = function(session){
+        session.upVoteCount++;
+    };
+});
+
+- angular's $anchorScroll service 
 
 
-
+# Angular Routing 
+# Creating Custom Angular Directives 
+# Testing Angular 
