@@ -292,9 +292,113 @@ class Sqrt<N, M, M>
 
 : 表达式模板, expression template, P313
 > 为了提高效率队指针表达式等进行优化, 提高可读性,  编辑在参数模板中
+> 鼓励使用计算的赋值运算来取代单纯的赋值运算符来减少不必要的临时变成
++=, *= 
+
+template<class T>
+SArray<T>& SArray<T>::operator+= (SArray<T> const& b)
+{
+    for(size_t k = 0; k < size(); ++k){
+        (*this)[k] += b[k];
+    }
+}
+
+但这种方式还有一定的缺陷
+    + 符号不雅观
+    + 使用时还是需要临时变量 tmp 
+
+- 在模板实参中编码表达式
+1.2*x + x*y;
+
+we convert the expression to object 
+A_Add<A_Mult<A_Scalar<double>, Array<double>>, A_Mult<Array<doube>, Array<double>>>
+
+template<typename T, typename OP1, typename OP2>
+class A_Add{
+    private:
+    typename A_Traits<OP1>::ExprRef op1;
+    typename A_Traits<OP2>::ExprRef op2;
+    
+public:
+    A_Add(OP1 const& a, OP2 const& b):op1(a), op2(b){
+    }
+    
+    T operator[] (size_t idx) const {
+        return op1[idx] + op2[idx];
+    }
+    
+    size_t size() const{
+        assert(op1.size() == 0 || op2.size() == 0 || op1.size() == op2.size());
+        return op1.size() != 0 ? op1.size():op2.size();
+    }
+}
+
+...
+    
 
 : 高级应用程序 P345页
 > 类型区分, 使用模板编写类型区分程序
+> we wish to write these kinds of code 
+if(TypeT<T>::IsPtrT){
+
+}
+else if(TypeT<T>::IsClassT){
+
+}
+- 首先开发一些用于辨认基本类型的模板
+template<typename T>
+class IsFundaT{
+public:
+    enum{Yes = 0, No = 1};
+};
+
+//特化基本类型
+#define MK_FUNDA_TYPE(T)        \
+template<>                      \
+class IsFundaT<T>{              \
+    public:                     \
+        enum{Yes = 1, No = 0};  \
+};                              \
+
+MK_FUNDA_TYPE(bool)
+...
+extend to all the fundamental type such as char, wchar_t, ...
+
+    + use the template 
+tempalte<typename T> 
+void test(T const& t)
+{
+    if(IsFundaT<T>::Yes){
+        std::cout << "T is fundamental type" << std::endl;
+    }
+    else{
+        std::cout << "T is no fundamental type" << std::endl;
+    }
+}
+
+class MyClass{
+};
+
+int main(){
+    test(1); //is fundamental
+    test(MyClass()); // is no fundamental
+}
+
+- 辨别组合类型
+template<typename T> 
+class CompoundT{
+    enum{IsPtr = 0, IsRefT = 0, IsArrayT = 0, IsFuncT = 0, IsPtrMemT = 0};
+    typedef T BaseT;
+    typedef T BottomT;
+    typedef CompoundT<void> ClassT;
+};
+
+BaseT, 用于构造模板参数类型T 的（直接）类型
+BottomT, 是除去指针，引用和数组之后的用于构造T原始类型
+
+如果T是int**则BaseT将是int*, BottomT is int 
+
+
 
 : 智能指针
 > hoder, trule
