@@ -1,0 +1,337 @@
+﻿Gatling Doc;Note=Erxin
+
+# Gatling
+- it is performance testing framework. it is open source  http://gatling.io/
+
+- features 
+    + record 
+    + edit with dsl script 
+    + integrate with window/linux, supported build tool 
+    maven, sbt, jenkins 
+    
+    + analyze with report 
+    
+- relatives 
+    + maven, http://maven.apache.org/
+    + sbt, interactive build tool, http://www.scala-sbt.org/
+    
+# Quick start 
+- download bundle http://gatling.io/#/download
+- install jdk 7u6+
+- for integrate with mave, make sure JAVA_HOME env is added 
+- gatling default encoding is utf-8  use the gatling.conf to change 
+- gatling script is writen in scala 
+
+Scala is an acronym for “Scalable Language”. This means that Scala grows with you. You can play with it by typing one-line expressions and observing the results.
+
+seamless java interop 
+http://www.scala-lang.org/
+
+many company like twitter, linkedin or intel
+
+feels like script language 
+
+tutorial http://twitter/github.io/scala_school/
+
+- test case, most of the gatling http features 
+simulations 
+scenarios 
+feeders
+recorder 
+loops 
+
+- application under test 
+    + use a database deployed at http://computer-database.gatling.io 
+    + also could deploy it on local https://github.com/gatling/gatling-computer-database
+    
+    + with play framework which is used for build webapp with java and scala 
+    https://www.playframework.com/
+    
+- scenario, test performance is aim to representative of what really happens when users navigate it 
+
+    + arraives at application 
+    + user search for keyword 
+    + open related models 
+    + go back to home page 
+    + iterates through pages 
+    + user creates a new model 
+    
+- basic 
+    + using the recorder, support record actions on a web application and export them as a gatling scenario 
+    
+        * linux 
+        %gatling_home/bin/recorder.sh
+
+        * window
+        %gatling_home%\bin\recorder.bat 
+    
+    will launch a GUI 
+    
+    + configure the settings 
+    + click start 
+    + change browser proxy to use the gatling proxy, default is localhost:8000
+    
+    if contain out going proxy, don't forget to change the out going proxy 
+    
+    + record a sequence of actions 
+    browser filter computer 
+    add new computer 
+    ...
+    
+    + click stop and save, the simulation will be generated in the folder 
+    
+- gatling scenario explained 
+    + the produced output will be contain in the ouput folder 
+package computerdatabase // 1
+
+import io.gatling.core.Predef._ // 2
+import io.gatling.http.Predef._
+import scala.concurrent.duration._
+
+class BasicSimulation extends Simulation { // 3
+
+  val httpConf = http // 4
+    .baseURL("http://computer-database.gatling.io") // 5
+    .acceptHeader("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8") // 6
+    .doNotTrackHeader("1")
+    .acceptLanguageHeader("en-US,en;q=0.5")
+    .acceptEncodingHeader("gzip, deflate")
+    .userAgentHeader("Mozilla/5.0 (Windows NT 5.1; rv:31.0) Gecko/20100101 Firefox/31.0")
+
+  val scn = scenario("BasicSimulation") // 7
+    .exec(http("request_1")  // 8
+    .get("/")) // 9
+    .pause(5) // 10
+
+  setUp( // 11
+    scn.inject(atOnceUsers(1)) // 12
+  ).protocols(httpConf) // 13
+}
+    
+the optional package 
+the required imports 
+the class declaration note that it extends Simulation
+the common configuration to all HTTP requrests 
+
+var is the keyword to define a consnt value 
+
+the baseURL that will be prepended to all relative urls 
+common Http header will be sent with all the requests 
+the scenario definition 
+a http request, named request_1. the name will be displayed in the final reports 
+the url the requrest targets with GET 
+some pause/think time the parameter unit is seconds 
+
+- running gatling 
+    + launch 
+        * linux 
+        $gatling_home/bin/gatling.sh 
+        
+        * window 
+        %gatling_home%\bin\gatling.bat 
+        
+    will display a menu of simulation examples 
+    
+    + may get exception ThreadPriorityPolicy=42 is outside the allowed range [0...1]
+    
+    change the value to 0 
+
+    
+# Advanced tutorial 
+- isolate processes for reuse 
+    + abstract processes into object. Objects are native scala singletons. 
+    
+    + example create a search object 
+object Search {
+
+  val search = exec(http("Home") // let's give proper names, as they are displayed in the reports
+    .get("/"))
+    .pause(7)
+    .exec(http("Search")
+    .get("/computers?f=macbook"))
+    .pause(2)
+    .exec(http("Select")
+    .get("/computers/6"))
+    .pause(3)
+}
+
+    + now use the process to rewrite the scenario by 
+var scn = scenario("name").exec(Search.search, processObject.property, ...);
+
+- configure virtual users. 
+    + create different kinds of virtual users 
+
+val users = scenario("Users").exec(Search.search, Browse.browse)
+val admins = scenario("Admins").exec(Search.search, Browse.browse, Edit.edit)
+
+    + increase the number of simulated users 
+setUp(users.inject(atOnceUsers(10)).protocols(httpConf))
+
+    + ramp start the users 
+setUp(
+  users.inject(rampUsers(10) over (10 seconds)),
+  admins.inject(rampUsers(2) over (10 seconds))
+).protocols(httpConf)    
+
+- using dynamic data with feeders and checks 
+    + use dynamic data to simulate different users do different actions 
+    
+    + feeders are data sources containing all the values you want to use in your scenarios
+    
+        * CSV feeders 
+        example 
+        
+//create a data file in user-files/data folder 
+searchCriterion,searchComputerName
+Macbook,MacBook Pro
+eee,ASUS Eee PC 1005PE        
+        
+//declare a feeder and use it to feed our users with above data 
+object Search {
+
+  val feeder = csv("search.csv").random // 1, 2
+
+  val search = exec(http("Home")
+    .get("/"))
+    .pause(1)
+    .feed(feeder) // 3
+    .exec(http("Search")
+    .get("/computers?f=${searchCriterion}") // 4
+    .check(css("a:contains('${searchComputerName}')", "href").saveAs("computerURL"))) // 5
+    .pause(1)
+    .exec(http("Select")
+    .get("${computerURL}")) // 6
+    .pause(1)
+}
+
+- looping, extract the repeated exec block to a function. indeed simulation's are plain scala clases so we can use all the power of the language if needed 
+
+object Browse {
+
+  def gotoPage(page: Int) = exec(http("Page " + page)
+    .get("/computers?p=" + page))
+    .pause(1)
+
+  val browse = exec(gotoPage(0), gotoPage(1), gotoPage(2), gotoPage(3), gotoPage(4))
+}
+
+    + another built-in structure. the repeat builtin is a loop resolved at runtime. it takes the number of repetitions and optionally the name of the counter that's stored in the user's session 
+    
+object Browse {
+
+  val browse = repeat(5, "n") { // 1
+    exec(http("Page ${n}")
+      .get("/computers?p=${n}")) // 2
+      .pause(1)
+  }
+}
+
+- check and failure management, we have only used check to extract some data from the html response and store it in the session. 
+
+but check is also handy to check properties of the response. by default gatling check the http reponse status is 20x or 304
+    
+    + example 
+import java.util.concurrent.ThreadLocalRandom // 1
+
+val edit = exec(http("Form")
+  .get("/computers/new"))
+  .pause(1)
+  .exec(http("Post")
+  .post("/computers")
+  .check(status.is(session => 200 + ThreadLocalRandom.current.nextInt(2)))) // 2
+  
+ThreadLocalRandom to generate random values. we check a condition that's been customized with a lambda. it will be evaluated every time a user executes the request and return 200 or 201 
+
+we use tryMax method and exitHereIfFailed constructs 
+
+val tryMaxEdit = tryMax(2) { // 1
+  exec(edit)
+}.exitHereIfFailed 
+
+
+# General 
+- virtual user, load testing tools suc as ab or wrk. each one have its own data and maybe taking a distinct browsing path 
+
+- scenario, a group of user behaviors. it is a workflow 
+    + example 
+scenario("Standard User")
+  .exec(http("Access Github").get("https://github.com"))
+  .pause(2, 3)
+  .exec(http("Search for 'gatling'").get("https://github.com/search?q=gatling"))
+  .pause(2)
+
+    
+# analyze report format 
+- introduction 
+- features 
+- cost of ownership
+- technical support 
+- learning load 
+- customers 
+- feature comparison table 
+- compare price 
+- summary 
+- reference 
+- SWOT, Superiority Weakness Opportunity Threats, use a four cells table 
+- price and supported package 
+
+# Market Guide for Performance Testing 
+- trend
+- key attributes 
+seamless integration between performance-testing solution 
+broad native support for protocols 
+support for root cause analysis 
+runs on different platform 
+integration support with application development life cycle management 
+integration support with continuous integration, such as bamboo, jetbrains, teamcity and jenkins 
+integration support with APM solutions such as dynatrace, appdynamics and new relic and business intelligence/app 
+comprehensive reporting and customizable dashboards 
+
+- comercial tools 
+automation anywhere 
+blazemeter 
+ca technologies 
+hp performace center 
+hp storm runner 
+hp load runner 
+rational performance tester 
+borland 
+neotys 
+oracle 
+parasoft load test 
+webload 
+loadcomplete loadui 
+soasta cloudtest 
+telerik test studio 
+testplant 
+vendor 
+
+- open source test tools 
+jmeter 
+the grinder 
+locust 
+gatling 
+tsung 
+
+
+# Gatling research goals 
+- competitors 
+jmeter 
+gatling 
+...
+
+analyze each one 
+improve 
+what we need 
+
+deep to research 
+
+why some one use it 
+
+if i'm a developer why actually gatling 
+
+why people use gatling 
+
+15 minute or half hour 
+
+    
