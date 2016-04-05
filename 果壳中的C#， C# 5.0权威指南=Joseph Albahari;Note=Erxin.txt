@@ -173,9 +173,20 @@ Nullable<T>
     
     public static Node operator +();
     
+    + rules 
+    operator keyword 
+    must be static and public 
+    the parameter of the overload operator function is the arguments of the operator 
+    the return value is the expression value 
+    the declaration in the overload operator required at least one parameter 
+    
 - 自定义隐式转换
     + 具有转换类型的参数构造函数
     + 便携ToXXX和FromXXX方法
+    
+    public static implicit operator double(Type x);
+    
+    public static explicit operator double(Type x);
     
 - 扩展方法，允许对一个现有实现类型增加新的方法而不需要修改原始类型, 定义在静态类型和静态方法中
 public static class StringHelper{
@@ -196,26 +207,1048 @@ d.Quack();
 
 如果一个动态对象实现了IDynamicMetaObjectProvider那么这个接口将用来执行绑定
 
-- 自定义绑定 System.Dynamic
+- 静态绑定, 是在编译时知道具体类型的定义， 而动态绑定是在编译时将类型设置为object在运行时替换为具体类型，
+- 自定义绑定, 如果一个动态对象实现了IDynamicMetaObjectProvider那么这个接口将用来执行绑定。
+using System;
+using System.Dyanmic;
+
+public class Duck:DynamicObject
+{
+    public override bool TryInvokeMember(InvokeMemberBinder binder, object[] args, out object result)
+    {
+        ...
+    }
+}
+
+static dynamic Mean(dynamic x, dynamic y)
+{
+    return (x + y) / 2;
+}
+
+动态绑定会对性能产生一定的影响，控制在00ns以内
+
+- RuntimeBinderException, 当调用的动态类型没有具体属性或者方法的时候
+
+- 动态类型的运行时表现
+    + expression equal to true 
+typeof(dynamic) == typeof(object)
+typeof(List<dynamic>) == typeof(List<object>)
+
+- 动态类型会对其他所有类型进行隐式转换
+- var and dyanmic, var get the type from the compile time 
+- 动态表达式的静态类型， 静态类型在可能的情况下可以用在动态绑定中，只要运行时已经确定动态类型是指定的函数参数类型
+statc void Foo(object x, string y){...}
+
+var o = new Object();
+dynamic d = "hello";
+Foo(o, d);
+
+-  不可被动态调用的函数
+    + 扩展方法
+    + 接口的所有成员
+IFoo f = new Foo();
+dynamic d = f;
+d.FuncDefineInIFoo();  //throw exception
+    + 子类隐藏的基类成员 
+    
+- 属性，添加自定义信息到代码元素（程序集、类型、成员、返回值和参数）的扩展机制
+- 属性类， 通过继承System.Attribute类定义
+[AttributeType(...), ...]
+classDefination|propertyDefination|FunctionDefination
+
+    + .net contain many built-in properties 
+    
+- 属性目标
+    + 默认的目标是属性紧跟的代码段元素
+    + 对于程序集则需要显示的制定目标属性
+    [assembly:CLSCompliant(true)]
+
+- 调用者信息，C# 5.0， 可以给选定参数添加三个调用者属性信息中的一个
+[CallerMemberName]
+[CallerFilePath]
+[CallerLineNumber]
+从而获取参数的默认值， 例如
+[CallerLineNumber] int lineNumber = 0;
+
+    + one useful use case is in MVVM 
+    
+public class Foo:INotifyPropertyChanged 
+{
+    public event PropertyChanged = delegate {};
+    void RaisePropertyChanged([CallerMemberName] string propertyName = null)
+    {
+        PropertyChanged(this, new PropertyChangedEventArgs(propertyName);
+    }
+    
+    string _name;
+    public string Name 
+    {
+        get {return _name;}
+        set 
+        {
+            if(value == _name)
+            {
+                return 
+            }
+            else
+            {
+                RaisePropertyChanged(); //C#5.0 compiler will convert it to RaisePropertyChanged("Name");
+            }
+        }
+    }
+}
+
+- 不安全代码
+unsafe
+{
+    ....
+}
+
+- array 
+    + stackalloc keyword, it is used to assign memory from the stack 
+    int* a = stackalloc int[10];
+    
+    生命周期类似于局部变量
+    
+    + 固定的大小缓冲区， 使用fixed关键字，避免被GC重新调整内存布局
+    unsafe struct TypeName 
+    {
+        public fixed byte Buffer[30];
+    }
+    
+    fixed(byte *p = TypeNameObj.Buffer)
+        for(int i = 0; i < 30; i ++)
+        {
+            ...
+        }
+
+- COM互操作的时候需要使用指向为托管代码的指针
+- 预处理指令
+#define DEBUG
+#undef 
+#if 
+#else 
+#elif 
+#endif 
+#warning
+#error 
+#pragma warning [disable|retore]
+#line [#[file]|hidden]
+#region 
+#end
+
+- Condition属性，表示只有出现指定的预处理指令的时候才编译
+[Condition("DEBUG")]
+public class Foo{}
+
+- XML 文档，以三个斜线开头
+///<summary> Cancel </summary>
+public void Cancel(){...}
+
+    + xml doc tags
+<summary>
+<remarks>
+<param>
+<returns>
+<exceptions>
+<permission>
+<example>
+<c> 内联代码段
+<code> 多行代码示例
+<see cref="member">...</see>, 内联交叉引用
+<seealso>
+<paramref>, 引用<summary> or <remarks> parameter 
+<list type=[bullet|number|table|>... 
+<para>, 制定内容单独为一个段落
+<include>包含一个外部xml
+    + 用户可以自定义标签
+    
+- 类型或成员交叉引用，转换为唯一指定这个类型或成员的ID， 由ID定义的前缀表示
+N， 命名空间
+T， 类型
+F， 字段
+P， 属性
+M， 方法
+E， 事件 
+!， 错误
+
+    + 示例
+namespace NS 
+{
+    ///T:NS.MyClass 
+    class MyClass
+    {
+    ...
+    }
+}
+
+
+# 框架概述
+- 程序集和命名空间在 .net framework中是相互交叉的，最极端的情况是System.Core.dll和mscorlib.dll 
+
+- .net 4.5新特性
+    + support async by Task 
+    + zip compress protocol 
+    + add class HTTPClient to improve support HTTP 
+    + optimized GC 
+    + support call winRT for Metro style 
+    + WPF, WCF, WF improvement 
+    
+- .net 4.0 new features 
+    + BigInteger, Complex, Tuple 
+    + SortedSet 
+    + memory mapped file 
+    + delay I/O 
+    + DLR, dynamic language 
+    + security 
+    + new thread structure, Monitor.Enter, Signal send 
+    + Parallel LINQ 
+    
+- CLR core framework 
+    + system namespace  
+.Exception 
+.Enum
+.Array
+.Delegate 
+.Nullable
+.Type 
+.DataTime 
+.TimeSpan 
+.Guid 
+.Math 
+.Random 
+.Convert 
+.BitConvert 
+.IFromattable 
+.IComparable 
+
+- file handling 
+System.Text.RegularExpression 
+
+- System.Collection 
+.Generic 
+.Specialized, 强类型框架
+.ObjectModel, 自定义框架基类 
+.Concurrent
+
+- 查询, System.Linq, System.Linq.Expression, System.Xml.Linq 
+System.data.linq 
+system.data.entity 
+
+- xml, system.xml
+.linq 
+.schema 
+.serialization 
+.xpath 
+.xsl 
+
+- system.diagnostics, window 日志，性能计数器监控等
+- 并发, system.threading, system.threading.tasks 
+- i/o, system.io 
+- net, system.net 
+.http 
+.mail 
+.sockets 
+
+- system.runtime.serialization, system.xml.serialization 二进制序列化和XML序列化
+- assembly, reflection and properties 
+system.reflection 
+system.reflection.emit 
+
+- dynamic programming, system.dynamic 
+- security, system.security 
+.permissions 
+.policy 
+.cryptography 
+
+- advance threading 
+- COM inter operation 
+system.runtime.interopservices  
+- interface relative techniques 
+system.web.ui, asp.net 
+silverlight, 
+system.windows, wpf 
+system.windows.forms, window form 
+(system.windows.ui and system.windows.xaml), metro 
+
+- background techniques 
+    + ado.net, activex data object 
+    linq to sql 
+    entity framework 
+    
+    + windows workflow, system.workflow, system.activities 
+    
+    + COM+ and msmq 
+    system.enterpriseservices, system.messaging 
+    
+- distribution techniques 
+    + wcf, window communication foundation, system.servicemode 
+        * 高度可配置
+        * 加密
+        * 直接用配置修改通信协议
+    + remoting and web services, all could replaced by wcf 
+    + CardSpace, OpenID， 基于开放XML标准， System.Identity, Model.Claims and System.IdentityModel.Policy， 基于令牌的身份验证
+    
+# 框架基础
+- 文字与字符串
+system.char 
+char c = 'a';
+
+- StringBuilder 
+- encoding and unicode 
+using System.Text;
+
+var utf8 = Encoding.GetEncoding("utf-8");
+    
+- file stream 
+system.io.file
+
+- datetime 
+TimeSpan 
+
+parse from format stream 
+DateTime.ToString 
+
+TimeZone
+
+- convert string to other types 
+type.Parse(string-value);
+
+support  2,8,16 radix convert 
+base 64 
+
+- Guid 
+
+- Equals 不等价于== 
+double x = double.NaN;
+x == x; //false 
+x.Equals(x); //true 
+
+    + Equals 默认使用结构值相等
+    + == 默认执行引用相等比较
+var sb1 = new StringBuilder();
+var sb2 = new StringBuilder();
+sb1 == sb2; //false 
+sb1.Equals(sb2); //true 
+
+- IComparable 
+- Console 
+- System.Environment 
+- System.Diagnostics.Process 
+
+# 集合
+- there are three classies of collection in .net 
+    + classic interface 
+    + set, dictionary, list 
+    + base class for special set 
+    
+- Enumerable, IEqutable, IEnumerator<T> 
+    + for support foreach 
+    + interactive with standard collection modules 
+    + for support set initializor 
+    
+- ICollection, IList, IReadOnlyList
+- Array 
+- List, Queue, Stack and Set 
+- List<T>, ArrayList, ArrayList is only support of comaptible with framework 1.x 
+
+- LinkedList<T> 
+- BitArray
+- HashSet and Sorted Set 
+- IDictionary
+- ListDictionary and HybirdDictionary 
+- SortedDictionary, SortedListDictionary, the insert efficiency is very low 
+- custom collection and delegate for 
+    + trigger an event when add or remove an element 
+    + validate the inserted item 
+
+    
+    + intefaces Collection<T> and CollectionBase 
+    KeyedCollection<TKey, TItem> and DictionaryBase 
+    ReadOnlyCollection 
+    IEqualityComparer and EqualityComparer 
+    IComparer 比较器用于排序字典
+    StringComparer 
+    IStructuralIEquatable, IStructuralComparable 
+    
+# Linq 
+- system.linq 
+- syntax 
+from --------------+--identifer in enumerable-expr 
+      |            |
+      +-type-name--+
+      orderby -+--, ------------------------
+               |
+               +-expr--+---ascending----+---
+                       +----------------+
+                       +---descending---+
+
+       where 
+       let 
+                select 
+                group clause  into 
+                
+        join .. in .. on .. equals .. [into identifier]
+        
+        
+- linq compare sql 
+    + linq start left to right, sql is execute with undeine order 
+    + all the element are handled sequentially, sql handled the items like a net 
+    
+- let keyword is used to define a temp identifier in the query expression 
+- DataContext and ObjectContext
+    + 当调用foreach的时候，枚举对象引用时DataContext对象不会被释放，可以手动调用
+    
+- EntityFramework中的立即加载
+context.Entities.Include("ReferenceEntityName");
+
+
+# Linq运算符
+- Where 
+- Take
+- Skip 
+- TakeWhile
+- SkipWhile 
+- Select, mapping 
+- subquery 
+var query = from c in dataContext.customers 
+            select new {
+                            c.Name,
+                            Purchase = from p in dataContext.Purchase
+                                       where p.id == c.id 
+                                       select new {p.Description, p.price}
+                        };
+
+- SelectMany
+- Join and GroupJoin 
+from outter-iter in outter-set 
+    join inner-iter in inner-set on outter-key equals inner-keys 
+[into identifier]
+
+    + Join返回非嵌套结果集
+    + GroupJoin返回嵌套数据集
+    
+- zip
+- OrderBy, OrderByDescending, ThenBy, ThenByDescending, 当OrderBy无法确定顺序时，继续使用ThenBy
+- implement IOrderedEnumerable and IOrderedQueryable 
+- GroupBy 
+group entitye by entity.key 
+
+- set operator 
+Concat 
+Union 
+Intersect 
+Except 
+
+- First, Last, Single, DefaultEmpty 
+- Min, Max, Sm, Average 
+- Aggregate
+numbers.Aggregate 
+
+- Contains and Any 
+- Empty, 创建一个空集合
+numbers.SelectMany(innerArray => innerArray?? Enumerable.Empty<int>());
+- Repeat, Range 
+
+# Linq to XML 
+- DOM, XmlDocument
+string xml = @"...";
+XElement es = XElement.Parse(xml);
+
+XDocument xmlWeb = XDocument.Load("url");
+
+- XML命名空间
+<Tag xmlns:prefix="xxx.xxx.xxx"/>
+</Tag>
+
+
+# 其他XML技术
+- XmlReader
+- XmlWriter 
+- System.Xml.xpath 
+- system.xml.xsl, XSLT对XML解析提供基本的结构和API 
+- system.xml.serialization 
+- system.xml.xlinq 
+- XSLT, system.xml.xsl.xslCompiledTransform 转化类能有效的进行XLST转化
+
+# 销毁和垃圾回收
+- IDisposable Dispose and Close, Close/Stop是Dispose的子集
+- GC.ReRegisterForFinalize方法
+- 弱引用 System.WeakReference 
+
+
+# 诊断和代码契约
+- system.diagnostics, system.diagnostics.contracts 
+
+- debug and trace class 
+    + Debug类都是基于[Conditional("DEBUG")] 定义 
+    Debug.Fail 
+    Debug.Assert
+    
+    + Trace所有方法都是基于[Conditional("TRACE")]定义 
+    TraceListener
+    当连接到VS调试器的时候，消息将被输出到调试器
+    Fail方法被调用则会弹出窗口询问用户是否继续
+    
+    TextWriterTraceListener 
+    EventLogTraceListener 
+    EventProviderTraceListener 
+    WebPageTraceListener 
+    
+    Trace.Listeners.Add(new TextWriterTraceListener("xx.txt"));
+    
+    use Close or Flush method to stop the listener, close方法隐式调用Flush方法
+    + trace, debug 类都有Listeners属性
+    
+- Contract 先决条件
+Contract.Requires<TException>
+Contract.EndContractBlock
+定义代码契约条件
+
+- Contract 后置条件
+Contract.Ensures
+
+    + example 
+Contract.Requires(list != null);
+Contract.Ensure(list.Contains(item));
+
+- Contract.Asset, Contract.Assume
+
+- 附加中断器， system.diagnostics.debugger 提供了break, launch, log and IsAttached方法
+
+- 进程中检查线程
+foreach(var pt in p.Threads)
+{
+}
+    
+- StackTrace and StackFrame class, StackTrace will read the relative pdb file 
+- Window日志， EventLog 
+EventLog.WriteEntry 
+
+- 性能计数器 
+PeformanceCounterCategory
+
+support read and write into the system performance counter data 
+
+- StopWatch class is a useful class for mesure a start end time period 
+StopWatch s = StopWatch.StartNew();...
+s.Stop();
+s.Elapsed property 
+
+# 并发异步
+- 快速响应用户界面
+- 并发请求处理
+- 预测执行
+- 创建一个线程
+system.threading;
+
+var t = new Thread(func);
+
+- 联合与休眠
+t.Join();
+
+ThreadState.Unstarted
+ThreadState.WaitSleepJoin
+ThreadState.Stopped 
+Thread.Sleep
+
+阻塞的线程会立即交出它所属的时间片供系统使用
+
+- lock 
+static readonly _locker = new object();
+
+lock(_locker)
+{
+    ...
+}
+
+- 传递数据到线程， 使用lambda表达式
+- 创建线程的try, catch, finally语句在线程开始执行后都与线程无关， 无法捕获线程内执行的代码错误
+- 集中式异常处理，WPF， Metro和window窗体都支持订阅全局异常处理事件
+<configuration>
+    <runtime>
+        <legacyUnHandledExceptionPolicy enable="1"/>
+    </runtime>
+</configuration>
+
+- 同步多个UI线程， 同步上下文， system.componentModel中有抽象类synchronizationContext 实现了线程的一般化
+backgroundworker and tasks also used the sychronizationContext to handle the sync message 
+
+- 线程池的支持使用Task类
+Task.Run(()=>{});
+
+    + wait 方法用于阻塞任务到完成
+    + 长任务使用
+    Task.Factory.StartNew(()=>..., TaskCreationOptions.LongRunning);
+    
+    + result, 调用task的时候用Func<TResult> 代替Action<T>则会返回一个Task<TResult>对象 
+Task<int> tr = Task.Run(()=>{
+    return 1;
+});
+Console.WriteLine("Task running");
+Console.WriteLine("The answer is " + tr.Result);
+
+- 异常，Task抛出异常会封装在AggregateException中的InnerException属性里
+
+TaskScheduler.UnobservedTaskException for observe global unhandled task exception 
+
+- continuation c#5.0 
+var task = Task.Run(()=>{});
+var awaiter = task.GetAWaiter();
+awaiter.OnComplete(()={
+    int result = awaiter.GetResult();
+    Console.WriteLine(result);
+});
+
+如果出现同步上下文则会自动捕获，如果不希望使用，例如在库中而非UI代码中则可以使用
+task.ConfigureAwait(false).GetAwaiter(); 
+关闭捕获上下文功能来避免不同线程间传递数据
+
+task.ContinueWith(antecedent => {
+});
+
+- TaskCompleteSource<type>();
+
+- Task.Delay()
+- 异步原则
+    +　i/o密集
+    + unblock UI 
+    
+- C# 5.0异步函数
+await and async keyword 
+
+    + 取得结果使用await 
+Task<int> AsyncFoo()
+{
+    return Task.Run(()=>{});
+}
+
+async void GetResult()
+{
+    var result = await AsyncFoo();
+}
+
+async keyword is used to tell the compiler the await is a keyword. async keyword could only be used on the task which is return void, task<tresult> 
+
+- WinRT的异步方法， 与Task等价的是IAsyncAction, Task<TResult>, IAsyncOperation<TResult>
+- OperationStarted and OperationCompleted, asp.net 会使用这些方法保证处理管道的顺序执行过程
+- 取消
+class CancellationToken 
+{
+    public bool IsCancellationRequested {get; private set;}
+    public void Cancel() {IsCancellationRequested = true;}
+    public void ThrowIfCancellationRequested()
+    {
+        if(IsCancellationRequested)
+        {
+            throw new OperationCanceledException();
+        }
+    }
+}
+
+async Task Foo(CancellationToken ct)
+{
+    for(var i = 0; i < 10; i ++)
+    {
+        await Task.Delay(1000);
+        ct.ThrowIfCancellationRequested();
+    }
+}
+
+- 进度报告， IProgress<T> Progress<T> 
+- 基于任务的模式
+    + WhenAll
+    + WhenAny 
+    + Custom combile some custom control logic 
+    
+- backgroud worker 
+
+
+# stream and I/O 
+- FileStream 
+- File class quick method 
+.ReadAllText
+.ReadAllLines 
+.ReadAllBytes 
+.WriteAllText 
+.WriteAllLines
+.AppendAllText 
+
+- FileMode 
+.Open 
+.Truncate 
+.CreateNew 
+.Create 
+.OpenOrCreate 
+.Append 
+
+- other options 
+FileOptions, encrypted, deleteOnClose, RandomAccess and sequentialScan 
+
+- MemoryStream 
+
+- PipeStream is used for cross process communication 
+
+- BufferedStream 
+
+- 流适配器
+    + text 
+TextReader, TextWriter 
+StreamReader, StreamWriter 
+StringReader, StringWriter 
+
+    + binary 
+BinaryReader, BinaryWriter 
+
+    + xml 
+XmlReader, XmlWriter 
+
+- Compression
+System.IO.Compression 
+.GzipStream 
+.ZipFile
+
+compress in memory with MemoryStream 
+
+- Directory class 
+    + built-in special folders 
+    Environment.SpecialFolder such as AdminTools, Cookies, Personal, SendTo ...
+    
+    + driver info, DriveInfo class 
+    
+- observe filesystem events, FileSystemWatcher
+file create changed 
+file rename 
+file error 
+
+- windows runtime 中的文件输入/输出
+    + StorageFolder 
+    
+    Package.Current.InstalledLocation wil return the current StorageFolder 
+    
+    KnownFolders class contain several folders for the removable devices
+    
+    + metro app storage 
+    Window.Storage.ApplicationData.Current.LocalFolder 
+    Window.Storage.ApplicationData.Current.RoamingFolder 
+    Window.Storage.ApplicationData.Current.TemporaryFolder 
+    
+- memory mapping file 
+System.IO.MemoryMappedFiles
+    + get a file stream 
+    + create an instance for the MemoryMappedFile 
+    + call the CreateView Accessor method from the MemoryMappedFile object 
+    
+    + example 
+using (MemoryMappedFile mmf = MemoryMappedFile.CreateFromFile("uri"))
+using (MemoryMappedViewAccessor accessor = mmf.CreateViewAccessor())
+{
+    accessor.write(50000, (byte)77);
+    
+}
+
+    + 可以用于同一台计算机的不同进程的数据共享
+        * one process open a memory mapped file 
+        * another process call he MemoryMappedFile.OpenExisting function to open the same memory location 
+        
+        
+- 隔离存储， 例如受限的silverlight， 只能使用IsolatedStorageStream实现读写
+    +　隔离类型
+    用户 LocalApplicationData\IsolatedStorage
+    程序或计算机分配一个隔离存储区域 CommonApplicationData\IsolatedStorage
+    漫游用户 ApplicationData\IsolatedStorage
+    
+    use Environment.GetFolderPath可以获得每个预定义文件夹的实际物理路径
+...
+
+# 网络
+- WebClient
+
+    + 实例化
+    + 设置proxy
+    + 设置credentials
+    + 调用DownLoadXXX/UploadXXX 方法
+    
+- WebRequest 和WebResponse类
+    + 使用一个URI调用WebRequest.Create，创建一个Web请求
+    + 设置proxy
+    + 设置身份验证
+    + 如果需要上传数据则调用GetRequestStream然后在流中写入数据
+    
+    + GetResponse常见一个Web响应实例 
+    + 调用GetResponseStream取得流中的数据
+    
+请求类型
+http/https 
+ftp 
+file 
+
+- HttpClient, added since .net 4.5 
+    + 支持并发请求
+    + 可用于编写和插入自定义消息处理器
+    + 包含丰富且扩展的请求头与内容类型系统
+    
+    + example 
+string html = await new HttpClient().GetStringAsync("url");
+
+    + other methods 
+.SendAsync 
+.ByteArrayContext 
+.StreamContent 
+.FormUrlEncodedContent 
+.StreamContent 
+
+    + HttpMessageHandler 
+     
+- Cookies, HttpWebRequest 会忽略从服务器接收的任何cookie，为了接收cookie必须创建一个CookieContainer对象
+
+- 编写HTTP服务器
+HttpListener, 不支持XP 系统
+
+- 使用DNS 
+Dns.GetHostAddress (url)
+
+- send mail by smtp 
+SmtpClient client = new SmtpClient();
+
+- TCP 
+TcpClient 
+
+TcpListener 
+
+- Window runtime 中建立TCP 
+
+StreamSocketListener()
+
+StreamSocket 
+DataReader/DataWriter 
+
+
+# 序列化
+- IXmlSerializable 
+
+- 序列化类型
+    +数据契约序列化器
+    ＋二进制序列化器
+    + XmlSerializer 
+    + IXmlSerializable
+    
+- 扩展数据契约支持序列化反序列化钩子
+[OnSerializing]
+[OnSerialized]
+...
+
+
+# 程序集
+- system.reflection, system.resources, system.globalization 
+
+- 程序集包含的内容
+运行时信息，程序名、版本、权限、引用程序集
+
+应用程序清单，如何部署，如何升级
+
+以编译的类，提供IL代码和元数据 
+
+资源，嵌入程序集中的其他数据，可以是图像或者是本地化文本
+
+-程序集清单
+[asssembly:ASsemblyCopyRight()]
+- 应用程序清单 
+    + metro 中在
+    Package.appxmanifest 文件中 
+    
+    + 模块
+    
+- 程序集类，System.Reflection 的Assembly类 
+
+GetExecutingAssembly 
+GetCallingAssembly 
+GetEntryAssembly 
+
+- 强名称程序集，创作者的唯一编号
+sn.exe -k MyKeyPiar.snk 
+
+- 延迟签名 
+sn -k KeyPair.snk 
+
+sn -p KeyPair.snk PublicKeyOnly.pk 
+
+有公钥签名，没有私钥签名
+- 获得代码签名证书
+CA, Comodo, Go Daddy, GlobalSign, thawte and VeriSign 
+
+Ksoftware supply 99$ comodo signature 
+
+- signtool.exe tool 
+- GAC, global assembly cache 
+
+    + install assembly into gac 
+    $ gacutil /i *.dll 
+    
+- embedded resource during compiling 
+$ csc /resource:*.jpg *.cs 
+
+- .resources file 包含可用于本地化的内容 
+- .resx文件
+
+- 处理为引用的程序集
+Assembly.LoadFrom(uri)
+
+# 反射和元数据
+- 反射
+system.reflection 
+
+GetType and typeof operator 
+
+- TypeInfo, object.GetTypeInfo
+
+.GetMethod 
+
+- 实例化类型
+Activator.CreateIntance 
+
+调用 
+ConstructorInfo 对象的Invoke
+
+- MemberInfo 
+.GetMethod 
+.GetProperty 
+.GetDefaultMembers 
+.GetField 
+.GetEvent 
+.GetConstructor 
+.GetMethod 
+.GetNestedType
+
+- PropertyInfo 
+
+- 泛型类型
+typeof(IEnumerator<>).GetProperty("PropertyName");
+
+- use attribute 
+    + three kinds of attributes 
+    bit map attribute 
+    custom attribute 
+    pesudo attribute 
+    
+    + AttributeUsage 属性， 可以指示编译器使用目标属性的方法
+    
+public sealed class AttributeUsageAttribute:Attribute 
+{
+    public AttributeUsageAttribute (AttributeTargets validOn);
+    public bool AllowMultiple {get;set;}
+    public bool Inherited {get;set;}
+    public AttributeTargets ValidOn {get;}
+}
+
+- custom attribute 
+    + System.Attribute or System.Attribute 的子类，应该以Attribute结尾, 推荐
+    + 应用AttributeUsage 属性 
+    + 编写一个或多个全局构造方法， 定义了该属性的定位参数， 而在使用该属性的时候构造方法的参数会变成强制的
+    
+    + 属性构造方法参数必须为以下类型
+    bool, type, char, double, float, int, long 
+    Type 
+    enum 
+    array of above types 
+    
+    + example 实现自动化单元测试定义个属性用于指定方法的重入次数和失败显示的消息
+    
+[AttributeUsage(AttributeTargets.Method]
+public sealed class TestAttribute:Attribute 
+{
+    public int Repetitions
+    public string FailureMessage;
+    
+    public TestAttribute(): this(1) {}
+    public TestAttribute(int repetitions) {Repetitions = repetitions}
+}
+
+//use the attribute 
+class Foo 
+{
+    [Test]
+    public void Method0();
+    
+    [Test(20), FailureMessage="Debugging Time!"]
+    public void Method2(){...}
+}
+
+//get the attribute during the runtime 
+call the Type or MemberInfo.GetCustomAttribute
+Attribute.GetCustomAttribute or Attribute.GetCustomAttributes 
+
+foreach(var mi in typeof(Foo).GetMethods)
+{
+    var att = (TestAttribute) Attribute.GetCustomAttribute(mi, typeof(TestAttribute));
+    
+    if(att != null){
+    
+    }
+}
+
+- 动态生成代码 
+System.Reflection.Emit 
+
+DynamicMethod to generate IL 
+
+var dynMethod = new DynamicMethod("Foo", null, null typeof(Test)); 
+ILGenerator gen = dynMethod.GetILGenerator(); 
+gen.EmitWriteLine("hello");
+gen.Emit(OpCodes.Ret);
+dynMethod.Invoke(null, null);
+
+# 动态变成
+- DLR， 是CLR 的一个库， System.Runtime.CompilerServices 
+- use the dynamic type in the code 
+
+# Security 
+- system.security 
+.Permissions 
+.Principal 
+.Cryptography 
+
+- permissions 
+CodeAccessPermission 
+PrincipalPermission 
+
+IPermission
+    + example only mary can execute the report 
+    new PrincipalPermission("marry", null).Demand();
+    
+    + 沙箱化
+    new FileIOPermission().Demand();
+- PermissionSet  
+- 代码访问安全
+SecurityPermission 
+ReflectionPermission 
+EnvironmentPermission 
+RegisterPermission 
+
+- CLR4.0中的透明模型
+[PermissionSet(SecurityAction.Demand, Unrestricted=true)]
+...
+
+- 沙箱化程序集， 假设需要编写允许第三方安装插件的程序集， 需要组织作为可信应用程序的插件利用授权他的特权从而避免破坏应用程序
+
+string publicFolder = Path...
+string pluginPath = Path...
+PermissionSet ps = new PermissionSet(PermissionState.None);
+ps.AddPermission(new SecurityPermission(SecurityPermissionFlag.Execution));
+AppDomainSetup setup = AppDomain.CurrentDomain.SetupInformation;
+AppDomain sandbox = AppDomain.CreateDomain("sbox", null, setup, ps);
+sandbox.ExecuteAssembly(pluginPath);
+AppDomain.Unload(sandbox);
+
+- 操作系统安全
+管理员帐户
+受限制用户 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
+    
+    
+    

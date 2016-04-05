@@ -1,0 +1,142 @@
+﻿DLL Injection and Hooking;Note=Erxin
+
+# Window message hook 
+- hook is a mechanism by an application can intercept events. a function that intercepts a particular type of event is known as a hook procedure 
+
+- example uses hooks 
+    + monitor message for debugging 
+    + provide support for recording and playback of macros 
+    + provide support for a help key(f1)
+    + implement a compuer-based training (cbt) application 
+    
+- hook tend to slow down the system 
+
+- hook chains, the system maintains a separate hook chain for each type of hook. when a message occurs that is associated with a particular type of hook, the system passes the message to each hook procedures for some types of hooks can only monitor messages; others can modify messages or stop their progress through the chain 
+
+- hook procedures 
+    + a hook procedure func use SetWindowsHookEx to install it into the chain to install it into the chain associated with the hook 
+    
+LRESULT CALLBACK HookProc(
+  int nCode, 
+  WPARAM wParam, 
+  LPARAM lParam
+)
+{
+   // process event
+   ...
+
+   return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+HookProc is a place hoder for an application defiend name 
+
+nCode paramter is a hook code that hook the procedure uses to determine the action to perform
+value of the hook code depends on the type of the hook 
+wParam, lParam depend on the hook code, typically contain information about a message that was sent or posted 
+
+SetWindowsHookEx always installs a hook procedure at the beginning of a hooko chain. use CallNextHookEx to call the next hook. 
+
+A global hook monitors messages for all threads in the same desktop as the calling thread. A thread-specific hook monitors messages for only a individual thread 
+
+- hook types 
+WH_CALLWNDPROC and WH_CALLWNDPROCRET, enable you to monitor messages sent to window procedures. window call WH_CALLWNDPROC before passing it to the process and call WH_CALLWNDPROCRET after the process handle the message 
+
+WH_CBT, hook procedure before activating, creating, destroying, minimizing, maximizing, moving, or sizing a window; cbt is shortcut for computer based training application 
+
+WH_DEBUG, system calls a WH_DEBUG hook procedure before calling hook procedures associated with any other hook in the system. it could be used to control the hook. check more for DebugProc calback 
+
+WH_FOREGROUNDIDLE, enables you to perform low priority tasks during times when its foreground thread is idle. System call this hook when the application's foreground thread is about to become idle 
+
+WH_GETMESSAGE, enables an application to monitor messages about to be returned by the GetMessage or PeekMessage function. You can use the WH_GETMESSAGE hook to monitor mouse and keyboard input and other messages posted to the message queue. 
+
+WH_JOURNALPLAYBACK, enables an application to insert messages into the system message queue. You can use this hook to play back a series of mouse and keyboard events recorded earlier by using WH_JOURNALRECORD. Regular mouse and keyboard input is disabled as long as a WH_JOURNALPLAYBACK hook is installed. A WH_JOURNALPLAYBACK hook is a global hook—it cannot be used as a thread-specific hook. The WH_JOURNALPLAYBACK hook returns a time-out value. this value tells the system how many milliseconds to wait before processing the current message from the playback hook. This enables the hook to control the timing of the events it plays back 
+
+WH_JOURNALRECORD, enables you to monitor and record input events. Typically, you use this hook to record a sequence of mouse and keyboard events to play back later by using WH_JOURNALPLAYBACK. Global hook 
+
+WH_KEYBOARD_LL, enables you to monitor keyboard input events about to be posted in a thread input queue. 
+
+WH_KEYBOARD,  enables an application to monitor message traffic for WM_KEYDOWN and WM_KEYUP messages about to be returned by the GetMessage or PeekMessage function. You can use the WH_KEYBOARD hook to monitor keyboard input posted to a message queue
+
+WH_MOUSE_LL, monitor mouse input events about to be posted in a thread input queue. 
+
+WH_MOUSE,  enables you to monitor mouse messages about to be returned by the GetMessage or PeekMessage function. You can use the WH_MOUSE hook to monitor mouse input posted to a message queue. 
+
+WH_MSGFILTER and WH_SYSMSGFILTER, enable you to perform message filtering during modal loops that is equivalent to the filtering done in the main message loop. An application can call the WH_MSGFILER hook directly by calling the CallMsgFilter function. 
+    + example 
+while (GetMessage(&msg, (HWND) NULL, 0, 0)) 
+{ 
+    if (!CallMsgFilter(&qmsg, 0)) 
+        DispatchMessage(&qmsg); 
+} 
+
+WH_SHELL, use the WH_SHELL hook to receive important notifications. The system calls a WH_SHELL hook procedure when the shell application is abot to be activated and when a top-level window is created or destroyed. Note that custom shell applications do not receive WH_SHELL messages. Therefore, any application that registers itself as the default shell must call the SystemParametersInfo function before it (or any other application) can receive WH_SHELL messages. This function must be called with SPI_SETMINIMIZEDMETRICS and a MINIMIZEDMETRICS structure. Set the iArrange member of this structure to ARW_HIDE. 
+    
+- reference 
+https://msdn.microsoft.com/en-us/library/ms644959(VS.85).aspx
+
+
+# Using Hooks 
+
+
+# WinEvents
+- widnow includes a feature called WinEvetns to allow processes exchange certain types of information. Accessibility tools thaht use MS UI automation 
+- server application and os use WinEvents to notify clients when a change occurs in the system or in the user interface 
+    + sile way for clients to register for event notifications
+    + mechanism for injecting client code into servers 
+    + routing of events from servers to interested clients 
+    
+- The Microsoft Active Accessibility run-time provides IAccessible proxies for all standard UI elements. When an event occurs that affects the UI, servers can broadcast an event notification to all interested clients by calling the NotifyWinEvent function
+    
+For example, to notify clients that a control's name has changed, a server calls NotifyWinEvent and passes EVENT_OBJECT_NAMECHANGE in the event parameter. The system responds by determining which clients have registered to receive that particular event and calls their registered callback function. 
+    
+# Dynamic-link libraries 
+- dll can define two kinds of functions, exported and internal. the exported function are intended to be called by other modules 
+    
+applications share the dll code 
+
+window API implement as a set of DLLs 
+
+- about dynamic link libraries 
+    + types of dynamic linking 
+        * load-time dynamic linking, a module makes explicit calls to exported dll functions as if they where local functions. this requires you to link the module with the import library for dll 
+    
+        * run-time dynamic linking, a module use LoadLibrary or LoadLibraryEx function to load the dll at run time. After the dll is loaded the module calls the GetProcAddress function to get the address of the exported dll functions. The module calls the exported dll functions using the function pointers returned by GetProcAddress. This eliminates the need for an import library 
+    
+    + Dlls and memory management 
+    every process that loads the dll maps it into its virtual address space. after it can call the exported functions 
+    
+    system maintain a per-process reference count for each DLL. The exported functions run in the context of the thread that calls it 
+        * the threads can use handles opened by a DLL function
+    
+- using dynamic link libraries 
+- dynamic link library reference 
+    
+    
+
+# COM+(Component services)
+- references 
+https://msdn.microsoft.com/en-us/library/ms685978(v=vs.85).aspx
+
+
+# Interprocess Communications 
+- reference 
+https://msdn.microsoft.com/en-us/library/aa365574(v=vs.85).aspx
+
+
+# DLL injection Wiki 
+- In computer programming, dll injection is a technique used for running code within the address space of another process by forcing load a dynamic-link library 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

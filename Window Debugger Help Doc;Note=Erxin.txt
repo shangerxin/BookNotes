@@ -1544,18 +1544,2023 @@ NUM
     + winext contains extension for any version of window. dbghelp.dll module located in the base directory of the debugging tools for windows 
     
 ### Using debugger extension commands 
+- the extension command is similar to debugger commands with the syntax 
+$ ![module.]extension [arguments]
+
+the module name should not contain .dll. if module include full path then the limit is 255 characters .
+
+if the module is not ready then it will be loaded with LoadLibrary(module). after that it call the GetProcAddress to locate the extension name in the module. The name is case-sensitive 
+
+- search order. if module name is not specified, the search order is 
+    + the extension modules that work with all operating system and both Dbghelp.dll and winext\ext.dll 
+    
+    + for kerl mode should use winext\kext.dll and user mode winext\uext.dll 
+    + both operating syste specific and mode-specific
+    
+- .setdll( set default extension dll) to promote any module to top of the search chain 
+- .chain, display all loaded extension module 
+
+
 ### Writing new debugger extensions 
+- there are two types of debugger extensions 
+    + DbgEng extensions, are based on the prototypes in the dbgeng.h and also those in the wdbgexts.h 
+    
+    + WdbgExts extensions. based on the prototypes in the wdbgexts.h 
+    
 
 ##Remote debugging 
 ## Debugging Previous versions of windows 
+...
+- debugging tools for window 7 and xp are included in the SDK for window 7 and .net framework 4.0
+...
 
 # Debugging Techniques 
 ## Standard debugging techniques 
-## Writing new debugging extensions 
+### Using Breakpoints 
+- specify location of a breakpoint by virtal address. if you put a breakpoint on a routine without offset then it active when that routine is entered 
 
+    + a breakpoint can associated with a certain thread 
+    + a breakpoint can enable a fixed number of passes through an address before it is triggered 
+    + can automatically issue certain command when it trigger 
+    + can set on non-executable memory and watch for that location to be read or written to 
     
-# Debugger Reference 
+- if you are debugging more than one process in user mode the collection of breakpoints depends on the current process. to view break points you need to select the process as current process. To control the process by #Controlling process and threads 
+
+- commands for controlling and displaying breakpoints 
+bl, breakpoint list and status 
+.bpcmds, display breakpoint commands to list all breakpoints along with the commands that were used to create them 
+bp, set breakpoint 
+bu, set unresolved breakpoint 
+bm, set symbol breakpoint set new breakpoints on symbols that match a specified pattern 
+ba, break on access, set a processor breakpoint, also known as data breakpoint can be triggered when the memeory location is written to 
+bc, permanently remove one or more breakpoints 
+bd, disable 
+be, enable 
+br, renumber to change the id of an existing breakpoint 
+bs, udpate breakpoint change the command associated with an existing breakpoint 
+bsc, update conditional breakpoint to change the condition under which an existing conditional breakpoint occurs 
+
+- each breakpoint have a decimal id 
+- include a command in a breakpoint that is automatically executed 
+$ bu MyFunction+0x47 ".dump c:\bpdump.dmp; g"
+
+this command will break at myFunction+0x47 and writes a dump file and resume execute 
+
+if use kernel mode debugger control a user-mode debugger then don't use the g command in the breakpoint command string 
+
+- kerl mode maximum of breakpoints number is 32 
+- processor breakpoints is depends on the target processor arhictecture 
+
+### Breakpoint Syntax 
+- address in breakpoints to set breakpoint 
+$ bp 0040108c 
+$ bp main+5c 
+$ bp `source.c:31`
+
+- breakpoints on methods, put breakpoint on the method in myClass in two way 
+    + in MASM expression syntax indicate a method by a double colon or a double underscore 
+    $ bp MyClass::MyMethod 
+    $ bp MyClass__MyMethod 
+    
+    + C++ expression syntax must indicate a method by double colon 
+    $ bp @@(MyClass::MyMethod)
+    
+- check #Evaluating expresion for more detail 
+- breakpionts using compilcated text 
+    + set a breakpoint on complicated functions, including functions that contain spaces, as well as member of a C++ public class. enclose the expresion in parenthese 
+    $ bp(??MyPublic) 
+    $ bp(Operator new)
+    
+    + more versatile technique is to use @!"chars" syntax, in MASM evaluator that enables you to provide the arbitrary text for symbol resolution. Must start three symbols @!" and end with a quotation mark ("). Without this you cannot use spaces angle bracktes or other special characters in symbol names in MASM.
+    also set the bu command by using the @!"chars" syntax 
+    
+    $ bu @!"ExecutableName!std::pair<unsigned int,std::basic_string<unsigned short,std::char_traits<unsigned short>,std::allocator<unsigned short> > >::operator="
+
+    ExecutableName is the executable file. this escape synatx is more useful for c++ and managed code 
+    
+    + set a breakpoint on arbitrary text in c++ syntax use 
+    $ bu @@c++(text) 
+    
+- breakpoint in scripts. use a numerical expression that resolves to an integer that corresponds to a breakpoint id 
+$ b?[Expression]
+
+the square brackets are required, this synatx allow debugger scripts programmically select a breakpoint for example breakpoint is depending on the value of a user-defined pseudo-register 
+$ b?[@$t0]
+
+
+### Unresolved Breakpoints(bu breakpoints)
+- a breakpoint is set for a routine name that has not been loaded, the breakpoint is called a deferred, virtual or unresolved breakpoint. Every time a new application is loaded it checked for this routine name if this routine appear, debugger computes the actual coded addres of the virtal breakpoint and enables the breakpoint 
+
+- module unloaded and reloaded not effect the bu breakpoint on the other handle bp breakpoint is immediately resolved to an address 
+
+- three primary differences between bp and bu breakpoints 
+    + bp is always converted to an address. bu breakpoint assocaited with symbolic value 
+    + bp breakpoint address is found in a loaded module if the module unloaded then the breakpoint is removed. bu breakpoint will persist 
+    + bp breakpoint are not saved in windbg workspace. bu are saved 
+    
+- address breakpoint could be set by bp or bm(set symbol breakpoint) when /d switch is included. 
+- unresolved breakpoint can be set by bu or bm command which not used with /d swith 
+- command display breakpoint is include all breakpoints 
+- Windbg Breakpoints dialog display all breakpoint and indicate unresolved with "u". when using the mose in the windbg to Disassemlby window or Source Window the debugger creates an unresolved breakpoint 
+
+### Processor breakpoint 
+- controlled by the processor at the request of debugger. known as processor breakpoint and data breakpoint. Breakpoints are controlled by debugger is known as software breakpoint 
+
+processor breakpoints are usually set on program data this the reason they are called "data breakpoint" but they can also be set on executable code 
+
+software breakpoint are usually set on executable code 
+
+- processor breakpoint is triggered when specific memory location is accessed. four types of processor breakpoints 
+    + e, trigger when retrieves an instruction from a specific address 
+    + r, read/write specify address 
+    + w, write specify address 
+    + i(i/o), when I/O port at the specified address is accessed 
+    
+- each processor breakpoint has a size associated with it. a w(write) breakpoint could be set at the address 0x70001008 with a size of four bytes. this would monitor the address from 0x70001008 to 0x7000100B, inclusive. 
+
+when a processor perform a operation on a memory region, which overlap with the processor breakpoint then check the processor architecture manual for "debug register" or "debug control register" for more detail 
+
+x86 processor it will be triggered 
+
+a e(execute) breakpoint is set on address 0x00401003 then a two-byte instruction spanning the address check the processor manual 
+
+processor distinguishes between user-mode breakpoint and kernel mode breakpoint. a kernel-mode breakpoint might or might not affect a user-mode process, depending on whether the user-mode code is using the debug register state 
+
+on multiprocessor computer, processor breakpoint applies to all processors. use the .apply_dbp(apply data breakpoint to context)
+
+- software breakpoint. when the debugger sets a software breakpoint it temporarily replaces the content of that memory location with a break instruction. the debugger remembers the original contents of this location 
+
+- availability of processor breakpoint types 
+
+window server 2003 sp1 on an itanium-based computer that use wow64 to emulate x86. e breakpoint do not work
+
+i(i/o) is available only during kernel-model debugging 
+
+not all data sizes can be used with all processor breakpoint types. the permitted sizes depend on the processor of the target computer. check #break on access for more detail 
+
+- limitation of software breakpoint and processor breakpoint 
+    + specify a data address rather than a program address when using bp or bm /a commands it only safe when you are certain that will be only used as executable code or may lead to data corruption 
+    
+    + bp, bu and bm commands set software breakpoint by replacing the processor instruction with a break instruction. these cannot be used in read-only code. to set a breakpoint in such code required to se ba(break on access) with e option 
+    
+    + cannot create multiple processor breakpoint at the same address that differ only in the command that is automatically executed when the breakpoint is triggered. can create multiple breakpoints at same address that differ only their other restriction ba /p /t /c /C options 
+    
+    + initial bereakpoint in a user-mode cannot be a processor breakpoint 
+- controlling software breakpoint and processor breakpoint 
+    + software can be created with bp, bm and bu 
+    
+    + processor breakpoint can be created by ba 
+    
+### Initial breakpoint 
+- when debugger starts a new target application, an initial breakpoint automatically occurs after the main image and all statically linked DLLs are loaded before any DLL initialization routines are called 
+
+when debugger attaches to an existing user-mode application, an initial breakpoint occurs immedaitely
+
+the -g command-line option cause the windbg or CDB to ignore the initial breakpoint. 
+
+to stop on actual application about to begin use set breakpoint on main or winmain routine and then use g command 
+
+### User space and system space 
+- window gives each user-mode application a block of virtual addresses this known as the user space of that application. The other large block of address known as system space or kernel space. it cannot be access by the application 
+
+in kernel mode you can set breakpoint in user space with bp, bu and ba or with Breakpoint dialog box. But you must use the process context to specify the user-mode process that owns that address space by using .process /i 
+
+breakpoint in user space are alwasy associated with the process whose process context was active when the breakpoint were set. if you both started user-mode and kernel mode debugging it will first break into user-mode debugger. use .breakin command to transfer the control to kernel mode debugger 
+
+- determining the range of user space and system space. use dp(display memory) command from a kernel debugger to display the window global variable MmHighestUserAddress. this variable contain the address of the top of user space 
+
+kd$ dp nt!mmhighestuseraddress L1 
+
+### Risks Entailed When Setting Breakpoints 
+- when setting a breakpoint by specify a memory address or a symbol plus an offset, you must not put this breakpoint in the middle of an instruction. 
+    + example 
+ 
+770000f1 5e               pop     esi
+770000f2 5b               pop     ebx
+770000f3 c9               leave
+770000f4 c21000           ret     0x10
+770000f7 837ddc00         cmp     dword ptr [ebp-0x24],0x0
+ 
+if put a breakpoint by bp, bu or ba command you must specify the 0x770000F4 address 
+
+if you put a breakpoint in 0x770000F5 by ba command the processor puts a breakpoint at that location but it will never be triggered because the processor consider the 0x770000F4 to be the actual address of the instruction 
+
+if you put a breakpoint in the 0x770000F5 by bp or bu command the debugger writes a breakpoint at that location. however this breakpoint might corrupt the target. because when processor execute to that address and try to combine the instruction will use the wrong data which already replaced by the debugger 
+
+when use bp, bu or ba make sure alwasy put the breakpoints at the proper address. If use the userinterface you don't have to worry this. 
+
+### Conditional breakpoints in Windbg and other window debuggers 
+- break in only if a specify condition is satisfied 
+
+condtion breakpoint is created by combining a breakpoint with either the j(Execute If-Else) command or the .if token, followed by the gc(Go from conditional breakpoint)
+
+    + syntax 
+$ bp address "j (condition) 'optionalCommands'; 'gc'"
+
+$ bp address ".if(condition){OptionalCommands} .else {gc}"
+$ bp `mysource.cpp:143` ".if (poi(MyVar)>0n20) {} .else {gc}"
+
+specify source line number by grave accents(`)
+
+when breakpoint hit the command in straight quotation marks(") is executed 
+
+in C++ expression MyVar is treat as integer. in MASM expression the MyVar is treat as an address. thus you need to use the poi operator to dereference it.(if your variable is a c pointer then you need to dereference it twice. poi(poi(MyPtr))
+
+0n prefix means the variable is decimal 
+
+gc(go for conditional breakpoint) command this willresume before the breakpoint was hit 
+
+- conditional breakpoint based on string comparison 
+$ bp kernel32!CreateEventW "$$<c:\\commands.txt"
+
+the bp command create a conditional breakpoint base on the script file 
+
+script file content 
+ 
+.if (@r9 != 0) { as /mu ${/v:EventName} @r9 } .else { ad /q ${/v:EventName} }
+.if ($spat(@"${EventName}", "Global*") == 0)  { gc } .else { .echo EventName }
+ 
+this will check the argument lpName of the function CreateEventW 
+
+The lpName argument passed to the CreateEventW is the fourth argument, so ti stored in the r9 register(x64 processor). the script performs the following steps 
+
+If lpName is not NULL, use as and ${} to create an alias named EventName. Assign to EventName the null-terminated Unicode string beginning at the address pointed to lpName. if lpName is null then use ad to delete existing alias named EventName
+
+use $spat to compare the string by EventName and pattern "Global*", $spat is a case insenstive match 
+
+- conditional breakpoints and register sign extension. set a breakpoint that is conditional on a register value 
+
+    + break a the myFunction if eax register is equal to 0xA3 
+ 
+0:000> bp mydriver!myFunction "j @eax = 0xa3  '';'gc'" 
+0:000> bp mydriver!myFunction ".if @eax = 0xa3  {} .else {gc}"
+ 
+    + these commands will not works 
+ 
+0:000> bp mydriver!myFunction "j @eax = 0xc0004321  '';'gc'" 
+0:000> bp mydriver!myFunction ".if @eax = 0xc0004321  {} .else {gc}"
+ 
+the reason is the preceding command will fail is that MASM expression sign-extends registers whose high bit equals one. When eax have the value 0xC0004321. it will be treated as 0xFFFFFFFF`C0004321 in computations. even though eax will still be displayed as 0xC0004321. It is signed extended in kernel mode not in user mode. Therefore the preceding command will not work properly in user mode. if you mask the high bit of eax the command will work properly in kernel mode -- but will fail in user-mode 
+0001
+0010
+0011
+0100
+0101
+0110
+0111
+1000
+1001
+1010 A 
+1011 B 
+1100 C 
+1101 D 
+1110 E 
+1111 F 
+
+you should formulate your commands defensively against sign extension in both modes. use mask AND with 32-bit register 
+ 
+0:000> bp mydriver!myFunction "j (@eax & 0x0`ffffffff) = 0x0`c0004321  '';'gc'" 
+0:000> bp mydriver!myFunction ".if (@eax & 0x0`ffffffff) = 0x0`c0004321  {} .else {gc}"
+ 
+- condition breakpoint in windbg by menu Edit|Breakpoints and enter the condition 
+
+- restriction on conditional breakpoints if you are controlling user-mode debugger from kernel mode debugger, you cannot use conditional breakpoints or any other breakpoint commands contain gc or g commands. if you use then the interface might not be abel to keep uo and you will unable to breakback into CDB 
+
+
+### Executing Unitl a specified state is reached 
+- using a breakpoint to control execution. more complex breakpoint can 
+    + trigger on when this address is executed by a specific thread 
+    + allow a specified number of passes through this address before being triggered 
+    + automatically issue a specified command when it is triggered 
+    + watch a specified address in non-executable memory, being triggered when that memory is read or written to 
+    
+- breakpoints and Pseudo-Registers use $thread pseudo-register which is always equal to the current thread. 
+
+    +  create a breakpoint that will be triggered every time that NtOpenFile is called by the thread which was active at the time you issued the bp command:
+
+kd>bp /t @$thread nt!ntopenfile 
+
+check more detail from the #Pseudo-Registers
+
+- Using a script file to control execution. a script file that calls itself recursively, testing the desired state in each iteration. use command such as t(trace) to execute a single step 
+    + execute until eax contains the value 0x1234, script file is called eaxstep 
+    .if (@eax == 1234) { .echo 1234 } .else { t "$<eaxstep" }
+
+    issue the command from debugger command window 
+    $ t "$<eaxstep"
+    
+this t command will execute a single step and then execute the quoted command. $< (run script file)
+
+
+## Writing new debugging extensions 
+- check detail from #Writing DbgEng Extensions and #Writing WdbgExts Extensions
 ...
+
+
+## Reading and Writing Memory 
+- memory can be referenced by adddresses or by the names of variables 
+
+### Accessing Memory by virtual address 
+- variable format 
+hexadecimal bytes 
+word 
+double words 
+quad-words 
+integers(short, long, quad integers and unsinged integers)
+floating-point numbers(10-byte, 16-byte, 32-byte and 64-byte real number)
+ascii characters 
+
+- commands 
+d*, display memory command displays the contents of a specified memory address or rage 
+e*, enter values command
+
+- specific data type 
+dt, display type, contain highly versatile and options 
+ds, display string 
+dl, display linked list 
+d*s, display words and symbols finds double-words or quad-words that might contain symbol information 
+!address, extension command displays information about the property of the memory that is located at specific address 
+
+- manipulate memory ranges 
+m, move memory 
+f, fill memory 
+c, compare memory 
+s, search memory 
+.holdmem, hold and compare memory 
+
+- most of the time the commands interpret their parameters in current radix 
+
+memory window display integers and real numbers in decimal format and display other formats in hexadecimal format 
+
+use n command to change default radix 
+convert numbers use ?(evaluate expression) to convert or .formats(show number formats) command 
+
+user mode debugging the virtual address is control by the current process. 
+kernel mode debugging the virtal address is control by debugger 
+
+### Accessing memory by physical address 
+- read from a physical address by 
+!db, !dc, !dd, !dp, !du and !dw extesion command 
+
+- write to 
+!eb, !ed 
+
+- fp command wrtes a pattern to a physical memory range, repeating till the range is full 
+
+when using windbg in kernel mode, can access physical memory directly from memory window 
+
+- search physical memory by 
+!search 
+
+- more detail check #converting virtual address to physical address 
+
+
+### Accessing global variable 
+- The name of global variables are stored in the symbol files that are created when an application is compiled. The debugger interpret the as a virtual address 
+
+use ?(evaluate expression) command to display the address that is associated with any symbol 
+
+- obtain variable address and display by 
+ 
+0:000> ? MyCounter 
+Evaluate expression: 1244892 = 0012fedc
+0:000> dd 0x0012fedc L1 
+0012fedc  00000052
+ 
+1244892 is the decimal version of the address 
+the second command display the value 0x52 which is decimal 82 
+
+- accessing local variables. similar to global variable but to indicate to a command a variable is local which need to precede the symbol with a dollar sign($) and an exclamation point(!) as in $!var 
+
+- editing local variables 
+    + VS or windbg supply different ways 
+    + dv(display local variables) will display the names and values of all local variables 
+    + !for_each_local extension enables you to execute a single command repeatedly 
+
+- debugger interprete the local variables base on the local context. By default this context matches the location of the program counter. But debugger could change the context 
+
+
+### Controlling variables throught the watch window 
+- the watch window is not effect by change the local context. only those variables that are defined in the scope of the current program counter can have their values displayed or modified 
+
+
+### Converting virtual address to physical addresses 
+- there are two ways 
+    + !vtop extension 
+    + !pte extension 
+    
+- suppose you are debugging a target computer ang want to investigate virtual address 0x0012F980 here is the process to use !vtop to find the physical address  
+    + make sure workin in hexadecimal else use command 
+    $ n 16 
+    
+    + determine the byte index of the address. it is equal to the lowest 12 bits of the virtual address so it is 0x980 
+    
+    + determine the directory base of the address by using the !process extension 
+    kd> !process 0 0 
+    **** NT ACTIVE PROCESS DUMP ****
+    ....
+    PROCESS ff779190  SessionId: 0  Cid: 04fc    Peb: 7ffdf000  ParentCid: 0394
+     DirBase: 098fd000  ObjectTable: e1646b30  TableSize:   8.
+      Image: MyApp.exe
+    + determine the page frame number of the directory base 0x098fd000 so the page frame number is 0x98FD
+    + use the !vtop extension the first parameter should be the frame number and the second is the virtual address in question 
+    kd> !vtop 98fd 12f980
+    Pdi 0 Pti 12f
+    0012f980 09de9000 pfn(09de9)
+
+    the last line display the beginning address of the physical page 
+    
+    !d* extension display memory at a specified physical address 
+    kd> !dc 9de9980
+    
+    d* (display memory) commands uses a virtual address as its argument 
+    kd> dc 12f980 
+    
+    these two command will get the same address 
+    
+- converting a virtual address to a physical address using !pte 
+    + work on 16 radex 
+    + determine the by index, which is 0x980 
+    + set process context to the desire process 
+    kd> !process 0 0 
+    **** NT ACTIVE PROCESS DUMP ****
+    ....
+    PROCESS ff779190  SessionId: 0  Cid: 04fc    Peb: 7ffdf000  ParentCid: 0394
+        DirBase: 098fd000  ObjectTable: e1646b30  TableSize:   8.
+        Image: MyApp.exe
+    
+    kd> .process /p ff779190 
+    
+    + use the !pte extension with the virtual address as its argument. PDE, page directory entry, PTE page table entry 
+    kd> !pte 12f980
+                   VA 0012f980
+    PDE at   C0300000        PTE at C00004BC
+    contains 0BA58067      contains 09DE9067
+    pfn ba58 ---DA--UWV    pfn 9de9 ---DA--UWV
+    
+    look in the last row of the right column the notation pnf 9de9. 0x9de9 is the page frame number (PFN) of this PTE. multiple the frame number by 0x1000(shift it left 12 bits). the result 0x09de9000 is the physical address of the beginning of the page 
+    
+    + add the byte index to the address 0x09de9000 + 0x980 = 0x9de9980 is the desired physical address 
+    
+- converting addresses by hand
+...
+
+### Using the !analyze extension 
+- the first step in debugging a crashed target computer or application is to use the !analyze extension command. use -v option for display more 
+
+- contain topics 
+    + use-mode !analyze -v 
+    + kernel-mode !analyze -v 
+    + followup field and the triage.ini file 
+    + addtional !analyze the techniques 
+    
+- use-mode !analyze -v 
+    + the displayed exception information could also be found by command .exr(display exception record)
+
+    + stack command field shows the command that was used to obtain the STACK_TEXT. you can use this command to repeat this stack 
+    STACK_COMMAND:  .ecxr ; kb
+
+- kernel-mode 
+    + IRQL, interrupt request level 
+    
+    + .trap(display trap frame) command 
+    
+    + Ln (list nearest symbols) command to determine what module and function these address reside in 
+    
+- followup field and the triage.ini file contains the module name and function owners check #Specifying Module and Function Owners for more detail 
+
+- addtional !analyze techniques 
+if you do not believe the bug id is correct, you can override the bucket choice by using !analyze with -D 
+use !analyze -f to force complete in crash 
+
+if you think the problem is due to hang you could use !analyze -hang to check if there are any threads are blocking other threads 
+
+use command !deadlock extension for deteck in kernel mode 
+
+automatic ignore issues by supply a xml file containing in a formatted list of known issues 
+!analyze -c - loadKnownIssuesFile extension to load this file 
+
+
+### Handling a bug check when driver verifier is enabled 
+- driver verifier detects driver errors at run time
+...
+
+### Noinvasive debugging(user mode)
+- if a user-mode application is already running, the debugger can debug it noninvasively. noninvasive debugging is useful if the target application has stopped responding. 
+
+- noninvasive debugging, the debugger doesn't attach to the arget application but it suspended all the thread of the target and then access to the target's memory, registers and other such information. however debugger cannot control the target so command like go do not work 
+
+- CDB command line 
+$ cdb -pv -p ProcessId 
+$ cdb -pv -pn ProcessName 
+
+- windbg command line 
+$ windbg -pv -p ProcessID 
+
+
+### Debugging in assembly mode 
+- the debugger will automatically displays the contents of memory locations and registers as they are accessed and the address of the program counter 
+
+- disassembly code 
+u, unassemble disassembles and displays a specified section of machine language 
+uf, unassemble function, disassemble a function 
+up, unassemble from physical memory of a specified section 
+ur, unassemlbe real mode BIOS, command disassembles and displays a specified 16-bit real-mode code 
+ux, unassemble x86 BIOS the x86-based BIOS code instruction set a specified address 
+Disassembly window, windbg only 
+
+- example 
+0040116b    45          inc         ebp            
+0040116c    fc          cld                        
+0040116d    8945b0      mov         eax,[ebp-0x1c] 
+
+if a line contain a branch instruction the notation [br=1] or [br=0] to indicate the is taken or not 
+
+- manipulate assembly code 
+    + #(search for disassembly pattern command) this command is equivalent to searching the four columns of the disassembly display 
+    + a(assemble) command can take assembly instructions and translate them into binary machine code 
+    
+- assembly mode and source mode. single-stpping through an application the size of a step is depend on the mode, which is one line of assembly or one line of source 
+
+change the mode by 
+    + l+, l- set source options commands to control the mode the l-t command activates assembly mode 
+    + clear the source mode command on debug menu (windbg only )
+    
+- if your application was written in assembly the disassembly might not exactly match your code. can load the source to switch to source mode debugging 
+
+### Debugging in source mode 
+- compilation requirements, you must have compiler or linker create symbols(.pdb files). Prevent source optimization for debugging by 
+MSC_OPTIMIZATION marco to /Od /Oi to avoid optimization 
+
+- locating the symbol files and source files 
+
+- source debugging, need setup symbols and source path. 
+    + you app started, ntdll.dll load your application 
+    + your code start point 
+    $ bp main 
+    to set a breakpoint in main 
+    
+    + if you issue a break by using the ctrl+c, ctrl+break or debug|break the debugger creates a new thread so ou cannot see your source code 
+    
+- source debugging in the windbg gui 
+
+support hover a symbol to evaluate 
+
+active source mode in windbg by command l+t command, click Source Mode on debug menu or the toolbar 
+
+- source debugging in debugger command window 
+.lines command toggle source line support or start the debugger use command-line option 
+
+l+t command to performed one source line at a time 
+l+t to setp one assembly instruction 
+l+s command display the current source line 
+l+l, only see the line number 
+l+o 
+lsp, set number of source lines 
+ENTER repeat the last command 
+    + example 
+$ l+s 
+$ l+t 
+
+- source lines and offsets 
+    + display memory offset 
+$ ? `[[module!]filename][:linenumber]`
+
+    + also could use it to set breakpiont in source 
+    
+- stepping and tracing in source mode 
+p command will step over a nested single line such as 
+print("%x\n", GetTickCount();
+
+to step over certain calls while tracing into other calls use .setp_filter(set step filter) to indicate which calls to step over. 
+can use _step_filter to filter out framework functions such as MFC, ATL 
+
+### Debugging optimized code and inline functions 
+- window 8+ support debug optimized code and inline function. debugger display inline functions in the call stack inline function only displays local varibles but not parameters 
+
+- accurate display of local variables and paramters 
+use dv -v command to see the locations of the paramters and local variables 
+
+x command to list all the caller sites of the inline function 
+
+use .frame command to check the inline function meory status 
+
+### debugging managed code using the windows debugger 
+- windbg, cdb and ntsd to debugger managed code required sos debugging extension sos.dll and a data access component(mscordacwks.dll)
+
+- the version of filename of CLR used by .net framework 
+.net version            CLR version         CLR filename 
+1.10                    1.1                 mscorwks.dll 
+2.0                     2.0                 mscorwks.dll 
+3.0                     2.0                 mscorwks.dll 
+3.5                     2.0                 mscorwks.dll 
+4.0                     4.0                 clr.dll 
+4.5                     4.0                 clr.dll 
+
+- debugging managed code must load two components 
+    + DAC, data access component, mscordacwks.dll 
+    + SOS debugging extension, sos.dll, it is contain in the .net framework installation location, .net 1.x required window sdk 7 
+    
+    + assume debugger running on the same computer with the target 
+    $ .cordll -ve -u -l 
+    to load DAC 
+    
+    display module information 
+    lmv mclr 
+    lmv mscorwks 
+    
+    if sos.dll doesn't load automatcally required to use command 
+    $ .loadby sos clr (4.0+)
+    $ .loadby sos mscorwks(1.0 - 2.0)
+    
+    http://go.microsoft.com/fwlink/?LinkID=223345
+    
+    alternatively can use 
+    $ .load C:\Windows\Microsoft.NET\Framework64\v4.0.30319\sos.dll
+
+    + using MS public symbol server 
+    .sympath+srv* (add symbol server to symbol path)
+    !sym noisy 
+    .cordll -ve -u -l 
+    
+- using SOS debugging extension 
+.chain command 
+
+!sos.help, test sos debugging extension 
+sos.DumpDomain 
+!sos.Threads command 
+
+### Debugging windows store apps using the windows debugger 
+- use PLMDebug tool to suspending, resuming and terminating a window store app 
+
+### Changing contexts 
+- in kernel mode the virtual address and register name eax content are ambiguous. we need specify the context in which such phrases can be understood 
+
+- debugger have five different contexts that you can set while your debugging 
+    + the session context indicates the default user session 
+    + the process context determines how the debugger interprets virtual addresses 
+    + user-mode address context is a almost never set directly. it is automatically set when you change process context 
+    + the register context determines how the debugger interprets registers and also controls the results of a stack trace. this context is also known as the thread context. if you specify an explicit conext that is used instead of the current register context 
+    + the local context determine how the debugger interprets the local variables. This context is also known as the scope 
+    
+- session context from window xp+ each multiple logon sessions can run at the same time, each logon session has its own processes. 
+
+!session, to display all logon sessions or changes the current session context 
+
+session context is used by the !sprocess and !spoolused extensions when the session number is entered as "-2"
+
+when session context changed then process context is automatically changed 
+
+- process context, each process has its own page directory that records how virtual addresses are mapped to physical addresses. when any thread within a process is executing the OS use this page directory to interpret virtual address 
+
+kernel mode debugging change process context by 
+.process command 
+
+on an Itanium-based processor, a single process might have more than one page directory, then could use .context command to swith the address context 
+
+- register context, each thread has its own register values. in user-mode debugging the current thread typically determines the register context 
+
+.cxr, display context record 
+.ecxr, display exception context record 
+
+- kernel mode debugging you can control the register context by using a variety of debugger commands 
+.thread 
+.cxr 
+.trap( display trap frame)
+
+- change processor mode by command . to make sure current processor mode setting is match the debug register context 
+.effmach
+
+- local context, use .frame(set local context) command or double-click the desired frame in the calls window 
+
+in use mode debugging the local context is always a frame within the stack trace of the current thread 
+in kernel mode debugging the local context is always a frame within the stack trace of the current register context's thread 
+
+local context is reset if any events occur 
+    + any program execution stepping or tracing 
+    + thread delimiter (~) in any command 
+    + any change to the register context 
+    
+!for_each_frame extension enables you to execute a single command repeatedly 
+
+### Controlling processes and threads 
+- the current process is the debugger is currently controlling, the current thread is the one that was active when the debugger attached to the process or caused the exception 
+
+- in kernel mode required to use changed context to switch process 
+
+- display processes and threads 
+|, process status 
+~, thread status 
+processa and thread window 
+
+- change the current process 
+|s, set current process command 
+~s, set current thread command 
+process and thread window in wndbg 
+
+- freezing and suspending threads 
+each thread has a suspend count that is associated with it. if this count is one or larger then system does not run the thread. if the count is zero or lower the system runs when appropriate 
+
+    + when the debugger attaches to a process, it increments the suspend counts of all threads in that process by one 
+    + when detach it decrement all suspend counts by one 
+    
+    + control the suspend count of any thread from the debugger by using the following methods 
+    ~n, suspend thread increments the specified thread's suspend count by one 
+    ~m, resume thread, command decrements the specified thread's suspend count by one 
+    
+    + debugger can also freeze a thread, this action is similar to suspend the thread in some ways. "frozen" is a debugger setting. nothing relative to window OS. 
+    
+    by default all threads are unfronzen. when debugger cause a process to execute the threads are fronzen do not execute. if debugger detaches then all threads unfreeze 
+    
+    freeze by 
+    ~f, freeze thread 
+    ~u, unfreeze thread 
+    
+- threads and processes in other commands 
+~e, thread specific command qualifier before many commands and exetension commands 
+
+    + example 
+~*e !gle 
+repeats the !gle extension command for every thread that is being debugged.
+
+
+### Using debugger markup language, DML 
+- lmD command is an example of a command that is capable of providing DML output. 
+
+the module name is a link that you can click to get more detailed information 
+
+- DML defines a small set of tags that can be included in command output. one example is the <link> tag. you can experiment with the <link> tag and other DML tags by using the .dml_start and .browse commands 
+$ .browse .dml_start filepath 
+executes the commands stored in a DML file. the output is displayed in the Command Browser Window instead of command window 
+
+    + example 
+//suppose the c:\dml.txt contains the following lines 
+cmd 
+My DML Experiment
+<link cmd="lmD musb*">List modules that begin with usb.</link>
+ 
+//the following command display the text and link in the command browser window 
+cmd 
+.browse .dml_start c:\DmlExperiment.txt
+ 
+- capable of generating DML output 
+.dml_start 
+.dml_flow 
+!dml_proc 
+lmD 
+kM 
+.chain /D 
+.help /D 
+.printf /D 
+
+the .perfer_dml commands turns DML on or off. when DML is turned on commands that are capable of generating DML output will generate DML output by default 
+
+start from window 10 the right click behavior is available in DML. 
+ 
+<link cmd="u MyProgram!memcpy">
+<altlink name="Set Breakpoint (bp)" cmd="bp MyProgram!memcpy" />
+u MyProgram!memcpy
+</link>
+
+
+### Controlling Exceptions and Events 
+- check more from #Enabling Postmortem Debugging 
+- resume executing by 
+gh or gn 
+
+- kernel-mode exceptions, exceptions that occur in kernel-mode code are more serious than user-mode exceptions. if kernel-mode exceptions are not handled, a bug check is issued and the system stops 
+
+if a kernel-mode debugger is attached to the system the debugger is notified before the blue screen 
+
+- controlling exceptions and events from the debugger 
+    + the event can cause a break into the debugger as soon as it occurs
+    + event can break in after other error handlers have been given an opportunity to respond (second chance)
+    + event can also send the debugger a message but continue executing 
+    + debug can ignore the event 
+    
+- control break status and handling status by 
+SXE, SXD, SXN, or SXI command in the debugger command window 
+-x, -xe, -xd, -xn, or -xi option in CDB command line 
+sxe or sxd keyword in tools.ini file CDB only 
+click event filters on the debug menu to open the event filters dialog 
+
+for the SX*, -x*, sx* you can add the -h option to cause the handling status to be set instead 
+
+- display the most recent exception or event by 
+.lastevent 
+
+- controlling break status, the value in the brackets is the default value 
+SXE,-xe; break (enable )
+
+SXD, -xd; second change break (disabled)
+
+SXN, -xn; output notify (notify)
+
+SXI, -xi    ignore 
+
+- controling the handling status, all events are considered unhandled unless you use the gh command, all exception are consider unhandled unless you use the sx* command toghether with -h options 
+
+check full list of event by #Event Definitions and Defaults section 
+
+when you use the SX* command on cc, hc, bpec and ssec events, or when use SX* command with -h option on an exception the following action occur
+
+Command     Status name         Description 
+SXE         handled             event is considered handled when resume 
+SXD,SXN, SXI not handled 
+
+- automatic commands, use command string can contain multiple commands that are separated with semicolons 
+
+the command string can end with, g, gh, gn 
+
+gn go with exception not handled 
+gh, go with exception handled 
+
+- Event definitions and defaults, if you change the default handling status handled will effect all the exception-handling routines 
+
+Event code      meaning                     default break status 
+asrt            assert failure              break 
+av              access violation 
+dm              data misalighed 
+dz              integer division by zero 
+c000008e        floating point division by zero 
+eh              C++ EH exception 
+gp              Guard page violation 
+ii              illegal instruction 
+iov             integer overflow 
+ip              in-page i/o error 
+isc             invalid system call 
+isq             invalid lock sequence 
+sbo             stack buffer overlfow 
+wkd             wake debugger 
+aph             application hang  the app is stop reponding 
+3c              child application termination 
+chhc            invalid handle 
+Number          any numbered exception 
+
+    + exceptions which are used to commmunicate with the debugger 
+dbce, special debugger command exeception 
+vcpp, sepcial visual c++ exception 
+wos, wow64 single step exception 
+wob, wow64 breakpoint exception 
+ssessec, single step exception 
+bpebpec, breakpoint exception 
+ccecc, ctrl+c or ctrl+break 
+
+An application can use DBG_COMMAND_EXCEPTION (dbce) to communicate with the debugger. 
+
+    + exception for debugging manage code 
+clr, common language runtime exception 
+clrn, common language runtime notification exception 
+
+    + support change break status of the following events 
+ser, system error 
+cpr[:Process], process creation 
+epr[:Process], process exit 
+ct, thread creation 
+ld[:Module], load module 
+ud[:Module], unload module 
+out[:Output], target application output 
+ibp, initial breakpoint 
+iml, inital module load (kernel only)
+
+
+### Finding the process id 
+- several ways to find a process id 
+tasklist 
+tlist 
+debugger 
+task manager 
+
+- debugger command 
+.tlist 
+
+- csrss and user-mode drivers, client server run-time subsystem process(CSRSS) #debugging CSRSS 
+
+
+### Debugging a stackoverflow 
+- use-mode threads can encounter, three possible causes 
+    + a thread uses the entire stack reserved for it, often cause by infinite recursion 
+    + a thread cannot extend the stack because out run out page file 
+    + a thread cannot extend the stack because the system is within the brief period used to extend the page file 
+    
+- the variable layout in the stack is base on the setting of compiler, debug/release will have different optimization
+
+- check the event cause the debugger to break in by 
+$ .lastevent 
+Last event: Exception C00000FD, second chance 
+
+the exception code could be found out in the ntstatus.h 
+
+- display the call stack 
+$ k 
+ChildEBP RetAddr
+009fdd0c 71a32520 COMCTL32!_chkstk+0x25
+009fde78 77cf8290 COMCTL32!ListView_WndProc+0x4c4
+009fde98 77cfd634 USER32!_InternalCallWinProc+0x18
+009fdf00 77cd55e9 USER32!UserCallWinProcCheckWow+0x17f
+009fdf3c 77cd63b2 USER32!SendMessageWorker+0x4a3
+009fdf5c 71a45b30 USER32!SendMessageW+0x44
+009fdfec 71a45bb0 COMCTL32!CCSendNotify+0xc0e
+009fdffc 71a1d688 COMCTL32!CICustomDrawNotify+0x2a
+009fe074 71a1db30 COMCTL32!Header_Draw+0x63
+009fe0d0 71a1f196 COMCTL32!Header_OnPaint+0x3f
+009fe128 77cf8290 COMCTL32!Header_WndProc+0x4e2
+009fe148 77cfd634 USER32!_InternalCallWinProc+0x18
+009fe1b0 77cd4490 USER32!UserCallWinProcCheckWow+0x17f
+009fe1d8 77cd46c8 USER32!DispatchClientMessage+0x31
+009fe200 77f7bb3f USER32!__fnDWORD+0x22
+009fe220 77cd445e ntdll!_KiUserCallbackDispatcher+0x13
+009fe27c 77cfd634 USER32!DispatchMessageWorker+0x3bc
+009fe2e4 009fe4a8 USER32!UserCallWinProcCheckWow+0x17f
+00000000 00000000 0x9fe4a8 
+
+The target thread has broken into COMCTL32!_chkstk which indicate a stack problem 
+
+investigate the relative threads by 
+$ ~*k 
+   0  id: 570.574   Suspend: 1 Teb 7ffde000 Unfrozen
+   .....
+
+   1  id: 570.590   Suspend: 1 Teb 7ffdd000 Unfrozen
+   .....
+   
+stack information is contained in the TEB(thread, environment block) at 0x7ffdc000. use command !teb to show it which reuqired symbols 
+
+with not symbols then use command dd the with block address. with complete symbol could use dt TEB to do this. without simple required to check the header file ntpsapi.h to do this 
+typedef struct _TEB {
+    NT_TIB NtTib;
+    PVIOD EnvironmentPointer;
+    CLIENT_ID ClientId;
+    PVOID ThreadLocalStoragePointer;
+    PPEB ProcessEnvironmentBlock;
+    ULONG LastErrorValue;
+    ..
+    PVOID DeallocationStack;
+}TEB;
+
+typedef struct _NT_TIB{
+    struct _EXCEPTION_REGISTRATION_RECORD *ExceptionList;
+    PVOID StackBase;
+    PVOID StackLimit;
+    ...
+} NT_TIB;
+
+$ dd 0x7ffdc000 L4 
+7ffdc000   009fdef0 00a00000 009fc000 00000000 
+the second and third dword in the TEB struct point to the bottom and top of the stack 
+
+caculate the stack size by 
+$ ? a00000-9fc000
+
+the maximal stack size is stored in the field DeallocationStack. After some calculation you can determine that this field's offset is 0xE0c 
+$ dd 77ffdc000+e0c L1 
+wil display the maximun stack size
+
+compare to the current stack size will know the remaining stack 
+
+break into KD to get furthermore information with !vm extension to display virtual memory information 
+$ .breakin 
+
+$ !vm 
+during the user mode debugging, other process may still use the ntsd command to allocate virtual memory. so there is no way to exactly view the virtual memory state during the stackoverflow happen. but we could analyzing the function call by 
+$ k 
+and disassemble the first few instructions for the Header_Draw 
+$ u COMCTL32!Header_Draw 
+...
+
+### Manually walking a stack 
+- some time the stack trace function will fail in debugger 
+- manual walk a stack concept is dump out the stack pointer find out where the modules are loaded, find possible function addresses, find possible function addresses and verify by checking to see if each possible stack entry makes a call to the next 
+
+kb command (display stack backtrace) command has an additional feature on intel system. by doing a kb=[ebp] [eip] [esp] the debugger will display the stack trace for frame with the given values for base pointer 
+
+find out what modules are loaded where by x(examine symbols) command 
+kd> x 
+
+dumping out the stack pointer to look for address by x*! 
+kd> dd esp 
+kd> dd 
+
+to determine which value are likely function address by check the value 
+    + most integers are going to be smaller value which means they will mostly zeros when displayed as DWORDs 
+    + most pointers to local addresses will be near the stack pointer 
+    + status code usually begin with a c(c00000d6). unicode and ascii string can be identified by the fact that each character will be in the range of 20-7f. in kd dc command will show the characters on right 
+    
+    + the function addresss will be in the range listed by x*! 
+    
+    investing address by list nearest symbols command by In for each address 
+    
+    kd> ln 80136039 
+    ....
+    
+    check the display 
+    
+    to verify each symbol unassemble immedately before return address specified to see if it des a call to the function above it by 
+    kd> u 8136039-2 11 
+    
+    recheck the answer by the command k 
+    
+### Debugging a stack trace that has jscript frame 
+- JSript stack dump creation may incorretly 
+
+use command 
+.stkwalk_force_frame_pointer 1 
+to correct it 
+
+### debugging an application failure 
+- most common exception 
+access violation, this is occur when invalid pointer is dereference 
+argument faults 
+exceptions 
+critical section time-out(deadlocks) 
+in-page i/o errors 
+user-mode exception have many possible causes. if an unknown exception occurs locate it in ntstatus.h or winerror.h 
+critical section timeouts occur when one thread is waiting for a critical section for a long time. require to anaylysis of the stack trace 
+in-page i/o erros are almost always hardware failures check the code in ntstatus.h 
+
+### Reattaching to the target application 
+- xp+, does not depend on whether used with -pd option 
+    + determine the processid 
+    + start a new instance of cdb or windbg use -pe command-line option 
+    $ debugger -pe -p PID 
+    
+    or use .attach command in a debugger 
+    
+    + if the proces does not respond properly, it might have a suspend count that is too high. use the commad ~m(resume thread) to reduce the suspend count 
+    
+    detach from the process but leave it frozen in a debugging state by .abandon command which could be used to reattach 
+    
+    
+### Crashing and rebooting the target computer 
+- when perform kernel debugging, you can cause the target computer to stop responding (crash or bug check) by .crash (force system crash) command. the debugger will write a kernel mode dump file 
+
+use .reboot command to restart the target 
+
+in the early stage of boot process the connection is lost, if use cdb or kd all breakpoint will lost. if use windbg could use save current workspace to save all the breakpoint information 
+
+end debugging session by Ctrl+B or Exit menu 
+
+- support automatci break into debugger by 
+    + first kernel module is loaded 
+    + kernel initializes 
+    
+    + set automatic breakpoint by -d 
+    
+- change break state 
+    + break with event happen 
+    + use ctrl+k or ctrl+alt+k in kd to change break state will switch three states 
+    no automatic break 
+    break upon kernel 
+    break on first kernel load 
+    
+### Synchronizing with the target computer 
+- in kd press ctrl+r to synchronize with target. in windbg use ctrl+alt+r 
+- .restart(restart kernel connection) will provide a more powerful resynchronization 
+
+
+### Finding a memory leak 
+- launching performance monitor and add following counters 
+Memory-> Pool nonpaged bytes 
+Memory -> Pool Paged bytes 
+Paging File -> % Usage 
+
+change update to 6000 seconds to capture a graph. start the application. 
+
+use-mode memory leaks are always located in pageable pool and cause both the pool paged bytes counter and the page file useage counter to increase steadily 
+
+kernel mode memory leaks usually deplete nonpaged pool causing the pool nonpaged bytes counter to increase 
+
+#### Finding a kernel mode memory leak 
+#####Using Poolmon to find a kernel-mode memory leak 
+#####Using the kernel debugger to find a kernel-mode memory leak 
+#####Using driver verfier to find a kernel-mode memory leak 
+
+#### Finding a user mode memory leak 
+##### Using performance monitor to find a user-mode memory leak 
+- add following counter 
+Process -> private bytes(for each process you want to examine)
+Process -> virtual bytes 
+
+change update time to 600s
+
+##### Usig umdh to find a user-mode memory leak 
+- user-mode dump heap(umdh) utility for analyze window heap allocation for a specific process 
+- umdh is included in the debugging tools 
+- have following model 
+    + analyze a running process("mode 1"). umdh displays the size of the allocation the size of the overhead the pointer allocation and the allocation stack 
+    
+    + mode 2, udmh log 
+- preparing to use udmh, not know which process is leaking then first use performance monitor to find out the process. the most important data in the umdh log are the stack trace of the heap allocations
+to determine whether a process is leaking then check the trace 
+
+before using umdh, configure the GFlags which is for debugging tools for windows #GFlag which contain registry debugger. use the glags tool 
+    + execute glags.exe GUI swith to Image File tab. type the process name and select create user mode stack trace database and then click apply 
+    
+    or use command line 
+    $ gflags /i ImageName +ust 
+    
+    + default x86 is 32mb for stack strace data 64mb for x64 
+    
+    + if change any flags required to reboot to take effect. changes to kernel falgs tab are effective immediately which will lost in the reboot 
+    
+- udmh use the symbol path specify by the environment variables. to ensure accurate results, must disable BSTR caching set the OANOCACHE environment variable equal to 1 
+
+if need to trace a server then required to set as system environment variable and reboot 
+
+- detecting increases in heap allocation with umdh  
+    + determine process id 
+    + analyze the heap memory 
+    $ umdh -p:pid -f:log.txt 
+    
+    + use open log 
+    + compare log files recored at different times to determine which allocations are growing 
+    
+    umdh can compare two different log files and display the change in their respective allocation size. 
+    $ umdh log1.txt log2.txt > report.txt 
+    
+    output content maybe: 
+    + 5320 ( f110 - 9df0) 3a allocs BackTrace00B53 
+    Total increase == 5320 
+    
+    search the keyword BackTrace in the log will get call stack 
+
+### Debugging a time out 
+- a resource timeou, during a resource timeout the thread waiting for the resource will break into kd 
+- use !thread extension 
+$ !thread <id> 
+to get the thread call stack, either the ExpWaitForResourceExclusive and ExpWaitForResourceShared function will be on the stack for that thread 
+
+if you get to a thread that is not waiting for another resource, it is probably the resource of the problem. 
+
+- critical section time outs, RtlpWaitForCriticalSection near the top of the stack 
+$ !ntsdexts.locks will give a list of locks currently held and the current theads that own them. find the critical section 
+
+ExpWaitForResourceXxx the lock identifier is the first parameter to RtlpWaitForCriticalSection 
+
+#### Resource time outs(kernel mode)
+#### Critical section time outs(user mode)
+- this can be identified by the stack trace that shows the routine RtlpWaitForCriticalSection near the top of the stack 
+- as with resource time outs the !ntsdexts.locks extension will give a list of locks currently held 
+- with ExpWaitForResourceXxx, the lock identifier is the first parameter to RtlpWaitForCriticalSection 
+- example 
+$ kb 
+
+use the !ntsdexts.locks extension to find the critical section 
+$ !locks 
+
+now search for the thread id number 
+$ ~ 
+which own the critical section 
+
+switch to a thread from the list of ~ command by the index 
+$ ~<index>s 
+
+$ kb 
+check the call stack again 
+
+### Debugging a stalled system 
+- computer stop responding without initiating a bug. this "freeze" in variety of forms 
+    + mouse can move 
+    + screen is still mouse does not move, and continues paging memory and disk 
+    + screen is still disk is silent 
+    
+- mouse pointer moves or paging disk is usually due to a problem with the client server run-time (RSRSS)
+
+- if NTSD is running on CSRSS, press f12 to dump out each thread to #Debugging CSRSS for more info 
+- if CSRSS is ok then it's the kernel problem 
+- no mouse move then certainly a kernel issue 
+
+#### Finding a failed process 
+- determine the accepting processor, use !pcr extension on each processor and looking for the processor for which an extention handler has been loaded 
+0: kd> !pcr 
+PCR Processor 0 @ffdff000
+ NtTib.ExceptionList: ffffffff
+            NtTib.StackBase: 80470650
+...
+
+the address of NtTib.ExceptionList on this processor            
+
+the most interesting parts of the process dump are 
+    + the times 
+    + the handle count 
+    + the thread status 
+    
+- using the !process 0 7 extension is the best way to find the probelm on a hung system. use !process 0 0 then a !process on the process handle for CSRSS. get more information by .cache decodeptes before call !process 0  
+unresponsive computer 
+
+extension,      effect 
+!ready          identifies 
+!kdext*.locks   identifies 
+!vm             check the virtual memory usage 
+!poolused       determines wheter one type of pool allocation is disproportionately large 
+!memusage       check the physical memory status 
+!heap           check the validity of the heap 
+!irpfind        search nonpaged pool for active IRPs 
+
+ntoskrnl!KiSwapThread 
+NtReadFile 
+
+#### Debugging an interrupt storm 
+- interrupt storm, is a level-triggered interrupt signal that remains in the asserted state. causes 
+    + a hardware device does not relese its interrupt signal after being directed to do so by the device driver 
+    + a device driver does not instruct its hardware to release the interrupt signal 
+    + a device driver claims the interrupt even though the interrupt was not initiated form its hardware 
+    + the edge level control register(elcr) IS NOT CORRECTLY 
+    + edge and level interrupt-triggerred devices share an IRQ
+    
+- use !irpfind extension command to look for pending IRPs, use !irp to obtain the details 
+- use kb command to request a stack trace 
+- use !arbiter 4 extension to determine which devices are on IRQ 0xB 
+- r command to examine the registers 
+
+#### Debugging multiple target 
+- debug multiple dump files or live user-mode application at the same time. each target contains one ore more processes
+- targets are also grouped into systems 
+    + each dump file is a separate system 
+    + debugging live user-mode applications on different computer then each application is a separate system 
+    + debugging user-mode applications on the local, the applications are combined into a single system 
+    
+- debugging addtional user-mode application by .attach or .create command followed by g 
+- debug addtional dump files by using the .opendump command followed by g
+- use command line option z to open multiple dump files 
+- to close one target and contitnue to debug other by .kill command. xp+ support .detach command 
+
+- control the debugging of multiple systems you can use 
+    + || system status command display one or more systems 
+    + ||s set currnt system command enable you to select the current system 
+    + windbg Processes and Threads window enables you display or select systems, processes and threads 
+    
+#### Tracking down a processor hog 
+- one application is consuming all the processor's attention, other processes will end up "starving"
+- use this following process to correct 
+    + identify which application is causing this problem, use task manager or perfmon 
+    + attach debugger 
+    + identify which thread is causing the problem. use !runaway 3 extension to take a snapshot of where all the CPU time is going. use g(go) and wait a few seconds then break in and use !runaway 3 again 
+     
+    0:002> !runaway 3
+     User Mode Time
+     Thread    Time
+     4e0        0:12:16.0312
+     268        0:00:00.0000
+     22c        0:00:00.0000
+     Kernel Mode Time
+     Thread    Time
+     4e0        0:00:05.0312
+     268        0:00:00.0000
+     22c        0:00:00.0000
+
+    0:002> g
+
+    0:001> !runaway 3
+     User Mode Time
+     Thread    Time
+     4e0        0:12:37.0609
+     3d4        0:00:00.0000
+     22c        0:00:00.0000
+     Kernel Mode Time
+     Thread    Time
+     4e0        0:00:07.0421
+     3d4        0:00:00.0000
+     22c        0:00:00.0000
+     
+in this case the thread 0x4e0 cause the problem 
+
+use ~ and ~s command to maek this the current thread 
+$ ~ 
+$ ~2s
+
+use kb to obtain stack trace 
+$ kb 
+ 
+0:002> kb
+FramePtr  RetAddr   Param1   Param2   Param3   Function Name
+0b4ffce4  01836060  0184f440 00000001 0b4ffe20 BuggyProgram!OpenDestFileStream+0xb3
+0b4ffd20  01843eba  02b5b920 00000102 02b1e0e0 BuggyProgram!SaveMsgToDestFolder+0xb3
+0b4ffe20  01855924  0b4ffef0 00145970 0b4ffef0 BuggyProgram!DispatchToConn+0xa4
+0b4ffe5c  77e112e6  01843e16 0b4ffef0 0b4fff34 RPCRT4!DispatchToStubInC+0x34
+0b4ffeb0  77e11215  0b4ffef0 00000000 0b4fff34 RPCRT4!?DispatchToStubWorker@RPC_INTERFACE@@AAEJPAU_RPC_MESSAGE@@IPAJ@Z+0xb0
+0b4ffed0  77e1a3b1  0b4ffef0 00000000 0b4fff34 RPCRT4!?DispatchToStub@RPC_INTERFACE@@QAEJPAU_RPC_MESSAGE@Z+0x41
+0b4fff40  77e181e4  02b1e0b0 00000074 0b4fff90 RPCRT4!?ReceiveOriginalCall@OSF_SCONNECTION@Z+0x14b
+0b4fff60  77e1a5df  02b1e0b0 00000074 00149210 RPCRT4!?DispatchPacket@OSF_SCONNECTION@+0x91
+0b4fff90  77e1ac1c  77e15eaf 00149210 0b4fffec RPCRT4!?ReceiveLotsaCalls@OSF_ADDRESS@@QAEXXZ+0x76
+
+use g with address to run and stop at the given address 
+0:002> g BuggyProgram!SaveMsgToDestFolder+0xb3
+
+use kb again 
+0:002> kb
+FramePtr  RetAddr   Param1   Param2   Param3   Function Name
+0b4ffd20  01843eba  02b5b920 00000102 02b1e0e0 BuggyProgram!SaveMsgToDestFolder+0xb3
+0b4ffe20  01855924  0b4ffef0 00145970 0b4ffef0 BuggyProgram!DispatchToConn+0xa4
+0b4ffe5c  77e112e6  01843e16 0b4ffef0 0b4fff34 RPCRT4!DispatchToStubInC+0x34
+0b4ffeb0  77e11215  0b4ffef0 00000000 0b4fff34 RPCRT4!?DispatchToStubWorker@RPC_INTERFACE@@AAEJPAU_RPC_MESSAGE@@IPAJ@Z+0xb0
+0b4ffed0  77e1a3b1  0b4ffef0 00000000 0b4fff34 RPCRT4!?DispatchToStub@RPC_INTERFACE@@QAEJPAU_RPC_MESSAGE@Z+0x41
+0b4fff40  77e181e4  02b1e0b0 00000074 0b4fff90 RPCRT4!?ReceiveOriginalCall@OSF_SCONNECTION@Z+0x14b
+0b4fff60  77e1a5df  02b1e0b0 00000074 00149210 RPCRT4!?DispatchPacket@OSF_SCONNECTION@+0x91
+0b4fff90  77e1ac1c  77e15eaf 00149210 0b4fffec RPCRT4!?ReceiveLotsaCalls@OSF_ADDRESS@@QAEXXZ+0x76
+
+0:002> g BuggyProgram!DispatchToConn+0xa4
+
+finally you will find a breakpiong that is not hit. set breakpoint at the last g command. then use g command repeatedly this this breakpoint hit immediately. regardless of how many times you have executed the target. 
+
+finally you have found the buggy function 
+    
+#### determing the ACL of an object
+- use debugger to examine the access control list(ACL) of an object. to use it while you are performing user-mode debugging, you need to redirect control to a kernel debugger, #Controlling the User-Mode Debugger from the Kernel Debugger
+
+- use !object debugger extension command with the name of the object will show the object header 
+- dt command display the address with structure name nt!_OBJECT_HEADER 
+$ dt nt!_OBJECT_HEADER ffbb8a80
+   +0x000 PointerCount     : 3
+   +0x004 HandleCount      : 2
+   +0x004 NextToFree       : 0x00000002
+ +0x008 Type             : 0x80e30e70
+   +0x00c NameInfoOffset   : 0x10 ''
+ +0x00d HandleInfoOffset : 0 ''
+   +0x00e QuotaInfoOffset  : 0 ''
+   +0x00f Flags            : 0x20 ' '
+   +0x010 ObjectCreateInfo : 0x8016b460
+   +0x010 QuotaBlockCharged : 0x8016b460
+   +0x014 SecurityDescriptor : 0xe11f08b6
+   +0x018 Body             : _QUAD
+   
+SECURITY_DESCRIPTOR structure actually begins at 0xE11F08B6 & ~0x7. Use the !sd extension on this address
+
+will displays the security information for this object 
+
+#### displaying a critical section 
+- can be displayed by the !ntsdexts.locks extension, the !critsec, !cs and dt command 
+!ntsdexts.locks will display a list of critical section 
+!critsec will display the address 
+!cs olly available in xp+ 
+dt can be used to display the literal contents of RTL_CRITICAL_SECTION structure 
+
+- fields of critical section 
+LockCount 
+EnterCriticalSection
+LeaveCriticalSection 
+RecursionCount, the number of times that owning thread has called EnterCriticalSection 
+EntryCount field indicates the number of times that a thread other than the owning thread has called EnterCriticalSection 
+
+#### Debugging a deadlock 
+- deadlock raise when two or more threads have requested locks on two or more resources in an incompatible sequence. 
+- debugging a user-mode deadlock 
+    + issue the !ntsdexts.locks, you can just type !locks at the debugger 
+    
+    + kd and ~
+    
+    check the thread has a call to the WaitForCriticalSection function 
+
+#### Debugging a failed driver unload 
+- driver will no unload if there is a leaked reference to DeviceObject 
+- apart from IoCreateDevice there are several functions that take reference to DriverObject and DeviceObject. you need to follow the guidelines for using the functions 
+- fixing a driver that fails to unload 
+    + set breakpoint at IoCreateDevice get the DeviceObject address 
+    + find object header by !object extension 
+    
+    + put a breakpoint on the pointer count using ObjectHeader's address 
+    
+#### reading bug check callback data 
+- many drivers supply bug check callback routines when windows issue a bug check it calls these routines before shutting down the system. the routine can specify and write to areas of memory known as callback and secondary callback data 
+
+- BugCheckCallback, data written by this routine becauses part of callback data and not included in the crash dump file 
+- BugCheckSecondaryDumpDataCallback, the data is inculded in the crash dump 
+- BugCheckAddPagesCallback, data is included in the crash dump 
+
+- displaying callback data 
+!bugdump extension 
+!bugdump component 
+
+KeRegisterBugCheckCallback 
+
+- Display secondary callback data 
+
+#### Debugging a user-mode failure with kd 
+- debug user-mode need cdb or windbg. sometimes a user mode exception will break into kd because no user-mode debugger is present 
+- kernel debugger will attempts to load the first user-mode symbol that matches the address specified k, u or ln command 
+- add symbol 
+.sympath  and then .reload, if wrong symbol is loaded you can explicitly load a symbol by a .reload <binary.ext> 
+
+.sys file loaded that can be identified by using a !drivers extension 
+ntdll.dll and kernel32.dll are two of the most common symbols that would be required.
+
+#### Crashing and rebooting the target computer 
+- cause the target computer stop responding by issuing the .crash command the debugger writes a kernel-mode dump file 
+- restart the target computer use the .reboot 
+- automatic breakpoint in kernel mode by -d commandline option 
+- ctrl+k in kd ctrl+alt+k in windbg to cahnge break state 
+
+
+#### Mapping driver files 
+- replacing driver files can be difficult. frequently you have to boot to the safe build relace the driver binary and then boot again. xp+ support another way when windbg or kd is attached as kernel debugger, it also could be used on boot driver, display drivers, subsystem driver, kernel-mode module ... 
+
+- steps 
+    + crreate a driver replacement map file. it is a text file that lists the drivers on the target computer and their replacement drivers on the host computer 
+    
+    create a file named mymap.ini in d:\ with content 
+    
+    map
+    \Systemroot\system32\drivers\videoprt.sys
+    \\myserver\myshare\new_drivers\videoprt.sys
+  
+    + syntax could be found at #Driver replacement map file format 
+    
+    + set up a kernel debuggin connection to the target 
+    
+    + load the driver replacement map by 
+        * set _NT_KD_FILES environment variable before you start the kernel debugger 
+        D:\Debugging Tools for Windows> set _NT_KD_FILES=d:\Map_Files\mymap.ini
+        D:\Debugging Tools for Windows> kd
+        
+        * use the .kdfiles(set driver replacement map) command after you start the kernel debugger 
+        D:\Debugging Tools for Windows> kd
+        kd> .kdfiles d:\mymap.ini
+        KD file associations loaded from 'd:\Map_Files\mymap.ini'
+        
+- Driver Replacement Map File Format
+Each driver file replacement is indicated by three lines in the driver replacement map file. 
+The first line consists of the word "map". 
+The second line specifies the path and file name of the old driver on the target computer. 
+The third line specifies the full path of the new driver. This driver can be located on the host computer or on some other server.
+You can repeat this pattern of information any number of times.
+
+- If you use CTRL+D (in KD) or CTRL+ALT+D (in WinDbg), you see verbose information about the replacement request. 
+
+- If you want to replace a boot driver file by using this driver replacement method, you must connect the kernel debugger to the Windows boot loader (Ntldr), not to the Windows kernel. Before you can make this connection, you must install a special debugger-enabled version of Ntldr. You can find this version of Ntldr in the Windows Driver Kit (WDK), in the %DDKROOT%\debug directory. 
+
+because targe tcomputer bypass its boot.ini you must make the connection through the COM1 port on the target computer. The baud rate is 115200. Therefore, the kernel debugger on the host computer should be configured to use a COM connection at the 115200 speed.
+
+#### messages from the target 
+- breaking in to the debugger 
+    + user-mode break routines, use, debugbreak routine, see the window sdk 
+    
+    + user-mode program calls DebugBreak 
+    
+        * if a user-mode debugger is attached the program will break into the debugger 
+        * no user-mode debugger is attacher, kernel-mode debugging is enabled then break into kd 
+        * no then app terminated 
+        
+- kernel mode break routines 
+    + DbgBreakPoint routine works in kernel-mode code 
+    + DbgBreakPointWithStatus also causes a break but it additionally send a 32 bit status code to the debugger 
+    
+- kernel-mode conditional break routines, the assert macro causes the debugger to display the fail expression and its location 
+
+- sending output to the debugger 
+OutputDebugString sends a null-terminated string to the debugger
+
+- kernel mode output routines, DbgPrint displays output in the debugger window only kernel mode code can call DbgPrint, DbgPrintEx allows you tag your message. KdPrint and KdPrintEx are identical to DbgPrint...
+
+- reading and filtering debugging messages 
+    + in DbgPrintEx and KdPrintEx  pass appropriate component name to the componentId parameter and pass a value to the level 
+    + set the value of appropriate component filter mask 
+    
+    + attach a kernel debugger to the computer
+    
+    + get more detail from the function document 
+    
+- identifying the component name Each component is referred to in different ways, depending on the context. In the ComponentId parameter of DbgPrintEx, the component name is prefixed with "DPFLTR_" and suffixed with "_ID". In the registry, the component filter mask has the same name as the component itself
+
+- choosing the correct level The Level parameter of the DbgPrintEx routine is of type DWORD. It is used to determine the importance bit field. 0 to 31. They are defined in the Microsoft Windows Driver Kit (WDK) header ntddk.h
+
+- setting the component filter mask 
+    + The component filter mask can be accessed in the registry key HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter. Using a registry editor, create or open this key
+    + If a kernel debugger is active, it can access the component filter mask value by dereferencing the address stored in the symbol Kd_XXXX_Mask, where XXXX is the desired component name. 
+    
+- determining if a debugger is attached 
+Windows XP and later) The KD_DEBUGGER_ENABLED global kernel variable indicates whether kernel debugging is enabled.
+
+(Windows XP and later) The KD_DEBUGGER_NOT_PRESENT global kernel variable indicates whether a kernel debugger is currently attached.
+
+(Windows Server 2003 and later) The KdRefreshDebuggerNotPresent routine refreshes the value of KD_DEBUGGER_NOT_PRESENT.
+## Specialized debugging techniques 
+
+# Symbols for window debugging 
+## Introduction to symbols 
+### Symbol path for windows debuggers 
+- some compilers such as VS put symbols in the same directory as the binary. If you are debugging a user-mode process on the computer where the executable was built, if the symbol files are still in their original location the debugger can locate the symbols files without you setting the symbol path 
+
+- syntax uri separated by semicolons. relative path are supported 
+- compensating for symbol matching problems to fit for the symbol timestamp is not math the binary. Because the MS-DOS compatitility 8.3 short names for files may lead to symbol match problems if copy the similar named symbol to the same location 
+the long name are automatic generate 8.3 short names and the names are saved in the image's debug record. The name could be OS dependent
+
+- caching symbols location 
+    + recommend cache symbols locally use 
+    cache* or cache*localsymbolcache; in symbol path 
+
+    $ .sympath cache*c:\MySymbols;\\someshare
+    
+    + if you use srv* in symbol path, the debugger use a symbol server to get symbols from the default symbol store 
+    $ .sympath srv*[local-symbol-store*]http://msdl.microsoft.com/download/symbols
+    
+    + seperate the save location for the symbol server and manually putted symbols 
+    
+- combining cache* and srv* 
+$ .sympath cache*;srv*http://msdl.microsoft.com/download/symbols
+
+- using #ageStore to reduce the cache size 
+- lazy symbol loading, if symbol path is changed, all ready loaded symbols are immediately reloaded. 
+    + turn off lazy load by -s commandline options 
+    + .reload /f 
+    
+- controlling symbol path 
+    + use .sympath 
+    + .symfix (set symbol store path) is similar to .sympath but saves you some typing 
+    + use _NT_SYMBOL_PATH and _NT_ALT_SYMBOL_PATH 
+    + start debugger with -y to set path 
+    
+- use -sins option then debgger will ignore the environment variables 
+- symbols and symbol files each symbol will contain 
+    + global variables 
+    + local variables 
+    + function names and addresses of their entry points 
+    + frame pointer omission FPO records 
+    + source-line numbers 
+    
+- each pdb will contain thousands of symbols 
+- window symbols, win2000 keeps its symbols in files with extensions .pdb and .dbg. VC6+ linkers put all symbols into .pdb files. in standard window symbols will contain these directories 
+ACM, microsoft audio compression manager files 
+COM, executable files 
+CPL, control panel progra 
+DLL, 
+DRV, driver files 
+EXE
+SCR, screen saver files 
+SYS, driver files 
+
+### public and private symbols 
+- private symbol data includes 
+    + functions 
+    + global variables 
+    + local variables 
+    + information about user-defined structures, classes and data types 
+    + the name of the source file and the line number in that file corresponding to each binary instruction 
+    
+- public symbol table contains fewer items 
+    + functions(except for functions declared static)
+    + global varibles specifie as extern 
+    
+- many of the public symbol table ahve names that are decorated with a prefix a suffix or both. prefixes include __imp__(imported function). suffixes include (@) followed by addresses 
+
+- full symbol files and stripped symbol files 
+full symbol contain both private and public symbol data 
+
+a stripped symbol is smaller files only contain the public symbol table or subset of the public symbol 
+
+- creating full and stripped symbol files 
+    + debug build will create a full symbol 
+    + retail build will creates no symbols 
+    
+    + build with build utility will create full symbol 
+    + binplace tool create a stripped symbol from full symbol 
+    + PDBCopy tool can create a stripped symbol from a full symbol 
+    + using symChk tool can determine wheter a symbol file is private or public 
+    
+- viewing public and private symbols in the debugger, behavior depends on certain symbol options 
+    + SYMBOPT_UNDNAME option is default debugger option decorations are not included when the name of a public symbol is displayed 
+    + SYMBOPT_PUBLICS_ONLY is on private symbol data is ignored 
+    + SYMBOpt_NO_PUBLICS, public symbol data is ignored this is option is default off 
+    + SYMBOPT_AUTO_PUBLICS the first symbol search is performed in the private symbol data if not found then search the public symbol table 
+    
+- example, command x(examine symbols) is used three times
+$ x /t /d *!*typingstring* 
+$ .symopt+ 4000
+$ x /t /d *!*typingstring* 
+$ .symopt- 2
+
+- viewing public and private symbols with the DBH tool 
+
+### Accessing symbols for debugging 
+- the symbol files can be gathered into a symbol store which is then accessed by a symbol server. debugging tools for windows contains a symbol store creation tool called SymStore 
+
+- symbol server enables the debugger to automatically retrieve the correct symbol files from a symbol store without the user needing to know product ames releases, or build numbers. 
+
+Window contains a symbol server called SymSrv 
+
+microsoft products store their symbols on internet to load this use .symfix command 
+
+#### Installing window symbol files 
+- use symfix command for full details check the microsoft public symbols 
+    + required 1gb spaces 
+- install symbol files sequence 
+    + install os symbol 
+    + install symbols for the currently installed service pack 
+    + install the symbo files for any hot fixes that were installed after the current service pack 
+    
+#### Symbol stores and symbol servers 
+- SymSrv (symsrv.dll) is a symbol server 
+- microsoft public symbol server 
+set _NT_SYMBOL_PATH=srv*DownstreamStore*http://msdl.microsoft.com/download/symbols
+
+DownLoadStremStore must be specify a directory on your local computer or network that will be used to cache symbols 
+
+shortcut command is 
+$ .symfix+ DownstreamStore
+
+- MS provied compressed version of symbol files, have a uderstore at the end of the filename's extension ntdll.pd_ 
+
+- advanced SymSrv use 
+    + symsrv can also be used to separate a large symbol store into a smaller subset 
+    
+    + use this symbol server, symsrv.dll must be installed in the same directory as debugger 
+set _NT_SYMBOL_PATH = symsrv*ServerDLL*DownstreamStore*\\Server\Share 
+
+set _NT_SYMBOL_PATH = symsrv*ServerDLL*\\Server\Share 
+
+set _NT_SYMBOL_PATH = srv*DownstreamStore*\\Server\Share 
+
+set _NT_SYMBOL_PATH = srv*\\Server\Share 
+
+- SymSrv create a fully qualified unc path to the desired symbol file, this path begins with the path to the symbol store recorded in the _NT_SYMBOL_PATH environment variable 
+
+the symbolServer routine is then used to identify the name of the desired file; 
+
+- firewalls and proxy servers, SymProxy or use any other proxy server 
+    + allow authentication requests by 
+    $ !sym prompts 
+    $ .symopt-0x80000 use either !sym prompts off or .symopt+0x80000 
+    
+    must use .reload after making any changes to the authentication permission status 
+- choosing a proxy server 
+set _NT_SYMBOL_PROXY=myproxyserver:80
+ 
+- http symbol stores
+    + use srv protocol supported through symsrv.dll the symbol store can be accessed using http instead of just UNC/SMB 
+    
+- configuring IIS 
+    + must be configured to serve the symbols by creating a virtual directory and configuring MIME types 
+    
+    + option make the symbol files browseable 
+    + configure MIME 
+    + using web.config to configure mime type 
+    + configure authentication 
+    + Kerberos support must be disable when use SymSrv.dll connect to iis 
+    
+    + open a cmd 
+    $ appcmd.exe set config -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='NTLM']" /commit:apphost
+    
+    enable 
+    $ appcmd.exe set config -section:system.webServer/security/authentication/windowsAuthentication /+"providers.[value='Negotiate,NTLM']" /commit:apphost
+    
+- configure SymSrv client authentication prompts 
+!sym prompts on 
+
+- File Share symbol server running a SMB symbol server is simple a matter of creating a file share and granting users access to that file share 
+srv*C:\Symbols*\\MachineName\Symbols
+
+- symbol store folder tree 
+
+- symbol store single tier or two-tier structure 
+D:\SymStore\Symbols\ntdll.dll\...\
+D:\SymStore\Symbols\ntdll.pdb\...\
+
+if a large number of files are to be stored a two tier structure can be used at the root of the symbol store the first 2 letters of the filename are used as an intermediate folder name 
+
+symbol store can be extremely big 
+#### SymProxy 
+
+- other symbol stores, since symStore transactions are all logged in csv-format text 
+- other symbol servers, customize symbol server, the server must expose SymbolServer function 
+- defferred symbol loading, load symbol when debugger is needed 
+Resolve Unqualified Symbols, from the Debug menu of windbg to resolve symbols that have no module prefix 
+
+overwrite deferred symbol loading by using ld command or .reload command with /f 
+
+this option can be turned on or off by using .symopt+0x4 or .symopt-0x4
+
+- avoiding debugger searches for unneded symbols 
+    + prevent automatic loading for unqualified symbols 
+The SYMOPT_NO_UNQUALIFIED_LOADS option disables or enables 
+
+SYMOPT_NO_UNQUALIFIED_LOADS is off by default. To activate this option
+
+    + suggested 
+    use qualified name for symbol in debugger to speed up search 
+    activate noisy symbol loading (SYMOPT_DEBUG) by using the -n command-line option or, if the debugger is already running, by using .symopt+0x80000000 or the !sym noisy debugger extension command.
+    activate SYMOPT_NO_UNQUALIFIED_LOADS by using the -snul command-line option or, if the debugger is already running, by using .symopt+0x100. to prevent debugger from searching for unqualified symbol 
+    explicit load modules with command .reload or ld 
+
+#### SymStore is a tool for creating symbol stores 
+- symstore enable debugger to look up symbols base on the time stamp and size of the image. multple versions of .pdb cannot be stored on the same server be cause they contain same signature and age 
+
+#### how the debugger recognizes symbols 
+- command bp main or display the inteer variable MyInt withe commadn dd MyInt L1 
+- general symbol syntax rules
+    + symble name consist of one or more characters, but always begins with a letter, underscore, question mark, or doller sign 
+        * an exclamation mark separates the module name and the symbol. use a exclamation mark with no module name can be useful for tel lthe debugger that a paramter is a name and not a hexadecimal number 
+        
+        to specify a symbol is local precede it with a dollar sign and an exclamation point like $!symbol_name 
+        
+- symbol syntax in numberical expressions, debugger understand two different kinds of expression, MASM and c++ 
+    + MASM each symbol is interpreted as an address 
+    + c++ expression, each symbol is interpreted according to its type
+    
+    check #Evaluating Expression for more detail 
+    
+    ss(set symbol suffix) command can be used to set the symbol suffix 
+    
+- symbol syntax in text expression 
+bm(set breakpoint) and x (examine symbols). text parameters support whildcards. a text expression used to spedify a symbol can be prefixed with a leading underscore. Symbol suffix is not used when matching symbols in text expressions 
+
+- symbol options, contrl how symbols are loaded and used 
+
+Flag            Option Name             Default in debugger         Default in DBH 
+0x1             SYMOPT_CASE_INSENSITIVE  On                         On 
+0x2             SYMOPT_UNDNAME           On                         On 
+...
+
+    + changing symbol option setting by command .symopt (set symbol options)
+    
+    control all the settings at once with the -sflag command-line option. Because in using this method, since it sets the entire bitfield and will override all the symbol handler defaults. 
+    -sflags 0x401 will not only turn on SYMOPT_EXACT_SYMBOLS and SYMOPT_CASE_ISNENSITVIE but also turn off all the other options that normally are on by default 
+    
+    symbol option can be turn on and off by -sflags+/- 0x80 
+    
+- symbol status abbreviations 
+    + check symbol file types and loading status by lm(list loaded modules) command. or !lmi extension or windbg's Debug|Modules menu command 
+    
+    + displays generated by these command 
+    Abbreviation            meaning 
+    deferred                has been loaded but debugger has not attempted to load the symbols 
+    #                       there is a mismatch between symbol and executable 
+    T                       timestamp is missing 
+    C                       checksum is missing 
+    DIA                     symbol files were laoded through debug interface 
+    Export                  no actual symbol files where found, so symbol information was extracted from the binary file's export table 
+    M                       there is a mismatch between the symbol file and the executable 
+    PERF                    binary contains performance-optimized code 
+    Stripped                Debug information was stripped from the image file 
+    PDB                     the symbols are in .pdb format 
+    COFF                    symbols are in common object file formt 
+    
+### Symbol Problmes while debugging 
+- Verifying symbols 
+    + use lm command 
+    $ lm 
+    + most useful command form is 
+    $ lml 
+    
+    use windbg Debug|Modules menu command will let you see this information as well 
+    
+    + if don't see proper symbol file then fist check the symbol path 
+    $ .sympath 
+    
+    if you are using the kernel debugger make sure your local %windir% IS NOT on your symbol path 
+    
+    + reload symbol with commad .reload 
+    $ .reload ModuleName 
+    
+    you should active nosiy mode so you can see which symbol file dbghelp is loading check #Symbol Options to active noisy mode 
+    $ !sym noisy 
+    $ .reload nt 
+    
+    + diagnosing symbol loading errors 
+    in noisy mode the debugger may print out error codes when it cannot load a symbol file. error codes define in winerror.h are 
+    0xB ERROR_BAD_FORMAT
+    
+    + verify your search path and symbols 
+    
+    + mismatched builds. pointing at symbols for the wrong build HAL hardware abstraction level 
+    
+    use the vertarget command (show target computer version) in kd 
+    
+    + testing symbols, try verify stack trace 
+    + useful commands and extensions 
+    lm, list loaded modules 
+    !dh image-header-base 
+    .reload /n, reload all kernel modules 
+    .reload [image-name], not image name then reload symbol for all images. it is necessary to reload symbols after symbol path is changed 
+    !sym noisy, turn on verbose mode for symbol loads 
+    .sympath [new-symbol-path]
+    X *!, this will list the modules with current have symbols loaded 
+    .reload /user 
+    attempt to reload all user-mode symbols 
+    X wdmaud!*start*, this will list only the symbols in the wdmaud module whose names contain the "start" string 
+    
+    + network and port problems 
+    determine which com port the debug cable is connected 
+    check boot.ini setting of test system 
+    .dll and .sys with the same name 
+    .reload misbehaving symbol and check the !dlls command 
+    
+- matching symbol names problems 
+    + public vs private symbol matching 
+    + ms-dos compatibility short name symbol matching 
+    
+- reading symbols from paged-out headers, if a module's header is paged out to disk then this is a critical problem for kd 
+
+    + acquire symbols for paged-out headers 
+    make a second copy of the kernel itself 
+    append root directory of this share to the symbol path 
+    use .reload command 
+    use !sym noisy extension command 
+    
+    this is only works with kernel debugging 
+    
+    check symbols from one of these files 
+    $ x fs_rec!* 
+    
+- mapping symbols whe the PEB is paged out, process environment block (PEB). reclaim memory. 
+    + suppose a module is mapped into a virtual address range that contains the address 7f78e9e000F enter the following command 
+    $ !vad 7f78e9e000F 1 
+    
+    load the symbols enter the command that was given in the reload command string 
+    $ .reload notepad.exe=000007f7`8e9e0000,32000
+    
+    + use !process command to obtain the virtual address descriptor root address 
+    
+- debugging user-mode processes without symbols 
+    + to figure out what the addresses mean, you'll need a computer with matches the one with the error. same platform(x86 or x64) and be loaded with the same version of windows 
+    + copy use-mode symbols and the binaries you want to debug onto the new machine 
+    + start cdb or windbg on the symbol-less machine 
+    + issue an | command to check which process need to debug do a !process 0 0 looking for the process id given by the cdb command 
+    + use k command on symbol-less machine 
+    + with the symbol machine use u command for each address gien on the symbol-less stack will give you the stack trace for the error on the symbol less machine 
+
+- debugging perfomance optimized code, re-arrange compiled and linked code so that it executes with more efficiency. these techniques optimze the component for memory hierarchies 
+    + function plus an offset will not necessarily have the same meaning it would have in non-optimized code 
+    + see if a module has been performance-optimized by use the !lmi extension command 
+    
+$ !lmi ntdll 
+Loaded Module Info: [ntdll]
+         Module: ntdll
+   Base Address: 77f80000
+     Image Name: ntdll.dll
+   Machine Type: 332 (I386)
+     Time Stamp: 394193d2 Fri Jun 09 18:03:14 2000
+       CheckSum: 861b1
+Characteristics: 230e stripped perf
+Debug Data Dirs: Type Size     VA  Pointer
+                 MISC  110,     0,   76c00 [Data not mapped]
+     Image Type: DBG      - Image read successfully from symbol server.
+                 c:\symbols\dll\ntdll.dbg
+    Symbol Type: DIA PDB  - Symbols loaded successfully from symbol server.
+                 c:\symbols\dll\ntdll.pdb
+                 
+the perf in the characteristics which means optimization 
+
+    + you cannot perform reliable address arithmetic on optimized code 
+    
+### AgeStore 
+- agestore tool delete files in a directory or directory three based on their last access dates. 
+- agestore can delete all files in a single directory or in all directories within a tree
+
+$ agestore -date=month-day-year command deletes all files that where last accessed prior to the specied date 
+$ agestore -size=size-remaining beginning with the least-recently accessed files until the total size of the remaining fiels is less than or equal to sizeremaining 
+
+delete all files in the directory tree subordinate to c:\symbols\downstreamstore that were last accessed over thirty days ago 
+$ agestore c:\symbols\downstreamstore -days=30 -s
+
+$ agestore c:\mydir -date=01-07-2008
+
+    + running agestore on vista+, last access time (LAT) data could be enable or disable in ntfs vista+ it is disable by default 
+    
+    use fsutil.exe tool to enable the gathering of LAT data from a command promp 
+$ fsutil behavior set disablelastaccess 0 
+
+disable lat data 
+$ fsutil behavior set disablelastaccess 1 
+
+    + the changes take effect on the next restart 
+
+- dbh.exe is a command-line tool that displays information about the content of the symbol file 
+
+the source code of DBH is available in the SDK for window 8 
+
+the function is similar the x command in debugger 
+
+display private symbol and public symbol 
+
+- PDBCopy removes private symbol ifnormation from a symbol file 
+...
+
+- symChk, compares executable files to symbol files to verify that the correct symbols are available 
+$ symChk [/r] filenames /s symbolPath 
+
+filenames is the needed symbols, will try to find symbols for the filename/directory from the given symbol path 
+
+determine the symbol is private or public 
+$ symchk /v c:\sym\*.exe /s c:\sym 
+
+# Crash dump analysis using the windows debugger(windbg)
+## Kernel-mode dump files 
+## User-mode dump files 
+### Varieties of user-mode dump files 
+- full dump file, the entire memory space of a process, the program's executable image itself, the handle table
+.dump /f 
+
+despite their names, the largets miidump file actually contain more information than the full user-mode dump. 
+$ .dump /mf and .dump /ma will create a larger and more complete file thant .dump /f 
+
+- minidumps, includes oly selected parts of the memory asociated with a process is called a minidump 
+
+/ma, create a minidump with all optional addtions equivalent to /mfFhut full memory data, handle data, unloaded module information, basic memory information, and thread time information to the minidump.
+
+/mf, adds full memory data to the minidump, all accessible committed pages owned by the target application 
+
+/mF, adds all basic memory information to the minidump 
+...
+
+the command .dump /mfiu can be used to create a fairly large minidump, or the command .dump /mrR can be used to create a minidump that preserves the user's privacy.
+
+### Create a user mode dump 
+- choose the best tool
+Feature                 Adplus      Window Error Reporting      CDB and Windbg      User Dump  
+postmortem debugging,   y           y                           y                   y 
+hangs                   y           n                           y                   y 
+encounter an exception  y           y                           y                   y 
+running normally        n           n                           y                   n          
+fails during startup    n           n                           y                   y 
+shrink dump             n           n                           y                   n 
+
+- cdb and windbg
+    + automatically dump check #Enable postmortem debugging 
+    + create dump while debugging .dump 
+    + shrinking an existing dump use .dump command 
+- UserDump tool, userdump.exe are part of OEM support tools package (old)
+
+- analyzing a user-mode dump file 
+    + cdb 
+        * install symbol files 
+        * start cdb 
+        $ .opendump 
+        command 
+        
+    + windbg 
+    
+- extracting information from a dump file 
+    + finding the computer name in a kernel model dump file 
+    $ !peb 
+    
+    $ x srv!SrvComputerName 
+    
+    finding ip address 
+    find a thread stack shows some send/receive activity. open one of the send packets 
+    
+    find process id in a user-mode dump 
+    $ | 
+    the process mark with (.) is the current process id is hexadecimal after the id: notation 
+    
+- CAB files that contain paging files along with a memory dump. a memory dump file can be placed in a cabinet file 
+
+    + suppose a cab file contain 
+    Memory.dmp 
+    Cabmanifest.xml 
+    Pagefile.sys 
+    
+    //Cabmanifest.xml contain 
+    XML 
+    <?xml version="1.0" encoding="UTF-8"?>
+    <WatsonPageFileManifest>
+      <Pagefiles>
+        <Pagefile Name="pagefile.sys"></Pagefile>
+      </Pagefiles>
+    </WatsonPageFileManifest>
+     
+    open the cab file in debugger by 
+    $ windbg /z MyCab.cab 
+    $ kd /z MyCab.cab 
+
+The memory dump file that you put in the CAB file must be a complete memory dump. You can use Control Panel to configure Windows to create a complete memory dump when there is a crash. For example, in Windows 8 you can go to Control Panel > System and Security > System > Advanced System Settings > Startup and Recovery. As an alternative to using Control Panel, you can set the value of this registry entry to 1.
+HKLM\SYSTEM\CurrentControlSet\Control\CrashControl\CrashDumpEnabled
+
+Starting in Windows 8.1, you can configure Windows to preserve the contents of paging files when Windows restarts.To specify that you want paging files to be saved when Windows restarts, set the value of this registry entry to 1.
+HKLM\SYSTEM\CurrentControlSet\Control\CrashControl\SavePageFileContents
+
+- debugging oca minidump files, online crash analysis is the reporting facility for window error reproting information 
+...
+
+
+# Debugger Reference 
+## cdb comandline options and ntsd is identical to cdb 
+cdb  [ -server ServerTransport | -remote ClientTransport ] 
+[ -premote SmartClientTransport ] [-log{a|au|o|ou} LogFile]
+[-2] [-d] [-ddefer] [-g] [-G] [-hd] [-lines] [-myob] [-bonc]
+[-n] [-o] [-s] [-v] [-w] [-cf "filename"] [-cfr "filename"] [-c "command"] 
+[-robp] [-r BreakErrorLevel]  [-t PrintErrorLevel] 
+[ -x{e|d|n|i} Exception ] [-x] [-clines lines] 
+[-i ImagePath]  [-y SymbolPath] [-srcpath SourcePath] 
+[-aExtension] [-failinc] [-noio] [-noinh] [-noshell] [-nosqm]
+[-sdce] [-ses] [-sicv] [-sins] [-snc] [-snul] [-zp PageFile] 
+[-sup] [-sflags 0xNumber] [-ee {masm|c++}]
+[-e Event] [-pb] [-pd] [-pe] [-pr] [-pt Seconds] [-pv] 
+[ -- | -p PID | -pn Name | -psn ServiceName | -z DumpFile | executable ] 
+[-cimp] [-isd] [-kqm] [-pvr] [-version] [-vf] [-vf:<opts>] 
+
+cdb -iae 
+
+cdb -iaec KeyString 
+
+cdb -iu KeyString
+
+cdb -QR Server 
+
+cdb -wake pid 
+
+cdb -?
+
+## KD command line options and ntkd 
+
 ##windbg commandline options 
 windbg [ -server ServerTransport | -remote ClientTransport ] [-lsrcpath ]
    [ -premote SmartClientTransport ] [-?] [-ee {masm|c++}] 
@@ -1702,4 +3707,189 @@ Specifies the command line of an executable process. This is used to launch a ne
 [-? ]
 Pops up this HTML Help window.
     
+## DebgSrv command line options 
+## KdSrv command line options 
+## DbEngPrx command line options 
+## KDbgCtrl command line options 
+## DbgRpc command line options 
+## SymStore command line options 
+
+## Environment variables 
+- general environment variables 
+_NT_DEBUGGER_EXTENSION_PATH 
+_NT_EXECUTABLE_IMAGE_PATH
+_NT_SOURCE_PATH 
+_NT_SYMBOL_PATH
+_NT_ALT_SYMBOL_PATH
+_NT_SYMBOL_PROXY 
+_NT_DEBUG_HISTORY_SIZE
+_NT_DEBUG_LOG_FILE_OPEN 
+_NT_DEBUG_LOG_FILE_APPEND
+_NT_EXPR_EVAL = {masm | c++} 
+_NO_DEBUG_HEAP, xp + debug heap will not be used 
+DBGENG_NO_DEBUG_PRIVILEGE, prevents processes spawned by the debugger from the inheriting SeDebugPrivilege 
+DBGHELP_HOMEDIR, specifies the path for the root of the default downstream store used by SymSrv and SrcSrv 
+SRCSRV_INI_FILE 
+
+- kernel mode environment variables 
+...
+
+## Debugger commands 
+### Syntax rules 
+- obey the general syntax rules 
+    + use any combination of uppercase and lowercase letters in commands and arguments 
+    + multipel command parameters split by space or comma(,)
+    + omit the space between a command and its first parameter, you can omit others if not cause any ambiguity 
     
+- command reference topics 
+    + blod font indicate items that you must literally type 
+    + character italic font will explained in parameters section 
+    + [xxx] optional 
+    + {xx|yy} must select one 
+    
+#### Numberical expression syntax 
+- MASM nubmers and operators 
+base in 16, 10, 8, or 2 
+
+use n command to set 
+0x, 0n, 0t octal, 0y binary 
+
+    + symbol in masm expression, numeric value of any symbol is its memory address 
+    
+    specify which module the address is associated with by exclamation point (!) before the name of the symbol 
+    
+    use two colons(::) or two underscores(__) to indicate the member of a class 
+    
+    use a grave accent(`) or an apostrophe(') to indicate the member of a class 
+    
+    + numeric operators in MASM expressions 
+    modify any component of an expression by using a unary operator 
+    
+    if part of an masm expression is enclosed in parenthese and two at signs(@@) appear before the expression the expression is interpreted according to c++ expression rules also specify with @@c++(...) or @@masm(...)
+    
+    + unary operators 
+    + 
+    - 
+    not 
+    hi, high 16 bits 
+    low, low 16 bits 
+    by, low-order byte from the specified address 
+    $pby, same as by except that it takes a physical address 
+    wo, low-order word from the specified address 
+    $pwo, same as wo except it takes a physical address 
+    dwo, double-word from the specify adress
+    qwo, quad-word from the specified address 
+    $pqwo, physical address of qwo 
+    poi, pointer-size data from the specified address 
+    $ppoi, same as poi except it takes a physical address 
+    
+    + binary operators 
+    * 
+    /
+    +
+    -
+    <<
+    >>
+    >>>, arithmetic right shift 
+    = or == 
+    < 
+    >
+    <=
+    >= 
+    != 
+    and or &
+    xor or ^ 
+    or or |
+    
+    + non-numeric operators in masm 
+    $fnsucc(FnAddress, RetVal, Flag, interprets the retval value as return value for the function that is located at the FnAddress 
+    
+    $iment(address), return the address of the image entry point in the loaded module list 
+    $scmp("string1", "string2"), evaluates to -1, 0, or 1 like str cmp 
+    $sicmp("string1", "string2"), equal to stricmp 
+    $scmp 
+    $sicmp 
+    $spat("string", "pattern"), string matches pattern 
+    $vvalid(address, length), check whether the memory range that begins at address and extends for length bytes is valid 
+    
+    + register and pseudo registers in masm, add an at sign @ before all registers and pseudo-registers. 
+    use a period(.) to indicate teh current instruction pointers. you cannot use period as first parameter for r command 
+    
+    + source line number must enclose by using `
+    
+- c++ numbers and operators 
+hexadecimal 64-bit value in the xxxxxxxx`xxxxxxxx format
+
+L, U, and I64 suffixes with integer values
+
+    + characters and strings in c++ similar to normal c++ expression 
+    
+    + When you add the < and > delimiters after a template name, you can add spaces between these delimiters. 
+
+    + operators in expression 
+    two at signs (@@) before the expression, the expression is interpreted according to MASM expression 
+    The symbols that indicate arrays ( [ ] ), pointer members ( -> ), UDT members ( . ), and members of classes ( :: )
+    cannot use new, delete and throw cannot call function 
+    you cannot shift a non-integer value.
+    
+    + operators 
+    // comment 
+    class::member 
+    class::~member, destructor 
+    ::name, global 
+    
+    struct.field 
+    pointer->field 
+    name[integer]
+    lvalue ++ 
+    lvalue -- 
+    dynamic_cast<type>(value)
+    static_cast<type>(value)
+    reinterpret_cast<type>(value)
+    const_cast<type>(value)
+    
+    (type)value 
+    sizeof value 
+    sizeof(type)
+    ++ lvalue 
+    --lvalue 
+    ~value 
+    !value 
+    value 
+    +value 
+    &lvalue 
+    *value 
+    
+    struct.* pointer, pointer to member of structure 
+    pointer->*pointer,pointer to member of referenced structure
+    
+    value*value 
+    value/value 
+    value+value 
+    value-value 
+    value<<value 
+    value>>value 
+    ...
+    
+    + registers and pseudo register in c++ expression 
+    must add @ before the register or pseudo-register 
+    
+    all address are cast to puchar 
+    $thread is cast to ETHREAD* 
+    $proc is cast to EPROCESS*
+    $teb is cast to TEB* 
+    $peb is cast to PEB* 
+    
+    use r command to edit these values 
+    
+    + macros in c++, must add a number sign before the macros 
+    #CONTAINING_RECORD(Address, Type, Field), base address of an instance of a structure 
+    #FIELD_OFFSET(Type, Field), byte offset of a named field 
+    #RTL_CONTAINS_FIELD (Struct, Size, Field), byte size includes the desired field 
+    #RTL_FIELD_SIZE(Type, Field), the size of a field in a structure of known tye 
+    #RTL_NUMBER_OF(Array), number of elements in a statically sized array 
+    #RTL_SIZEOF_THROUGH_FIELD(Type, Field), size of a structure of known type 
+    
+- MASM expression VS C++ EXPRESSION
+
+

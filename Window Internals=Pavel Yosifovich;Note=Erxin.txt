@@ -2179,12 +2179,91 @@ virtual address
 31                            0 
 10 bits   | 10 bits | 12 bits  
 
-2^12 is 4kb which is actually the page size 
+2^12 is 4kb which is actually the page size which is the last 12 bits 
 
 1024 entries         -------->      RAM 
 
-page directory, it is always reside in physical memory 
-one per process 
+page directory, it is always reside in physical memory. it exist one per process 
+
+it is saved in the KPROCESS kernel structure and copied to a special register of the CPU 
+
+page directory have 1024 entries, each one 32bit in size. the entire page directory take up 4kb 
+
+the upper 10 bits select a particular entry in the page directory called PDE(page directory entry). 2^10 is 1024 entries 
+
+PDE will point to a page table. So there will be 1024 page tables for a process 
+
+the middle 10 bits of the virtual address is point to a PTE, page table entry. That PTE points to the start of a page in physical memory. 
+
+the last 12 bits is the offset of the page in physical memory 
+
+- x86 PDE and PTE 
+    + each entry is 32 bits(64 bits on PAE)
+    + upper 20 bts is the page frame number(PFN) (24 bits PAE)
+    + bit 0 is the valid bit. if the bit is set the 20bit be used as the page frame number pointing to the start of a page in the physical memory 
+    
+    if not the CPU throws the page fault exception.
+    
+    + other bits exists. PDE and PTE have the same structure 
+    
+    + valid x86 PTE/PDE layout 
+    31|...|12|11|10.... 0 
+    U, reserved large page if PDE 
+    
+    dirty, 6 bit, page has been written to 
+    large page, this maps a large page(2mb)
+    accessed, page has been read 
+    owner, user mode or kernel mode accessible 
+
+- DEMO, virtual address translation 
+    + open notepad 
+    + open kd
+    + use systeminternal tool to do kernel debug
+    $ livekd -w 
+
+    + find process nodepad 
+    kd$ !process 0 0 notepad.exe 
+    PROCESS 85aa84a0 ....
+    
+    + switch to the context of notepad 
+    $ .process 85aa84a0
+    
+    + use vmmap.exe which in systeminternal tool 
+    
+    + open notepad.exe process in vmmap 
+    if a Heap is in Reserved state it will not allowed to access 
+    
+    + use command !pte in windbg to check the page table entry of a heap address 
+    $ !pte 1770000
+    
+    ... pfn 1fef 
+    
+    the 1fe1 is the physical address of in RAM, the address need to append three 000 at the end because the page size of physical memory is normally 4kb 
+    
+    + use the RAMMap of systeminternal tool 
+
+- physical address extension (PAE)
+    + intel pentium pro and later processsors support a new PAE mod, this mode allowed accessing more than 4bg physical memory  
+    + virtual address translation contains an extral level of indirection. called page index 
+    + Each PTE/PDE is 64 bits, of which 24 are the PFN 
+        * Tus maximum physical memory is 
+        2^(24+12)=2^36=64gb 
+        
+    + now the kernel must support PAE - default 32 bit kernel is the PAE kernel and use transaction mode extension could access more than 64gb 
+        
+    + address windowing extensions 
+        * api that allows access to more than 4bg of physical memory 
+        * naturally requires the PAE kernel 
+        memory above 4gb cannot be used "automatically" required special api, so alloc or some other allocation function could not use the extended memories. The memory will never be paged out because it is always physical memory  
+        
+        although the file system cache uses it if available 
+        * functions to use AllocateUserPhysicalPages, VirtualAlloc with specific flags (MEM_PHYSICAL and MEM_RESERVE), MapUserPhysicalPages 
+        
+        64 bit system could map memory to 8tb 
+
+- x64 Virtual Address Translation 
+
+
 
 
 
