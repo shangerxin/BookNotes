@@ -1,8 +1,544 @@
 ﻿Chrome Extension Doc;Note=Erxin
 
+# Learn basics
+## Overview
+- overview 
+    + extension is a zipped module of files, html, css, javascript, images, ..
+    
+    + interact with web pages or servers using content scripts, cross-origin XMLHttpRequests 
+    
+- extension UI 
+    + browser action, for add icon to browser toolbar 
+    + page action, add icon to browser when some of the website is visited 
+    + context menu 
+    + option page 
+    + modify webpages with content scripts 
+    
+- files, extension have these files 
+manifest file 
+html files 
+javascript files (optional)
+etc...
+
+- to distribute your extension you need to compress your extensions files as zip and change the extension to .crx 
+
+upload the extensio using chrome developer dashbord
+https://chrome.google.com/webstore/developer/dashboard
+
+- referring to files 
+    + put any file into an extension and reference with url 
+    
+    /images/image.png 
+    
+    reference the image from a html file contain in root dir  /image.html 
+    
+    <img src="images/image.png"/>
+    
+    + with chrome debugger every file is accessible by an absolute url 
+    chrome-extension://<extensionID>/<pathToFile>
+    
+    <extensionID> is a unique identifier that the extension system generates for each extension
+    
+    your extensionID will changed when unpacked, load from different directory, so use a placeholder @@extension_id to avoid hardcoding the id during development 
+    
+- manifest file manifest.json 
+https://developer.chrome.com/extensions/manifest
+
+- architecture 
+    + background page, an invisible page that holds the main logic of the extension 
+    
+    defined by background.html can contain javascript files. there are two types of background pages 
+        * persistent background pages 
+        
+        set permission in manifest.json 
+        "background": {
+            "scripts": ["background.js"]
+        }
+        
+        or
+        
+        "background": {
+            "page": "background.html"
+        }
+        
+        * event pages, are only loaded when they are needed and unloaded after complete their rountine 
+        
+        "background": {
+            "scripts": ["eventPage.js"],
+            "persistent": false
+        }
+        
+        here are some events may trigger loaded the event pages 
+        app/extension is first installed or updated 
+        the aim event is dispatched 
+        a content script or other extension send a message 
+        another view in the extension call runtime.getBackgroundPage 
+        
+        event will not unload until all visible views are closed and message ports are closed 
+        
+        once the event page has been idle a short time the runtime.onSuspend event is dispatched 
+        
+        because listeners themselves only exist in the context of the event page, you must use addListener each time the event page loads; only doing so at runtime.onInstalled by itself is insufficient 
+        
+        convert background page to event pages to reduce the memory footprint 
+        add "persistent":false 
+        if your extension use setTimeout() and setInterval() then replace them with alarm API. DOM based timers won't be honored if the event page shut down 
+        async HTML5 API like notification and geolocation will not complete after event page shutdown 
+        replace extension.getBackgroundPage() replace it with runtime.getBackgroundPage() the later is async which will trigger reload the event page if necessary 
+        
+        best practice 
+        re-register the event when event page loaded 
+        register runtime.onInstalled event for handling installing or upgrade. the event is a good place for modify contentMenu 
+        keep runtime state in memory throughout a browser session, use storageAPI or indexedDB
+        use event filters to restrict your event notifications such as replace tabs.onUpdated event with webNavigation.onCompleted event 
+        listen to runtime.onSuspend event to clean up but the event will not be triggered when extension crashes. suggest persisting periodically instead 
+        when use message passing make sure close the unused ports 
+        if use the contextMenu pass a string id to contextMenus.create and use the contextMenus.onClicked callback instead of an onclick parameter to contextMenus.create 
+        
+    
+    + content script, if the extension need to interact with web pages that the user load 
+    
+    + UI pages, a browser action can have a popup which is implemented as a html file. use tabs.create or window.open() to display any other html files 
+    
+    there are several ways to open a html page 
+        * chrome.browserAction, display icon on the toolbar, can have a tooltip, badge, popup 
+        
+        "browser_action": {
+          "default_icon": {                    // optional
+            "19": "images/icon19.png",           // optional
+            "38": "images/icon38.png"            // optional
+          },
+          "default_title": "Google Mail",      // optional; shown in tooltip
+          "default_popup": "popup.html"        // optional
+        }
+        
+        * override pages, override pages are a way to substitute a html file from your extension for a page that chrome normally provide. avalable pages 
+        bookmark manager, default page could be access by chrome://bookmarks
+        
+        history, also could be access by chrome://history 
+        
+        new tab, the page that appears when the user creates a new tab or window. you can also get to this page by entering the URL chrome://newtab 
+        
+        one extension can only override only one page. incognito windows not support overridden new tab 
+        
+        "chrome_url_overrides" : {
+            "pageToOverride": "myPage.html"
+        }
+        
+        * options page, extensions management page at chrome://extensions 
+        "options_page": "options.html"
+    
+    + content scripts is used to interact with web pages 
+    
+- using the chrome.* APIs 
+- async vs sync methods. Most method in chrome.* API is async 
+- communication between pages 
+    + all of an extension's pages execute in same process on the same thread, the pages can make direct function calls to each other 
+    
+    + find page in extension with chrome.extension.getViews() methods or .getBackgroundPage() method will return the finded page reference. Use other page reference could directly call the method in other pages and manipulate their DOMs 
+    
+- saving data and incognito mode 
+    + HTML5 web storage api 
+    
+    + by default extensions don't run in incognito windows. you need to consider what a user expects from your extension when the browser is incognito 
+    
+    if a piece of data might show where a user has been on the web or what the user has done, don't store it from an incognito window 
+    
+    detect incognito window 
+    tabs.Tab or windows.Window 
+    
+## Hosting changes 
+- user can only install extensions hosted in the chrome web store. except for enterprise policy and developer mode 
+- supported deployment options 
+    + osx and linux extensions can be installed via a preferences JSON file 
+    + for window extensions can be installed via the Window registry. ensure that the update_url registry key points to the follow URL https://clients2.google.com/service/update2/crx.Local
+    + for enterprise have group policy 
+    
+# extensions qualifty guidelines 
+- new setting override API to allow extensions to manage important chrome settings on windows 
+- single purpose chrome extensions policy 
+- You can email us at chromewebstore-policy@google.com with your extension ID, and we’ll try to provide feedback within a week.
+
+
+# Event pages 
+- check the previous notes 
+
+# Content scripts 
+- javascript files run in the context of web pages. using the standard DOM to modify the visited pages 
+- find unlinked URLs in web pages and convert them into hyperlinks 
+- increase font size 
+- microformat in the DOM 
+- limitations, 
+    + cannot use chrome.*API except for extension(.getURL, inIncognitoContext, lastError, onRequest, sendRequest)
+    i18n
+    runtime(connect, getManifest, getURL, id, onConnect, onMessage, sendMessage, storage)
+    
+    + cannot use variables or functions defined by extension's pages 
+    + use variables or functions defined by web pages or other content scripts 
+    
+- support exchange message between background and also make cross-site XMLHttpRequests, communicate with web pages using the shared DOM
+
+    + content script can access extension resources by 
+    
+//access config.json file in a config_resources folder
+var xhr = new XMLHttpRequest();
+xhr.onreadystatechange = handleStateChange; // Implemented elsewhere.
+xhr.open("GET", chrome.extension.getURL('/config_resources/config.json'), true);
+xhr.send();
+
+    + add permissions for cross-origin XMLHttpRequest
+"permissions": [
+    "http://www.google.com/"
+  ]
+
+- manifest 
+"content_scripts": [
+    {
+      "matches": ["http://www.google.com/*"],
+      "css": ["mystyles.css"],
+      "js": ["jquery.js", "myscript.js"]
+    }
+  ]
+    
+only inject code sometimes by use permission field instead
+"permissions": [
+    "tabs", "http://www.google.com/*"
+  ]
+
+    + use content_scripts field in manifest to insert multiple content scripts. support properties, the match pattern is glob syntax 
+
+    matches
+    execlude_matches
+    match_about_blank 
+    css 
+    js 
+    run_at 
+    all_frames 
+    include_globs 
+    exclude_globs 
+    
+- programmatic injection, it is useful when only want to injected when some event happen 
+
+    + require corss-origin permissions for the extension and chrome.tabs 
+"permissions": [
+    "http://www.google.com/", 
+    "tabs"
+  ]
+  
+inject javascript by tabs.executeScript({code:"", file:"file-path"}), inject css by tabs.insertCSS()
+
+- execution environment, content scripts execute in a special environment which can't access any javascript variables created by the page. Each content script is isolate with each other 
+
+the page script and content script are share DOM element and event  
+
+- communication with embedding page, if page want to communicate with content script they must do it through shared dom 
+
+    + example using window.postMessage or window.webkitPostMessage for transferable object 
+//content script 
+var port = chrome.runtime.connect();
+
+window.addEventListener("message", function(event) {
+  // We only accept messages from ourselves
+  if (event.source != window)
+    return;
+
+  if (event.data.type && (event.data.type == "FROM_PAGE")) {
+    console.log("Content script received: " + event.data.text);
+    port.postMessage(event.data.text);
+  }
+}, false);
+
+//page script
+document.getElementById("theButton").addEventListener("click",
+    function() {
+  window.postMessage({ type: "FROM_PAGE", text: "Hello from the webpage!" }, "*");
+}, false);
+
+the html is not part of extension it post message to itself will intercepted with content script and then content script post message to the execution process 
+
+- security considerations don't eval untrusted content script code, settimeout will eval string as javascript 
+- referring to exetension files using chrome.exetension.getURL("file-in-extension-path") to assign to shared DOM element 
+
+
+# permission settings 
+- reference 
+https://developer.chrome.com/extensions/declare_permissions
+
+- permission fields 
+activeTab
+alarms 
+audioModem 
+background 
+bookmarksbrowsingData
+clipboardRead
+cilpboardWrite
+contentSettings
+contextMenus 
+cookies 
+copersence 
+debugger 
+declarativeContent 
+declarativeWebRequest
+desktopCapture
+dns 
+documentScan
+downloads 
+enterprise.platformKeys
+experimental
+fileBrowserHandler 
+fileSystemProvider 
+fontSettings
+gcm 
+geolocation
+history 
+identity 
+idle 
+idltest 
+location 
+management 
+nativeMessaging
+networking.config 
+notificationProvider 
+notifications 
+pageCapture 
+platformKeys 
+power 
+printerProvider 
+privacy 
+processes 
+proxy 
+sessions 
+signedInDevices 
+storage 
+system.cpu 
+system.display 
+tabCapture
+tabs 
+topSites 
+tts 
+ttsEngine 
+unlimitedStorage 
+vpnProvider 
+wallpaper
+webNavigation
+webRequest
+webRequestBlocking 
+
+
+# The activeTab permission 
+- activeTab allow extension temporary access to the currently active tab 
+
+    + example make current script red 
+// Called when the user clicks on the browser action.
+chrome.browserAction.onClicked.addListener(function(tab) {
+  // No tabs or host permissions needed!
+  console.log('Turning ' + tab.url + ' red!');
+  chrome.tabs.executeScript({
+    code: 'document.body.style.backgroundColor="red"'
+  });
+});
+
+- activeTab permission will limit the effect of the malicious code 
+- activeTab permission allowed 
+    + tabs.executeScript(), tabs.insertCSS on tab 
+    + get URL, title, and favicon with tabs.Tab object 
+    + user gestures invoking activeTab
+    browser action 
+    page action, icons inside the address bar.
+    content menu item 
+    commands API from a keyboard shortcut 
+    accepting a suggestions from the omnibox API 
+
+# chrome extension API updates 
+- reference URL 
+https://developer.chrome.com/extensions/whats_new
+
+# Getting started building a chrome extension 
+- example 
+    + add browser action and activeTab permission to manifest 
+    + add resources 
+    + load the extension, extension file is .crx files with chrome://extensions or menu 
+    + fiddle the code, change codes and click reload from extension management to reload the extension 
+    
+# Develop Extensions 
+## Accessibility (a11y)
+- using accessible UI controls 
+    + standard controls whenever possible 
+    input 
+    checkbox 
+    input text field 
+    option 
+    radio button 
+    link 
+    
+- ARIA is a specification for making UI controls accessible to screen readers by means of standard set of DOM attributes 
+
+adding ARIA support to custom controls in your extension involves modifying dom. The ARIA attribute role is an with a value set to one of the pre-defined ARIA role strings. Because ARIA roles are static, the role attribute should not change its value
+
+    + example extension contain a toolbar then add role attribute 
+    <div role="toolbar"/>
+
+    + w3c supported states and properties 
+    https://www.w3.org/TR/wai-aria/states_and_properties
+    
+    <div role="toolbar" tabindex="0" aria-activedescendant="button1">
+    The aria-activedescendant property specifies which child of the toolbar receives focus when the toolbar receives focus. 
+    
+- set element.tabIndex = 0 will set to the default focus, if equal to -1 will remove the element from the tab sequence and still avaliable set focus programmatically 
+
+- explicit set keyboard navigation strategy 
+
+- chrome accssibility technical documentation 
+http://www.chromium.org/developers/design-documents/accessibility#TOC-WAI-ARIA-Support
+
+- article for DIY accessible UI controls 
+https://www.w3.org/2010/Talks/www2010-dsr-diy-aria/#(1)
+
+- provide accessible content 
+    + evaluate your use of text in your extension, provide a way to increase the text size 
+    
+    + indicate of the flexibility of your UI apply the 200% text 
+    
+    + avoid baking text into images. use google font api 
+    https://developers.google.com/fonts/?csw=1
+    
+- colors, provide a way to increase the background and foreground colors contrast 
+
+    + color contrast check tool 
+    http://snook.ca/technical/colour_contrast/colour.html#fg=33FF33,bg=333333
+    
+    + check what a image look like in various format 
+    http://www.vischeck.com/vischeck/
+    
+- sound, captions are the textual representation of a video's soundtrack 
+
+https://dcmp.org/ciy/
+
+- image, provide informative alt text for your images 
+<img src="img.jpg" alt="The logo for the extension">
+
+Alternative text article
+
+http://webaim.org/techniques/alttext/
+
+- a11y examples 
+https://src.chromium.org/viewvc/chrome/trunk/src/chrome/common/extensions/docs/examples/extensions/news_a11y/
+https://src.chromium.org/viewvc/chrome/trunk/src/chrome/common/extensions/docs/examples/extensions/news/
+
+
+## Content Security Policy(CSP)
+- in general CSP works as a block/whitelisting mechanism for resources loaded or executed by your extensions 
+
+these policy provide a security over and above the host permissions manifest setting
+
+{
+  ...,
+  "content_security_policy": "[POLICY STRING GOES HERE]"
+  ...
+}
+
+- full details of regarding CPS's syntax is here 
+http://w3c.github.io/webappsec-csp/
+http://www.html5rocks.com/en/tutorials/security/content-security-policy/
+http://www.whatwg.org/specs/web-apps/current-work/multipage/origin-0.html#sandboxing-flag-set
+
+- default policy restrictions for manifest_version 2 is 
+script-src 'self'; object-src 'self'
+
+
+- eval and related functions are disabled 
+alert(eval("foo.bar.baz"));
+window.setTimeout("alert('hi')", 10);
+window.setInterval("alert('hi')", 10);
+new Function("return foo.bar.baz");
+
+- inline javascript will not be executed 
+- only local script and object resources are loaded so don't reference js library from CDN 
+- relaxing the default policy 
+    + inline script is not avaliable, a work around is add hash to script tab 
+    https://www.w3.org/TR/2015/CR-CSP2-20150721/#script-src-hash-usage
+    + remote script, allowed whitelisting origins with the following schemes: blob, filesystem, https, chrome-extension and chrome-extension-resource
+    
+    the host part of the origin must explicitly be specified for the https and chrome-extension schemas 
+    
+    wildcard schema is not allowed. https://* 
+    
+    subdomain schema is allowed https://*.cloudfront.net 
+    
+    + domain in the public preffix list are also viewed as generic top-level domains, https://publicsuffix.org/list/ to load resource from these domains the subdomain must be explicit 
+    
+- the restriction is only against the resource are directly executed. It not restrict for other files with XMLHttpRequest
+
+- example for allow script loaded from example.com over https 
+"content_security_policy": "script-src 'self' https://example.com; object-src 'self'"
+
+both script-src and object-src is defiend by policy 
+    
+- support use event tracking with google analystics 
+- evaluated javascript. add unsafe-eval to policy to allowed eval() like functions
+"content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+    
+- content scripts, are generally not subject to the CSP. so it may use eval() even the extension 
+
+
+
+
+
+
+  
+# chrome extension inline installation add link to chrome webstore 
+- reference 
+https://developer.chrome.com/webstore/inline_installation
+
 # API 
 - chrome.types
 ChromeSetting prototype provide a common set of functions get(), set(), clear(), onChange for settings of the chrome browser
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
