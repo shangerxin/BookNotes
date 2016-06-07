@@ -1095,7 +1095,7 @@ Qt Visual Studio Add-in, intended developers who wish to develop Qt application 
     + widget-based user interfaces 
     in contrast to Qt Quick, widgets do not scale that well for touch screens and fluid
     
-    + import concepts in qt widgets 
+    + important concepts in qt widgets 
     application main window, is a set of classes 
         * overview for typical modern main application window 
         QAction, abstract user interface action that can be inserted into widgets 
@@ -1248,6 +1248,170 @@ Qt Visual Studio Add-in, intended developers who wish to develop Qt application 
         * qt widget examples http://doc.qt.io/qt-5/examples-widgets.html
         
     model/view programming 
+        * MVC introduced by smalltalk 
+        * combined the view and control and to allow flexible handling of user input, we introduce the concept of delegate. in standard view delegate reders the items of data. when an item is edit it communicates with the model directly using model indexes 
+        
+        * model/view can be separated into three groups 
+        models 
+        views
+        delegates 
+        
+        they communicate with each other use signals and slots 
+        
+        * all item model are based on the QAbstractItemModel, for list table should use QAbstractListModel and QAbstractTableModel
+        
+        * create new model, code reference http://doc.qt.io/qt-5/model-view-programming.html#creating-new-models
+        
+        * ready-made models in Qt 
+        QStringListModel 
+        QStandardItemModel, complex tree structures 
+        QFileSystemModel
+        QSqlQueryModel, QSqlTableModel, QSqlRelationalTableModel 
+        
+        * views, Qt provids 
+        QListView 
+        QTableView 
+        QTreeView 
+        QAbstractItemView 
+        
+        reference view classes http://doc.qt.io/qt-5/model-view-programming.html#view-classes
+        
+        * delegates, the default delegate implementation is provided by QStyledItemDelegate. it is used by standard views 
+        QItemDelegate don't use the current style to paint its items 
+        
+        reference delegate classes http://doc.qt.io/qt-5/model-view-programming.html#delegate-classes
+        
+        * sorting there are two ways to do it 
+        your model is sortable, if it reimplements the QAbstractItemModel::sort(), QTableView and QTreeView provie an API 
+        
+        enable interactive sorting by connecting the QHeaderView::sortIndicatorChanged() signal to the QTableView::sortByColumn() slot or QTreeView::sortByColumn() slot 
+        
+        another way is your model doesn't have the required interface, you could use the proxy model http://doc.qt.io/qt-5/model-view-programming.html
+        
+        * convenience classes such as QListWidget, QTreeWidget and QTableWidget. they are not intended to be subclassed. they are used item-based item view and table 
+        
+        to subclasses could use QListView, QTableView, QTreeView with QStandardItemModel 
+        
+        * using models and views 
+        
+        two models in Qt, QStandardItemModel it is a multi-purpose model and QFileSystemModel is a maintains info abou the contents of directory 
+        
+        * using QTreeView/QListView with QFileSystemModel
+QSplitter *splitter = new QSplitter;
+
+QFileSystemModel *model = new QFileSystemModel;
+model->setRootPath(QDir::currentPath());
+
+QTreeView *tree = new QTreeView(splitter);
+tree->setModel(model);
+tree->setRootIndex(model->index(QDir::currentPath()));
+
+        * model classes
+        base concepts, QAbstractItemModel represent the data as a hierarchical structure 
+        
+        * model indexes, ensure representation of the data is separate from the way it is accessed. mode indexes contain a pointer to the model that created them. 
+        
+        mode index provide a temporary reference QModelIndex or long term index QPersistentModelIndex 
+        
+        to obtain a model required three properties, a row, a column and a index of a parent item 
+        
+        * row and column, model can be accessed as a simple table 
+        QModelIndex index = model->index(row, column, ...);
+        
+        top level items in a model are always refereenced by specifying QModelIndex() as parent item 
+        
+        each item can be the parent of another table 
+        
+        * item roles, a model can perform various roles for other components. Qt::DisplayRole is  used to access string, the standard roles are defined by Qt::ItemDataRole 
+        
+        as model for the item of data by 
+        QVariant value = model->data(index, role);
+        
+        reference create new models section for additonal informaton of roles http://doc.qt.io/qt-5/model-view-programming.html#creating-new-models
+        
+        * using model indexes 
+         QFileSystemModel *model = new QFileSystemModel;
+        QModelIndex parentIndex = model->index(QDir::currentPath());
+        int numRows = model->rowCount(parentIndex);
+        
+        for (int row = 0; row < numRows; ++row) {
+            QModelIndex index = model->index(row, 0, parentIndex);
+            QString text = model->data(index, Qt::DisplayRole).toString();
+            // Display the text in a widget.
+        }
+        
+        * sharing selections among views with same model 
+        secondTableView->setSelectionModel(firstTableView->selectionModel());
+    
+        * delegate example 
+        class SpinBoxDelegate : public QStyledItemDelegate
+        {
+            Q_OBJECT
+
+        public:
+            SpinBoxDelegate(QObject *parent = 0);
+
+            QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                                  const QModelIndex &index) const Q_DECL_OVERRIDE;
+
+            void setEditorData(QWidget *editor, const QModelIndex &index) const Q_DECL_OVERRIDE;
+            void setModelData(QWidget *editor, QAbstractItemModel *model,
+                              const QModelIndex &index) const Q_DECL_OVERRIDE;
+
+            void updateEditorGeometry(QWidget *editor,
+                const QStyleOptionViewItem &option, const QModelIndex &index) const Q_DECL_OVERRIDE;
+        };
+        
+        //private a editor, when table view need a editor it ask the delegate to provide it 
+        QWidget *SpinBoxDelegate::createEditor(QWidget *parent,
+            const QStyleOptionViewItem &/* option */,
+            const QModelIndex &/* index */) const
+        {
+            QSpinBox *editor = new QSpinBox(parent);
+            editor->setFrame(false);
+            editor->setMinimum(0);
+            editor->setMaximum(100);
+
+            return editor;
+        }
+        
+        //provide a function to copy mode data into the editor 
+        void SpinBoxDelegate::setEditorData(QWidget *editor,
+                                    const QModelIndex &index) const
+        {
+            int value = index.model()->data(index, Qt::EditRole).toInt();
+
+            QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
+            spinBox->setValue(value);
+        }
+        
+        //submit data to the model, the standard QItemDelegate informs view when it has finished editing by emitting the closeEditor() signal 
+        void SpinBoxDelegate::setModelData(QWidget *editor, QAbstractItemModel *model,
+                                   const QModelIndex &index) const
+        {
+            QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
+            spinBox->interpretText();
+            int value = spinBox->value();
+
+            model->setData(index, value, Qt::EditRole);
+        }
+        
+        //updating the editor's geometry 
+        void SpinBoxDelegate::updateEditorGeometry(QWidget *editor,
+            const QStyleOptionViewItem &option, const QModelIndex &/* index */) const
+        {
+            editor->setGeometry(option.rect);
+        }
+        
+        //editing hints provide hints to the other components about the result. we also could add filter to the delegate to control the displaied data 
+        
+        * handling selections in item views 
+        information about items selected in a view is stored in an instance of the QItemSelectionModel. it is independent of any views it is possible to share selections between views 
+        
+        selections are made up of selection ranges only record the start and ending mode index 
+        
+        
+        
     rich text processing 
     drag and drop 
     internationalization 
@@ -1256,6 +1420,7 @@ Qt Visual Studio Add-in, intended developers who wish to develop Qt application 
     
     + displaying web content, provides the chromium-based WebEngine layout engine 
     reference webengine, http://doc.qt.io/qt-5/qtwebengine-index.html
+    
     
 
 
@@ -1275,6 +1440,9 @@ http://doc.qt.io/QtQuickCompiler/
 
 - reference 
 http://doc.qt.io/qt-5/overviews-main.html
+
+# Qt namespace 
+http://doc.qt.io/qt-5/qt.html
 
 # Translate Qt 4 to Qt 5 
 https://wiki.qt.io/Transition_from_Qt_4.x_to_Qt5
