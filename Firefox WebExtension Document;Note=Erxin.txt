@@ -134,38 +134,526 @@ https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Examples
 - content script 
 
 
+# Porting from google 
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Porting_from_Google_Chrome
+
+- setups 
+    + check incompatibilities, https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Chrome_incompatibilities
+    + add application key 
+    + check basic setup for installing webextension firefox 
+    + package to xpi 
+    + submit 
+    
+# extension url match pattern 
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Match_patterns
+- the match pattern is used in several webextension area 
+which url to load content script 
+which url to monitor the webrequest 
+
+- structure 
+<scheme>://<host><path>
+
+    + scheme 
+    *, matches http and https 
+    http/https/file/ftp/app
+    
+    + host take 
+    *, any host 
+    *.part-of-host-name 
+    complete-host-name 
+    
+    + path must begin with a "/", the wildcard "*" could be used in several locations 
+    <all_urls>, matches all urls under any of the supported schemes 
+    *://*.mozilla.org/*, match all http and https scheme, not match ftp 
+    
+    the path at lease should be a "/" character 
+
+# Manifest
+- permissions 
+"permissions": [
+  "*://developer.mozilla.org/*",
+  "webRequest"
+]
+    + reference, https://developer.mozilla.org/en-US/Add-ons/WebExtensions/manifest.json/permissions
+
+    + the key can contain three kinds of permissions 
+    host permissions 
+    api permissions 
+    the activeTab permission 
+    
+    + host permission are specified as match patterns, the extension request privileges for these url such as 
+    xhr access to those orgins 
+    inject scripts to pages by tabs.executeScript
+    ability to receive events from webrequest api 
+    ability to access cookies with cookie api, also required include the cookies api permision in manifest
+    
+    + api permissions are specified as keywords 
+    alarms 
+    bookmarks
+    contentMenus 
+    cookies 
+    downloads 
+    downloads.open 
+    idle 
+    notifications 
+    storage 
+    tabs 
+    webNavigation
+    webRequest
+    webRequestBlocking 
+        
+        * exceptions 
+        tabs gives you access to privileged parts of the tabs API: Tab.url, Tab.title, and Tab.faviconUrl. In Firefox, you also need tabs if you want to include url in the queryInfo parameter to  tabs.query(). The rest of the tabs API can be used without requesting any permission
+        
+        webRequestBlocking enables you to use the "blocking" argument, so you can modify and cancel requests
+        
+        downloads.open lets you use the downloads.open() API, to open a downloaded with associated application 
+        
+    + activeTab permission is specified as "activeTab"
+        * extra privileges are 
+        inject javascript, css into the tab with chrome.tabs.executeScript, chrome.tabs.insertCSS
+        
+        access to the privileged parts of the tabs api for current tab, such as tab.url, tab.title, tab.faviconUrl
+        
+        * incompatibilities with chrome 
+        background
+        clipboardRead
+        clipboardWrite
+        geolocation
+        nativeMessage
+        unlimitedStorage
+        
+        
+# using the javascript api 
+- webextension api could be used in background script, browser action page or popups. a few of these could be access by content scripts 
+
+- require set permision in manifest.json 
+- two way to use 
+function logTabs(tabs) {
+  console.log(tabs);
+}
+
+chrome.tabs.query({currentWindow: true}, logTabs);
+
+    + equal to 
+function logTabs(tabs) {
+  console.log(tabs);
+}
+
+browser.tabs.query({currentWindow: true}, logTabs);
+
+    + differences 
+    chrome namespace is also supported by google 
+    
+    if you use the browser namespace, you can use promises instead of callbacks for asynchronous functions 
+    
+- internationalization, i18n library is quite similar to common javascript library i18n.js 
+
+    + check the example notify-link-clicks-i18n 
+    
+    + anatomy of an internationalized webextension 
+webextension-root-directory/
+
+    _locales
+        en
+            messages.json
+                English messages (strings)
+        de
+            messages.json
+                German messages (strings)
+        etc.
+    manifest.json
+        locale-dependent metadata
+    myJavascript.js
+        JavaScript for retrieving browser locale, locale-specific messages, etc.
+    myStyles.css
+        locale-dependent CSS
+
+    + provide localized strings in _locales directory, placed inside the extension root. each individual local has its strings called messages contain a file called message.json, if the subtag includes a basic language plus a regional variant, then the language and variant are conventionally seperated using a hyphen '-', Hoever in the directory _locales, the seperater must be underscore '_', ex. "en_US"
+
+    + look the structure of _locales/en/message.json 
+{
+  "extensionName": {
+    "message": "Notify link clicks i18n",
+    "description": "Name of the extension."
+  },
+
+  "extensionDescription": {
+    "message": "Shows a notification when the user clicks on links.",
+    "description": "Description of the extension."
+  },
+
+  "notificationTitle": {
+    "message": "Click notification",
+    "description": "Title of the click notification."
+  },
+
+  "notificationContent": {
+    "message": "You clicked $URL$.",
+    "description": "Tells the user which link they clicked.",
+    "placeholders": {
+      "url" : {
+        "content" : "$1",
+        "example" : "https://developer.mozilla.org"
+      }
+    }
+  }
+}
+
+All of these items are strings; $URL$ is a placeholder, which is replaced with a substring at the time the notificationContent member is called by the WebExtension.
+
+    + message file specification, https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/i18n/Locale-Specific_Message_reference
+    
+    + internationalizing manifest.json 
+        * retrieving localized strings in manifest, such as for addon's name, description 
+        
+        "name": "__MSG_extensionName__",
+        "description":"__MSG_extensionDescription__"
+        
+        format 
+        __MSG_ + messageName + __ 
+        
+        * specify default local 
+        "default_locale": "en"
+        
+        * local-dependent css 
+        header{
+            background-image: url(../images/__MSG_extensionName__/header.png);
+        }
+
+    + retriving message strings from javascript with i18n api 
+        * reference, https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/i18n
+        
+        * use i18n.getMessage(), i18n.getAcceptLanguages() and i18n.getUILanguage() methods if you needed to customize the UI depending on the local 
+        
+        * i18n.detectLanguage() could be used to detect the language of user-submitted content 
+        
+        * example 
+        var title = chrome.i18n.getMessage("notificationTitle");
+
+        // in /_locales/en/message.json 
+        "notificationTitle": {
+            "message": "Click notification",
+            "description": "Title of the click notification."
+        }
+
+        var content = chrome.i18n.getMessage("notificationContent", message.url);
+        "notificationContent": {
+          "message": "You clicked $URL$.",
+          "description": "Tells the user which link they clicked.",
+          "placeholders": {
+            "url" : {
+              "content" : "$1",
+              "example" : "https://developer.mozilla.org"
+            }
+          }
+        }
+        the placeholders memeber defines all the placehoders, the "url" placeholder as the example is specified that its content is taken from $1 which is the first value given inside the second parameter of getMessage(). We need use $URL$ in the message string, if placeholder named "name" then we use $NAME$
+
+        * also support directly used $1, ... into the message string 
+        
+        * hardcoded substitution 
+        "placehoders":{
+            "mdn":{
+                "content":"hard-coded-value"
+            }
+        }
+
+    + localized string selection, locales can be specified using only a language code, like fr or en 
+    
+        * if there is a message.json file for exact current local, and it contains the string return it 
+        * exact match prior to regionless version 
+        * use default 
+        * use a empty string 
+        
+    + predefined message, use exactly the same syntax except with @@ before the message name 
+    __MSG_@@MessageName__ 
+    
+    Message names:
+    @@extension_id 
+    @@ui_locale
+    @@bidi_dir, the text directionfor the current local, "rtl" or "ltr"
+    @@bidi_reversed_dir, 
+    @@bidi_start_edge, left or right 
+    @@bidi_end_edge 
+    
+    these could be used in manifest or css files 
+    
+    + test localization 
+        * open about:config and change the filed  general.useragent.locale
+        
+        * restart browser 
+        
+# Content scripts 
+- content script can read and modify the content of their pages using standard DOM APIs 
+
+content scripts can only access a small subset of the webextension apis, but they can communicate with background scripts 
+
+- loading content script 
+    + declaratively, using content_scripts key in manifest.json 
+    + programmatically use tabs.executeScript() 
+    
+- content script environment 
+    + DOM access, content script get a clean view of the DOM
+    content script cannot see javascript variables defined in page scripts 
+    if a page script redefines a built-in dom property, content script will see the original version 
+    
+    in gecko this called xray vision 
+    
+    content script can only access the page's DOM as the page script does. the reverse versa 
+    
+    if a content script want to use a javascript library then the library itself should be injected as content scrpit too 
+    
+    + content script supported webextension api 
+    
+        * extension 
+        getURL() 
+        inIncognitoContext 
+        
+        * runtime 
+        connect() 
+        getManifest() 
+        getURL() 
+        onConnect() 
+        onMessage() 
+        sendMessage() 
+        
+    + cross-domain privileges get the same privileges as the rest of the extension 
+    
+    + communicating with background script 
+    
+        + send one-off messsages with an optional response 
+                    in content script                       in background page 
+        send    chrome.runtime.sendMessage   chrome.tabs.sendMessage        
+        receive chrome.runtime.onMessage        chrome.runtime.onMessage 
+        
+    + communicating with the web page with DOM message, window.postMesssage and window.addEventListener APIs 
+// page-script.js
+var messenger = document.getElementById("from-page-script");
+messenger.addEventListener("click", messageContentScript);
+
+function messageContentScript() {
+  window.postMessage({
+    direction: "from-page-script",
+    message: "Message from the page"
+}, "*");
+    
+    
+// content-script.js
+window.addEventListener("message", function(event) {
+  if (event.source == window &&
+      event.data.direction &&
+      event.data.direction == "from-page-script") {
+    alert("Content script received message: \"" + event.data.message + "\"");
+  }
+});
 
 
+# Debugging 
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Debugging
+
+- the browser toolbox
+    + prerequestes 
+    open developer tools 
+    open settings 
+    under advanced settings mae sure the following two settings are checked 
+    Enable browser chroe and add-on debugging toolbox 
+    Enable remote debugging 
+    
+    + open browser toolbox, Tool|Web developer menu|Browser Toolbox 
+    not browser console and click ok 
+    
+    we could use console to see log output from background script, scripts running in popups and content script 
+    
+    to access popup scripts as soon as they load then add a debugger; statement at the start of the script 
+    
+- javascript command interpreter 
+    + reference https://developer.mozilla.org/en-US/docs/Tools/Web_Console/The_command_line_interpreter
+    
+    + enter expressions, enter, enter multiline expression use shift+enter instead of enter 
+    
+    + working with iframes, use helper function cd() to change the console's scope to a specific iframe 
+    var frame = document.getElementById("frame1");
+    cd(frame);
+    
+    swich back with cd(); also support switch like cd("#frame1");
+    
+    + helper commands 
+    $(), return the first element that match equivalent to document.querySelector 
+    $$(), looks up a css selector string return a list of DOM nodes, similar to document.querySelectorAll() 
+    $0, current inspected element in the page 
+    $_, the result of last expression from 39+ 
+    $x(), evalues an xpath and returns an array of matching nodes 
+    $keys(), given an object returns a list of the keys or property naems on that object, shortcut for Object.keys 
+    values(), a list of values 
+    clear(), clear the console output 
+    inspect(), open the object inspector for that object 
+    pprint(),
+    help(), displays help text 
+    cd(), change evaluation context to a different iframe 
+    copy, copy the argument to the clipboard, if argument is a DOM lement then its outerHTML is copied otherwise JSON.stringify is called 
+    clearHistory, remembers the commands you've typed 
+    
+
+- addon debugger, about:debugging page in firefox 
+    + reference https://developer.mozilla.org/en-US/Add-ons/Add-on_Debugger
+    
+    + debugging chrome: and about: pages in normal debugger from 37+
+    
+- debugging content script, in multiprocess firefox you can't use browser toolbox to attach content script. it will be listed in the content process which run scripts loaded from the web pages. 
+
+To debug it need the Browser Content Toolbox which attach the developer tools to the browser's content process after content script loaded it will be listed 
+
+- debugging popup 47+ 
+    + this a three steps process 
+    disable autohide for panels, the icon looks like four little squires in the developer toolbox 
+    open the popup, select the popup frame, the document url will like moz-extension://<some-uuid>/path/to/your-popup.html
+    select the document containing the popup 
+    
+- add-on debugger is need development for the future uses 
+    + reference, https://developer.mozilla.org/en-US/Add-ons/Add-on_Debugger
+    
+    + have three parts 
+    javascript debugger 
+    console 
+    scratchpad 
+    
+- console api 
+https://developer.mozilla.org/en-US/docs/Web/API/Console
+    + timer 
+    + custom css 
+    + group 
+    
+    
+# Content security policy 
+- CSP, applied to them by default,
+- default content security policy, https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Content_Security_Policy#Default_Content_Security_Policy
+
+for webextension
+"script-src 'self'; object-src 'self';"
+    + only load <script> and <object> resources that are local to the add-on 
+    + add-on is not allowed to evaluate strings as javascript
+    + inline javascript is not executed 
+    
+- location of script and object resources 
 
 
+# web-ext command 
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/WebExtensions/web-ext_command_reference
+
+- command 
+run 
+sign 
+
+- global options 
+| --artifacts-dir, a, specifies a particular directory to save artifacts in, eg the .zip file 
+| --help, -h 
+| --source-dir, -s 
+| --verbose, -v 
+| --version 
+
+- setting option evironment variables 
+take the option name 
+remove the two dashes 
+convert the remaining dashes to underscores 
+capitalize the letters 
+prefix the result with $WEB_EXT_ 
 
 
+# Chrome incompatibilities 
+- reference 
+https://developer.mozilla.org/en-US/Add-ons/WebExtensions/Chrome_incompatibilities
 
 
+# Chrome registration 
+- chrome is the set of user interface elements of the application window that are outside the window's content area such as toolbar, menu bar, progress bar and window title 
+
+mozilla locates and read the root chrome.manifest file for extensions and themes 
+
+- three types of provider 
+content 
+locale 
+skin 
+
+- the chrome registry, this is used in addon sdk or legacy extensions. provide mappings from chrome packages names to the physical location of chrome packages on disk 
+
+- manifest instructions 
+comments, start with '#'
+
+manifest, this will load a secondary manifest file, which could be used to seperate component 
+
+binary-component, register and use a binary component 
+binary-component components/mycomponent.dll [flags]
+
+interfaces, to load interface info fraom a typelib file produced by XPIDL
+
+component CID implement an XPCOM component in javascript 
+component {00000000-0000-0000-0000-000000000000} components/mycomponent.js [flags]
+
+contract, maps a contract id to the classid for a specific implementation 
+
+category, register a entry category manager 
+
+content, will register a location to use when resolving the uri chrome://packagename/content/... 
+content packagename uri/to/files/ [flags]
+
+local, a local package is registered with the line, localname is usually a plain language identifier such as "en" or a language-country identifier "en-US"
+locale packagename localename uri/to/files/ [flags]
+
+skin, register a skin package retrieve by chrome://packagename/skin/...
+
+overlay, xul overlays are registered with the following syntax 
+overlay chrome://URI-to-be-overlaid chrome://overlay-URI [flags]
+
+style, custom css which will be applied to a chrome page 
+style chrome://URI-to-style chrome://stylesheet-URI [flags]
+
+override some cases an extension or embedder amy wish to override a chrome file provide by the application or xulrunner. override are not recursive, the path in overridden file is relative to the overridden path not the original one 
+override chrome://package/type/original-uri.whatever new-resolved-URI [flags]
+
+resource, aliases can be created using the resource instruction 
+resource aliasname uri/to/files/ [flags]
+
+- manifest flags 
+    + appliaction = app-id 
+    + appversion=version >=, <=...
+    + platformversion=version >=, <=...
+    + contentaccessible, chrome content can no longer be referenced from within <img>, <script> or other elements contained in or added to content that was loaded from an untrusted source. this flag is used to explicit allow this reference 
+    
+    content packagename chrome/path/ [contentaccessible=yes]
+    + os=winnt/Darwin, used to specify features for different os 
+    https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/OS_TARGET
+    
+    + abi, a component is only compatible with a particular api 
+    
+    + platform, platform specific package 
+    
+    + process, in electrolysis registrations can be set to only apply in either the main process or any content processes 
+    
+    + xpcnativewrappers, Chrome packages can decide whether to use the XPCNativeWrapper security mechanism to automatically protect their code against malicious content that they might access. See Safely accessing content DOM from chrome for details.
+    
+    + remoteenabled, in multiprocess firefox the give chrome uri always be loaded into the chrome process, if you set the remoteenabled, then the page will be loaded in the same process as the browser that loaded it 
+    
+    + remote required, In multiprocess Firefox, the default is that a given chrome: URI will always be loaded into the chrome process. If you set the "remoterequired" flag, then the page will always be loaded into a child process:
+
+- instructions supported in bootstrapped add-ons 
+manifest 
+content 
+local 
+skin 
+override 
+
+- debugging a chrome manifest file 
+- old-style content.rdf manifest 
+- offcial reference for toolkit api 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Firefox webextension release note reference
+- ref, https://blog.mozilla.org/addons/2016/06/09/webextensions-for-firefox-49/
 
 
 
