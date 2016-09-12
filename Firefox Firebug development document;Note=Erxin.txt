@@ -71,12 +71,1099 @@ this is implemented based on the firefox's built-in javascript debugger
     
     + remote debugging protocol stream transport, https://wiki.mozilla.org/Remote_Debugging_Protocol_Stream_Transport
     
+    bulk data 
+    
+    the transport is implemented in firefox which is the base of Firefox built-in javascript debugger 
+    
+    mozilla debugging protocol is specification in terms of packets exchanged between client and serer. The packet is either a JSON text or a block of bytes ("Bulk data" packet)
+    
+    this document describe mozilla remote debugging protocol stream transport, a layer suitable for carrying mozilla debugging protocol pakets 
+    
+        * packets, transport requires no intial handshake or setup, no shutdown exchange, the first bytes on the stream in each direction are those of the first packet, json/bulk data 
+        
+        * json packets 
+        length:JSON 
+        length is a series of decima ascii digits, json is a well-formed json text encoded with utf-8 
+        
+        * bulk data packets 
+        bulk actor type length:data 
+        
+        the keyword bulk is encoded in ascii the spaces are always exactly one ascii space 
+        actor is a sequence of unicode characters, encoded in utf-8 containing no spaces or colons 
+        type is a sequence of unicode characters, encoded in utf-8 containing no spaces or colons 
+        length is a sequence of decimal ascii digits 
+        data is a sequence of bytes whose length is length interpreted as a number 
+        
+        actor names are defined in the remote debugging protocol. 
+        
+        * stream requirements 
+        it must be transparent
+        it must be reliable 
+        it must be ordered, bytes are received in the same order they are transmitted 
+    
     + custom output in the web console, https://developer.mozilla.org/en-US/docs/Tools/Web_Console/Custom_output
 
 
+# Firebug internals 
+- refer http://getfirebug.com/wiki/index.php/Firebug_Internals
+- resources 
+    + best place to learn, http://www.softwareishard.com/blog/category/firebug/
+extending tutorial 
+    + extending firebug, http://www.softwareishard.com/blog/firebug-tutorial/extending-firebug
+    + firebug api, http://getfirebug.com/developer/api/
+    + jsd, the mozilla c++ code that supports javascript debugging features in firebug 
+    http://getfirebug.com/wiki/index.php/Jsd
+    
+    + jsClassName values of the javascript scope jsClassName 
+    
+- source 
+firebug/extension, contains firebug source 
+firebug/tests/fbtest/, firebug test harness 
+firebug/tests/content/, fbtest suite 
+lite/, firebug lite for non firefox browsers 
+
+- overview of firebug 
+ui is a xul wrapper around html content in the two panels, the html content is all dynamically created from templates which called "domplate"
+
+architecturally firebug is a model-view-controller system with firefox dom being the model and hte xul/html content is the view, the controller is the bulk of firebug code 
+
+- development setup 
+    + fetch code from github 
+    + create new firefox profile 
+    + in your  git repo folder finding the install.rdf for firebug, e.g firebug\extension, copy the full path to extension folder 
+    + Create a new file named "firebug@software.joehewitt.com" 
+    + open the created filr in a test editor, paste the path you copied above into it 
+    + restart firefox with the new created profile 
+    
+- set some useful preferences, javascript.options.strict = false 
+- launch firefox with chromedebug 
+| $firefox.exe -jsconsole -p firebug -no-remote
+| 
+| -jsconsole, brings up error console 
+| -p profile 
+| -no-remote, allows multiple firefox instances to run at the same time 
+| -purgecaches, needed for firefox 4.0+
+| 
+
+- modules and context
+every web page being debugged by firefox has only one context which contain all meta-data about the page 
+web page window and the context are firebug modules at each stage of the page's lifetime 
+each module examines the page and places in the context 
+the modules should have no internal state related to any pages, all state should be set in the context 
+
+every firefox browser.xul ChromeWindow creates one instance of every module
+
+- panels, are view-controllers. they manage the content in the html panels, panels are created on demand by firebug 
+
+on creation they are given a document and a context 
+
+every firefox dom window can cause at most one panel instance. a firebug extension will implement one panel 
+
+when a panel is selected 'show' is called; the panel activates element of the toolbar above the panel content area. 'hide' is called on when it is deselected 
+
+- reps, representations, object displayable in firebug are mapped into "FirebugReps", system of objects 
+
+FirebugReps.Element is how DOM element are rendered 
+
+- components er modules, deep under the visible UI are firebug's components. non-visual code interacting with the entire firefox application. 
+
+firebug-service.js is the firebug adapter for firefox's javascript debugging service jsd 
+
+- scope, various parts of firebug source code  compile in various 'scope', the container of symbols that can be bound into functions at compile time 
+
+here are five exterior scopes to understand, browser.xul, firebug.xul, BackstagePass, FunkyEvent and Web page.
+
+most firebug source is compiled inside of 
+with(FBL){
+    ...
+}
+
+html windows inside of the main and side panels of the firebug UI are themselves each a scope 
+
+brower.xul, firefox outer window scope, firbug overlays browser.xul to show the UI the file browserOverlay.xul both adds the XUL tag to create firebug ui and it adds script tags that cause firebug source to be compiled into the 'window' object of browser.xul. there is on firebug object in browser.xul 
+
+firebug.xul, the firebug detached or new window scope. when firebug is detached from firefox, open in a new or separate window, the new window has its own scope. in that scope a firebug script tag compiled to create a connection back to the original browser.xul. chrome.js is unique to each top level window, but the firebug object used by the detached window is the object of the parent browser.xml 
+
+BackStagePass, the scope of components is separate from any window, it is not used for share data 
+
+FunkyEvent, in some rare cases an event or setTimeout handler created by firebug will run and the functions of lib will not be available unless you explicitly say "FBL", we don't understand why this happens 
+
+web page, the content of consoleInject.js and commandLineInjected.js are copied into webage and thus they compile into the scope of the page to implement the window.console object and the command line evaluator 
+
+- Domplate, is a template for creating web content, http://getfirebug.com/wiki/index.php/Domplate
+
+- Windows, have at least 5 meaning 
+    + the user interface rectangle visible throught the OS window management 
+    + the top level nsIXULWindow displaying browser.xul 
+    + sub-windows of browser.xul 
+    + the nsIDOMWindow objects containing web pages 
+    + sub-windows of the web page, eg iframes 
+    
+in the most of time, firebug refers to the last two. in most of the code 'window' refers to browser.xul, do not use this variable. only chrome.js should use 'window'. often firebug functions pass 'win' which refer to the nsIDOMWindow containing the web page. if you want to see the javascript variables in the web page the way the web page sees them use. win.wrappedJSObject, be careful not add functions to this object, check http://getfirebug.com/wiki/index.php/Using_win.wrappedJSObject
+
+- how are the xul files used? 
+browserOverlay.xul, puts firebug into the bottom of the browser b overlay on to firefox's browser.xul 
+firebug.xul, puts firebug into its own window 
+firebugOverlay.xul, overlays browserOverlay.xul or firebug.xul to add placement-independent features by XUL 
+
+    + more detail about firefox overlay, http://getfirebug.com/wiki/index.php/Firebug_Overlays
+    
+- how are panels created 
+extend Firebug.panel 
+add methods 
+use this.context for context dependencies 
+add ui to this.panelNode as html 
+learn about domplate to create the html 
+registerPanel 
+
+- how does debugging work? 
+http://getfirebug.com/wiki/index.php/Chromebug
+
+- how to use fbtrace, http://getfirebug.com/wiki/index.php/FBTrace
+
+- the entry point 
+    + firefox starts, loads its browser.xul 
+    + firefox reads firebug extension directory under profile, finds chrome.manifest sees an overlay 
+    + firefox overlays browser.xul with chrome://firebug/content/browserOverlay.xul 
+    + browserOverlay.xul calls in chrome://firebug/content/firebugOverlay.xul 
+    + firebugOverlay.xul calls in chrome://firebug/content/firebug.css 
+    + firebug.css calls in -moz-binding, url("chrome://firebug/content/bindings.xml#initializer")
+    + in binding.xml the first call into javascript is FirebugChrome.panelBarReady(this);
+    
+you can learn more about the rest of the action by setting fbtrace panel options INITIALIZE and PANELS 
+
+
+# Reference XPCOM 
+- refer, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM
+
+
+# Firefox Mozilla Debugging doc 
+- refer, https://developer.mozilla.org/en-US/docs/Mozilla/Debugging
+- debugging javascript, https://developer.mozilla.org/en-US/docs/Mozilla/Debugging/Debugging_JavaScript
+
+- 
+
+# chrome.manifest refer https://developer.mozilla.org/en-US/docs/Chrome_Registration#The_Chrome_Registry
+
+# Xray vision 
+- refer, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Xray_vision
+
+# Firefox commandline options 
+- refer, https://developer.mozilla.org/en-US/docs/Mozilla/Command_Line_Options#-foreground
+
+# Using win.wrappedJSObject 
+- use |win.wrappedJSObject.a| where |win| is the Web page's nsIDOMWindow
+- Any object obtained via |wrappedJSObject| is a live Web page object. Hackers can try to use Firebug's access of these objects to attack users.
+- accessing content object in chrome privileged scripts 
+    + read properteis from content objects
+    + safely set properties on cnotent object to primitive values
+    + set properteis on content object to object values, all object/function reachable via the object value would be visible to content 
+    + don't pass anything coming from content to any place that treats strings as javascript 
+    + don't want to allow content to directly call chrome-previlege functions unless they have been _very_  carefully vetted
+
+- running chrome scripts in content objects 
+read content object 
+assign content objects to content object 
+call dom platform methods and pass content objects to chrome object properties 
+assign strings obtained from chrome objects to content objects 
+avoid passing content objects into chrome functions unless you ensure that you don't violate the rest of the guidelines 
+beware that chrome functions can close over chrome objects 
+
+
+# ChromeBug 
+- it is the firebug source adapted to work on the entire chrome level of xul. it only works on xul based app 
+- install the latest chromebug 
+http://getfirebug.com/releases/chromebug
+
+- running chromebug 
+$ firefox.exe -chromebug 
+
+- basic, The Console, HTML, CSS, Script, DOM tab row shows the data for the nsIDOMWindow selected by the "context" menu. most of time you can use context menu to explore the content 
+
+- tools, Gijs Kruitbosch's chrome list http://www.gijsk.com/mozilla/chromelist/
+Browse all of chrome:// as if it were a directory tree
+Quickly find out what manifest registered a certain file
+Save chrome files to a local file.
+Copy URLs and paths to the files.
+Find files in LXR, or in some other source browsing system if you configure the hidden pref for the URL
+Open files in the browser, or view their source
+List possible problems with the Chrome Manifests in use in the Error Console.
+
+
+# Jsd, implementation of the javascript interface for debugging javascript
+- source, http://mxr.mozilla.org/mozilla-central/source/js/jsd/
+- files, jsdIDebuggerService.idl 
+
+definitions of the entry points, javascript calls these, for example code see firebug's firebug-service.js 
+    + example how script create hook 
+jsd.scriptHook = {
+    onScriptCreated: hook(this.onScriptCreated),
+    onScriptDestroyed: hook(this.onScriptDestroyed)
+};
+
+jsd_xpc.cpp, implementations of the jsdIDebuggerService interfaces, defines the jsdService object that receives the get/set calls for hooks from javascript 
+
+jsdService::SetScriptHook implements the setter for jsdIDebuggerService.scriptHook
+
+static void jsds_ScriptHookProc (JSDContext* jsdc, JSDScript* jsdscript, JSBool creating, void* callerdata)
+
+jsdebug.h 
+
+gulue between jsd_xpc.cpp and c code. the header file defines c types callable by the c++ functions in jsd_xpc.cpp 
+typedef void (* JSD_ScriptHookProc)(JSDContext* jsdc, JSDScript* jsdscript, JSBool creating, void* callerdata);
+
+also the header declares the c functions to accept these hook calls 
+JSD_SetScriptHook(JSDContext* jsdc, JSD_ScriptHookProc hook, void* callerdata);
+
+jsdebug.c 
+implementations of the JSD_function, they just cal jsd_ function declared in jsd.h 
+JSD_PUBLIC_API(JSBool)
+JSD_SetScriptHook(JSDContext* jsdc, JSD_ScriptHookProc hook, void* callerdata)
+{
+    JSD_ASSERT_VALID_CONTEXT(jsdc);
+    return jsd_SetScriptHook(jsdc, hook, callerdata);
+}
+
+jsd.h delcarations of the jsd_functions called by jsdebug.c 
+extern JSBool
+jsd_SetScriptHook(JSDContext* jsdc, JSD_ScriptHookProc hook, void* callerdata);
+
+jsd_scpt.c, definitions of jsdIScript focused functions of jsd.h 
+JSBool
+jsd_SetScriptHook(JSDContext* jsdc, JSD_ScriptHookProc hook, void* callerdata)
+{
+    JSD_LOCK();
+    jsdc->scriptHook = hook;
+    jsdc->scriptHookData = callerdata;
+    JSD_UNLOCK();
+    return JS_TRUE;
+}
+in this file the call to the hook in the function jsd_NewScriptHookProc 
+hook = jsdc->scriptHook; 
+...   
+if( hook )
+    hook(jsdc, jsdscript, JS_TRUE, hookData);
+    
+jsd_high.c support for creating jsd wrappers around the js context 
+JS_SetNewScriptHookProc(jsdc->jsrt, jsd_NewScriptHookProc, jsdc);
+
+jsd/jsdbgapi.cpp part of the js engine, we store the hook pointers 
+ JS_PUBLIC_API(void) 
+ JS_SetNewScriptHook(JSRuntime *rt, JSNewScriptHook hook, void *callerdata) { 
+      rt->globalDebugHooks.newScriptHook = hook;      
+      rt->globalDebugHooks.newScriptHookData = callerdata;  
+ }
+ 
+- relationship to js engine, at avrious points the js engine will call functions that may result in debugger hook calls 
+
+    + example js_CallNewScriptHook is called five places 
+     jsscript.cpp script_compile_sub, the script comes from JSCompiler::compileScript.
+    jsscript.cpp, script_thaw, the script come from js_XDRScript()
+    jsscript.cpp js_NewScriptFromCG, the script comes from js_NewScript();
+    jsxdrapi.cpp js_XDRScript, the script is passed in (see case #2 above).
+    jsfun.cpp js_XDRFunctionObject, the script seems to come from js_XDRScript in case #4? These are called on startup ReadScriptFromStream().
+
+- platform callers of javascript compile functions 
+
+- platform callers of javascript compile functions script tag 
+    + seting a breakpoint on js_CallNewScriptHook hits when we compile a script tag 
+    
+    script_compile_sub 
+    script_thaw the jsFunction argument is null 
+    js_NewScriptFromCG(JSContext *cx, JSCodeGenerator *cg) 
+    
+    createHiddenWidnow 
+    chrome://browser/content/sanitize.js 
+    
+    
+# Remote Debugging Protocol 
+- this protocol is implemented in firefox and it is the basis of firefox's built-in javascript debugger. check the debugger doc https://github.com/jimblandy/DebuggerDocs draft and discuss revisions
+
+The protocol provides a unified view of JavaScript, DOM nodes, CSS rules, and the other technologies used in client-side web applications
+ 
+- allows a debugger to connect to a browser, inspect javascript threads to watch. provides a unifed view of javascript DOM nodes, css rules 
+
+all communication between debugger(client) and (server) is in the form of JSON object 
+
+the protocol operates at the javascript level, not at the c++ or machine level, assumes that the javascript impelmentation itself is healthy and reponsive 
+
+- general conventions 
+- actor, it is on the server that can exchange json package with the client, every package from client specify the actor to which it is directed and package in server indicates which actor sent it 
+
+server have a root actor, it used to respresent info of browsers, mail reader, enumerate tabs, chrome etc. each of these is represented by an actor to which requests can be addressed. Both include artifacts of the program being debugged and debugging machinary such as javascript object, stack frames, breakpoints and watchpoints 
+
+actor names are json string without space or colon, name of root actor is "root"
+
+we use term child mean direct child, parent for direct parent, use ancestor and descendent for looser relationships 
+
+actor hierarchy does not correspond to any particular hierarchy appearing in the debuggee. actor is arranged like a tree in debugger have root element 
+
+the term of actor is portal from https://wiki.mozilla.org/IPDL
+
+- packets data send in bi-direction byte system between client and server which is called package with the form 
+
+client to server 
+ { "to":actor, "type":type, ... }
+if actor not exist then server will response 
+ { "from":actor, "error":"noSuchActor" }
+actor may response error package 
+ { "from":actor, "error":name, "message":message }
+ actor receive a package whose type it does not recognize will replay 
+  { "from":actor, "error":"unrecognizedPacketType", "message":message }
+ 
+ additional properties may be present depend on type 
+ 
+every package from server with the form 
+ { "from":actor, ... }
+
+client should ignore unrecognize package 
+
+- common patterns of actor communication, most actor follows 
+    + request/reply, Each packet sent to the actor ("request") elicits a single packet in response ("reply")
+    
+    
+    + Request/Reply/Notify: Like Request/Reply, but the actor may send packets that are not in response to any specific request ("notification"), perhaps announcing events that occur spontaneously in the debuggee
+    
+    the actor should prevent flood notify the client 
+
+    + some actor require more complicated rules, For example, the set of packets accepted by a Thread-like actor depends on which one of four states it occupies.
+
+
+- grips is a json value that refer to a specific javascript value in the debuggee. grips appear anywhere an arbitrary value from the debuggee such as stack frames, object property lists, lexical environments, paused packets, etc
+
+grip will send mutable values as reference to debugger
+
+grip form 
+value 
+
+string, number, boolean 
+{"type": "null"}
+
+use typeof(grip) == "object" to decide whether the grip is simple or not 
+
+undefine value will present as 
+{ "type":"undefined" }
+ { "type":"Infinity" }
+ { "type":"-Infinity" }
+ { "type":"NaN" }
+ { "type":"-0" }
+
+ represent a javascript object whose class is className
+{ "type":"object", "class":className, "actor":actor }
+
+if the class if "function" the grip may have addtional properties 
+ { "type":"object", "class":"Function", "actor":actor,
+   "name":name, "displayName":displayName,
+   "userDisplayName":userDisplayName,
+   "url":url, "line":line, "column":column }
+
+- objects, while a thread is paused the client can send requests to the actor appearing in object grips to examine the objects they represent in more detail 
+
+- property descriptors are used to describe client property with the form 
+{ "enumerable":enumerable, "configurable":configurable, ... }
+
+it is defined in EMCScript 5 
+
+where getter and setter are grips on the property's getter and setter functions. These may be { "type":"undefined" } if the property lacks the given accessor function
+
+a safe getter value descriptor provides a value that an inherited accessor 
+ { "getterValue": value, "getterPrototypeLevel": level,   "enumerable":enumerable, "writable":writable}
+where value is a grip on the value the getter returned, level is the number of steps up the object's prototype chain one must take to find the object on which the getter appears as an own property. If the getter appears directly on the object, level is zero.  The writable property is true if the inherited accessor has a setter, and false otherwise. 
+
+- finding an object's prototype and properties 
+...
+the wiki is not completed yet 
+
+- evaluating source-language expressions 
+ { "to":thread, "type":"clientEvaluate", "expression":expr, "frame":frame }
+ 
+- thread pauses to report an interesting event to the client 
+{ "from":thread, "type":"paused", "actor":pauseActor, "why":reason,
+   "currentFrame":frame, "poppedFrames":[poppedFrame...] }
+   
+- detaching from a thread 
+{ "to":thread, "type":"detach" }
+ 
+ 
+ 
+
+# Firefox developer tools 
+- refer, https://developer.mozilla.org/en-US/docs/Tools
+- about:debugging, url of firefox is a dashboard to debug add-ons and workers 
+- debugger api, https://developer.mozilla.org/en-US/docs/Tools/Debugger-API
+
+# Firefox Debugger API 
+- Both Firefox’s built-in developer tools and the Firebug add-on use Debugger to implement their JavaScript debuggers.
+
+
+- jsdebugger reference it is the Debugger API module code refer, https://dxr.mozilla.org/mozilla-central/source/js/ductwork/debugger/jsdebugger.jsm
+
+https://dxr.mozilla.org/mozilla-central/source/js/ductwork/debugger
+
+it is the implementation of Debugger API 
+
+- refer, https://developer.mozilla.org/en-US/docs/Tools/Debugger-API
+- General conventions  for debugger API
+    + instances and prototypes are extensible
+    + properties are configurable and writable 
+    + prefer inherited accessor properteis to own data properties
+    
+- debuggee values, means either a primitive value or debugger.Object instance 
+    + primitive values are passed freely between debugger and debuggee 
+    + objects received from the debuggee(including host objects like dom element) are fronted in the debugger by debugger.Object instances, which provide reflection-oriented methods 
+    
+    + debugger's object may be passed to debuggee, but it is the referent not the instance itself 
+    
+- debuggee code, code evaluated in the scope of a debuggee global object 
+    + debuggee frame is a frame running debuggee code 
+    + debuggee function is a function that closes over a debuggee global object, the function's code is debuggee code 
+    + debuggee environment is an environment whose outermost encoding environment is a debuggee global object 
+    + debuggee script is a script containing debuggee code 
+
+- completion values, when a debuggee stack frame completes it return a completion value with following form 
+{return:value}
+{yield:value}
+{throw:value}
+null 
+
+If control reaches the end of a generator frame, the completion value is { throw:stop } wherestop is a Debugger.Object 
+
+- resumption values debugger-provided handler functions may return a value which is called resumption values with form 
+{return:value}
+undefined, debugger will continue execution normally
+{yeild:value}, as the next value of the current frame, value is debuggee value
+{throw:value}
+null 
+
+debugger instance have a uncaughtException to indicate the debuggee error 
+
+- timestamps are expressed in units of milliseconds. the resolution of timestamps is generally greater than milliseconds 
+
+- the debugger.debuggeeWouldRun exception, to protect the debugger's integrity, only methods whose stated purpose can inpsect the debuggee's state which called invocation functions 
+
+for normal functions if they normal operation would cause debuggee code to run then an exception Debugger.DebuggeeWouldRun will be thrown 
+
+the exception may have a cause property for providing more detail info, the values would be 
+"proxy", would cause a proxy handler to run 
+"getter", would cause a getter to run 
+"setter"
+undefine, if the system does't know the reason 
+
+- debugger client api, refer, https://wiki.mozilla.org/Debugger_Client_API have several code example 
+
+this is the API supplied by the firefox developer tools 
+
+- debugger instances and shadow objects, various shadow objects that make up the debugger API 
+    + debugger object, reflection-oriented api to prevent debugger accidentally invoking getters, setters, proxy traps, ...
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Object
+    
+    + debugger.Script, represent a block of js code either a function body, top level script. it can set breakpoints 
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Script
+    
+    + debugger.Frame, represents a running stack frame, you can walk the stack and find the frame's script and environment and set onStep and onPop handlers on frames 
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Frame
+    
+    + debugger.Environment belong to a running stack frame, caputured by a function closure or global object's properties 
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Environment
+    
+    + debugger.Source which represent a javascript compilation unit, it can furnish a full copy of its source code, and explain how the code entered the system, whether via a call to eval, a <script> element, or otherwise
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Source
+    
+    + debugger.Memory, contain debuggee's memory use 
+    https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Debugger.Memory
+shadow object are unique per debugger, example: debugger.Object is one to one mapping to debuggee.Object 
+
+- examples 
+https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Tutorial-Debugger-Statement
+https://developer.mozilla.org/en-US/docs/Tools/Debugger-API/Tutorial-Allocation-Log-Tree
+
+
+
+# Writting websocket server 
+- refer, https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+
+
+
+# How to build a firebug extension 
+- part 1 http://labs.enonic.com/articles/how-to-build-firebug-extensions-part-1-getting-started
+
+- tutorial, http://www.softwareishard.com/blog/extending-firebug/
+
+
+# firebug.next which will be released with firefox 49 and merged developer tool and firebug together 
+- refer, https://github.com/firebug/firebug.next.git
+
+
+
+# firebug github working group 
+- refer, https://github.com/firebug/
+
+- devtools extension examples 
+https://github.com/firebug/devtools-extension-examples
+
+    + netanalysis, show how to perform custom analysis of data collected by the network panel, checkout how to get all data as har object 
+    
+    har 1.2 spec, http://www.softwareishard.com/blog/har-12-spec/
+    
+    https://github.com/firebug/devtools-extension-examples/tree/master/NetAnalysis
+    
+    
+# DevTools/Hacking 
+- refer 
+https://wiki.mozilla.org/DevTools/Hacking
+https://wiki.mozilla.org/DevTools#Internal_Technical_Documentation
+https://wiki.mozilla.org/Debugger_Client_API
+
+- build 
+    + latest code 
+$ hg clone http://hg.mozilla.org/integration/fx-team
+
+    + released, most of the time the central is fine 
+$ hg clone http://hg.mozilla.org/mozilla-central
+
+    + run 
+$ mach build 
+
+- run 
+$ ./mach run 
+
+or 
+$ ./mach run -P development
+
+- incremental builds 
+$ ./mach build faster
+
+if changed c++ files then need use 
+ $ ./mach build binaries
+ 
+    + do a clobber build which similar to "make clean"
+ $ ./mach clobber
+ $ ./mach build
+ 
+- configuring your dev profile 
+    + enable remote debugging and the browser toolbox 
+    enable chrome debugging 
+    enable remote debugging 
+    
+    + disable the remote debuging prompt 
+    devtools.debugger.prompt-connection
+    
+    to false in about:config 
+    
+    + enabling devtools logging, in about:config search for devtools you can see some of them 
+    browser.dom.window.dump.enabled = true
+    devtools.debugger.log = true
+    devtools.dump.emit = true
+       
+    + enable devtool assertions add your .mozconfig 
+    ac_add_options --enable-debug-js-modules
+    
+     const { assert } = require("devtools/shared/DevToolsUtils");
+     // ...
+     assert(1 + 1 === 2, "I really hope this is true...");
+    
+    It also enables the "debug" builds of certain third party libraries, such as React. 
+    
+- developer tools directories overview 
+devtools/shared, code for devtols remote debugging protocol client 
+devtools/locals, strings used in either devtools server only or shared with both client and server 
+devtools/server, code for the devtools remote debugging protocol server and transport layer 
+devtools/client, front end user interface for our tools 
+devtools/client/locales, strings used in the devtools client(front-end ui)
+devtools/client/themes, css and images used in the devtools client (front-end ui)
+
+- various devtools resource types 
+    + javascript module, javascript modules are installed by our build system using moz.build files, moz.build file must live in the same directory as the files to be installed 
+    
+    following these steps ensures that require() and resource:// paths map directly to locations in the source tree 
+    
+    File: /devtools/server/actors/layout.js
+    In /devtools/server/actors/moz.build:
+    DevToolsModules(
+        'layout.js'
+    )
+    
+    + require(), devtools js code is in the form of commonjs modules that loaded with require() 
+    
+    example: 
+    File: /devtools/server/actors/layout.js
+        * uses with 
+     loader.lazyRequireGetter(this, "layout", "devtools/server/actors/layout") 
+     
+     or 
+     
+     require("devtools/server/actors/layout")
+    
+    + Cu.import(), some older devtools js module use the Gecko javascript code module https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/Using
+    with extension .jsm, this will be moved away in the future. to import existing one we need to use Cu.import with resource://
+    
+    detail:
+    /devtools/client/<X>: resource://devtools/client/<X>
+    /devtools/server/<X>: resource://devtools/server/<X>
+    /devtools/shared/<X>: resource://devtools/shared/<X>
+
+    example:
+    
+    File: /devtools/shared/Loader.jsm
+    Usage:
+        Cu.import("resource://devtools/shared/Loader.jsm")
+
+    
+    File: /devtools/client/framework/gDevTools.jsm
+    Usage (prefer lazy in most cases):
+        loader.lazyImporter(this, "gDevTools", "resource://devtools/client/framework/gDevTools.jsm")
+        Cu.import("resource://devtools/client/framework/gDevTools.jsm")
+
+    + chrome content, much of the devtools front-end/ui is currently loaded using chrome:// meaning browser chrome as in the UI. relation to the chrome browser. it allow thoses files to have privileged access to platform internals.  this will be removed in the future 
+    
+    chrome content is typically used xul, html and js file 
+    
+        * packaging, add a new file that should be loaded via chrome://, you need to update a manifest file at /devtools/client/jar.mn so that it's packaged correctly. 
+    
+       content/<X> (<X>)
+    
+        Example:
+
+        File: /devtools/client/webaudioeditor/models.js
+        Entry: content/webaudioeditor/models.js (webaudioeditor/models.js)
+
+        * usage almost match their source tree path, with one difference the segment client is replaced by content this is requirement of the chrome:// protocol handler 
+    
+        Example:
+
+        File: /devtools/client/webaudioeditor/models.js
+        Usage: chrome://devtools/content/webaudioeditor/models.js
+
+    + chrome theme 
+        * packaging ia chrome:// (such as a new CSS file for a tool UI), you need to update a manifest file at /devtools/client/jar.mn so that it's packaged correctly. 
+    
+         skin/<X> (themes/<X>)
+    
+        Example:
+
+        File: /devtools/client/themes/images/add.svg
+        Entry: skin/images/add.svg (themes/images/add.svg)
+
+        * usage, the client is replaced with content 
+        Example:
+
+        File: /devtools/client/themes/images/add.svg
+        Usage: chrome://devtools/skin/images/add.svg
+
+    + localization We currently have two sets of localized files:
+
+    devtools/client/locales: Strings used in the DevTools client (front-end UI)
+    devtools/shared/locales: Strings used in either the DevTools server only, or shared with both the client and server
+
+    ...
+    
+- devtools automated tests, we use three suites of tests 
+    + xpcshell, unit test style of tests, no browser window, mostly testing API directly 
+    + mochitest-chrome, unit-test style of test, but with a browser window 
+    + mochitest-devtools, integration style of tests 
+    
+    + running devtools test 
+    $ ./mach test devtools/* 
+    
+    + xpcshell test 
+    $ ./mach xpcshell-test --tag devtools 
+    
+    run a specific test 
+     $ ./mach xpcshell-test devtools/path/to/the/test_you_want_to_run.js
+     
+    + chrome mochitests
+     $ ./mach mochitest -f chrome --tag devtools
+      $ ./mach mochitest devtools/path/to/the/test_you_want_to_run.html
+      
+    + devtools mochitests 
+     $ ./mach mochitest --subsuite devtools --tag devtools
+     $ ./mach mochitest devtools/client/<tool>
+     
+      $ ./mach mochitest devtools/client/debugger
+       $ ./mach mochitest devtools/client/path/to/the/test_you_want_to_run.js
+       
+- writing tests 
+    + follow the coding guide, https://wiki.mozilla.org/DevTools/mochitests_coding_standards
+    
+- finding documentation 
+    + source code search engine http://dxr.mozilla.org/mozilla-central/source/
+    + xul elements, gecko-specific api http://developer.mozilla.org/
+    + devtool document repo, https://dxr.mozilla.org/mozilla-central/source/devtools/docs
+    + others, https://wiki.mozilla.org/DevTools#Internal_Technical_Documentation
+    
+- making and submitting a patch 
+    + how to use mozilla version control, http://mozilla-version-control-tools.readthedocs.org/en/latest/hgmozilla/index.html
+    
+    + code standards https://wiki.mozilla.org/DevTools/CodingStandards
+    
+    + ESLint m to validate your code changes https://wiki.mozilla.org/DevTools/CodingStandards#JS_linting_with_ESLint
+    $ ./mach eslint --setup
+    
+    run 
+    $ ./mach eslint path/to/directory
+    
+    refer, http://eslint.org/
+    
+    
+    + how to submit a patch https://developer.mozilla.org/en-US/docs/Developer_Guide/How_to_Submit_a_Patch
+    
+    + review checklist https://wiki.mozilla.org/DevTools/Code_Review_Checklist
+    
+- coding standards 
+    + javascript https://wiki.mozilla.org/DevTools/CodingStandardss
+    + css https://wiki.mozilla.org/DevTools/CSSTips
+    + svg best practices 
+    https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/SVG_Guidelines
+    https://dxr.mozilla.org/mozilla-central/source/devtools/docs/svgs.md
+     
+- devtools api, https://developer.mozilla.org/en-US/docs/Tools/DevToolsAPI, the apis are about how to manipulate the devtool panel and add relative event listeners 
+
+
+# XPCOM, XUL extension references 
+- chrome.manifest chrome registration 
+https://developer.mozilla.org/en-US/docs/Chrome_Registration#The_Chrome_Registry
+
+- xpcom 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM
+
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface
+
+- javascript code module 
+https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules
+
+- mozilla projects doc
+https://developer.mozilla.org/en-US/docs/Mozilla
+
+- convert overlay to restartless (bootstrap)
+https://developer.mozilla.org/en-US/Add-ons/How_to_convert_an_overlay_extension_to_restartless
+
+- observer topics, this could be used with Services.obs.addObserver(documentWatcher, "document-element-inserted", false);
+https://developer.mozilla.org/en-US/docs/Observer_Notifications
+    + topics 
+    application startup/down 
+    browser 
+    documents 
+    windows 
+    io notifications 
+    http requests 
+    cookies 
+    download manager 
+    extension manager 
+    idle service 
+    computer sleep and wake 
+    login manager 
+    places 
+    session store 
+    private browsing 
+    bookmarks 
+    themes 
+    developer tools 
+    telemetry 
+    plugins 
+    message manager 
+    permission manager 
+    context menu 
+    
+
+
+
+# Code snippets
+- Tabbed Browser, Firefox's tabbed browser which is a global variable gBrowser
+    + refer, https://developer.mozilla.org/en-US/Add-ons/Code_snippets/Tabbed_browser
+    + multiple meaning for the word 'browser', the entire application firefox is called a browser 
+    
+    inside each tab is a browser, both in the common sense of a web page brwoser and the xul sense of a browser 
+
+    other meaning of browser is the tabbrowser element in firefof xul window 
+    
+    + getting access to the browser 
+    // gBrowser is only accessible from the scope of 
+    // the browser window (browser.xul)
+    gBrowser.addTab(...);
+    
+    gBrowser is only accessible after window is fully loaded 
+    
+    + from a sidebar 
+    var mainWindow = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+                       .getInterface(Components.interfaces.nsIWebNavigation)
+                       .QueryInterface(Components.interfaces.nsIDocShellTreeItem)
+                       .rootTreeItem
+                       .QueryInterface(Components.interfaces.nsIInterfaceRequestor)
+                       .getInterface(Components.interfaces.nsIDOMWindow);
+
+    mainWindow.gBrowser.addTab(...);
+    
+    + from a dialog
+    window.opener.gBrowser.addTab(...);
+    
+    //if the opener doesn't work, then you could get the most recent browser window using code 
+    var wm = Components.classes["@mozilla.org/appshell/window-mediator;1"]
+                   .getService(Components.interfaces.nsIWindowMediator);
+    var mainWindow = wm.getMostRecentWindow("navigator:browser");
+    mainWindow.gBrowser.addTab(...);
+    
+    + opening a url in a new tab 
+    // Add tab  
+    gBrowser.addTab("http://www.google.com/");
+
+    // Add tab, then make active
+    gBrowser.selectedTab = gBrowser.addTab("http://www.google.com/");
+    
+    + manipulating content of a new tab 
+    var newTabBrowser = gBrowser.getBrowserForTab(gBrowser.addTab("http://www.google.com/"));
+    newTabBrowser.addEventListener("load", function () {
+      newTabBrowser.contentDocument.body.innerHTML = "<div>hello world</div>";
+    }, true);
+    
+    + opening a url in the currect window/tab, there are method avaliable in chrome://browser/content/utilityOverlay.jsscript
+    openUILinkIn(...)
+    
+    + opening a url in an on demand tab 
+    
+    + closing a tab 
+    gBrowser.removeCurrentTab();
+    + chaning active tab 
+    gBrowser.tabContainer.advanceSelectedTab(1, true);
+    
+    + detecting page load 
+    
+    + notification when a tab is added or removed 
+    
+    + notification when a tab's attributes change 
+    
+    + notification when a tab is pinned or unpinned 
+    
+    + detecting tab selection
+    
+    + enumerating browsers 
+    var num = gBrowser.browsers.length;
+    for (var i = 0; i < num; i++) {
+      var b = gBrowser.getBrowserAtIndex(i);
+      try {
+        dump(b.currentURI.spec); // dump URLs of all open tabs to console
+      } catch(e) {
+        Components.utils.reportError(e);
+      }
+    }
+  
+- working with windows in chrome code 
+    + refer https://developer.mozilla.org/en-US/docs/Working_with_windows_in_chrome_code
+    + opening windows  
+    from a <script> in a window or an overlay 
+    var win = window.open("chrome://myextension/content/about.xul", 
+                          "aboutMyExtension", "chrome,centerscreen");
+
+    + from xpcom components and modules 
+    var ww = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+                       .getService(Components.interfaces.nsIWindowWatcher);
+    var win = ww.openWindow(null, "chrome://myextension/content/about.xul",
+                            "aboutMyExtension", "chrome,centerscreen", null);    
+                          
+    get window object from a document using document.defaultView 
+    
+    + content windows, When a XUL window contains a widget capable of displaying a page, such as <browser> or <iframe>, the document in that widget is, naturally, separate from the document of the chrome window itself. There also is a Window object for each sub-document, although there's no window in a common sense for the sub-document.
+    
+    The same holds for chrome windows opened inside a tab of <tabbrowser>. The elements above the chrome document opened in the tab are separate from your chrome document.
+
+    The following two subsections describe how to cross chrome-content boundaries in either way, i.e. accessing elements which are ancestors of your chrome document, or accessing elements which are descendants of your chrome document (but nevertheless in a different context).
+    
+    accessing content documents, browser.contentDocument to access that document and browser.contentWindow
+    
+    You should be aware of XPCNativeWrappers when working with untrusted content. With XPCNativeWrappers turned on (which is the default in Firefox 1.5+), your extension can safely access the DOM of the content document, but not the content JavaScript.
+    
+    refer, accessing content documents, https://developer.mozilla.org/en-US/docs/Working_with_windows_in_chrome_code#Accessing_content_documents
+    
+- interaction between priviledged and non-privileged pages 
+    + refere https://developer.mozilla.org/en-US/docs/Archive/Add-ons/Interaction_between_privileged_and_non-privileged_pages
+    
+    !!! one deperacated way to communicate with chrome from non privileged page 
+                          
+    + use document add event listener to pass the data 
+    
+    + this method id deperacated 
+    
+    + accessing a document in the sidebar 
+                          
+    ...
+    
+    + advanced data sharing 
+    using javascript code modules 
+    
+    using an xpcom singleton component 
+    
+    storing data in preferences 
+    
+    
+                          
+# Possible useful APIs 
+- get the debugger.frame object after hit the debugger statement 
+debugger.getNewestFrame(),                           
+                          
+                         
+# Firefox Developer Tools 
+- refer, https://developer.mozilla.org/en-US/docs/Tools
+## Creating 
+## Debugging 
+- page inspector 
+- console 
+- debugger 
+- network monitor 
+- storage inspector 
+- DOM property viewer 
+- developer toolbar 
+- 3d view 
+- eyedropper 
+- about:debugging 
+    + provide  a single page which you can attach the firefox developer tools to a number of debugging targets, at the moment it supports two main sorts of targets 
+    restartless add-ons 
+    workers 
+    
+    + opening the about:debugging page 
+        * from menu 
+        * use address about:debugging 
+        
+    + add-ons, supported basic bootstrapped, add-on sdk, webextensions 
+    the page enable load temporarily from disk 
+    connect the addon debugger to any restartless addons 
+    
+    connecting the add-on debugger 
+    
+    + The "Enable add-on debugging" button works by turning on the devtools.chrome.enabled and devtools.debugger.remote-enabled preferences
+    
+    both preferences must be true to enable add-on debugging, checking the box sets both preferences to true, and unchecking it sets them both to false 
+    
+    + loading a temporary add-on 
+    
+    updating a temporary add-on
+
+        * change files that are loaded on demand like content scripts or popups then changes are picked up automatically 
+        * if you change files are loaded the whole time, like background script, need reload or disable & re-enable 
+        * if your changes are only parsed at install time, like manifest.json, you will need to reload addon
+    
+        * about:debugging will supported remote debugging, which could be used for debugging on mobile device browsers 
+        
+    + workers, categorised as follows 
+        * all registered service workers
+        https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API
+        
+        A service worker is run in a worker context: it therefore has no DOM access, and runs on a different thread to the main JavaScript that powers your app, so it is not blocking. It is designed to be fully async; as a consequence, APIs such as synchronous XHR and localStorage can't be used inside a service worker.
+        
+        Service workers only run over HTTPS, for security reasons. 
+        
+        SharedWorkerGlobalScope, https://developer.mozilla.org/en-US/docs/Web/API/SharedWorkerGlobalScope
+        
+        * all registered shared workers 
+        https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker
+        
+        The SharedWorker interface represents a specific kind of worker that can be accessed from several browsing contexts, such as several windows, iframes or even workers.
+        
+        the shared worker required obey the same origin policy, https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy
+        
+        URL 	                                                                            Outcome 	Reason
+        http://store.company.com/dir2/other.html 	                Success 	 
+        http://store.company.com/dir/inner/another.html 	Success 	 
+        https://store.company.com/secure.html 	                    Failure 	Different protocol
+        http://store.company.com:81/dir/etc.html 	                Failure 	Different port
+        http://news.company.com/dir/other.html 	                Failure 	Different host
+        
+        * cross-origin network access
+        The same-origin policy controls interactions between two different origins, such as when you use XMLHttpRequest or an <img> element. These interactions are typically placed in three categories:
+        Cross-origin writes are typically allowed.
+        Cross-origin writes are typically allowed.
+        Cross-origin reads are typically not allowed, but read access is often leaked by embedding. For example you can read the width and height of an embedded image
+        
+        resources which may be embedded cross-origin
+        JavaScript with <script src="..."></script>. Error messages for syntax errors are only available for same-origin scripts.
+        CSS with <link rel="stylesheet" href="...">. Due to the relaxed syntax rules of CSS, cross-origin CSS requires a correct Content-Type header. 
+        images with <img>.
+        Media files with <video> and <audio>.
+        Plug-ins with <object>, <embed> and <applet>.
+        Fonts with @font-face. Some browsers allow cross-origin fonts
+        Anything with <frame> and <iframe>. A site can use the X-Frame-Options 
+        
+        JavaScript APIs such as iframe.contentWindow, window.parent, window.open and window.opener allow documents to directly reference each other. When the two documents do not have the same origin, these references provide very limited access to Window and Location objects
+        Access to data stored in the browser such as localStorage and IndexedDB are separated by origin. 
+        The browser will make a cookie available to the given domain including any sub-domains, no matter which protocol (http/https) or port is used. When you set a cookie, you can limit its availability using the Domain, Path, Secure and Http-Only flags. When you read a cookie, you cannot see from where it was set. 
+        
+        * CSRF, https://www.owasp.org/index.php/Cross-Site_Request_Forgery_%28CSRF%29
+        
+        * XSS, cross site scripting  https://www.owasp.org/index.php/Cross-site_Scripting_(XSS)
+        
+        * XSHM, cross site history manipulation, https://www.owasp.org/index.php/Cross_Site_History_Manipulation_(XSHM)
+        
+        * other workers, chrome workers, dedicated workers 
+        https://developer.mozilla.org/en-US/docs/Web/API/ChromeWorker, not standard 
+        https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#Dedicated_workers
+    
+- selecting iframes 
+- view source 
+
+## Mobile 
+## Performance 
+## Debugging the browser 
+## Extending the devtools 
+## Settings
+## Release Notes 
+
+# Service worker cookbook 
+- refer, https://serviceworke.rs/
+
+
+# Cross extension communication 
+1.	Window.postMessage 
+2.	DOM event, https://developer.mozilla.org/en-US/docs/Archive/Add-ons/Interaction_between_privileged_and_non-privileged_pages
+3.	Web Socket, possible useful documents 
+https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules
+https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules/NetUtil.jsm
+https://developer.mozilla.org/en-https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIServerSocketUS/docs/Mozilla/JavaScript_code_modules/Services.jsm
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIServerSocketListener
+
+4.	Embed webextension into restart less. https://blog.mozilla.org/addons/2016/06/09/webextensions-for-firefox-49/
+Currently not works, the relative work item on Mozilla Bugzilla is not completed yet. https://bugzilla.mozilla.org/show_bug.cgi?id=1252227
+
+5. shared worker 
+6 service worker 
+
+
+# Script security 
+- refer, https://developer.mozilla.org/en-US/docs/Mozilla/Gecko/Script_security#Security_checks
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                          
+                          
+                          
+                          
+                          
+                          
+                          
+                          
+                          
+                          
+                          

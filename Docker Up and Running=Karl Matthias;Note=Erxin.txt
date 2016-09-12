@@ -1,0 +1,441 @@
+Docker Up and Running=Karl Matthias;Note=Erxin
+
+# introduction 
+- gitrepo for docker/docker 
+https://github.com/docker/docker
+- birth of docker, 2013 at the time of the announcement by dotCloud 
+- the promise of docker, it is far more than a virtualization platform. some competition products 
+KVM 
+Xen 
+OpenStack 
+Mesos 
+Capistrano 
+Fabric 
+Ansible 
+Chef 
+Puppet 
+SaltStack 
+
+docker is a middling competitor, it is stronger in some areas than others, it combing the ease of application deployment tools like capistrano and fabric with ease of administrating virtualization system, and then provding hooks that make workflow automation and orchestration easy to implement 
+
+- benefits of the docker workflow 
+    + packaging softwre in a way that leverages the skills developers already have 
+    rpm, mock, dpkg and pbuilder 
+    
+    + build application software and required os filesystems togther in a single standardized image format 
+    
+    + using packaged artifacts to test and deliver the exact same artifact to all system in all environments 
+    
+    + abstracting software applications form the hardware without sacrificing resources 
+    
+- what docker isn't  but can often be used in conjunction with 
+    + enterprise virtualization platform, vmware, kvm. container's advantage is run many virtual machiens with radically different operating system on a single host, with containers both host and the containers share the same kernel 
+    
+    + cload platform, openstack, cloudstack, etc. docker handles deploying running and managing containers on pre-existing docker hosts. it doesn't allow you to create 
+    
+    + configruation management, puppet, chef, etc 
+    + deployment framework, capistrano, fabric, docker can't be used to auotmate a complex deployment process by itself 
+    + workfload management tool, mesos, feet, docker doesn't have any internal concept of a cluster 
+    + development environment, vagrant etc, vagrant is a virtual machine management tool for developers that is often used to simulate server stacks that closely resemble the production environment 
+
+# docker at a glance 
+- process simplification
+    + application developers request resources from operations engineers 
+    + resources are provisioned and handed over to developers 
+    + develoeprs script and tool their deployment 
+    + operations engineers and developers tweak the deployment repeatedly 
+    + addtional application dependencies are discovered by developers 
+    + operations engineers work to isntall the addtional requirements 
+    + loop over steps 5 to 6 n more times 
+    + the application is deployed 
+    
+- docker process 
+    + developer build the docker image and ship it to the registry 
+    + operation engineers provide configuration details to the container and provision resources 
+    + developer trigger deployment 
+    
+- broad support and adoptions
+AWS Elastc Beanstalk 
+google app engine 
+ibm cload 
+microsoft azure 
+rackspace 
+cloud and many more 
+
+- docker client runs on most major operating systems, docker server only avaliable on linux 
+- architecture 
+    + client/server model, with only one executable that acts as both components depending on invoke the docker command 
+    
+    + underneath is simple exterior, docker heavily leverages kernel mechanisms such as iptables, virtual bridging, cgroups, namespaces and various filesystem drivers 
+    
+- client/server model, the client and the server/daemon 
+the server does the ongoing work of running and managing your containers 
+docker server can talk directly to image registries 
+
+- network prots and unix sockets    
+docker -d daemon talk to each other over network sockets 
+
+the original tcp port that docker was configured to use was 4243 
+
+docker registered its own tcp port 2375 with IANA for un-encrypted, 2376 for handling encrypted traffic 
+
+- robust tooling 
+    + docker porvides both a command-line tool and a remote web api 
+    
+    + docker command-line tool 
+    build a container image 
+    pull images from a registry to a docker daemon or push them up to a registry from the docker daemon 
+    start a container on a docker server either in the foregroudn or background 
+    retreve the docker logs from a remote server 
+    start a command-line shell inside a running contianer on a remote server 
+    
+- container networking 
+    + docker server acts as a virtual bridge and the container are clients behind it 
+    
+    bridge is just a network device that repeats traffic from one side to another 
+    
+    + docker allocates the private subnet form a unsused RFC 1918 private subnet block it detect which network blocks are unsused on startup and allocates the virtual network. 
+    it bridged to the host's local network through an inteface on server called docker0 
+    
+- getting the most from docker 
+- build a stateless application 
+- containers are not virtual machiens 
+- containers are lightweight 
+- towards an immutable infrastructure, deploying most of your applications within containers, it is possible to start simplifying your configuration management story by moving towards an immutable infrastructure 
+
+- limited isolation, containers are isolated from each other but it's probably more limited than you expect. docker container could limit cpu and memory usages 
+
+- stateless applications 
+- externalizing state, to make docker work well with state applications 
+- the docker workflow 
+docker have iamge tags to record the deployed application 
+- building, docker command-line tool contains a build flag that will consume a dockerfile and produce a docker image 
+- testing required third party test framework 
+- packaging, after build you will get a multiplayered docker image 
+- docker ecosystem, wide community 
+
+
+# installing docker 
+- important terminology 
+docker client, the docker command used to control most of the docker workflow and talk to remote server 
+docker server, the docker command run in daemon mode, this turns a linux system into a docker server 
+docker image, consist of one or more filesystem layers and some important metadata 
+docker container, a docker container is a linux container that has been instantiated from a docker iamge 
+atomic host, is a smal finely tuned operating system image like coreOS and project atomic and supports container hosting and atomic OS upgrades 
+
+- docker client 
+    + linux 
+    $ sudo apt-get update 
+    $ sudo apt-get install docker.io 
+    $ sudo ln -sf /usr/bin/docker.io /usr/local/bin/docker 
+    
+    if under bash then set up completion with 
+    $ sudo sed -i $acomplete -F _docker docker' /etc/bash_completion.d/docker.io 
+    $ source /etc/bash_completion.d/docker.io 
+    
+    + fedora 
+    $ sudo yum -y install docker-io 
+    
+    + window 
+    boot2docker installer 
+    
+- docker server 
+$ sodu docker -d -H unix:///var/run/docker.sock -H tcp://0.0.0.0:2375 
+
+- systemd-Based linux, current fedora releases utilize systemd to manage processes on the system. you can ensure that the server starts every time you boot the system by 
+$ sudo systemctrl enable docker 
+
+tell system to enable the docker service and start it when the system boots or switches into the default runlevel 
+
+to start docker server 
+$ sudo sysmctl start docker     
+
+- upstart-based linux, ubuntu uses the upstart init daemon 
+$ sudo update-rc.d docker.io defaults 
+
+start the service immediately 
+$ service docker.io start 
+
+- init.d based linux, it is a traditional init.d system 
+configure auto start 
+$ chkconfig docker on 
+
+to start immediately 
+$ service docker start 
+or 
+$ /etc/init.d/docker start 
+
+- non-linux VM -based server, such as microsoft or mac os which provide virtualbox and boot2docker. 
+
+it allows boot a ubuntu based linux virtual machine on your local system 
+
+docker machine 
+vagrant 
+manually maintained virtual machines 
+ktematic 
+
+    + boot2docker 
+    $ boot2docker init 
+    
+   download boot2docker and requried boot image run the previous command 
+   
+   
+   start up virtual machine with docker daemon by 
+   $ boot2docker up to interact with the docker serer from your local system 
+   
+   set up your shell envirnoment so that you can easily use your local docker client to talk to the docker daemon on your virtual machine you can run 
+   $ $(boot2docker shellinit)
+   
+   connet to docker daemon 
+   $ docker info 
+   
+   connect to shell 
+   $ boot2docker ssh 
+   
+- docker machine, docker machien a tool that makes it easier to setup docker host on bare-metal, cloud and virtual machien platforms 
+
+    + setup in your local machine 
+    $ curl -L -o docker-machien \ 
+    download and install docker-mahine 
+    
+    create a docker machine 
+    $ docker-machien create --driver virtualbox local 
+    
+    this will downloads a boot2docker image and creates a virtual box virtual machine 
+    $ $(docker-machine env local)
+    
+    list docker machien 
+    $ docker-machine ls 
+    
+    $ add config 
+    $ docker-machien config local 
+    
+    see docker host's ip 
+    $ docker-machine ip 
+    
+    login to the ssytem 
+    $ docker-machine ssh local 
+    
+    stop your docker machien 
+    $ docker-machine stop local 
+    
+    restart 
+    $ docker-machine start local 
+    
+- vagrant install vagrant and create a host directory with a name similar to docker-host 
+$ mkdir docker-host 
+
+- test setup 
+ubuntu 
+$ docker run --rm -ti ubuntu:latest /bin/bash 
+
+fedora 
+$ docker run --rm -ti fedora:latest /bin/bash 
+
+
+# working with docker images 
+- a typical dockerfile might look like node.js-based application 
+from node:0.10 
+...
+
+use supervisord to management node application 
+http://supervisord.org/, is a process control system, client/server system that allows its user to monitor and control a number of process on unix-like operating system 
+
+- building an image
+$ git clone https://github.com/spkane/docker-node-hello.git 
+
+$ cd docker-node-hello 
+
+$ docker build -t example/docker-node-hello:latest 
+
+- running your image
+$ docker run -d p 8080:8080 example/docker-node-hello:latest 
+
+- environment variables 
+
+- custom base images 
+
+- public registries 
+docker hub 
+quay.io 
+
+- private registries 
+
+
+# working with docker containers 
+- what are container? 
+vmware or xen allow you to run a complete linux kernel and operating system on top of a virtualized layer commonly called hypervisor 
+
+containers are a fundamentally different approach where all containers share a single kernel and isolation implemented entirely within that single kernel this is called operating system virtualization 
+
+libcontainer project gives a good short definition of a container, a container is a self-contained execution environment that shares the kernel of the host system which is optionally isolated from other containers in the system 
+
+container is not a new idea it is a way to isolate and encpsulate a part of the running system. first version chroot, freebsd jail expended chroot's capabilities. sun released a early build of solaris 10 which included solaris containers, hp released secure resource partition for hp ux. 2013 docker annoucement, google release lmctfy 
+
+- creating a container 
+$ docker run 
+
+it a convenience command wraps two separate steps, first create a container and second docker execute the container 
+$ docker create 
+$ docker start 
+
+- basic configuration 
+name 
+    $ docker create --name="awesome-service" ubuntu:latest
+labels, labels are key-value pairs that can be applied to docker images and containers as metadata 
+    docker run -d --name labels -l deployer=Ahmed -l tester=Asako \ ubuntu:latest sleep 1000
+    
+slearch for and filter containers based on metadata 
+$ docker ps -a -f label=deployer=Ahmed
+ 
+use inspect command to check metadata for a container 
+$ docker inspect hash-id 
+
+- hostname, by default you start a contaienr docker will copy certain system files on the host including /etc/hostname 
+$ docker run --rm -ti ubuntu:latest /bin/bash
+
+- domain name service dns, resolv.conf file is managed via a bind mount between the host and container 
+- media access control (mac) address 
+$ docker run --rm -ti --mac-address="a2:11:aa:22:bb:33" ubuntu:latest /bin/bash
+
+- storage volumes, mount service file to a container 
+$ docker run --rm -ti -v /mnt/session_data:/data ubuntu:latest /bin/bash
+
+- cpu share 
+$ docker run --rm -ti progrium/stress --cpu 2 --io 1 --vm 2 --vm-bytes 128M --timeout 120s
+
+cpu pinning to a container to one or more cpu cores 
+$ docker run --rm -ti -c 512 --cpuset=0 progrium/stress --cpu 2 --io 1 --vm 2 --vm-bytes 128M --timeout 120s
+
+- memory 
+$ docker run --rm -ti -m 512m progrium/stress --cpu 2 --io 1 --vm 2 --vm-bytes 128M --timeout 120s
+
+- unlimits, setting soft and hard limits via the ulimit command 
+$ sudo docker -d --default-ulimit nofile=50:150 --default-ulimit nproc=10:20
+
+override unlimits on a specific container by passing in values using the --unlimit argument 
+$ docker run -d --ulimit nproc=100:200 nginx
+
+- starting a container 
+$ docker create -p 6379:6379 redis:2.8
+
+check process 
+$ docker ps 
+
+- auto-restarting a container 
+$ docker run -ti --restart=on-failure:3 -m 200m --memory-swap=300m progrium/stress --cpu 2 --io 1 --vm 2 --vm-bytes 128M --timeout 120s
+
+- stop a container 
+$ docker stop hash-id 
+
+- kill a container 
+$ docker kill hash-id 
+
+- pausing and unpausing a container 
+$ docker pause id 
+$ docker unpause id 
+
+- cleaning up containers and images 
+$ docker images 
+$ docker rmi image-id 
+
+to delete all containers on your docker hosts you can use 
+$ docker rm $(docker ps -a -q )
+$ docker rmi $(docker images -q)
+
+remove all container that exited with a nonzero state 
+$ docker rm $(docker ps -a -q --filter 'exited!=0')
+
+remove all untagged images 
+$ docker rmi $(docker images -q -f "dangling=true")
+
+
+# exploring docker
+- printing the docker version 
+$ docker version 
+
+- server info 
+$ docker info 
+
+- default image root directory for docker 
+/var/lib/docker 
+
+- download image update 
+$ docker pull ubuntu:latest 
+
+- inspecting a container 
+$ docker run -d -t ubuntu /bin/bash 
+$ docker ps 
+$ docker inspect 
+
+- getting inside a running container, execute a command inside a running container 
+$ docker exec -t -i 589f2ad30138 /bin/bash
+
+- nsenter, is the core util-linux package from kernel.org is nsenter, shot for namespace enter which allow you to enter any linux namespace 
+
+the easiest way to get ahold of nsenter is to isntall via a third-party docker container. 
+
+install the nsenter command-line tool into /usr/local/bin
+
+$ docker run --rm -v /usr/local/bin:/target jpetazzo/nsenter
+
+use nsenter to mount filesystem to a third-party docker 
+$ docker ps 
+to check the PID 
+
+$ PID=$(docker inspect --format \ 3c4f916619a5)
+$ sudo nsenter --target $PID --mount --uts --ipc --net --pid
+
+- exploring the shell 
+
+- returning a result, it is a common way to run a process in a container and wait for the result 
+$ docker run 8d12decc75fe /bin/false
+$ echo $?
+1
+$ docker run 8d12decc75fe /bin/true
+$ echo $?
+- docker logs, kernel log buffer could be check the command dmesg 
+
+    + simple log 
+    $ docker logs contaienr-id 
+    
+    log to file 
+    $ docker logs -f contaienr-id 
+    
+    + configurable logging backends with option --log-driver=syslog 
+    
+- monitoring docker 
+$ docker stats container-id 
+
+Here we call localhost, but you’ll want to use the hostname of your Docker server. Port 2375 is usually the right port. Note that we also pass the ID of our container in the URL we send to curl
+
+inspect the contents of the DOCKER_HOST environment variable, using something like echo $DOCKER_HOST, to discover the hostname or IP address of the Docker server
+
+start server 
+$ docker run -d ubuntu:latest sleep 1000
+
+request state 
+$ curl -s http://localhost:2375/v1/containers/91c8...244a/stats
+
+- docker events, generates an events stream around the container life cycle 
+$ docker events 
+
+- aAdvisor, for graphic monitor docker state, there are several kinds of tools like DataDog, GroundWork and New Relic 
+
+cAdvisor web interface (i.e., http://172.17.42.10:8080/) 
+
+it provides a rest api endpoint which can easily be queried for detailed information 
+
+- exploration, gives you all the basic ned to start running containers 
+
+# path to production containers 
+- deploying 
+
+
+# debugging containers 
+# docker at scale 
+# advanced topics 
+# designing your production containers platform 
+# conclusion 
+
+
