@@ -889,8 +889,11 @@ Node in Practice=Alex Young;Note=Erxin
     net.createServer 
     server.listen to bind it to a port 
     
+    var assert = require('assert');
     var net = require('net');
     var clients = 0;
+    var expectedAssertions = 2;
+    
     var server = net.createServer(function (client) {
     		clients++;
     		var clientId = clients;
@@ -905,11 +908,655 @@ Node in Practice=Alex Young;Note=Erxin
     	console.log('Server started on port 8000');
     });
     
+    + testing tcp server with client 
+    net.connet to connect server's port 
+    
+    function runTest(expectedId, done) {
+    	var client = net.connect(8000);
+    	client.on('data', function (data) {
+    		var expected = 'Welcome client: ' + expectedId + '\r\n';
+    		assert.equal(data.toString(), expected);
+    		expectedAssertions--;
+    		client.end();
+    	});
+    	client.on('end', done);
+    }
+    runTest(1, ()=>{runtest(2, ()=>{});});
+    
+    if want to hanlde error then subscribe the error event on EventEmitter. for handling distinct network connections, it's better to use domain module to handle seperated event in a centralize way 
+    
+    + improve low-latency applications 
+    socket.setNoDelay, to enable TCP_NODELAY
+    
+    server <=> buffer <=> client 
+    
+    Nagle’s algorithm, Nagle's algorithm is a means of improving the efficiency of TCP/IP networks by reducing the number of packets that need to be sent over the network. It was defined by John Nagle while working for Ford Aerospace and Communications Corporation.
+    
+    for real time application need to set the TCP_NODELAY flag to disable the nagle's algorithm 
+    
+    var net = require('net');
+    var server = net.createServer(function (c) {
+    		c.setNoDelay(true);
+    		c.write('377375042377373001', 'binary');
+    		console.log('server connected');
+    		c.on('end', function () {
+    			console.log('server disconnected');
+    			server.unref();
+    		});
+    		c.on('data', function (data) {
+    			process.stdout.write(data.toString());
+    			c.write(data.toString())
+    		});
+    	});
+    server.listen(8000, function () {
+    	console.log('server bound');
+    });
+    
+    + UDP clients and servers,  UDP is suitable for query-response protocols, which is used for DNS. if you want a lower latency over data integrity then UDP is good choice. online games generally use UDP 
+    
+    for example build a video streaming service, display images 
+    
+    + transferring a file with UDP, use the dgram module to create datagram sockets and send data with socket.send 
+    
+    var dgram = require('dgram');
+    var socket = dgram.createSocket('udp4');
+    socket.bind(4000);
+    
+    //create a client socket is the same as servers use dgram.createSocket 
+    var message = 'Sample message';
+    socket.send(new Buffer(message), 0, message.length, port, remoteIP);
+    
+        * example 
+        
+    var dgram = require('dgram');
+    var fs = require('fs');
+    var port = 41230;
+    var defaultSize = 16;
+    function Client(remoteIP) {
+        var inStream = fs.createReadStream(__filename);
+        var socket = dgram.createSocket('udp4');
+        inStream.on('readable', function () {
+            sendData();
+        });
+        function sendData() {
+            var message = inStream.read(defaultSize);
+            if (!message) {
+                //When client has finished,call unref to safely close it when no longer needed
+                return socket.unref();
+            }
+            socket.send(message, 0, message.length, port, remoteIP,
+                function (err, bytes) {
+                sendData();
+            });
+        }
+    }
+    function Server() {
+        var socket = dgram.createSocket('udp4');
+        socket.on('message', function (msg, rinfo) {
+            process.stdout.write(msg.toString());
+        });
+        socket.on('listening', function () {
+            console.log('Server ready:', socket.address());
+        });
+        socket.bind(port);
+    }
+    if (process.argv[2] === 'client') {
+        new Client(process.argv[3]);
+    } else {
+        new Server();
+    }
+    
+    + datagram packet layout and datagram size, package size must be under the MTU on the network 
+    
+    source port, 0-15 
+    desitination port, 16-31 
+    udp length, 0-15 
+    upd checksume, 16-31 
+    payload 
+    
+    the MTU is 65507 bytes for ipv4 and 65527 for ipv6 
+    
+    + binary communication with udp 
+    chat servers are the classic network programming it uses UDP instead of TCP or HTTP 
+    
+    when a client connected you could write client.write 
+    
+    client server program allows client to connect to a cntral server over udp and message each other. UDP isn't full-duplex, it's possible to create connections in two directions given a port number at both sides 
+    
+    var assert      = require('assert');
+    var dgram       = require('dgram');
+    var fs          = require('fs');
+    var defaultSize = 16;
+    var port        = 41234;
+    function Client(remoteIP) {
+    	var socket = dgram.createSocket('udp4');
+    	var readline = require('readline');
+    	var rl = readline.createInterface(process.stdin, process.stdout);
+    	socket.send(new Buffer('<JOIN>'), 0, 6, port, remoteIP);
+    	rl.setPrompt('Message> ');
+    	rl.prompt();
+    	rl.on('line', function (line) {
+    		sendData(line);
+    	}).on('close', function () {
+    		process.exit(0);
+    	});
+    	socket.on('message', function (msg, rinfo) {
+    		console.log('\n<' + rinfo.address + '>', msg.toString());
+    		rl.prompt();
+    	});
+    	function sendData(message) {
+    		socket.send(new Buffer(message), 0, message.length, port, remoteIP,
+    			function (err, bytes) {
+    			console.log('Sent:', message);
+    			rl.prompt();
+    		});
+    	}
+    }
+    function Server() {
+    	var clients = [];
+    	var server = dgram.createSocket('udp4');
+    	server.on('message', function (msg, rinfo) {
+    		var clientId = rinfo.address + ':' + rinfo.port;
+    		msg = msg.toString();
+    		if (!clients[clientId]) {
+    			clients[clientId] = rinfo;
+    		}
+    		if (msg.match(/^</)) {
+    			console.log('Control message:', msg);
+    			return;
+    		}
+    		for (var client in clients) {
+    			if (client !== clientId) {
+    				client = clients[client];
+    				server.send(
+    					new Buffer(msg), 0,
+    					msg.length, client.port, client.address,
+    					function (err, bytes) {
+    					if (err)
+    						console.error(err);
+    					console.log('Bytes sent:', bytes);
+    				});
+    			}
+    		}
+    	});
+    	server.on('listening', function () {
+    		console.log('Server ready:', server.address());
+    	});
+    	server.bind(port);
+    }
+    module.exports = {
+    	Client : Client,
+    	Server : Server
+    };
+    if (!module.parent) {
+    	switch (process.argv[2]) {
+    	case 'client':
+    		new Client(process.argv[3]);
+    		break;
+    	case 'server':
+    		new Server();
+    		break;
+    	default:
+    		console.log('Unknown option');
+    	}
+    }
+    
+    + HTTP clients and servers, http protocol is stateless and built on TCP node's http module is on top its TCP module 
+    
+        * http server 
+        http.createServer and http.createClient 
+        
+        var assert = require('assert');
+        var http = require('http');
+        var server = http.createServer(function (req, res) {
+                res.writeHead(200, {
+                    'Content-Type' : 'text/plain'
+                });
+                res.write('Hello, world.\r\n');
+                res.end();
+            });
+        server.listen(8000, function () {
+            console.log('Listening on port 8000');
+        });
+        var req = http.request({
+                port : 8000
+            }, function (res) {
+                console.log('HTTP headers:', res.headers);
+                res.on('data', function (data) {
+                    console.log('Body:', data.toString());
+                    assert.equal('Hello, world.\r\n', data.toString());
+                    assert.equal(200, res.statusCode);
+                    server.unref();
+                });
+            });
+        req.end();
+        
+        
+        high level node http module like express and restify. it's typical to create and tear down TCP socket per request for HTTP in TCP connection 
+        
+        * flow redirects, with request module, download pages and follow redirects if necessary. the response code 3xx
+        300 multiple choices 
+        301 moved permanently 
+        302 found 
+        303 see other 
+        304 not modified 
+        305 see proxy 
+        307 temporary redirect 
+        
+        Redirection is cyclical, and requests will be made until a 200 status is encountered
+        
+        var http = require('http');
+        var https = require('https');
+        var url = require('url');
+        var request;
+        function Request() {
+            this.maxRedirects = 10;
+            this.redirects = 0;
+        }
+        Request.prototype.get = function (href, callback) {
+            var uri = url.parse(href);
+            var options = {
+                host : uri.host,
+                path : uri.path
+            };
+            var httpGet = uri.protocol === 'http:' ? http.get : https.get;
+            console.log('GET:', href);
+            function processResponse(response) {
+                if (response.statusCode >= 300 && response.statusCode < 400) {
+                    if (this.redirects >= this.maxRedirects) {
+                        this.error = new Error('Too many redirects for: ' + href);
+                    } else {
+                        this.redirects++;
+                        href = url.resolve(options.host, response.headers.location);
+                        return this.get(href, callback);
+                    }
+                }
+                response.url = href;
+                response.redirects = this.redirects;
+                console.log('Redirected:', href);
+                function end() {
+                    console.log('Connection ended');
+                    callback(this.error, response);
+                }
+                response.on('data', function (data) {
+                    console.log('Got data, length:', data.length);
+                });
+                response.on('end', end.bind(this));
+            }
+            httpGet(options, processResponse.bind(this))
+            .on('error', function (err) {
+                callback(err);
+            });
+        };
+        request = new Request();
+        request.get('http://google.com/', function (err, res) {
+        	if (err) {
+        		console.error(err);
+        	} else {
+        		console.log('Fetched URL:', res.url,
+        			'with', res.redirects, 'redirects');
+        		process.exit();
+        	}
+        });
+        
+        * http proxies, for capture and retransmit htt requests 
+        var http = require('http');
+        var url = require('url');
+        http.createServer(function (req, res) {
+        	console.log('start request:', req.url);
+        	var options = url.parse(req.url);
+        	options.headers = req.headers;
+        	var proxyRequest = http.request(options, function (proxyResponse) {
+        			proxyResponse.on('data', function (chunk) {
+        				console.log('proxyResponse length:', chunk.length);
+        				res.write(chunk, 'binary');
+        			});
+        			proxyResponse.on('end', function () {
+        				console.log('proxied request ended');
+        				res.end();
+        			});
+        			res.writeHead(proxyResponse.statusCode, proxyResponse.headers);
+        		});
+        	req.on('data', function (chunk) {
+        		console.log('in request length:', chunk.length);
+        		proxyRequest.write(chunk, 'binary');
+        	});
+        	req.on('end', function () {
+        		console.log('original request ended');
+        		proxyRequest.end();
+        	});
+        }).listen(8080);
+        
+        * making DNS requests, DNS uses TCP and UDP for its request/response-based protocol, dns module 
+        
+        when http or net modules are used to connect remote server, node will look up ip addreses using dns.lookup internally 
+        
+        dns.resolve 
+        dns.resolveTxt, text values can be used by other services for addtional features built on top of dns 
+        dns.resolveSrv, service records define "location" data for a service 
+        dns.resolveNs, used for name server themselves 
+        dns.resolveCname, canonical name records, these are set to domain names rather than ip address 
+        
+        dns module is used for look up a single or multiple domain names quickly. When looking up multiple addresses, it can be faster to use dns.resolve instead.
+        
+        var dns = require('dns');
+        dns.lookup('www.manning.com', function (err, address) {
+        	if (err) {
+        		console.error('Error:', err);
+        	}
+        	console.log('Addresses:', address);
+        });
+        
+        var dns = require('dns');
+        //the result return an array of address compare to previous 
+        dns.resolve('www.manning.com', function (err, addresses) {
+        	if (err) {
+        		console.error(err);
+        	}
+        	console.log('Addresses:', addresses);
+        });
+        
+        * encryption, node's encryption module, tls uses OpenSSL transport layer security/secure socket layer 
+        
+        tls module is used as the basis for the https module
+        
+        Public key cryptography is dependent on public-private key pairs a pair is required for both clients and servers. public key of the Certificate Authority(CA)
+        
+        The OpenSSL command-line tools are required for this. http://www.openssl.org 
+        
+        to make a certificate signed by an authority you control, you'll need to issue the following commands 
+        genrsa, generate an RSA certificate; this is private key 
+        req, create a CSR, X.509 Certificate signing Request 
+        x509, sign the private key with the CSR to produce a public key 
+        
+        //create server's private key using 1024 bit 
+        $ openssl genrsa -out server.pem 1024
+        //create CSR this is where you enter your hostname 
+        $ openssl req -new -key server.pem -out server-csr.pem
+        //sign server's private key 
+        $ openssl x509 -req -in server-csr.pem -signkey server.pem -out server-cert.pem
+        //create client's private key 
+        $ openssl x509 -req -in server-csr.pem -signkey server.pem -out server-cert.pem
+        //create CSR for the client remeber to enter your hostname here as well 
+        $ openssl req -new -key client.pem -out client-csr.pem
+        //sign client's private key and output a public key 
+        $ openssl x509 -req -in client-csr.pem -signkey client.pem -out client-cert.pem
+        
+        after generate the certificate files start the server using tls.createServer 
+        
+        var fs = require('fs');
+        var tls = require('tls');
+        var options = {
+        	key : fs.readFileSync('server.pem'),
+        	cert : fs.readFileSync('server-cert.pem'),
+        	ca : [fs.readFileSync('client-cert.pem')],
+        	requestCert : true
+        };
+        var server = tls.createServer(options, function (cleartextStream) {
+        		var authorized = cleartextStream.authorized ?
+        			'authorized' : 'unauthorized';
+        		console.log('Connected:', authorized);
+        		cleartextStream.write('Welcome!\n');
+        		cleartextStream.setEncoding('utf8');
+        		cleartextStream.pipe(cleartextStream);
+        	});
+        server.listen(8000, function () {
+        	console.log('Server listening');
+        });
+        
+        * encrypted web servers and clients https.createServer with TLS 
+        //server 
+        var fs = require('fs');
+        var https = require('https');
+        var options = {
+        	key : fs.readFileSync('server.pem'),
+        	cert : fs.readFileSync('server-cert.pem'),
+        	ca : [fs.readFileSync('client-cert.pem')],
+        	requestCert : true
+        };
+        var server = https.createServer(options, function (req, res) {
+        		var authorized = req.socket.authorized
+        			 ? 'authorized' : 'unauthorized';
+        		res.writeHead(200);
+        		res.write('Welcome! You are ' + authorized + '\n');
+        		res.end();
+        	});
+        server.listen(8000, function () {
+        	console.log('Server listening');
+        });
+        
+        //client 
+        var fs = require('fs');
+        var https = require('https');
+        var os = require('os');
+        var options = {
+        	key : fs.readFileSync('client.pem'),
+        	cert : fs.readFileSync('client-cert.pem'),
+        	ca : [fs.readFileSync('server-cert.pem')],
+        	hostname : os.hostname(),
+        	port : 8000,
+        	path : '/',
+        	method : 'GET'
+        };
+        var req = https.request(options, function (res) {
+        		res.on('data', function (d) {
+        			process.stdout.write(d);
+        		});
+        	});
+        req.end();
+        req.on('error', function (e) {
+        	console.error(e);
+        });
+        
 - child process 
+    + write everything in javascript, projects 
+    GaphicsMagic, http://www.graphicsmagick.org/, a full-featured image manipulation tool 
+    wkhtmltopdf, http://wkhtmltopdf.org/, a headless webkit pdf geenrator perfect for turning that html report into a pdf download 
+    
+    choosing the right method, to execute external applications 
+    
+    /external app 
+        /non-node 
+            /streaming -no-> spawn 
+            /buffered(callback) -no-> execFile 
+                                -yes-> exec 
+        /node 
+            /streaming -no-> fork 
+            
+        * execFile, execute an external app, given a set of arguments and callback with buffered output after the process exits 
+        * spawn, execute an external application, given a set of arguments and provide a streaming interface for i/o and events for when the process exists 
+        * exec, execute one or more commands inside a shell and callback with the buffered output after the process exits 
+        * fork, execute a node module as a separate process, given a set of arguments provide a streaming and evented interface like spawn 
+    
+    
+    + execute external applications 
+    var cp = require('child_process');
+    cp.execFile('ls', ['non-existent-directory-to-list'],
+    	function (err, stdout, stderr) {
+    	console.log(err.code);
+    	console.log(stderr);
+    });
+    
+        * execute external app and stream output 
+        cp.execFile('echo', ['hello', 'world'], ...);
+        cp.spawn('echo', ['hello', 'world'], ...);
+        
+        var cp = require('child_process');
+        var child = cp.spawn('echo', ['hello', 'world']);
+        child.on('error', console.error);
+        child.stdout.pipe(process.stdout);
+        child.stderr.pipe(process.stderr);
+        
+        
+        * executing commands in a shell 
+        cp.exec('cat messy.txt | sort | uniq',
+            function (err, stdout, stderr) {
+            console.log(stdout);
+        });
+    + detaching a child process, can be used to kick off external applications and then allow them to run on their own 
+    
+    var child = cp.spawn('./longrun', [], { detached: true });
+    
+        * execute node programs 
+        var cp = require('child_process');
+        cp.execFile('node', ['myapp.js', 'myarg1', 'myarg2' ], ...
+        
+        * forking node modules for manage separate node processes 
+        var cp = require('child_process');
+        var child = cp.fork('./myChild');
+        
+        child process will share i/o of parent and setup a communication channel 
+        On the parent side, it provides child.on('message') and child.send().
+        
+        * running jobs use fork to run a pool of workers 
+        
+        * working synchronously execFileSync, spawnSync, execFile 
 
 
 # Real-word recipes 
 - the web, build leaner and meaner web applications 
+    + using node for client-side development 
+        * front end techniques 
+        quick start a web server for single page app 
+        
+        var connect = require('connect');
+            connect.createServer(
+            connect.static(__dirname)
+        ).listen(8080);
+        
+        http.createServer 
+        
+        other modules,  GitHub at https://github.com/jarofghosts/glance, and on npm as glance
+        
+        * grunt for client-side project 
+        install grunt-cli 
+        make a package.json 
+        use a grunt plugin that runs a webserver 
+        
+        Now you need to install a web server module: npm install --save-dev grunt grunt-contrib-connect will do the job.
+        
+        gulp, http://gulpjs.com/ is a new alternative option which take advantage of node's streaming api and has a light syntax and easy to learn 
+        
+        create a file called Gruntfiles.js which contain tasks that grunt will run for you 
+        
+        * using the dom in node, jsdom, https://github.com/tmpvar/jsdom, then we could use jQuery in node 
+        
+        var jsdom = require('jsdom');
+        jsdom.env(
+        	'<p class="intro">Welcome to Node in Practice</p>',
+        	['http://code.jquery.com/jquery.js'],
+        	function (errors, window) {
+        	console.log('Intro:', window.$('.intro').text());
+        });
+        
+        another options is If you really just want to process HTML in a jQuery-like way, then you could use cheerio https://npmjs.org/package/cheerio. This module is more suited to web scraping
+        https://github.com/cheeriojs/cheerio
+        
+    + node in the browser, use a browserify program for help converting node javascript into browser-friendly code. http://browserify.org/
+    
+    convert ndoe module to browserify script by 
+    $ browserify index.js o bundle.js 
+    any require statements will cause the files to be included in bundle.js 
+    
+    create a package.json file with jquery as a dependency, you can load jquery using browserify 
+    
+    //use browserify in code 
+    var browserify = require('browserify');
+    var b = browserify();
+    b.add('./index.js');
+    b.bundle().pipe(process.stdout);
+    
+    + server-side techniques and websockets 
+        * express route separation 
+        app.get('/notes', function (req, res, next) {
+        	db.notes.findAll(function (err, notes) {
+        		if (err)
+        			return next(err);
+        		res.send(notes);
+        	});
+        });
+        app.post('/notes', function (req, res, next) {
+        	db.notes.create(req.body.note, function (err, note) {
+        		if (err)
+        			return next(err);
+        		res.send(note);
+        	});
+        });
+        
+        * refactor web app structure 
+        create a directory called routes or controllers and add a file called index.js
+        
+        each routing function is exported with a CRUD-inspired name(index, create, update, show)
+        
+        var express = require('express');
+        var app = express();
+        var routes = require('./routes');
+        app.use(express.bodyParser());
+        app.get('/notes', routes.notes.index);
+        app.post('/notes', routes.notes.create);
+        app.patch('/notes/:id', routes.notes.update);
+        app.get('/notes/:id', routes.notes.show);
+        
+        module.exports = app;
+        
+        * automatic restart the server, use a file watcher to restart th application automatically 
+        
+        node provide an API for this, fs.watch
+        
+        third party module is One of the most widely used modules that solves this problem is Remy Sharp’s nodemon (http://nodemon.io/). Nodemon is a utility that will monitor for any changes in your source and automatically restart your server. 
+        
+        //reload node process 
+        var fs = require('fs');
+        var exec = require('child_process').exec;
+        function watch() {
+        	var child = exec('node server.js');
+        	var watcher = fs.watch(__dirname + '/server.js', function (event) {
+        			console.log('File changed, reloading.');
+        			child.kill();
+        			watcher.close();
+        			watch();
+        		});
+        }
+        watch();
+        
+        * configuring web applications, use json configuration files, use process.evn to access system environment variables  
+        
+        example for how express app manage the configuration 
+        var express = require('express');
+        var app = express();
+        app.set('port', process.env.PORT || 3000);
+        app.configure('development', function () {
+        	app.set('db', 'localhost/development');
+        });
+        app.configure('production', function () {
+        	app.set('db', 'db.example.com/production');
+        });
+        app.listen(app.get('port'), function () {
+        	console.log('Using database:', app.get('db'));
+        	console.log('Listening on port:', app.get('port'));
+        });
+        
+        //json configuration loader 
+        var config = {
+        	development : require('./development.json'),
+        	production : require('./production.json'),
+        	test : require('./test.json')
+        };
+        module.exports = config[process.env.NODE_ENV
+        
+        The web framework Flatiron (http://flatironjs.org/) has an application configuration module called nconf (https://npmjs.org/package/nconf) that handles configuration files, environmental variables, and command-line options
+        
+        * elegant error handling 
+        
+        
+        
+    
+    + migrating express 3 applications to express 4 
+    + testing web applications 
+    + full-stack frameworks and realtime services 
+    
+- 
+
 - tests, the key to confident code 
 - debugging designing for introspection and resolving issues 
 - node in production, deploying applications safely 
