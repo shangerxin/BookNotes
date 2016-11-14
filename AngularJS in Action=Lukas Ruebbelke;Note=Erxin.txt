@@ -312,15 +312,170 @@ the content is the html and the scope object compile to the final output html
                          A                                  |
                          +----change to model update view---+
                          
-    + digest cycle                      
-- creating controllers to manage views 
-- declaring properties and methods in a controller 
-- binding to properties and methods in a controller 
-- binding to properties and expressions in an angularjs template 
-- best practices for creating views and controllers and how to test them 
+    + digest cycle
+    dirty checking is the simple process of comparing a value with its previous value 
+    angularjs perform dirty checking via a digest cycle that's controlled by $digest.$digest, it doesn't require to be called directly. if you want to init a digest cycle then use $apply, it calls $digest but has error-handling built around it 
+    
+    during the compilation phase $scope evaluates all of its properties and creates a watch expression for each one. the watch expression could be manually created too. automatic created watch expression will use angular.equals to compare 
+    during the $digest cycle all watch expression for a scope object are evaluated 
+    occasionally a property is chantged without angularjs knowing about it. manually kick off a digest cycle via $apply 
+    
+        * Event loop          |
+        Event queue(wait) ----|---->    AngularJS 
+            A                 |      $apply(function) ---> function()
+            |                 |                              |
+            |                 |                              V
+            |                 |                              $eval 
+            |                 |                          asynchronous queue 
+            |                 |                             A        |
+            |                 |                             |        |
+            |                 |                             |        V 
+            DOM render <------|----------------------------$digest loop  
+           Native             |           JavaScript
+                              |
+    + controller as syntax, a new convention was introduced for working with controllers known as the controller-as syntax.
+    ng-controller ="StoryboardCtrl as storyboard".  binding to a controller property from template, {{controller.someProperty}}
+    
+        * define a controller 
+    
+    angular.module('module-name')
+            .controller('controller-name', function($scope){...}){
+                var storyboard = this; //reference to the controller object 
+                
+                $scope.scopeProperty = 'value';
+            };
+    
+    + angularjs events, angular event system use $broadcast and $emit 
+    
+    listening and responding to a specific event is handled by $on 
+    $emit, sends event from a child upward to its parent 
+    $broadcast, sends from a parent scope downward to its children 
+    
+    to broadcast an event from a service, you need to inject $rootScope
+    
+    + properties and expressions 
+        * display stories with ng-repeat
+        //define an array of data in controller 
+        angular.module('Angello.Storyboard')
+        .controller('StoryboardCtrl', function () {
+        	var storyboard = this;
+        	storyboard.stories = [{
+        			"assignee" : "1",
+        			"criteria" : "It tests!",
+        			"description" : "This is a test",
+        			"id" : "1",
+        			"reporter" : "2",
+        			"status" : "To Do",
+        			"title" : "First Story",
+        			"type" : "Spike"
+        		},
+                ...
+            ];
+        });
+        
+        //bind the property in template 
+        <div class="list-area">
+            <div class="list-wrapper">
+                <ul class="list" ng-repeat="status in storyboard.statuses">
+                    <h3 class="status">{{status.name}}</h3>
+                    <hr/>
+                </ul>
+            </div>
+        </div>
+        
+        angularjs is able to keep the instances of each item separate by implicity creating a child scope for each template that's created by ngRepeat 
+        
+        * one-way data binding, from angularjs 1.3 introduces a one-time binding {{::expression}}
+        
+        the one-way binding starts with :: 
+        
+        * there are some special properties created on the local scope of each ng-repeat instance, these incude $index, $first, $even 
+        // Hypothetical Scenario
+        <ul>
+            <li ng-repeat="item in items" ng-click="ctrl.currentIndex == $index" >
+                <h2>{{item.title}}</h2>
+                <p ng-if="ctrl.currentIndex == $index”>
+                    {{item.longDescription}}
+                </p>
+            </li>
+        </ul>
+        * using ng-repeat to iterate over a object 
+        // Hypothetical Scenario
+        <ul>
+            <li ng-repeat="(key, item) in items">
+                <h2>{{key}}</h2>
+                <h3>{{item.title}}</h3>
+            </li>
+        </ul>
+    
+        * filters, filters allow you to filter the contents of a collection to give you exactly what you want based on some sort of predefined criteria. adding a pipe symbol and then declaring a filter. | filter: {status:status.name}
+    
+        <li class="story" ng-repeat="story in storyboard.stories| filter: {status:status.name}">
+        
+        * expressions, angularjs comme with some powerful built-in directives to capture user interactions, such as ngClick, ngBlur, ngFocus, ngSubmit, and so on 
+        
+        angular also allow for binging the input of form to a data structure using ngModel which allows for the implicit two-way binding of an input to a property in your controller 
+        
+        * display a story's details 
+        angular.module('Angello.Storyboard')
+            .controller('StoryboardCtrl', function() {
+                var storyboard = this;
+                storyboard.currentStory = null;
+                storyboard.editedStory = {};
+                ...
+                storyboard.setCurrentStory = function(story) {
+                storyboard.currentStory = story;
+                storyboard.editedStory =
+                angular.copy(storyboard.currentStory);
+            };
+        });
+        
+        <li class="story"
+        ng-repeat="story in storyboard.stories | filter: {status:status.name}" ng-click="storyboard.setCurrentStory(story)">
+            <article>
+                <div>
+                    <button type="button" class="close">×</button>
+                    <p class="title">{{story.title}}</p>
+                </div>
+                    <div class="type-bar {{story.type}}"></div>
+                <div>
+                    <p>{{story.description}}</p>
+                </div>
+            </article>
+        </li>
+        
+        The simplest element to work with in an AngularJS form is a text input, because you can bind the value of the input to a property using ngModel. 
+        
+        <input type="text" id="inputTitle" name="inputTitle" placeholder="Title"  ng-model="storyboard.editedStory.title" ng-required="true" ng-minlength="3" ng-maxlength="30" class="form-control">
+        
+        * populate options in a select control. AngularJS provides a similar directive called ngOptions that was created specifically for populating options in a select control
+        
+        <!-- client/src/angello/storyboard/tmpl/storyboard.html -->
+        <select id="inputReporter" name="inputReporter"
+            ng-model="storyboard.editedStory.reporter" ng-required="true"
+            ng-options="user.id as user.name for user in storyboard.users"
+            class="form-control">
+            <option value="">Please select...</option>
+        </select>
+        
+        * update/create story, use ng-click to trigger the update/create function from the controller 
+        <button class="btn pull-right btn-default" ng-disabled="!storyboard.detailsForm.$valid" ng-click="storyboard.updateStory()">Update Story</button>
+        
+    + best practices and testing 
+    
+- Models and services 
+- directives 
+- animations 
+- structuring your site with routes 
+- forms and validations 
 
+# Setting up Karma 
 
+# Setting up a Node.js server 
 
+# Setting up a firebase server 
+
+# Running the app 
 
 
 
