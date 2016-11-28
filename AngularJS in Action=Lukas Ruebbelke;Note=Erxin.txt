@@ -462,20 +462,1577 @@ the content is the html and the scope object compile to the final output html
         <button class="btn pull-right btn-default" ng-disabled="!storyboard.detailsForm.$valid" ng-click="storyboard.updateStory()">Update Story</button>
         
     + best practices and testing 
-    
+        * controller should be lightweight and specific to the view they control 
+        
+        controller is acting more as a commmunicator or a mediator between the view and the service 
+        
+        * controller should have no knowledge of the view they control 
+        * controller should never communicate directly with other controllers 
+        
 - Models and services 
+    + user service to create the communication layer between remote server and different controllers 
+    
+    + domain model and service the big picture 
+    Module <html ng-app="modulename">
+        |
+        config 
+        |
+        routes 
+        /   |   \
+       /    |    \
+     view--$scope--controller 
+     |                  |
+     directive          service 
+     
+    + what are models and services? 
+    services in angular means a common functionality that can be shared across your entire application, such as managing the state of data 
+    
+    + hello service, service are registered with the application $provide, most case it's eaiser to ue syntax suger provided by angular.module 
+    
+    example register a value that will be available as a service throughout the application via myModule.value give it a name of STORY_TYPES, and pass in an array of objects as the second parameter
+    
+    // client/src/angello/Angello.js, define a STORY_TYPES service 
+    myModule.value('STORY_TYPES', [{
+    			name : 'Feature'
+    		}, {
+    			name : 'Enhancement'
+    		}, {
+    			name : 'Bug'
+    		}, {
+    			name : 'Spike'
+    		}
+    	]);
+        
+    use the service in a controller 
+    // client/src/angello/storyboard/controllers/StoryboardController.js
+    angular.module('Angello.Storyboard')
+        .controller('StoryboardCtrl',
+            function (STORY_TYPES) {
+            var myStory = this;
+            //...
+            myStory.types = STORY_TYPES;
+            //...
+        });
+     
+    + the service lifecycle, a service is defined on angular.module using one of the convenience functions or in some cases directly with $provide 
+    
+    during the complication cycle, services are then registered in an instance factory for creation 
+    
+    when a service is required, the $injector service will check the instance cache to see if an instance of the requested service exists. if it does $injector will use the instance from cache and inject it into whatever requested the service 
+    
+    if not $injector will request a new instance from the instance factory and store it in cache 
+    
+    there is a way to workaround this, but use it carefully 
+    
+    + the different types of services 
+    
+    when to use which service module 
+        * module.value, good for storing simple values that may need to change during runtime 
+        * module.constant, good for storing simple values that will never need to change 
+        * module.service, creates a service using a constructor method,this is good for developer who prefer oop style like using this keyword 
+        * module.facotry, creates a service using a constructor function. developers using the revealing module pattern will be at home with this style 
+        * module.provider, providers the most control over defining your service but is more complex and verbose good for modifying behavior of a service which the application is being configured 
+    
+    + value service, all services is a value service. value service take two parameters, the name of the service and the value that is to be returned 
+    
+    moduleName.value('service-name', return-value-of-the-service);
+    
+    value services are limited in the sense that they can't be accessed in the module.config block during compilation 
+    
+    + constant service, constant service is similar to a value service except that it's avaliable to the module.config block and can't be modified during runtime 
+    
+    //example define a url 
+    angular.module('Angello.Common')
+        .constant('CURRENT_BACKEND', 'firebase');
+        
+    + service constructor and service factory 
+    
+    when we define a service using module.service then the instance is returned via a constructor function. this lends itself well to developers who prefer writing object-oriented code and like to define methods and properties on this keyword 
+    
+    // client/src/angello/app/services/LoadingService.js
+    angular.module('Angello.Common')
+        .service('LoadingService',
+            function ($rootScope) {
+            var service = this;
+            service.setLoading = function (loading) {
+                $rootScope.loadingView = loading;
+            };
+        });
+        
+    store this at the top-level function reference to this so that it can be accessed within children function blocks 
+    
+    when a service is defined with factory then the constructor method should return an instance of service object 
+    
+    angular.module('Angello.Common')
+        .factory('LoadingService',
+            function ($rootScope) {
+            var setLoading = function (loading) {
+                $rootScope.loadingView = loading;
+            };
+            return {
+                setLoading : setLoading
+            }
+        });
+        
+    + provider function, module.provider is add additional configuration phase when create the service for your application 
+    
+    we will configure built-in providers when we get into $http interceptors and service decorators 
+    
+        * further reading 
+        https://docs.angularjs.org/api/auto/service/$provide
+        
+        https://docs.angularjs.org/guide/providers 
+        
+    + models with $http
+    
+        * what is $http, it use XMLHttpRequest object or JSONP to communicate with a remote server via HTTP 
+        
+        $http is built with a deferred/promise API based on the $qservice
+        
+        RESTful APIs provide a convention for communicating with remote servers that make the underlying technology of the remote server secondary. 
+        
+        $resource service is also relative to http 
+        
+        * create your first model 
+        
+        define StoriesModel service 
+        
+        angular.module('Angello.Common')
+            .service('StoriesModel',
+            	function ($http, EndpointConfigService, UtilsService) {
+            	//...
+                var service = this,
+                MODEL = "/stories/"; //this is used for create url 
+                
+                service.all = function () {
+                	return $http.get(EndpointConfigService.getUrl(
+                			MODEL + EndpointConfigService.getCurrentFormat()))
+                	.then(
+                		function (result) {
+                		return UtilsService.objectToArray(result);
+                	});
+                };
+            });
+            
+            The URL is created by the EndpointConfigService and is based on our MODEL variable and the CURRENT_BACKEND constant.
+            
+        //using the service in a controller 
+        // client/src/angello/storyboard/controllers/StoryboardController.js
+        storyboard.getStories = function () {
+        	StoriesModel.all()
+        	.then(function (result) {
+        		console.log(result.data);
+        	});
+        };
+        
+    + $http convenience methods 
+    
+        * call $http with an argument $http({method:'GET', url:'/someUrl'});
+        
+        Get all stories $http.get(EndpointConfigService.getUrl(MODEL +        EndpointConfigService.getCurrentFormat()));
+        
+        Get a single story based on the story_id $http.get(EndpointConfigService.getUrlForId(MODEL,story_id));
+        
+        Create a story $http.post(EndpointConfigService.getUrl(MODEL +        EndpointConfigService.getCurrentFormat()), story);
+        
+        Update a story based on the story_id $http.put(EndpointConfigService.getUrlForId(MODEL, story_id), story);
+        
+        Delete a story based on the story_id $http.delete(EndpointConfigService.getUrlForId(MODEL, story_id));
+        
+        creating getUrl and getUrlForId to generate the URLs for the actual calls reduces cruft in the service. 
+        
+        If you need to change the URL structure, you can change the CURRENT_BACKEND constant in EndpointConfigService.js and the MODEL variable in the specific model file, and the change in URL structure is reflected in that entire service
+        
+        
+    + promises
+        * what are promise? the $http service will return return a promise for each method call, the promise will be resolved when the process is finished 
+        
+    + $http.success and $http.error, The success and error methods work almost exactly like then, but the callbacks have additional parameters to give you more information about the HTTP call
+    
+    $http.get(EndpointConfigService.getUrl(
+    		MODEL + EndpointConfigService.getCurrentFormat()))
+    .success(function (data, status, headers, config) {
+    	// this callback will be called asynchronously
+    	// when the response is available
+    })
+    .error(function (data, status, headers, config) {
+    	// called asynchronously if an error occurs
+    	// or server returns response with an error status.
+    });
+    
+    + angularjs 1.3 suggest use .then(), .catch(), .fanially() syntax to resolve promises instead of just use .then()
+    
+    + elegant sequencing with promises 
+        
+    angular also have a built-in $q service which supply $q.defer() to create a defer object like the q library 
+        
+    the defer object is similar to the promise 
+    
+    + $http interceptors, use $httpProvider service we could create custom interceptors and make them available by pushing them into the $httpProvider.interceptors array, there are four types of interceptors that you can use, request, requestError, response, responseError 
+    
+    learn more about interceptors please checkout the document at https://docs.angularjs.org/api/ng/service/$http 
+    
+    + interceptors in action, let's try to create a loading interceptor and inject the LoadingService into it 
+    
+    // client/src/angello/Angello.js
+    myModule.factory('loadingInterceptor', function (LoadingService) {
+    	var loadingInterceptor = {
+    		request : function (config) {
+    			LoadingService.setLoading(true);
+    			return config;
+    		},
+    		response : function (response) {
+    			LoadingService.setLoading(false);
+    			return response;
+    		}
+    	};
+    	return loadingInterceptor;
+    });
+    
+    pushing the interceptor into the $httpProvider.interceptors array 
+    // client/src/angello/Angello.js
+    myModule.config(function ($routeProvider, $httpProvider) {
+    	//...
+    	// Interceptor
+    	$httpProvider.interceptors.push('loadingInterceptor');
+    	//...
+    });
+    
+    + service decorators, we could making existing service "decorate" it to enhance its functionality or change its behavior entirely 
+    
+    we could enhance the $log service to provide better output to the console 
+    
+    + enhancing logging
+    
+    check an excellent post at http://solutionoptimist.com/2013/10/07/
+    
+    first we register the decorator using the $provide.decorator , the $delegate parameter to the decorator function is a reference to the original service 
+    
+    // client/src/angello/Angello.js
+    myModule.config(function ($routeProvider, $httpProvider, $provide) {
+    	//...
+    	// Decorator
+    	$provide.decorator('$log', function ($delegate) {
+            function timeStamp() {
+                //...
+            }
+            // Save the original $log.debug()
+            var debugFn = $delegate.debug;
+            $delegate.debug = function () {
+                // Prepend timestamp
+                arguments[0] = timeStamp() + ' - ' + arguments[0];
+                // Call the original with the output prepended with formatted timestamp
+                debugFn.apply(null, arguments)
+            };
+        });
+    });
+    
+    then we could continue call the $log.debug as before which is already decorated with the timeStamp function 
+    
+    + testing consideration 
+    
+    + testing a service, We’ll start the test by declaring two variables called $rootScope and LoadingService that we’ll assign the actual $rootScope and LoadingService
+    
+    describe('Loading Service', function () {
+    	var $rootScope,
+    	LoadingService;
+    	beforeEach(module('Angello.Common'));
+    	//...
+        
+        beforeEach(inject(function (_$rootScope_, _LoadingService_) {
+            $rootScope = _$rootScope_;
+            LoadingService = _LoadingService_;
+        }));
+        
+        it('should update $rootScope to false when setLoading is set to false',
+        	function () {
+        	LoadingService.setLoading(false);
+        	expect($rootScope.loadingView).toEqual(false);
+        });
+        
+        it('should update $rootScope to true when setLoading is set to true',
+        	function () {
+        	LoadingService.setLoading(true);
+        	expect($rootScope.loadingView).toEqual(true);
+        });
+        
+    });
+    we actually inject _$rootScope_ and _LoadingService_ as parameters. This is called underscore wrapping and is done so that we can assign those variables to the actual service name in our code. The inject method knows to strip out the underscores and return the actual service.
+    
+    + using $httpBackend to mock server calls, We’ll use $httpBackend to mock out specific server calls and then verify that StoriesModel did indeed hit our mock endpoints
+    
+    verifyNoOutstandingRequest on $httpBackend. This essentially asserts that $httpBackend was able to satisfy the request
+    
+    // client/tests/specs/services/StoriesModel.spec.js
+    describe('Stories Model', function () {
+    
+        it('Should get all', inject(function (StoriesModel, 
+                                             $httpBackend,
+                                             $rootScope){
+            var response = [];
+            $httpBackend
+                .when('GET', 
+                      'https://angello-angularjs.firebaseio.com/clients/1/stories/.json')
+                .respond(response);
+            $rootScope.$broadcast('onCurrentUserId', 1);
+            var promise = StoriesModel.all();
+            
+            $httpBackend.flush();
+            promise.then(function (result) {
+                expect(result).toEqual(response);
+            });
+            $rootScope.$digest();
+        }));
+    
+    	//...
+    	afterEach(inject(function ($httpBackend) {
+    			$httpBackend.verifyNoOutstandingExpectation();
+    			$httpBackend.verifyNoOutstandingRequest();
+    		}));
+    	//...
+    });
+    
+    Another technique worth mentioning is that you can manually resolve a promise by kicking off a digest cycle via $rootScope.$digest
+    
 - directives 
-- animations 
-- structuring your site with routes 
-- forms and validations 
+    + introduction to directives 
+    + what are directives?, it's html enhanced for web apps
+    
+    angular allowing you to define your own html behavior such as custom html tags and attributes 
+    
+    + why we need directives, it is a elegent way to extend html 
+    
+    it allow turn html to domain specific language 
+    
+    + directives a quick foundation , directives generally have three parts, controller function, the link function and the directive definition object(DDO). a directive always have a DDO. it may only have a link or controller function depending on the context 
+    
+    the DDO is the foundation of the directive, it is used to setting how directive is going to be marked up in the html, how it's scope is going to interact with the outside world whether it's going to use the existing html or load new html into the directive 
+    
+    the controller function for directive is used for setting the state for the directive and defining functionality
+    
+    the link function is where any DOM manipulation in your application goes. this is also where you put any initialization and interaction code for third-party plugins. it is also where you could capture any events emitted by a third-party plugin and process it for the rest of the angularjs application 
+    
+    + the user story directives 
+        * create the directive 
+        
+        create a directive is similar to create a controller with the same syntax 
+        
+        we will fill out the directive with a link function, a controller function and a definition object to lay the foundation for the rest of the function in the directive. we also have a controller as attribute on the definition object so we can reference the controller everywhere in the template 
+        
+        myModel.directive('userstory', function () {
+        	var linker = function (scope, element, attrs) {
+        		//pending
+        	};
 
+        	var controller = function ($scope) {
+        		//pending
+        	};
+
+        	return {
+        		restrict : 'A',
+        		controller : controller,
+        		controllerAs : 'userStory',
+        		link : linker
+        	};
+        });
+        
+        * the directive definition object, definition object is a extension of the module pattern where you return an object to be instantiated during an angularJS compilation cycle. 
+        
+        a specific API is avaliable to tell AngularJS exactly how the directive should behave. in the preceding example as noted by the line restrict: 'A'. then we indicated that we want to use the linker function and the controller function. 
+        
+        * link function, is the primary place to do DOM manipulation. everything you need to accomplish this is delivered to you via an angularjs care package in the form of the function parameters. The scope parameter is simple the socpe of the current instantiation of the directive. It is the same $scope parameter in the controller function. 
+        The element parameter is the element that the directive is declared on, but wrapped in a jquery object. the attrs parameter is an array of all of the attributes on the element that the directive was declared on 
+        
+        * the controller function, just as you want to segment dom manipulation to the link function, you want to keep imperative logic in the controller. the $scope object is shared between the link function and the controller, it's not uncommon to call a function in the controller from the link function. 
+        
+        the difference is that the service injected into the dirctive are the then available to the controller as opposed to injecting services into stand-alone controller directly. 
+        
+        * use the directive 
+        //previous html to show the user story 
+        <li ng-repeat="story in storyboard.stories | filter:{status:status.name}"
+            class="story"
+            ng-click="storyboard.setCurrentStory(story)">
+            <article>
+                <div>
+                    <button type="button" class="close"
+                    ng-click="userStory.deleteStoryBoard(story.id)">
+                        ×
+                    </button>
+                    <p class="title">{{story.title}}</p>
+                </div>
+                <div class="type-bar {{story.type}}"></div>
+                <div>
+                    <p>{{story.description}}</p>
+                </div>
+            </article>
+        </li>
+    
+        //same html with the userstory directive 
+        <li userstory 
+            ng-repeat="story in storyboard.stories | filter:{status:status.name}"
+            class="story"
+            ng-click="storyboard.setCurrentStory(story)">
+            <article>
+                <div>
+                    <button type="button" class="close"
+                    ng-click="userStory.deleteStoryBoard(story.id)">
+                        ×
+                    </button>
+                    <p class="title">{{story.title}}</p>
+                </div>
+                <div class="type-bar {{story.type}}"></div>
+                <div>
+                    <p>{{story.description}}</p>
+                </div>
+            </article>
+        </li>
+    
+        it's just a single attribute named userstory to a html element to tell the angular which element will be translated as a userstory directive 
+        
+        * add DOM event handlers to the directive link function 
+        myModel.directive('userstory', function () {
+        	var linker = function (scope, element, attrs) {
+        		//pending
+        		element
+        		.mouseover(function () {
+        			element.css({
+        				'opacity' : 0.9
+        			});
+        		})
+        		.mouseout(function () {
+        			element.css({
+        				'opacity' : 1.0
+        			})
+        		});
+        	};
+
+        	var controller = function ($scope) {
+        		//pending
+        	};
+
+        	return {
+        		restrict : 'A',
+        		controller : controller,
+        		controllerAs : 'userStory',
+        		link : linker
+        	};
+        });
+        
+        the directive doesn't fire until the element has been added to the page and the compilation cycle has run. It is like a premium valet service just for your DOM 
+        
+        * we could inject any services into the directive constructor methods for helping implment and manipulate the DOM and background logic 
+        
+    + a more advanced feature 
+    
+        * the drag and drop feature, three directives drag-container, drop-container, drop-target. we could add a service to share data between the drag/drop container and the target 
+        
+        angular.module('Angello.Storyboard')
+        .directive(‘dragContainer’, function () {
+        	return {
+        		restrict : 'A',
+        		controller : 'DragContainerController',
+        		controllerAs : 'dragContainer',
+        		link : function ($scope, $element, $attrs, dragContainer) {
+        			dragContainer.init($element);
+        			$element.on('dragstart',
+        				dragContainer.handleDragStart.bind(dragContainer));
+        			$element.on('dragend',
+        				dragContainer.handleDragEnd.bind(dragContainer));
+        			$scope.$watch($attrs.dragContainer,
+        				dragContainer.updateDragData.bind(dragContainer));
+        			$attrs.$observe('mimeType',
+        				dragContainer.updateDragType.bind(dragContainer));
+        			$attrs.$set('draggable', true);
+        		}
+        	};
+        })
+        .controller('DragContainerController', function ($dragging) {
+        	var dragContainer = this;
+        	dragContainer.init = function (el) {
+        		dragContainer.el = el;
+        	};
+
+            dragContainer.handleDragStart = function (e) {
+            	if (e.originalEvent)
+            		e = e.originalEvent;
+            	e.dataTransfer.dropEffect = 'move';
+            	e.dataTransfer.effectAllowed = 'move';
+            	dragContainer.el.addClass('drag-container-active');
+            	dragContainer.dragging = true;
+            	$dragging.setData(dragContainer.data);
+            	$dragging.setType(dragContainer.type);
+            };
+            
+            dragContainer.handleDragEnd = function (e) {
+            	if (e.originalEvent)
+            		e = e.originalEvent;
+            	angular.element(e.target).removeClass('drag-active');
+            	dragContainer.el.removeClass('drag-container-active');
+            	dragContainer.dragging = false;
+            	$dragging.setData(null);
+            	$dragging.setType(null);
+            };
+            
+            dragContainer.updateDragData = function (data) {
+            	dragContainer.data = data;
+            	if (dragContainer.dragging)
+            		$dragging.setData(dragContainer.data);
+            };
+            
+            dragContainer.updateDragType = function (type) {
+            	dragContainer.type = type || 'text/x-drag-and-drop';
+            	if (dragContainer.dragging)
+            		$dragging.setType(dragContainer.type);
+            };
+        });
+        
+        listen for changes to the mimeType attribute and trigger the updateDragType on the controller. We use $observe instead of $watch because the value we’re watching is evaluated as text, not an actual Angular expression.
+        
+        We assign the passed-in data to the controller and then, if the dragging property on the controller is true (or the element is still being dragged), we update the data property on the $dragging service
+        
+        we use $scope.$watch to listen for changes to $attrs.dragContainer. As you’ll see, $attrs.dragContainer is assigned to the story data model, and any time that data changes, we want to call updateDragData on the controller
+        
+        We initialize the type property on the controller to the type parameter if it exists, and to text/x-drag-and-drop if it doesn’t. Then, if the element is still being dragged, we update the type property on the $dragging service
+        
+        * use the drag container directive 
+        
+        <li userstory
+            ng-repeat="story in storyboard.stories | filter: {status:status.name}"
+            drag-container="story" mime-type="application/x-angello-status"
+            class="story my-repeat-animation"
+            ng-click="storyboard.setCurrentStory(story)">
+            
+        * create the drop container directive 
+        angular.module('Angello.Storyboard')
+        .directive('dropContainer', function ($document, $parse) {
+        	return {
+        		restrict : 'A',
+        		controller : 'DropContainerController',
+        		controllerAs : 'dropContainer',
+        		link : function ($scope, $element, $attrs, dropContainer) {
+        			var bindTo = function (event) {
+        				return function (e) {
+        					return $scope.$apply(function () {
+        						return dropContainer['handle' + event](e);
+        					});
+        				};
+        			};
+        			var dragEnd =
+        				dropContainer.handleDragEnd.bind(dropContainer);
+        			var handleDragEnter = bindTo('DragEnter');
+        			var handleDragOver = bindTo('DragOver');
+        			var handleDragLeave = bindTo('DragLeave');
+        			var handleDrop = bindTo('Drop');
+        			dropContainer.init($element, $scope, {
+        				onDragEnter : $parse($attrs.onDragEnter),
+        				onDragOver : $parse($attrs.onDragOver),
+        				onDragLeave : $parse($attrs.onDragLeave),
+        				onDrop : $parse($attrs.onDrop),
+        			});
+        			$element.on('dragenter', handleDragEnter);
+        			$element.on('dragover', handleDragOver);
+        			$element.on('dragleave', handleDragLeave);
+        			$element.on('drop', handleDrop);
+        			$scope.$watch($attrs.accepts,
+        				dropContainer.updateMimeTypes.bind(dropContainer));
+        			$document.on('dragend', dragEnd);
+        			$scope.$on('$destroy', function () {
+        				$document.off('dragend', dragEnd);
+        			});
+        		}
+        	};
+        });
+        
+        the $scope service provide a $apply method, we watch the accepts attribute on the directive, every time accepts changes we invoke the updateMimeTypes method on the controller 
+        
+        then we create a watcher on $document
+        
+        * use the drop container directive 
+        <li userstory
+            ng-repeat="story in storyboard.stories | filter: {status:status.name}"
+            drag-container="story" mime-type="application/x-angello-status"
+            drop-container="" accepts="['application/x-angello-status']"
+            class="story my-repeat-animation"
+            ng-click="storyboard.setCurrentStory(story)">
+        
+        <div class="emptystatus" drop-container=""
+            accepts="['application/x-angello- status']"
+            on-drop="storyboard.finalizeDrop(data)"
+            on-drag-enter="storyboard.changeStatus(data, status)"
+            ng-if="storyboard.isEmptyStatus(status)">
+        </div>
+        
+        We don’t add the on-drop and on-drag-enter attributes to the userstory element because we’re going to add drop-target directives as children of userstory and define those attributes there.
+        
+        We define another attribute called accepts and assign it an array of MIME types that we can drag over it. In this case, we only need one value, ['application/x-angello-status'], because there’s only one type of element we need to drag
+        
+    + build the controller 
+    angular.module('Angello.Storyboard')
+    .controller('DropContainerController', function ($dragging) {
+    	var dropContainer = this;
+    	var targets = {};
+    	var validAnchors = 'center top top-right right
+    		bottom-right bottom bottom-left left top-left'.split(' ');
+    	dropContainer.init = function (el, scope, callbacks) {
+    		dropContainer.el = el;
+    		dropContainer.scope = scope;
+    		dropContainer.callbacks = callbacks;
+    		dropContainer.accepts = ['text/x-drag-and-drop'];
+    		dropContainer.el.addClass('drop-container');
+    	};
+        
+        dropContainer.addDropTarget = function (anchor, dropTarget) {
+        	if (validAnchors.indexOf(anchor) < 0)
+        		throw new Error('Invalid anchor point ' + anchor);
+        	if (targets[anchor])
+        		throw new Error('Duplicate drop targets for the anchor ' + anchor);
+        	targets[anchor] = dropTarget;
+        };
+        
+        dropContainer.removeDropTarget = function (anchor) {
+        	if (targets[anchor] && targets[anchor] === anchor) {
+        		dropContainer.activeTarget = null;
+        	}
+        	delete targets[anchor];
+        };
+        
+        dropContainer.updateMimeTypes = function (mimeTypes) {
+        	if (!mimeTypes)
+        		mimeTypes = ['text/x-drag-and-drop'];
+        	if (!angular.isArray(mimeTypes))
+        		mimeTypes = [mimeTypes];
+        	dropContainer.accepts = mimeTypes;
+        };
+        
+        dropContainer.updateDragTarget = function (e, skipUpdateTarget) {
+        	if (e.originalEvent)
+        		e = e.originalEvent;
+        	var activeTarget = null;
+        	var activeAnchor = null;
+        	var minDistanceSq = Number.MAX_VALUE;
+        	var prevAnchor = dropContainer.activeAnchor;
+        	var prevTarget = dropContainer.activeTarget;
+        	if (!skipUpdateTarget) {
+        		angular.forEach(targets, function (dropTarget, anchor) {
+        			var width = dropContainer.el[0].offsetWidth;
+        			var height = dropContainer.el[0].offsetHeight;
+        			var anchorX = width / 2;
+        			var anchorY = height / 2;
+        			if (anchor.indexOf('left') >= 0)
+        				anchorX = 0;
+        			if (anchor.indexOf('top') >= 0)
+        				anchorY = 0;
+        			if (anchor.indexOf('right') >= 0)
+        				anchorX = width;
+        			if (anchor.indexOf('bottom') >= 0)
+        				anchorY = height;
+        			var distanceSq = Math.pow(anchorX - e.offsetX, 2)
+        				 + Math.pow(anchorY - e.offsetY, 2);
+        			if (distanceSq < minDistanceSq) {
+        				activeAnchor = anchor;
+        				activeTarget = dropTarget;
+        				minDistanceSq = distanceSq;
+        			}
+        		});
+        	}
+        	dropContainer.activeAnchor = activeAnchor;
+        	dropContainer.activeTarget = activeTarget;
+        	var eventData = {
+        		$event : e,
+        		data : $dragging.getData(),
+        		anchor : activeAnchor,
+        		target : activeTarget,
+        		prevAnchor : prevAnchor,
+        		prevTarget : prevTarget
+        	};
+        	if (prevTarget !== activeTarget) {
+        		if (prevTarget) {
+        			dropContainer.el.
+        			removeClass('drop-container-active-' + prevAnchor);
+        			prevTarget.handleDragLeave(eventData);
+        		}
+        		if (activeTarget) {
+        			dropContainer.el.
+        			addClass('drop-container-active-' + activeAnchor);
+        			activeTarget.handleDragEnter(eventData);
+        		}
+        	}
+        	return eventData;
+        };
+        
+        dropContainer.handleDragEnter = function (e) {
+        	if (e.originalEvent)
+        		e = e.originalEvent;
+        	if (!dropContainer.accepts
+        		 || dropContainer.accepts.indexOf($dragging.getType()) >= 0) {
+        		e.preventDefault();
+        	} else {
+        		return;
+        	}
+        	var eventData = dropContainer.updateDragTarget(e);
+        	dropContainer.el.children().css({
+        		'pointer-events' : 'none'
+        	});
+        	dropContainer.el.addClass('drop-container-active');
+        	if (dropContainer.callbacks.onDragEnter) {
+        		dropContainer.callbacks
+        		.onDragEnter(dropContainer.scope, eventData);
+        	}
+        };
+        
+        dropContainer.handleDragOver = function (e) {
+        	if (e.originalEvent)
+        		e = e.originalEvent;
+        	if (!dropContainer.accepts
+        		 || dropContainer.accepts.indexOf($dragging.getType()) >= 0) {
+        		e.preventDefault();
+        	} else {
+        		return;
+        	}
+        	var eventData = dropContainer.updateDragTarget(e);
+        	if (eventData.target) {
+        		eventData.target.handleDragOver(eventData);
+        	}
+        	if (dropContainer.callbacks.onDragOver) {
+        		dropContainer.callbacks
+        		.onDragOver(dropContainer.scope, eventData);
+        	}
+        };
+        
+        dropContainer.handleDragLeave = function (e) {
+        	if (e.originalEvent)
+        		e = e.originalEvent;
+        	var eventData = dropContainer.updateDragTarget(e, true);
+        	dropContainer.el.children().css({
+        		'pointer-events' : null
+        	});
+        	dropContainer.el.removeClass('drop-container-active');
+        	if (dropContainer.callbacks.onDragLeave) {
+        		dropContainer.callbacks
+        		.onDragLeave(dropContainer.scope, eventData);
+        	}
+        };
+        
+        dropContainer.handleDragEnd = function (e) {
+        	dropContainer.el.children().css({
+        		'pointer-events' : null
+        	});
+        	dropContainer.el.removeClass('drop-container-active');
+        };
+
+    });
+    
+    Our next stop is the addDropTarget method. As you’ll see, this method actually gets called from the drop-target directive. 
+    
+    We also default the accepts attribute to ['text/x-dragand-drop'] and add a drop-container class to the directive’s element
+    
+    removeDropTarget method (which also gets called from the droptarget directive), we simply remove the drop-target instance at the provided anchor key in the targets object
+
+    we’re going to use the Pythagorean Theorem(勾股定理)! We get the mouse pointer’s distance from anchorX and the mouse pointer’s distance from anchorY by subtracting e.offsetX and e.offsetY from them, respectively. Then we square both these values and add them together. The result is the square of the distance between the mouse pointer and the position represented by the two anchor points. Then, if that distance is less than minDistanceSq, we set the current anchor and current target, and update minDistanceSq to the distanceSq we just evaluated
+    
+    Now, if the previous target and the current target are different and there was a previous target, we remove the appropriate class and call the handleDragLeave method on the previous target, passing in our newly formed eventData. If there is a current target, we add the appropriate class to it and call the handleDragEnter method on it, passing in the eventData.
+    
+    we prevent the default DOM actions from occurring and proceed with the rest of the method. We have to prevent the default action if we want to implement our own functionality
+    
+    Then we call the updateDragTarget method, pass in the current event, and assign the variable eventData to the return value of that call. Also, we get rid of pointer events on the drop-container element’s children and add a class to that same element.
+    
+    + create the drop target directive 
+    + use the drop target directive 
+    
+    + build the controller 
+    
+    + create the $dragging service 
+    
+    + update the StoryboardCtrl 
+    
+    + integrating with third-party libraries again
+    
+    Flot is a gorgeous graphing library, http://www.flotcharts.org
+    
+    + testing a directive, create an angular element and then compile that element with $rootScope. We will use our userstory directive as an example 
+   
+    
+    describe('userstory Directive', function () {
+        var userStory,
+        element,
+        StoriesModel,
+        $rootScope;
+        beforeEach(module('Angello.User'));
+    
+    	beforeEach(inject(function ($q, $compile, _$rootScope_, _StoriesModel_) {
+    			$rootScope = _$rootScope_;
+    			var directiveMarkup = angular.element('<li userstory></li>');
+    			element = $compile(directiveMarkup)($rootScope);
+    			userStory = element.scope().userStory;
+    			StoriesModel = _StoriesModel_;
+    			spyOn(StoriesModel, 'destroy').and.callFake(function () {
+    				var deferred = $q.defer();
+    				deferred.resolve('data');
+    				return deferred.promise;
+    			});
+    			spyOn($rootScope, '$broadcast').and.callThrough();
+    		}));
+            
+        it('should delete a story', function () {
+        	userStory.deleteStory('0');
+        	expect(StoriesModel.destroy).toHaveBeenCalledWith('0');
+        	$rootScope.$digest();
+        	expect($rootScope.$broadcast).toHaveBeenCalledWith('storyDeleted');
+        });
+        
+        it('should delete a story', function () {
+        	userStory.deleteStory('0');
+        	expect(StoriesModel.destroy).toHaveBeenCalledWith('0');
+        	$rootScope.$digest();
+        	expect($rootScope.$broadcast).toHaveBeenCalledWith('storyDeleted');
+        });
+    });
+    
+    + best practices, DOM manipulation should be done in the link function and business logic in the controller
+- animations 
+    + intro to animations, the power of directive and animation can harness complex animations with the addtion of a single class to your markup 
+    
+    + how angularjs handles animations, angular provide hooks for you to apply your own animations. there are five of them 
+    
+    event       function                                            description 
+    enter       $animate.enter(element, parent, after, callback)    appends the element object after the node or within the parent node then runs the enter animation 
+
+    leave       $animate.leave(element, callback),                  runs the leave animation and then removes the element from the DOM 
+    
+    move        $animate.addClass(element, className, callback)     run the addClass animation based on the className value and then adds the class to the element 
+
+    addClass    $animate.addClass(element, className, callback), runs the addClass animation based on the className value and then adds the class to the element 
+    
+    removeClass $animate.remove(element, className, callback)
+    
+    + animation-naming convention, angularJS are entirely class-based, it makes integration third-party libraries easier 
+    
+    [class]-[event]-[state]
+    
+    .mute-add and .mute-remove 
+    
+    the animation defaults to the starting state and then progresses to the active state 
+    
+    if animations are defined within css and the events are triggered by an AngularJS directive such as ng-if or ng-repeat, the class name will be prefixed with an ng, as in ng-enter and ng-leave 
+    
+    + animation enable, angular animation doesn't contain in angular core. 
+    
+    GreenSock Animation Platform(GSAP) which is a javascript animation framework, http://www.greensock.com/gsap-js/
+    
+        * reference the angular-animate.min.js and TweenMax.min.js which contain everything GreenSock has to offer 
+        
+        inject the angular-animate as submodule by 
+        var myModule = angular.module('Angello', [//... 'ngAnimate', //...])
+        
+        * css transitions, css-based
+        
+        the animation-naming convention 
+        event       starting css class       ending css  class       directives that fire it 
+        enter       .ng-enter               .ng-enter-active        ngRepeat, ngInclude, ngIf, ngView 
+        
+        leave       .ng-leave               .ng-move-active         ngRepeat 
+
+        * define the base transition, we're using ng-if to trigger the animation and the event is casued by an angularjs directive, we need to define the classses for ng-enter and ng-leave
+        
+        .my-fade-animation.ng-enter, .my-fade-animation.ng-leave {
+            -webkit-transition: 0.5s linear all;
+            -moz-transition: 0.5s linear all;
+            -o-transition: 0.5s linear all;
+            transition: 0.5s linear all;
+        }
+        
+        this css define the transition for ng-enter and ng-leave on the my-fade animation to use linear easing that lasts for 0.5 seconds and applies to all properties 
+        
+        * define the ng-enter transition 
+        /* client/assets/css/animations.css */
+        .my-fade-animation.ng-enter {
+            opacity: 0;
+        }
+        .my-fade-animation.ng-enter.ng-enter-active {
+            opacity: 1;
+        }
+        
+        * define ng-leave transitions
+        .my-fade-animation.ng-leave {
+            opacity: 1;
+        }
+        .my-fade-animation.ng-leave.ng-leave-active {
+            opacity: 0;
+        }
+        
+        combine them for conciseness 
+        .my-fade-animation.ng-enter,
+        .my-fade-animation.ng-leave.ng-leave-active {
+            opacity: 0;
+        }
+        .my-fade-animation.ng-leave,
+        .my-fade-animation.ng-enter.ng-enter-active {
+            opacity: 1;
+        }
+        
+        * making it move, the css classs have been defined. You will see what we mean when we say angularjs transitions are essentially class-based directives that encapsulate animation functionality 
+        
+        html with animation 
+        <!-- client/src/angello/storyboard/tmpl/storyboard.html -->
+            <div class="details">
+            <!-- ... -->
+                <div ng-if="storyboard.detailsVisible" class="my-fade-animation">
+            <!-- ... -->
+            </div>
+        </div>
+        
+        html without animation 
+        <!-- client/src/angello/storyboard/tmpl/storyboard.html -->
+            <div class="details">
+                <!-- ... -->
+                <div ng-if="storyboard.detailsVisible">
+                <!-- ... -->
+            </div>
+        </div>
+        
+    + css animation
+        * define the base animation classes 
+        /* client/assets/css/animations.css */
+        .my-repeat-animation.ng-enter {
+            -webkit-animation: 0.5s repeat-animation-enter;
+            -moz-animation: 0.5s repeat-animation-enter;
+            -o-animation: 0.5s repeat-animation-enter;
+            animation: 0.5s repeat-animation-enter;
+        }
+        .my-repeat-animation.ng-leave {
+            -webkit-animation: 0.5s repeat-animation-leave;
+            -moz-animation: 0.5s repeat-animation-leave;
+            -o-animation: 0.5s repeat-animation-leave;
+            animation: 0.5s repeat-animation-leave;
+        }
+        .my-repeat-animation.ng-move {
+            -webkit-animation: 0.5s repeat-animation-move;
+            -moz-animation: 0.5s repeat-animation-move;
+            -o-animation: 0.5s repeat-animation-move;
+            animation: 0.5s repeat-animation-move;
+        }
+        
+        css animation require to define vendor prefix, using a css preprocess such as Sass or Less eliminates the need to type all of this out of hand 
+        
+        * define the animation keyframes 
+
+        @keyframes repeat-animation-enter {
+            from {
+                opacity:0;
+            }
+            to {
+                opacity:1;
+            }
+        }
+        ...
+        
+        * make it move, we can catually attach the same animation to two different ng-repeat instances with little fanfare 
+        <!-- client/src/angello/storyboard/tmpl/storyboard.html -->
+        <div class="list-area-animation"
+            ng-class="{'list-area-expanded':!storyboard.detailsVisible}">
+            <div class="list-wrapper">
+                <ul class="list my-repeat-animation"
+                    ng-repeat="status in storyboard.statuses">
+                    <h3 class="status">{{status.name}}</h3>
+                    <hr/>
+                    <li userstory
+                        ng-repeat="story in storyboard.stories | filter:{status:status.name}"
+                        drag-container="story" mime-type="application/x-angello-status"
+                        drop-container="" accepts="['application/x-angello-status']"
+                        class="story my-repeat-animation" ng-click="storyboard.setCurrentStory(story)">
+                        <!-- ... -->
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+    + javascript animation, use ng-class to dynamic attach class on to an element details-visible 
+    
+        * defining the javascript animation 
+        angular.module('Angello.Common')
+        .animation('.details-animation',
+        	function () {
+        	//...
+        });
+        
+        the syntax is similar to define an angular service or controller. the only difference is that the animation name is class-based
+        
+        * the javascript animation events, we trigger the animation with ng-class the two events we want to listen to are addClass and removeClass 
+        angular.module('Angello.Common')
+        .animation('.details-animation',
+        	function () {
+        	return {
+        		addClass : function (element, className, done) {
+        			//...
+        		},
+        		removeClass : function (element, className, done) {
+        			//...
+        		}
+        	};
+        });
+        
+        the className is the name of the class that trigger the event 
+        the element is the DOM element that the event was trigger on 
+        done is the callback function that needs to be called when the animation is complete 
+        
+        * the javascript animation class, it's possible to have more that one animation define on an element. it's necessary to perform some logic to only act if the class that triggered the event is the one you're defined 
+        angular.module('Angello.Common')
+        .animation('.details-animation',
+        	function () {
+        	return {
+        		addClass : function (element, className, done) {
+        			if (className == 'details-visible') {
+        				//...
+        			} else {
+        				done();
+        			}
+        		},
+        		removeClass : function (element, className, done) {
+        			if (className == 'details-visible') {
+        				//...
+        			} else {
+        				done();
+        			}
+        		}
+        	};
+        });
+        
+        use the TweenMax function to actually do the animation 
+        
+        * making it move, make the details-animation work is to add it to the DOM and set ng-class to toggle the details-visible class 
+        
+        the following is the same code we used earlier, but with a few small additions to the outer div we've added details-animation to the class attribute 
+        <div class="details details-animation" ng-class="{'details-visible':storyboard.detailsVisible}">
+        
+            <div class="details-nav">
+                <div ng-if="!storyboard.detailsVisible">
+                    <button class="btn pull-left btn-default"
+                        ng-click="storyboard.setDetailsVisible(true)">
+                        <span class="glyphicon glyphicon-arrow-left"></span>
+                    </button>
+                    </div>
+                    <div ng-if="storyboard.detailsVisible">
+                        <button class="btn pull-right btn-default"
+                            ng-click="storyboard.setDetailsVisible(false)">
+                        <span class="glyphicon glyphicon-arrow-right"></span>
+                        </button>
+                    </div>
+                </div>
+                <div ng-if="storyboard.detailsVisible" class="my-fade-animation">
+                <!-- ... -->
+            </div>
+        </div>
+        
+        * manually trigger animation by $animate service, see http://docs.angularjs.org/api/ngAnimate.$animate for more details 
+        
+        * learn more about test element animation by  http://www.yearofmoo.com/2013/08/remasteredanimation-in-angularjs-1-2.html#testing-animations
+        
+        * get full-page animation by set an animation class on the tag with the ng-view directive defined on it 
+        
+        * best practice, use css animation as much as possible. let javascript to handle the business logic 
+    
+- structuring your site with routes, every web application has a url and you can use this to define the state of the application. it's called url routing and angularjs allows you to implement routing in  your web applicaiton with ngRoute sub-module 
+
+    + the components of angularjs routes 
+    component       responsibility 
+    $routeProvider  Configures routes 
+    $route          listens to URL changes and coordinates with the ng-view 
+    ng-view         responsible for coordinating the creation of the appropriate controller and view for the current route 
+    $routeParams    interprets and communicates URL parameters to the controller     
+
+    with the route service to detect when the url is pointing to a specific user such as /users/123 with 123 being the user's id $route will detect this and work with ng-view to craete the appropriate controller and view to dispaly the user's stories 
+    
+    $routeParams service is injected into to the controller and exposes the user's id from the URL so that the controller can act upon it 
+
+    $routeProvider 
+    |
+    configures 
+    |
+    V 
+    $route ------> routeParams 
+    |                    |
+    controls             |
+    |                    |
+    V                    |
+    ng-view              expose url parameters 
+    |       \            |
+    creates  creates     |
+    |         \          |
+    V          V         V
+    view        controller 
+    
+    + how to create routes in angularjs
+    
+        * create your first route with ngRoute and ngView 
+        include the ngRoute source file, 
+        { file:
+        '//cdnjs.cloudflare.com/ajax/libs/angular.js/1.3.3/angular-route.min.js'
+        }
+        
+        we need to reference the sub-module in our application module definition 
+        
+        * add ngView, we need to tell angello where we want to display the route's rendered template in our application 
+        <body ng-controller="MainCtrl as main" ng-class="{loading:loadingView}">
+            <!-- ... -->
+            <div ng-view=""></div>
+            <!-- ... -->
+        </body>
+        
+        ng-view is responsible for fetching the route template and compiling it with the route's controller and displaying the finished, compiled view to the user 
+        
+        the relationship between a route and a view is one to one, which can be a significant disadvantage if you have a complex layout that requires nested views. a greate solution is to this problem is to use angularUI router https://github.com/angular-ui/ui-router
+        
+        * set up y our route with $routeProvider 
+        
+        routes are always configured in the config block of the module. it's behavior that needs to be available as soon as the application runs 
+        
+        routes are primarily configured using the when method provided by $routeProvider 
+        
+        myModule.config(
+        	function ($routeProvider, $httpProvider, $provide) {
+        	$routeProvider
+        	.when('/', {
+        		templateUrl : 'src/angello/storyboard/tmpl/storyboard.html',
+        		controller : 'StoryboardCtrl',
+        		controllerAs : 'storyboard'
+        	});
+        });
+
+        routeProvider comes with an additonal method called otherwise that's used when a route doesn't match any other definition 
+        
+        * set up route navigation, angularjs uses a hash symbol such as #/users as a reference point for a route. to navigate to the root of the site we therefore would use <a href="#/"></a> to accomplish the task 
+        div class="navbar navbar-fixed-top navbar-default">
+            <div class="navbar-header">
+                <a class="logo navbar-brand" href="#/">
+                    <img src="assets/img/angello.png">
+                </a>
+                </div>
+                <div class="btn-group pull-right" ng-show="main.currentUser">
+                    <a class="btn btn-danger" href="#/">
+                    <span class="glyphicon glyphicon-home"></span>
+                </a>
+                <a class="btn btn-danger" href="#/users">
+                    <span class="glyphicon glyphicon-user"></span>
+                </a>
+                <a class="btn btn-danger" href="#/dashboard">
+                    <span class="glyphicon glyphicon-signal"></span>
+                </a>
+                <button class="btn btn-default" ng-click="main.logout()">
+                    <span class="glyphicon glyphicon-log-out"></span>
+                </button>
+            </div>
+        </div>
+        
+        the best practice is favor anchor tags over programmatically setting routes using $location service 
+        
+        * review we added ngRoute to our applicaiton set up ngView and defined our routes with $routeProvider. 
+        
+        using route parameter to get detailed information 
+        
+    + using parameters with routes 
+    a route path can contain named groups which delineated with a colon; for example :userId, $route will attempt to match the path against $location.path and any matched parameters will be stored in the $routeParams service to be injected into the appropriate controller 
+    
+    /users/:userId/preferences/:somePreference
+    
+    |
+    V
+    
+    /users/123/preferences/green/eggs/and/ham 
+    
+    :userId, 123 
+    :somePreference green/eggs/and/ham
+    
+    add a route configuration 
+    myModule.config(function ($routeProvider, $httpProvider, $provide) {
+        $routeProvider
+        //...
+        .when('/users/:userId', {
+            templateUrl: 'src/angello/user/tmpl/user.html',
+            controller: 'UserCtrl',
+            controllerAs: 'myUser'
+        })
+        //...
+        .otherwise({redirectTo: '/'});
+    });
+    
+    use $routeParams to read the route parameters, $routeParams['userId']
+    
+    <tr ng-repeat="user in users.users">
+        <!-- ... -->
+        <td>
+            <button type="button" class="btn btn-link"
+            ng-click="users.removeUser(user.id)">Remove</button>
+            <a class="btn btn-link" href="#/users/{{user.id}}">View</a>
+        </td>
+    </tr>
+    
+    we add a new link point to #/users/{{user.id}}, to make a complete link  
+    
+    + using resolve with routes, one challenge with angular is we want to load a user's available information and a collection of sotries to work with before we show the user view. 
+    
+    angular allow us to handle this situation by defining dependencies on our routes that must be resolved before the route's controller is instantiated 
+    
+    we'll use the resolve property on the route configuration object, the object that's passed as the second argument to $routeProvider.when to define this dependency. The resolve property is an object map that allow us to define multiple dependencies
+    
+    myModule.config(function ($routeProvider, $httpProvider, $provide) {
+    	$routeProvider
+    	//...
+    	.when('/users/:userId', {
+    		templateUrl : 'src/angello/user/tmpl/user.html',
+    		controller : 'UserCtrl',
+    		controllerAs : 'myUser',
+    		resolve : {
+    			user : function ($route, $routeParams, UsersModel) {
+    				var userId = $route.current.params['userId']
+    					 ? $route.current.params['userId']
+    					 : $routeParams['userId'];
+    				return UsersModel.fetch(userId);
+    			},
+    			stories : function (StoriesModel) {
+    				return StoriesModel.all();
+    			}
+    		}
+    	})
+    	//...
+    	.otherwise({
+    		redirectTo : '/'
+    	});
+    });
+    
+    now we could use the $routeParams in controller to complete the necessary business logic. if the return value of a route resolve property is a promise, a $routeChangeSuccess event is fired when the promise is resolved. if promise is rejected then a $routeChangeError efvent is fired and addtional handling is necessary
+    
+    + route events, we have a loading service that sets flags on whether or not the application is loading which is bound to a modal preloader. 
+    
+    we want to show the loading animation when changing from one route to another, we can accomplish this by listening the $routeChangeStart and $routeChangeSuccess events 
+    
+    myModule.run(function ($rootScope, LoadingService) {
+    	$rootScope.$on('$routeChangeStart', function (e, curr, prev) {
+    		LoadingService.setLoading(true);
+    	});
+    	$rootScope.$on('$routeChangeSuccess', function (e, curr, prev) {
+    		LoadingService.setLoading(false);
+    	});
+    });
+    
+    + testing, Testing a route follows the same pattern; you define your globals (including a variable that holds the URL of the route you want to test), and you inject the $location, $route, $templateCache, and $rootScope. Aslo need manually grab the correct template and put it in the $templateCache before you can procceed 
+    
+    describe('User Route', function () {
+        var $route,
+        $rootScope,
+        $location,
+        url = 'login';
+        // Inject and assign the $route and $rootScope services.
+        // Put the template in template cache.
+        beforeEach(module('Angello'));
+        beforeEach(inject(function
+                (_$location_, _$route_, $templateCache, _$rootScope_) {
+                $route = _$route_;
+                $rootScope = _$rootScope_;
+                $location = _$location_;
+                $templateCache.put('src/angello/login/tmpl/login.html', '');
+            }));
+            
+        it('should be defined with
+            correct controller and templateUrl', function () {
+            $location.path(url);
+            $rootScope.$digest();
+            expect($route.current.controller).toEqual('LoginCtrl');
+            expect($route.current.controllerAs).toEqual('login');
+            expect($route.current.templateUrl)
+            .toEqual('src/angello/login/tmpl/login.html');
+        });
+    });
+    
+    now we only need to do is test whether our configuration is correct by using $location to navigate to our URL, invoking a digit cycle with the $routeScope.$digest
+    
+    + best practice, your route structure should keep same as your file structure. a good file structure often reflect the code structure
+    
+    + multiple views and side views, ngRoute help us build a solid foundation for routing in angularjs. but it doesn't support multiple views and nested views. check the ui.router and to find more advance use case https://github.com/angular-ui/ui-router/wiki
+            
+- forms and validations 
+    + form validation
+    
+    angularjs comes with a form directive that extends the standard html form elements and creates an instance of FormController to keep track of state within the form 
+    
+    set up validation by name attribute 
+    <form name="storyboard.detailsForm"></form>
+    
+                                    angularjs 
+                                    html form 
+                                        |
+                controller              |             view 
+    --------------------------------------------------------------------------------
+    form                                |
+    $scope.formName.$valid      <-------+
+                                        |
+    form element                        |
+    $scope.formName.formElement.$valid<-+------------> add validations 
+                                        |               ng-require="true"
+                                        |                   
+                                        +------------>  ng-disabled="!formName.$valid"
+    
+        * predefined form states that allow you to make decisions 
+        $pristine, boolean flag indidcates that the form i unmodified 
+        $dirty, boolean form has been modified 
+        $valid, boolean indicates the form in a valid state 
+        $invalid, indicates the form is in an invalid state 
+        $error, contains all the validations on a form and whether they're valid or invalid 
+        $touched, boolean indicates that a control has lost focus 
+        
+        * prevent user submit the form by bind $ng-disabled directive to $!storyboad.detailsForm.$valid so that ng-disabled is true when detailsForm is not valid 
+        
+        <div ng-if="storyboard.currentStory">
+            <button class="btn btn-default" ng-click="storyboard.updateCancel()">
+                Cancel
+            </button>
+            <button class="btn pull-right btn-default"
+                ng-disabled="!storyboard.detailsForm.$valid"
+                ng-click="storyboard.updateStory()">Update</button>
+        </div>
+        <div ng-if="!storyboard.currentStory">
+            <button class="btn pull-right btn-default"
+                ng-disabled="!storyboard.detailsForm.$valid"
+                ng-click="storyboard.createStory()">New Story</button>
+        </div>
+        
+        * adding validations, we will use a great little sub-module called ngMessages to help us display our error message. 
+        { file:'//cdnjs.cloudflare.com/ajax/libs/angular.js/1.3.3/angularmessages.min.js' }
+        
+        var myModule = angular.module('Angello',
+                        [//...
+                        'ngMessages',
+                        //...
+                        ]);
+        
+        the form controller will make the form element avaliable and expose the individual form elements via a formName.inputFieldName.property format 
+        <input class="form-control" type="text" id="inputTitle" name="inputTitle"
+        placeholder="Title" ng-model="storyboard.editedStory.title">
+        <div class="alert alert-warning"
+            ng-messages="storyboard.detailsForm.inputTitle.$error"
+            ng-if="storyboard.showMessages('inputTitle')">
+            <div ng-message="required">
+                <small>Required!</small>
+            </div>
+        </div>
+        
+        first we create a div with classes alert and alert warning, define the ng-messages directive on it and ffed it the storyboard.detailsForm.inputTitle.$error object. 
+        Then we create a child div, define a ng-message directive on it and feed ti the name of the rror that we want to validate against 
+        
+        use ng-if to telll angularjs to only show the message after user has left the field and it's invalid 
+        
+        angular.module('Angello.Storyboard')
+        .controller('StoryboardCtrl',
+        	function ($scope, $log, StoriesModel, UsersModel,
+        		STORY_STATUSES, STORY_TYPES) {
+        	//...
+        	storyboard.showMessages = function (field) {
+        		return storyboard.detailsForm[field].$touched
+        		 && storyboard.detailsForm[field].$invalid;
+        	};
+        	//...
+        });
+        
+        + ng-required, mark a input is required 
+        <input ... ng-required="true"/>
+        
+        + ng-minlength 
+        
+        + custom and asynchronous validation, build your own customized validation directive, you need to include the ngModel module into your directive. 
+        
+            * example check a input is number or not by custom a validation directive 
+            
+        var INTEGER_REGEXP = /^\-?\d+$/;
+        app.directive('integer', function () {
+        	return {
+        		require : 'ngModel',
+        		link : function (scope, elm, attrs, ctrl) {
+        			ctrl.$validators.integer = function (modelValue, viewValue) {
+        				if (ctrl.$isEmpty(modelValue)) {
+        					// consider empty models to be valid
+        					return true;
+        				}
+        				if (INTEGER_REGEXP.test(viewValue)) {
+        					// it is valid
+        					return true;
+        				}
+        				// it is invalid
+        				return false;
+        			};
+        		}
+        	};
+        });
+        
+        // use the directive 
+        <input type="number" ng-model="size" name="size" min="0" max="10" integer />{{size}}<br />
+        <span ng-show="form.size.$error.integer">
+            The value is not a valid integer!
+        </span> 
+        <span ng-show="form.size.$error.min || form.size.$error.max"> 
+            The value must be in range 0 to 10!
+        </span>
+        
+        for asynch validation use ctrl$asyncValidators to add the validation function and return a promise instead of a value 
+        show an message for a asynch validation during the processing time 
+        <span ng-show="form.name.$pending.asyncValidation">Doing some asynchronous validation</span>
+        
+        show error process is as same as the synchronous process 
+        
+        * ng-maxlength 
+        * form validation and css, angular adds the following classes among others 
+        .ng-valid {}
+        .ng-invalid {}
+        .ng-pristine {}
+        .ng-dirty {} 
+        
+        add a particular shade of red to style the element when it was invalid or a particular green when it was valid 
+        form.ng-dirty input.ng-invalid {
+            border: 1px solid #B02B2C;
+        }
+        form.ng-dirty input.ng-valid {
+            border: 1px solid #6BBA70;
+        }
+        
+        <input class="form-control ng-pristine ng-invalid ng-invalid-required ng-valid-minlength ng-valid-maxlength ng-touched" type="text" id="inputTitle" name="inputTitle" placeholder="Title" ng-model="storyboard.editedStory.title" ng-required="true" ng-minlength="3" ng-maxlength="30">
+        
+        * form validation, $setPristine and $setUntouched, set the form to pristine and untouched state by $setPristine and $setUntouched on the form element on the $scope reference 
+        
+        storyboard.resetForm = function () {
+        	storyboard.currentStory = null;
+        	storyboard.editedStory = {};
+        	storyboard.detailsForm.$setPristine();
+        	storyboard.detailsForm.$setUntouched();
+        }
+        
+    + testing, testing a form required karma-ng-html2js-preprocessor to let load templates wihtout initiating http requests 
+    
+    first off we create our top-level variables, include the angello.Storyboard module, and include the angello.Templates module. mock out all method on the UsersModel and StoriesModel services 
+    
+    //client/tests/specs/forms/StoryboardForm.spec.js
+    describe('Storyboard form', function () {
+        var scope,
+        ctrl;
+        beforeEach(module('Angello.Storyboard'));
+        beforeEach(module('Angello.Templates'));
+        beforeEach(inject(function ($q, $rootScope, $controller,
+                    $templateCache, $compile) {
+                var UsersModel = {
+                    all : function () {
+                        var deferred = $q.defer();
+                        deferred.resolve({});
+                        return deferred.promise;
+                    }
+                };
+                var StoriesModel = {
+                	all : function () {
+                		var deferred = $q.defer();
+                		deferred.resolve({});
+                		return deferred.promise;
+                	}
+                };
+
+                scope = $rootScope.$new();
+                ctrl = $controller('StoryboardCtrl', {
+                		$scope : scope,
+                		STORY_STATUSES : {},
+                		STORY_TYPES : {},
+                		UsersModel : UsersModel,
+                		StoriesModel : StoriesModel
+                	});
+                scope.storyboard = ctrl;
+                var templateHtml =                 	$templateCache.get('src/angello/storyboard/tmpl/storyboard.html');
+                var formElem = angular.element(templateHtml);
+                $compile(formElem)(scope);
+                
+                //trigger a digest cycle so that the validations are invoked
+                scope.$digest();
+            }));
+            
+        it('should be invalid by default', function () {
+        	expect(ctrl.detailsForm.$invalid).toBeTruthy();
+        });
+        
+        it('should be valid with populated fields', function () {
+        	ctrl.editedStory = {
+        		title : 'Title',
+        		status : 'To Do',
+        		type : 'Enhancement',
+        		reporter : 'Lukas Ruebbelke',
+        		assignee : 'Brian Ford'
+        	};
+        	scope.$digest();
+        	expect(ctrl.detailsForm.$valid).toBeTruthy();
+        });
+    });
+    
+    using ng-model-options, by default angular models update immedaitely when a user provides input(usually by typing). you can change that in angular 1.3 by adding an ng-model-options attribute to the form control that you want to modify 
+    update when user leaves the control by ng-model-options="{updateOn:'blur'}" to form control 
+    
+    + nesting forms, html doesn't allow nest forms natively. in order to show proper error messages at the correct times within nested forms, you need to wrap angular's ng-form directive around individual form fields 
+    
+    <form name="myForm">
+        <div ng-repeat="item in items" ng-class="{ 'has-error' : item.name.$invalid }">
+            <ng-form name="itemNameForm">
+                <label>Name</label>
+                <input type="text" name="name" ng-model="item.name" required>
+                <p ng-show="itemNameForm.name.$invalid">
+                    Name Required
+                </p>
+            </ng-form>
+        </div>
+    </form>
+    
+    + best practices, avoid excessive use of ng-fis and ng-show/hides when customizing error message. promote the logic into controller rather than in the html 
+    
+    
 # Setting up Karma 
+- karma is a javascript test runner. it's not a testing framework. it allows you specify the information about testint environment, such as browsers, which files to include, and so on. Then specify which test framework you want to use 
+
+- install node.js and node package management npm 
+$ npm install -g karma-cli 
+$ npm install karma-jasmine karma-chrome-launcher --save-dev 
+
+- init karma 
+$ karma init 
+
+create a karma configuration file karma.conf with configurations 
+module.exports = function(config){
+    config.set({
+        basePath:'../',
+        ...
+    });
+};
+//syntax similar to grunt or gulp file 
+
+- use karma in the package.json 
+{
+    "scripts": { 
+        "test": "karma start --single-run --browsers Chrome client/tests/karma.conf.js"
+    }
+}
+
 
 # Setting up a Node.js server 
+- install node.js and mongodb 
+- initialize the repo 
+- update EndpointConfigService.js 
+- a note about Auth0 
+// client/src/angello/Angello.js
+// Auth0 Authentication
+authProvider.init({
+	domain : 'angello.auth0.com',
+	clientID : 'Fq8hKAkghu45WpnqrYTc6dbvXhBUdP7l'
+});
+
 
 # Setting up a firebase server 
+- http://www.firebase.com/ and click start hacking 
 
 # Running the app 
+- install the serve 
+$ npm install -g serve 
+$ serve client/ 
+
+- view the app http://localhost:3000
 
 
 
