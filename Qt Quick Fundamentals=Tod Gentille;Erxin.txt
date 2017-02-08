@@ -1285,11 +1285,596 @@ transform:Scale{
 - summary 
 
 # Models views and delegates 
-- 
+- Overview 
+	+ ListModel 
+	+ ListView 
+	mode 
+	delegate 
+	header 
+	footer 
+	higlight 
+	+ Reapter
+	+ XmlListModel
+
+- ListModel and ListView 
+Data <--------------------------> Model 
+ |									|
+ |									V
+ Delegae 						View(ListView, GridView, PathView etc.)
+ ^								    |
+ |								    |	
+ +-----Display a row of data--------+	
+
+Delegate has a way to walk up the chain, so to speak to find the current
+ListView and the current model 
+
+The delegate can change the data in the model and the view will automatically
+update 
+
+ListModel's primary building block is ListElement 
+
+	+ the methods support by ListModel 
+	append 
+	remove 
+	move 
+	get 
+	set 
+	clear 
+	count
+
+	sync(), sync ListModel 
+	setProperty(int index, string property, variant value)
+	dynamicRoles: bool 
+
+	+ Roles: name and category 
+	ListModel{
+		id:listModelId 
+		ListElement {name: "Anders"; category: "C#"}
+		ListElement {...}
+		...
+	}
+void using common property names such as text 
+
+	+ dynamicRoles, roles underlying "type" can change, then we can change the
+	second element as a number 
+
+	set it first 
+
+	Not compatible with static ListElements, we have to use the methods to
+	dynamically add ListElements to your ListModel 
+
+	typically 4-6 times slower! depending on your platform 
+
+	+ the Final method
+	setProperty(index index, string property, variant value);
+
+	example:
+	setProperty(0, "name", "Tod");  //set the previous list listModelId 
+
+	+ jsobject dict which use JSON syntax 
+
+	online json editor http://www.jsoneditoronline.org 
+
+	+ ListModel methods, redux 
+	append(jsobject dict)
+	object get(int index)
+	insert(int index, jsobject dict) 
+	remove(int index, int count)
+	set(int index, jsobject dict)
+
+	+ Model-View-Delegate example for ListModel 
+	ListModel{
+		model: listModelId 
+		ListElement {name: "Anders"; category: "C#"}
+		...
+	}	
+
+	ListView{
+		model: listModelId 
+		width: 150; heigth: 100;
+		delegate: Row{
+			Text: {text: index+"."}
+			Text: {text: "Name:" + name}
+			Text: {text: "\t Category:" category}
+		}
+	}
+	the delegate specified how to abstract the model into the view. we could
+	also define the delegate in other place to make it more reusable  
+	
+	+ ListView support custom header and footer 
+
+	the verticalLayoutDirection property can be specified as
+	ListView.bottomtotop and the header will move to bottom and list will be
+	reverse. 
+
+	the layout direction can be set to Qt.righttoleft
+
+- demo ListView troubleshooting 
+ListView{
+	id: listViewId
+	model: listModelId
+	delegate: Row{
+		id: rowId 
+		spacing: 10 
+		Text{
+			text: index + ". " + model.name
+			font.pixelSize: 24 
+		}
+		Text{
+			text: category
+			font.pixelSize: 24
+			Component.onCompleted: print ("Row" + ListViewId.height)
+		}
+	}
+	Component.onCompleted: print("List view height" + height + "width:" width)
+}
+
+Component.onCompleted is an attached property provided by the QML engine, and
+we can use it to execute some debugging statements. The doc say the
+order of running the onCompleted script is undefined. 
+
+The output of the log for qml will display 
+qml:Row 0 
+qml: List view height 0 width 0
+this will make the list view only display a single row in it
+
+we could add anchros.fill: parent to the ListView then will expand the visible
+area
+
+lots of example of QML will use onCompleted singals to trace out QML behavior.
+The onCompleted event only means the qml have been completed from the
+framework's view and it's doesn't means all the item's properties are resolved
+
+- demo ListView decorations 
+	+ first move the delegate code out of the list itself from QML and put a
+	delegateId instead and we add a component with the id 
+
+	ListView{
+		id: listViewId 
+		model: listModelId 
+		anchros.fill: parent 
+		delegate: delegated 
+	}
+	Component{
+		id: delegateId 
+		Row: {
+			id: rowId
+			spacing: 10 
+			Text{
+				text: index + ". " + model.name
+				font.pixelSize: 24
+			}
+		}
+	}
+	
+	then we have a more reusable component, but we don't want to make the
+	component bound to the fixed fontSize with a specific list view. So we
+	need the component find the view which contain it by it self. W
+		* We need add a id to the root element of the component 
+		* use the id to find the relative list view 
+		Component{
+			id:...
+			Row:{
+				id:rowId
+				...
+				Text{
+					font.pixelSize: rowId.ListView.view.fontSize
+					...
+			}
+		}
+
+	+ we could add highlight to our list view by 
+	ListView{
+		...
+		highlight: Rectangle{
+			width: parent.width
+			color: "lightgray"	
+		}
+
+	+ add section to ListView, to automatic group base on section settings
+	ListView{
+		...
+		section{
+			property:"category"
+			criteria: ViewSection.FullString
+			labelPositioning: ViewSection.InlineLables
+			delegate: Rectangle{
+				width: listViewId.width
+				height: 30 
+				color: "lightsteelblue"
+				Text:{text.section;font.pixelSize: listViewId.fontSize}
+			}
+		}
+	}
+
+- demo ListView orientation 
+    + define ListView relative items in qml 
+    //main.qml {
+        ...
+        
+        Row{
+            DemoListView{}
+            DemoListView{verticalLayoutDirection: ListView.BottomToTop}
+            Column{
+                DemoListView{orientation: Qt.Horizontal}
+                DemoListView{orientation: Qt.Horizontal}
+            }
+        }
+    }
+    
+    //DemoListView.qml 
+    ListView{
+        ...
+        property bool isVertical: orientation === Qt.Vertical 
+        property int rowWdith: isVertical? 180: 50 
+        property int rowHeight: isVertical? 50: 180
+        
+        width: isVertical? 200: 300
+        height: isVertical? 300:200
+        header: Header{}
+        footer: Footer{}
+        delegate: Delegate{}
+    }
+    
+    //Header.qml 
+    Component{
+        id: headerId 
+        ...
+        Text{
+            ...
+            rotation: isVertical? 0: -90
+        }
+    }
+    
+    //Delegate.qml
+    Component{
+        id: delegateId 
+        ....
+    }
+    
+    //put into Footer.qml 
+    Component{
+        id: footerId
+        ...
+    }
+- repeater 
+    + properties 
+    modal: any 
+    delegate: Component 
+    count: int 
+    itemAdded(int index, Item item)
+    itemRemoved(int index, Item item)
+    
+    + example 
+    //main.qml will generate 4 list view instance 
+    Row{
+        spacing: 10 
+        Reapter{
+            model: 4 
+            DemoListView{}
+        }
+    }
+    
+    + use custom property array to set a property of repeater 
+    //main.qml  
+    property variant directionSetting: [
+        ListView.TopToBottom
+        ListView.BottomToTop
+    ]
+    
+    Row{
+        spacing: 10 
+        Repeater{
+            model: 2 
+            DemoListView{
+                verticalLayoutDirection: directionSetting[index]
+            }
+        }
+    }
+    
+    + qt also support object list 
+    
+    property var obejctList: [
+        {name: "Syncor", service: "programming"}
+        {name: "Syncor", service: "programming"}
+    ]
+    ...
+    Repeater{
+        Text{ text: modelData.name + " : " + modelData.service}
+    }
+
+- XmlListModel and XPath, required to import QtQuick.XmlListModel 2.0 
+    + XmlListModel only hold a collection of read-only data in xml roles 
+    + properties of XmlListModel
+    source or xml 
+    query 
+    roles list<xmlRole>
+    status, help troubleshooting 
+        XmlListModel.Loading 
+        XmlListModel.Ready 
+        XmlListModel.Error 
+        XmlListModel.Null 
+        
+    + source 
+    source: "qrc:///qt-quick-fundamentals-m07.xml"
+    source: "http://www.omdbapi.com/?r=XML&s=Breaker Morant"
+    
+    the r flag specifies the response data type. I want XML. the other option is JSON, and JSON is the default 
+    s specify the search 
+    
+    + example of XmlListModel 
+    //the xml data content 
+    ...
+    <clip href="qt-quick-fundamentals.wmv" title="Overview" bold="true"/>
+    <clip href="qt-quick-fundamentals.wmv" title="Overview" />
+    <clip href="qt-quick-fundamentals.wmv" title="Overview" bold="false"/>
+    ...
+    
+    //the qml content 
+    import QtQuick 2.2 
+    import QtQuick.Controls 1.2 
+    import QtQuick.XmlListModel 2.0 
+    import QtQuick.Layouts 1.1 
+    
+    ...
+    XmlListModel{
+        id: clipsId 
+        source: "qc:///qt-quick-fundamentals-m07.xml"
+        query: "/module/clips/clip"
+        XmlRole{name: "title"; query: "@title/string()"}
+        XmlRole{name: "href"; query: "@href/string()"}
+        ...
+        
+        onStatusChanged: {
+            var pre = "XmlListModel"
+            if(status === XmlListModel.Ready)  print(pre + "Ready -count:", cout );
+            if(status === XmlListModel.Loading)  print(pre + "Loading...");
+            if(status === XmlListModel.Error)  print(pre + "Error:",  errorString());
+            if(status === XmlListModel.Ready)  print(pre + "Null");
+        }
+    }
+    
+    in QML your query has to start with either the slash or double slash 
+    / = start at the root 
+    // find matches anywhere 
+    @ select attribute instead of element 
+    [] position predicate starts at 1 
+    [@someAttribute] boolean predicate 
+    
+    Then we could use Views to display the model, for example we could use ListView 
+    ListView{
+        id:...
+        model: clipsId 
+        
+        delegate: Text{
+            text: title 
+            font.bold: bold 
+            ...
+        }
+    }
+    
+- xpath syntax api explain  
+http://www.omdbapi.com
+        
+- summary 
 
 
 # Dialogs and More 
+- dialogs, five basic dialogs 
+    + ColorDialog 
+    + FontDialog 
+    + FileDialog 
+    + MessageDialog 
+    + Dialog 
+    
+    + Common properties of the basic dialogs 
+    modality, QtWindowModality, Modal or NonModal 
+    title, string 
+    <return/updated properties> 
+        fileUrl, fileUrls, folder 
+        color, currentColor 
+        font, currentFont 
+    visible: bool 
+    
+    + Common methods 
+    open(), set the visibility property to true 
+    close(), set the visibility property to false 
+    
+    all dialogs emit the onAccepted and onRejected signals 
+    
+    + all signals 
+    accepted 
+    apply 
+    discard 
+    help 
+    no 
+    rejected 
+    reset 
+    yes 
+    
+    + MenuBar, Toolbar and Action 
+    MenuBar > Menu > MenuItem Action 
+    ToolBar > ToolButton > Action 
+    
+- menu, toolbar, action 
+Action{
+	id:quitActionId
+	text: qsTr("Exit")
+	iconSource: "images/exit.png"
+	onTriggered: Qt.quit()
+}
+menuBar: MenuBar{
+	Menu {
+		title: qsTr("File")
+		MenuItem{
+			action: quitActionId 
+		}
+	}
+}
+toolBar: ToolBar{
+	ToolButton{action: quitActionId}
+}
 
+we could add images resource into the resource folder of the project 
+Resources/qml.qrc/images/*.png
+
+- file dialog 
+import QtQuick.Dialogs 1.1 
+
+property string folderToOpenUrl: ""
+
+Action{
+	id: folderOpenActionId
+	text: "open folder" 
+	iconSource: "images/folderopen.png"
+	onTriggered: folderDialogId.open()
+}
+
+ToolBar: ToolBar{
+	Row{
+		ToolButton{action: quitActionId}
+		ToolButton{action: folderOpenActionId}
+	}
+}
+
+FileDialog{
+	id: folderDialogId 
+	selectFolder: true 
+	title: baseAppName 
+	modality: Qt.WindowModal
+	onAccepted: folderToOpenUrl = fileUrl
+	onRejected: folderToOpenUrl = "folder not selected"
+}
+- font and color dialogs
+
+property int fileIndex: 0
+property int colorIndex:1 
+property int fontIndex: 2
+
+function setModelValue(index, value){
+	modelId.setProperty(index, "value", value)
+}
+
+ListModel{
+	id: modelId
+	ListElement{name: "File/Folder"; value:"no selection"}
+	ListElement{name: "Color"; value:"no selection"}
+	ListElement{name: "Font"; value:"no selection"}
+}
+
+ColorDialog{
+	...
+}
+
+FontDialog{
+	...
+	onAccepted: setModelValue(fontIndex, font.family)
+	onRejected: setModelValue(fontIndex, noSelection)
+}
+
+TableView{
+
+	model:modelId
+	TableViewColumn{role: "name"; title:"Dialog Type", width: 100}
+	TableViewColumn{role: "value"; title: "Result"; width: 300}
+}
+
+the modelId.setProperty will change the row of the ListModel
+- message and custom dialogs, custom dialog required QtQuick.Dialogs 1.2 
+Dialog{
+	id: customDialogId
+	signal heckYeahClicked()   //create a custom signal 
+	Calendar{
+		id: calenderId
+		onDoubleClick: ...
+	}
+	Row{
+		Button{
+			text: "built in click"
+			onClicked: customDialogId.click(StandardButton.Ok)
+		}
+		Button{
+			text: "Heck yeah customer signal"
+			onClicked: {
+				customDialog.heckYeahClicked()
+			}
+		}
+	}
+	onHeckYeahClicked: .... //handle the custom signal the event, it is a
+	naming convention 
+}
+
+MessageDialog{
+	id: messageDialogId
+	onYes: ...
+	onNo: ...
+}
+
+- coding conventions, qt coding convention to follow teams' guidlines 
+QML object structure 
+Grouped properties 
+Private properties 
+Lists of one item 
+JavaScript 
+
+
+JSLint for reference
+
+	+ recommaned 
+	object start with id 
+	define custom properties 
+
+	define signals 
+
+	define functions 
+
+	current object built-in properties setting 
+
+	child objects 
+
+	states 
+
+	transitions
+
+	+ group properties 
+	define group propety by online syntax or use a object definition and don't
+	write group name on each line
+
+	+ private properties there is no built-in support but we could use
+	QtObject to simulate it 
+	Item{
+		id: someComponent 
+		width: 50; height: 50
+		QtObject{
+			id: priv
+			property real pinSize: height/2
+		}
+	}
+
+	+ prefer no brackets for single item 
+
+	states: State{
+
+	} 
+
+	than 
+	states: [
+		States{
+		}
+	]
+
+	+ things left unsaid 
+	Canvas 
+	Connection, used to send signal outside of QML or C++ 
+	LocalStorage, for sqlite operation 
+	Loader, for lazyload 
+	QtTest, for unit test 
+	Timer 
+	Worker Script, for parallel jobs 
+- summary 
+
+# References 
+- http://www.syncorsystems.com 
 
 
 
@@ -1303,4 +1888,3 @@ transform:Scale{
     
     
     
-
