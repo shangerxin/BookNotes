@@ -1,14 +1,648 @@
 Effective Modern C++=Scott Meyers;Note=Erxin
 
 # Introduction 
+- This book is a about portable C++
+- C++ 11 is most pervasive featuere is prabably move semetics, the foundation
+  is distinguishing expression that are rvalues and lvalues
+  	+ rvalues indicate objects eligible for move operations. rvalues
+	correspond to temporary objects returned from functions 
+
+	+ lvalues generally don't, lvalue correspond to objects you can refer to,
+	either by name or by a pointer or lvalue reference 
+
+	+ a useful heuristic to determine whether an expression is an lvalue is to
+	ask if you can take its address. if you can it typically is. if you can't
+	it's usually a rvalue
+
+	+ an expression is independent of whether is an lvalue or an rvalue. A
+	type T you can have lvalues or rvalues. When dealing with a parameter of 
+	rvalue reference type, the parameter itself is an lvalue 
+
+	class Widget{
+	public:
+		Widget(Widget&& rhs);
+		...
+	};
+
+	it's valid to take rhs's address inside Widget's move constructor, so rhs
+	is an lvalue, even though its type is an rvalue reference. All parameters
+	are lvalues
+
+	rhs, is abbreviation of right hand side for parameter of move statement 
+
+	+ pass move and copy paramter for function 
+	void foo(Widget w);
+
+	Widget wid;
+	foo(wid); //copy wid passed 
+
+	foo(std::move(wid)); //move wid
+
+	+ in this book the function signature is include the return type 
+
+	+ std::auto_ptr is deprecated in C++ 11, use std::unique_ptr instead 
+
+	+ undefined behavior means that runtime behavior is unpredictable, for
+	example use brackets to index beyond the bounds of a std::vector 
+
+
+# Deducing types 
+- there are many context where type deduction take place. in calls to function
+  template, where auto appears in decltype expression and C++14 the enigmatic
+  decltype(auto)
+
+
+- understand template type deduction
+template<typename T>
+void f(ParamType param);
+
+call look like this 
+f(expr); //call f with some expression 
+
+T is deduced to be int, but ParamType is deduced to be const int&
+
+The type deduced for T is dependent not just on the type of expr, but also on
+the form of ParamType. There are three cases 
+	+ ParamType is a pointer or reference type, but not a universal
+		* if expr's type is a reference, ignore the reference part 
+		* then pattern-match expr's type against ParamType to determine T 
+
+		template<typename T>
+		void f(T& param);
+
+		we have these variables 
+		int x = 27;
+		const int cx = x;
+		const int& rx = x;
+
+		f(x); //T is int, param's type is int& 
+		f(cx); //T is const int, param's type is const int&
+		f(rx); //T is const int, param's type is const int&
+
+	reference(which are not equal to lvalue reference or rvalue reference)
+
+	when pass a const object ot a reference parameter they expect that obeject
+	to remain unmodifiable. 
+
+	referenceness is ignored during type decution so the third T is const int
+	too
+
+	if we change the f's parameter from T& to const T& things change a little
+
+	template<typename T>
+	void f(const T&, param);
+
+	int x = 27;
+	const int cx = x;
+	const int& rx = x;
+
+	f(x); //T is int, param's type is const int& 
+	f(cx); //T is int param's type is const int& 
+	f(rx); //T is int param's type is const int&
+
+	The same thing happen to pointer type 
+	+ ParamType is a universal reference, a universal reference's declared
+	type is T&&
+	If expr is an lvalue both T and ParamType are deduced to be lvalue
+	references
+	lthought ParamType is declared using the syntax for an rvalue reference,
+	its deduced type is an lvalue reference 
+	if expr is an rvalue the "normal" rules apply 
+
+	Example:
+	template<typename T>
+	void f(T&& param); //param is now a universal reference 
+
+	int x = 27; //as before 
+	const int cx = x
+	const int& rx = x;
+
+	f(x); //x is lvalue so T is int&, param's type is also int& 
+	f(cx); //cx is lvalue to T is const int& param's type is also const int& 
+	f(rx); //rx is lvalue, so T is const int& param's type is also const int& 
+	f(27); // 27 is rvalue so T is int and param's type is int&&
+
+	The key point is the type deduction rules for universal reference
+	parameters are different from those for parameters that are lvalue
+	reference or rvalue reference. Which never happens for non-universal
+	references 
+
+	+ ParamType is neither a pointer nor a reference 
+	template<typename T>
+	void f(T param); //param is now passed by value 
+
+	if expr's type is reference ignore the reference part. const and volatile
+	type are also ignored
+	(volatitle objects are uncommon.
+	They're generally used only for implementing device drivers.)
+
+	int x = 27;
+	const int cx = x;
+	const int& rx = x;
+
+	f(x); //T and param types are both int 
+	f(cx); //both int 
+	f(rx); //both int 
+
+	That's why expr's contess is ignoreed, because expr can't be modified
+	doesn't mean that a copy of it can't be
+
+	const is ignored only for by-value parameters. if expr is const pointer to
+	a const object and expr is passed to by a value 
+
+	template<typename T>
+	void f(T param);
+
+	const char* const ptr = "Fun with pointers"; //ptr is const pointer to
+	const object
+	f(ptr); //pass arg of type const char* const 
+
+	const char* means ptr point to the character string 
+	const ptr means the location of the pointer could not be modified. 
+	Th e type deduced to a modifiable pointer to a const, the constness of
+	what ptr points to is preserved during type deduction. but the constness
+	of ptr itself is ignored 
+
+deduce T and ParamType from expr
+
+- Array arguments, array  tyupes are different from pointer types. sometimes
+  seem to be interchangeable due to the first element could be decays to a
+  pointer. 
+
+  const char name[] = "J.P.Briggs";
+  const char* ptrToName = name; //array decays to pointer 
+
+  for template is different 
+  template<typename T> 
+  void f(T param); //template with by-value reference 
+  f(name); //T deduced as const char* 
+
+  void func(int param[]); 
+  equal to 
+  void func(int* param);
+
+  the type of an array that's passed to a template function by value is
+  deduced to be a pointer type. Funciton can't declare paramters that are
+  truly arrays due to the first element deduce to array, we still can declare
+  parameters that are references to arrays! 
+	
+	template<typename T>
+	void f(T& param); //template with by-reference parameter
+	
+	we pass an array to it 
+	f(name); //pass array to f 
+
+	The type deduced for T is the actual type of the array! which include the
+	size of array so we could use it to easy get the size of the array 
+
+	for the argument name the T is deduced to const char[13] and the type of
+	f's parameter is const char(&)[13]
+	template<typename T, std::size_t N>
+	constexpr std::size_t arraySize(T (&)[N]) noexcept
+	{
+		return N;
+	}
+
+	int keyValues[] = {1,2,3,4,5};
+	int mappedVals[arraySize(keyValues)]; 
+	std::array<int, arraySize(keyValues)>mappedVals; //mappedVals's size is
+	equal to keyValues
+
+- Function arguments, arrays aren't the only things could decay into pointers.
+  	Function types can decay into function pointers. The logic is similar to
+  	array types 
+
+	void someFunc(int, double); //it is a function type void(int, double)
+
+	template<typename T>
+	void f1<T param); // in f1 param passed by value 
+
+  	template<typename T>
+  	void f2<T& param); //in f2 param passed by ref 
+
+	f1(someFunc) // param deduced as ptr-to-func; type is void(*)(int, double)
+ 	f2(someFunc); //param deduced as ref-to-func; type is void(&)(int, double)
+
+- Things to remember during template deduction 
+	+ argument that are reference are treated as non-references
+	+ universal reference parameters, lvalue arguments get special threatment 
+	+ by-value parameters const and/or volatile arguments are treated as
+	non-const and non-volatile 
+	+ during template type deduction, arguments that are array or function
+	names decay to pointers unless they're used to intialize references 
+
+- understand auto type deduction 
+	+ template type deduction is explained using this general function
+	template 
+	template<typename T>
+	void f(ParamType param);
+
+	this general call
+	f(expr); //call f with some expression 
+
+	When a variable declared using auto,
+	auto x = 27; 
+
+	const auto cx = x;
+
+	the type specifier is const auto. And here 
+	const auto& rx = x;
+
+	auto&& uref1 = x; //x is int and lvalue so uref1's type is int& 
+
+	auto&& uref2 = cx; //cx is const int and lvalue so ref2's type is const
+	int& 
+
+	auto&& uref3 = 27; //27 is int and rvalue so uref's type is int&&
+
+	the type specifier is const auto&. compilers act as if there were a
+	template for each declaration as well as a call to that template with
+	corresponding initializing
+
+	for array and function names decay into pointers for non-reference type
+	specifier
+
+	const char name[] = "strings"'
+	
+	auto arr1 = name; //arr1's type is const char* 
+	auto& arr2 = name; //arr2's type is const char(&)[13]
+
+	void someFunc(int, double); //someFunc is a function type is void(int,
+	double)
+
+	auto func1 = someFunc; //func1's name is void(*)(int, double)
+	auto& func2 = someFunc; //func2's type is void(&)(int, double)
+
+	auto type deduction is works like template type deduction
+
+	we'll start with the observation that if you want to declare an int with
+	an intial value of 27
+
+		* C++ 98 support
+		int x1 = 27;
+		int x2(27);
+
+		* C++ 11 support 
+		int x3 = {27};
+		int x4{27};
+	
+	there are advantages to declaring variabls using auto 
+	auto x1 = 27;	//type is int
+	auto x2(27);	//type is int 
+	auto x3 = {27}; //type is std::initializer_list<int>
+	auto x4{27}; //type is std::initializer_list<int>
+
+	auto x = {11, 23, 9}; //x's type is std::initializer_list<int>
+
+	template<typename T>
+	void f(T param); //template also use std::initializer_list 
+
+	f({1,2,3}); //error! can't deduce type for T
+
+	if you specify in the template that param is a std::initializer_list<T>
+	for some unknown T, it will work 
+	template<typename T>
+	void f(std::initializer_list<T> initList);
+
+	f({1,2,3}); //T deduced as int, and initList's type is
+	std::initializer_list 
+
+	difference betwen auto and template deduction is auto assumes that a
+	braced initializer represents a std::initializer_list, but template type
+	deduction doesn't 
+	
+	this may lead to a mistake in C++11 programming which accidentally
+	declaring a std::initializer_list variable when you mean to declare
+	something else 
+
+	for C++11 this is the full story, but for C++14 the tale continues. C++14
+	permits auto to indicate that a function's return type should be deduced
+	and C++14 lambdas may use auto in parameter declarations. 
+	use auto employ template type deduction not auto type deduction. So a
+	function with an auto return type that returns a braced initializer won't
+	compile 
+
+	auto createInitList(){
+		return {1,2,3}; //error can't deduce type for {1,2,3}
+	}
+
+	The same is true when auto is used in a parameter type specification in a
+	C++ 14 lambda
+	std::vector<int> v;
+	...
+
+	auto resetV = [&v](const auto& newValue){v = newValue;}; //C++14 
+
+	returnV({1,2,3}); //error can't deduce type 
+
+	which means auto in a function return type or a lambda parameter implies
+	template type deduction not auto type deduction 
+
+- Understand decltype, decltype will tell you a name or a expressions's type 
+const int i = 0; //decltype(i) is const int 
+
+bool f(const Widget& w); //decltype(w) is const Widget&
+
+vector<int> v; //decltype(v) is vector<int>
+//decltype(v[0]) is int& 
+
+	+ C++11 primary use for decltype is declaring function templates where the
+	function's return type depends on its parameter types
+
+	for example, write a function that takes a containers that supportrs
+	indexing via square brackets plus an index. The return type of the
+	function should be the same as the type returned by the indexing operation
+
+	operator[] on a container of objects of type T typically returns a T&
+	
+	template<typename Container, typename Index>
+	auto authAndAccess(Container& c, Index i) -> decltype(c[i])
+	{
+		authenticateUser();
+		return c[i];
+	}
+
+	C++ 11 permites return types for single-statement lamdas to be deduced and
+	C++14 extends this to both all lambdas and all functions. including those
+	with multiple statements. which means in C++14 the trail -> decltype(c[i])
+	could be omited 
+
+	for functions with an auto return type specification, compilers employ
+	template type deduction, which will ignore the referencess of an
+	initializing expression which means the below code will not be compiled
+	std::deque<int> d;
+	...
+	authAndAccess(d, 5) = 10; //error, try to assign rvalue 
+
+	the reason is the return type c[i] which is d[5] will be deduced to int
+	which is rvalue. so C++14 still need decltype 
+
+	template<typename Container, typename Index>
+	decltype(auto)
+	authAndAccess(Container& c, Index i)
+	{
+		authenticateUser();
+		return c[i];
+	}
+
+	the use of decltype(auto) is not limited to function but also convenient
+	for declaring variables when you want to apply the decltype type deduction
+	rules to initializing expression indead of deduced the type directly 
+
+	Widget w;
+	const Widget& cw = w;
+	auto myWidget1 = cw;
+	decltype(auto) myWidget2 = cw;
+
+	if we want to support parameter both for lvalues and rvalues, one way is
+	overloading the function the other way is use universal references. we
+	could define the authAndAccess as 
+	template<typename Container, typename Index>
+	decltype(auto) authAndAccess(Container&& c, Index i)
+	{
+		authenticateUser();
+		return std::forward<Container>(c)[i];
+	}
+
+	the above code require C++14 compile, in C++11 we have to specify the
+	return type 
+	template<typename Container, typename Index>
+	auto authAndAccess(Container&& c, Index i) ->
+	decltype(std::forwared<Container>(c)[i])
+	{
+		authenticateUser();
+		return std::forward<Container>(c)[i];
+	}
+
+	applying decltype to a name yields the declared type for that name.
+
+	if an lvalue expression other than a name has type T decltype reports that
+	as T&. This seldom has any impact, functions returning lvalues for example
+	always return lvalue references
+
+	Putting parentheses around a name can change the type that decltype
+	reports for it!
+	int x = 0;
+	decltype(x) is int 
+	decltype((x)) is int&
+
+	in C++11, a return statement can affect the deduced type for a function 
+	decltype(auto) f1()
+	{
+		int x = 0;
+		...
+		return x; //decltype(x) is int 
+	}
+
+	decltype(auto) f2()
+	{
+		int x = 0;
+		...
+		return (x); //decltype((x)) is int&, so f2 return int&
+	}
+
+	+ things to remember for decltype
+	decltype almost always yields the type of variable or expression 
+	for lvalue expressions of type T other than names, decltype always reports
+	a type of T&
+	C++14 supports decltype(auto), which like auto, deduces a type from its
+	initializer, but it performs the type deduction using the decltype rules 
+
+- Item 4, know how to view deduced types 
+	+ get type deduction information as you edit your code in IDE, such as
+	hover over a variable 
+
+	this works for built-in types
+
+	+ compiler diagnostics, to get a compiler show a type is use that type in
+	a way that leads to compilation error 
+
+	const int theAnswer = 42;
+	auto x = theAnswer;
+	auto y = &theAnswer;
+
+	template<typename T>
+	class TD;
+
+	TD<decltype(x)> xType; //trigger the error, TD<int>...
+	TD<decltype(y)> yType; //trigger the error, TD<const int*> 
+
+	+ runtime output, the printf approach to displaying type inforamtion can't
+	be employed until runtime, but it offer full control over the formatting
+	of the output. we could use typeid and std::type_info::name to the rescue 
+	std::cout << typeid(x).name() << '\n'; // display types for x and y 
+	std::cout << typeid(y).name() << '\n';
+
+	typeid on an object such as x or y yield a std::type_info object and it
+	has a member function,name, that produce C-style string representation of
+	the type 
+
+	template<typename T>
+	void f(const T& param);
+
+	std::vector<Widget> createVec();
+	const auto vw = createVec();
+
+	if(vm.empty()){
+		f(&vm[0]);
+	}
+
+	tempalte<typename T>
+	void f(const T& param)
+	{
+		using std::cout;
+		cout << typeid(T).name();
+		cout << typeid(param).name(); //show param's type 
+	}
+
+	will display 
+	T = class Widget const *
+	param = class Widget const * 
+
+	the results of std::type_info::name are not reliable. the param type
+	should be const Widget* const &. the type'
+	s referenceness is removed and then the constness of the resulting pointer
+	is eliminated
+
+	the IDE also not reliable too. to overcome this we could use
+	Boost.TypeIndex library 
+
+	using boost::typeindex::type_id_with_cvr;
+
+	cout << type_id_with_cvr<T>().pretty_name();
+
+
+# auto 
+- Prefer auto to explicit type declarations
+int x;
+
+auto variable have their type deduced from their initializer, so the variable
+must be initialized. That means we could avoid uninitialized variable problems
+
+	+ example before C++ 11
+	template<typename It>
+	void dwim(It b, It e) //algorithm to dwim(do what I mean)
+	{
+		while(b != e){
+			typename std::iterator_traits<It>::value_type curValue *b;
+			...
+		}
+	}
+
+	+ use C++11 we could 
+	template<typename It>
+	void dwim(It b, It e)
+	{
+		while(b != e){
+			auto curValue = *b;
+		}
+	}
+
+	+ for C++14 auto could also be used in lambda 
+	auto func = [](const auto& p){ return ...};
+
+	but in real world we don't need to auto to declare a variable that holds a
+	closure. we could use std::function object 
+
+	it is a template in C++11 that generatlizes the idea of a function
+	pointer. It also could be used to point to a callable object 
+
+	std::function<bool(const std::unique_ptr<Widget>&, const
+	std::unique_ptr<Widget>&)> func;
+
+	will generate a function pointer of type bool(const std::unique_ptr<Widget>&,
+	const std::unique_ptr<Widget>&) 
+
+	we could also ust it to store closure, lambda expressions 
+	std::function<bool(const std::unique_ptr<Widget>&, const
+	std::unique_ptr(Widget>&))> derefUPless = [](const
+	std::unique_ptr<Widget& p1, const std::unique<Widget>& p2){return *p1 <
+	*p2;};
+
+	the difference between std:function and auto version is that the
+	std::function object will use fix sized for any given type and it will
+	allocate heap memory to store the closure. The auto version will used as
+	same as the memory required for the lambda expression 
+
+	+ other advantage 
+	std::vector<int> v;
+	...
+	unsigned sz = v.size();
+
+	the official return type of v.size() is std::vector<int>::size_type, but
+	few developers are aware of that std::vector<size::size_type is specified
+	to be an unsigned integral type. but on 32bit windows sz and v.size are
+	same. on 64bits the unsigned is till 32bit but v.size_type is 64bit 
+
+	using auto will ensure you don't need to change the code when porting from
+	32 to 64 
+
+	+ will improve performance in loop 
+	std::unorderd_map<std::string, int> m;
+	...
+	for(const std::pair<std::string, int>& p: m)
+	{
+		...//do something with p
+	}
+
+	use auto instead of the const std:pair... will prevent the compiler
+	generate the temp variable to help convert between std::pair<const
+	std::string, int> objects to std::pair<std::string, int> objects
+
+	for(const auto& p:m)
+	{
+		...
+	}
+
+- use the explicity typed initializer idiom when auto deduces undesired types 
+	+ supose we want to use a feature function to get if a list of supported
+	features 
+	Widget w;
+	...
+	bool highPriority = features(w)[5]; //is w high proprity?
+	...
+	processWidget(w, highPriority); //process w in accord with its priority 
+
+	if we simply replace the assignment highPriority from bool to auto
+	auto highPriority = features(w)[5] //then auto will deduce a wrong type to
+	std::vector<bool>::reference. The type is used to support vector save
+	bools in packed form one bit per bool. Because C++ forbids references to
+	bits. std::vector<bool> returns an object that acts like a bool&. the type
+	std::vector<bool>::reference make an implicit conversion to bool(not to
+	bool&)
+
+	+ any thing you could do with mutax you can do with atomic 
+
+- Key General Concept
+	+ critical section, code that must execute in isolation w.r.t. other
+	program code. It is used to implment transaction 
+
+	+ locks(mut_x is a mutex protecting x)
+	{lock_guard<mutex>hold(mut_x); //enter critical region(lock "aquire")
+		...read/write...
+	}
+
+	+ ordered atomics(whose_turn is a std::atomic<> variable protedcting x);
+	while(whose_turn != me){}  //enter critical regions(atomic read "aquires"
+	...read/write x...
+	whose_turn = someone_else	//exit critical regions  
+
+	+ transaction memory(still research right now but same idea):
+	atomic{
+		...read/write x...
+	}
+
+- key rules code can't move out 
+	+ it is flat-out illegal for a system to transform this 
+	mut_x.lock(); //enter critical region
+	x = 42;
+	mut_x.unlock(); //exit critcal section
+
+	the code x=42; will not be moved by the compiler
+
+- but code can safely move in. one way barriers an acquire barrier and a
+  release barrier 
+
+  these are fundamental hardware and software concepts
+
 - 
-
-
-
-
-
-
-
-
-
-

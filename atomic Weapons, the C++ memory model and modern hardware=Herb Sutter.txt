@@ -1,0 +1,175 @@
+atomic Weapons, the C++ memory model and modern hardware=Herb Sutter
+
+# Roadmap
+- optimizations, races and memory model 
+- ordering, acquire and release 
+- ordering mutexes atomics and fences 
+- other restrictions on compilers and hardware 
+- code gen& perofrmance x86/x64, IA64 ...
+- relexed atomics 
+- code volatile 
+- The machine everyone codes for 
+CPU core <---------> RAM
+
+	+ the real world 
+	core | core | core |...
+	L1 cache 
+	L2 cache    | L2 cache 
+	L3 cache 16mb 
+
+- key maintain fully coherent caches 
+
+- the talk in one slide, don't write a race condition or use non-default
+  atomics 
+
+- two key concepts 
+	+ sequential consistency (SC) executing the program you wrote 
+	+ race condition, a memory location(variable) can be simulaneouly accessed
+	by two threads and at least one thread is a writer
+
+- transformations, reorder + invent + remove 
+source code 
+	+--> compiler/JIT 
+		+---> processor 
+			+----> cache 
+				+----> actual execution 
+
+- dekker's and peterson's algorithms 
+	+ consider flags are shared and atomic but unordered, initially zero 
+		* thread 1 
+		flag1 = 1;  //a: declare intent
+		if( flag2 != 0 )  //b 
+			//resolve contention 
+		else
+			//enter critical section 
+
+		* thread 2
+		flag2 = 1; //c: declare intent
+		if(flag1 != 0)  //d 
+			//resolve contension 
+		else
+			//enter critical section 
+
+	+ could both thread enter the critical regions?
+	maybe 
+
+	solution
+		* use a suitable atomic type, eg Java/.net "volate", C++
+	std::atomic<> for the flag variable 
+		* use a system lock 
+		* (problematic) write a memory barrier after a and c 
+
+	+ explain the risk condition 
+	// in Processor 1 
+	flag1 = 1; (1) //write 1 to flag 1 send to store buffer 
+	if(flag2 != 0){...} (3) //read 0 from flag 2, read allowed to pass
+	buffered store to different location 
+	 
+	(1) --write to--> store buffer 
+						|
+						after a flash time the buffer flush to
+						|
+						V
+						global memory 
+
+	// in Processor 2 the same thing happend 
+	so there is a short window time for each of the thread will read the old
+	value from the global memory before the actual new value flushed out. This
+	is the risk condition happend
+
+- read don't required sync but write you need to tell the world 
+
+- single thread optimizations, the compiler may transform the orignal code to
+  the below to improve performance 
+	+ can transform this 
+	x = 1; 
+	y = "universe";
+	x = 2;
+
+	to this 
+	y = "universe";
+	x = 2;
+
+	+ can transform this 
+	for(i = 0; i < max; ++i)
+		z+=a[i];
+
+	to this 
+	r1 = z;
+	for(i = 0; i < max; ++i)
+		r1 += a[i];
+	z = r1; 
+
+	+ can transform this 
+	x = "life";
+	y = "universe";
+	z = "everything";
+
+	to this 
+	z = "everything";
+	y = "universe";
+	x = "life";
+
+	+ can transform this 
+	for(i = 0; i < rows; ++i)
+		for(j = 0; j < cols; ++j)
+			a[j*rows + i] += 42 
+
+	to this 
+	for(j = 0; j < cols; ++j)
+		for(i = 0; i < rows; ++i)
+			a[j*rows + i] += 42;
+
+	+ optimizations 
+	what the compiler knows
+		* all memory operations in this thread 
+		* how to conservative enough in the face of possible aliasing 
+
+	what the compiler doesn't know 
+		* which memory locations are "mutable shared" variables and could
+		* change asynchronously due to memory operations in another thread 
+		* how to be conservative enough in the face of possible sharing 
+	
+	solution tell it:
+		* somehow identify the operations on "mutable shared" locations 
+
+- fact of life 
+	+ software MMs (memory model) have converged on SC for data-race-free
+	programs (SC-DRF)
+
+	java required 2005, this is the only model optimazation  
+	c11 and c++11 default
+
+- memory model == contract 
+	+ you promise, compiler will not optimize your codes 
+
+- how to think about races 
+	+ while debugging an optimized build 
+	have you ever seen pink elephants? 
+
+	when you hit step next the current execute line may jump or disappear 
+
+	this because the compiler may save the variable in the same memory
+	location to save memory 
+
+	+ in a race on thread can see into another thread with the same view as a
+	debugger. 
+
+- key general comcepts, transaction
+	+ transaction, logical operation on related data that maintain an
+	invariant 
+	atomic, all or nothing 
+	consistent reads a consistent state 
+	independent, correct in the persistence 
+
+	+ Example 
+	bank_account acct1, acct2;
+	//begin transaction 
+	acct1.credit(100);
+	acct2.debit(100);
+	//end transaction 
+
+	don't expose inconsistent state 
+
+- key general concept critical region
+	+ critical region, code that must be execute in isolation w.r.t
