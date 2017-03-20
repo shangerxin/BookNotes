@@ -155,7 +155,7 @@ source code
 	+ in a race on thread can see into another thread with the same view as a
 	debugger. 
 
-- key general comcepts, transaction
+- key general concepts, transaction
 	+ transaction, logical operation on related data that maintain an
 	invariant 
 	atomic, all or nothing 
@@ -173,3 +173,173 @@ source code
 
 - key general concept critical region
 	+ critical region, code that must be execute in isolation w.r.t
+    
+    + locks（mut_x is a mutex protecting x) 
+    {lock_guard<mutex> hold(mut_x);
+     ... read/write x...
+    }
+    
+    + ordered atomics 
+    while(whose_turn != me) {} //enter critical region (atomic read "acquires" value)
+    ...read/write x...
+    whose_turn = someone_else // atomic write "release"
+    
+    + tranactional memory (still research right now, but same idea)
+    atomic{
+        ...read/write x...
+    }
+    
+    all of these four type of codes generate almost the same code 
+    
+- key rules 
+    + inside code can't move out of the previous writed critical region 
+    + code can safely move in 
+- key concepts "acrequire" and "release"
+    + one way barriers and release barrier 
+    will generate relative codes to tell the hardware to perform the locks 
+    
+- fact of life, memory synchronization actively works against important modern hardware optimization 
+
+bandwidith x latency = concurrency 
+
+- sample modern cpu 
+1% of die to compute 99% to move/store data 
+
+itanium 2 9050: dual-core 24mb L3 cache 
+
+- roadmap 
+    + automating acquire and release 
+    
+    don't write fences by hand 
+    
+    do make the compiler write barriers for you by using "crtical region" 
+    
+    abstractions mutexes and std::atomic<> variables 
+    
+    mut_x.lock();
+    ...read/write...
+    mut_x.unlock();
+    
+    std::atomics read = aquire write = release 
+    
+    while(whose_turn != me){}  //read whose_turn 
+    ...read/write x...             
+    whose_turn = someone_else; //write whose_turn 
+    
+- controlling reordering #2 std::atomic<> 
+special atomic types are automatically safe from reordering 
+
+advantage just tag the variable not every place it's used 
+disadvangtage, write corrrect atomics code is harder thant it looks 
+    + a new lock free algorithm or data structure is a publishable result 
+    + some common data structures have no known practical "lock-free" implementation 
+    
+- ordoered atomics 
+    + ordered atomics variables 
+    Java and ~= .net volatile, always SC 
+    C++ 11 atomic<T>, C11 atomic_ *
+    
+    + semantics and operations 
+    each individual read/write is atomic no torn reads no locking needed 
+    each thread's reads/writes are guaranteed to execute in order 
+    special ops [compare-and-]swp (CAS) conceptually atomic executions of 
+    
+    T atomic<T>::exchange(T desired)
+    {
+        T oldval = this > value; this->value = desired; return oldvalue;
+    }
+    
+    T atomic<T>::compare_exchange_strong(T& expected, T desired)
+    {
+        if(this-> value == expected)
+        {
+           this-value = desired; 
+           return true;
+        }
+        expected = this->value; 
+        return false;
+    }
+- compare_exchange: weak and strong 
+    + in c++ 11 compare and swap -> compare_exchange_* 
+    
+    example, if (val.compare_exchange_strong(expected, desired))
+    
+    pronounced 
+    
+    + often written in loops -> "CAS loop" 
+    
+    _weak vs. _strong: _weak allows spurious failures 
+    prefer, _weak when you're going to write a CAS loop anyway 
+    almost always want -strong when doing a single test 
+    
+- controlling reordering #3 Fences & ordered APIs 
+	+ fences are explicit "sandbars" aginst reording 
+
+	flag1 = 1;
+	mb();
+		//linux full barrier 
+		xchg)
+
+	if(flag2 != 0) {...}
+
+	disadvantage:
+	 nonprotable, different flavors on different processors 
+	 tedious have to be written corrently == differently at every point of use 
+	 error-prone, hard to reason about 'lock-free' papers avoid mentioning 
+	 performance, usually too heavy. standalone barriers are especially
+	 pessimized 
+	 
+- why standalone fences are suboptimial 
+	+ consider publishing via a widget* 
+	//thread1 
+	widget* temp = new widget();
+	global = temp;
+
+	//thread2 
+	global-> do_something();
+	global-> do_something_else();
+
+	+ adding standalone fences to publish via widget*;
+	//thread1
+	widget* temp = new widget();
+	mb();
+	global temp;
+	
+	//thread2 
+	temp2 = global;
+	mb();
+	temp2->do_something();
+	temp2 = global;
+	mb();
+	temp2->do_something_else();
+   
+   	fence require more syncrinization and require more works 
+
+- other restrictions on compilers and hardware 
+- code gen & performance x86/x64, ia64...
+	 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
