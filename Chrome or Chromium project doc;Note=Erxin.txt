@@ -1,0 +1,362 @@
+Chrome or Chromium project doc;Note=Erxin
+
+# Debugging Chromium on Windows 
+- use a different profile for chrome with parameter --user-data-dir=c:\tmp\my_debug_profile
+
+- enable chrome debugging log by --enable-logging --v=1
+debug build will put chrome_debug.log file in out\debug directory 
+
+- symbol server 
+https://chromium-browser-symsrv.commondatastorage.googleapis.com
+
+- multi-process issues 
+
+- reference 
+https://www.chromium.org/developers/how-tos/debugging-on-windows
+https://www.chromium.org/developers/how-tos/debugging-on-windows/windbg-help
+
+- problem
+When you select Run in the debugger, only the main browser process will be debugged. The code that actually renders web pages (the Renderer) and the plugins will be in separate processes that's not (yet!) being debugged
+
+    + easy way is use single process mode with parameter --single-process
+    
+    it's not perfect because some problems won't manifest themselves in this mode. and worker threads are still spawned into new processes 
+    
+- manullay attaching to a child processs, debugging something that only happends on startup with parameter --renderer-startup-dialog --no-sandbox
+
+and attach process and click ok for the pop up dialog 
+
+Startup dialogs also exist for other child process types: --gpu-startup-dialog, --ppapi-startup-dialog, --plugin-startup-dialog (for NPAPI).
+
+- semi-automatically attaching the debugger to child process 
+- image file execution options, Using Image File Execution Options (IFEO) will not work because CreateProcess() returns the handle to the debugger process instead of the intended child process
+
+- visual studio hints  automatically not step into functions based on regular expression:
+For Visual Studio:
+Open C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\Packages\Debugger\Visualizers\default.natstepfilter
+Add regular expressions of functions to not step into, colons and angle brackets must be escaped with a \You don't need to suffix =nostepinto, it's the default
+Examples:
+operator (new|delete).*   - operator new and delete
+std\:\:.*                 - Skip everything in std.
+WTF\:\:.*Ptr\<.*\>\:\:.*  - all methods on WebKit OwnPtr and variants, ... WTF::*Ptr<*>::*
+Natstepfilter file or Registry is read at start of a debugging session with F5.
+
+https://blogs.msdn.microsoft.com/andypennell/2004/02/06/how-to-not-step-into-functions-using-the-visual-c-debugger/
+
+- V8 and chromium, pass V8 command line from chrome 
+$ chrome.exe --js-flags="--trace_exception --heap_stats"
+
+list all flags 
+chrome.exe --js-flags="--help"
+
+- grahpics debugging 
+https://www.chromium.org/developers/how-tos/debugging-on-windows/graphics-debugging-in-visual-studio-2013
+https://www.chromium.org/developers/design-documents/chromium-graphics/debugging-with-nsight
+
+- debugging on another machine 
+    + build the mini_installer target on your main build machine e.g.
+    $ ninjia -C out\Debug mini_installer 
+    
+    next on the debug machine 
+    
+    + make the build machine's build volumne available on the debug machine  to craft a UNC path(e.g. \\builder\src)
+    
+    + open a command prompt change to a local disk 
+    + run src\tools\win\copy-installer.bat in the remote checkout by way of mout 
+    this will copy the installer, dlls and pdbs  
+    + run c:\out\Debug\mini_installer.exe with the falgs of your choice to install chrome + add c:\out\debug to your _NT_SYMBOL_PATH environment
+    
+- find memory leaks 
+    + the window heap manager has a useful debug flag. It can be asked to capture and store a stack trace with every allocation 
+    
+    the tool to scrape these traces out of processes is UMDH which comes with windbg 
+    
+    turn on the stack trace database for chrome by gflags.exe make it run unbearably slowly. turning on the user stack trace database on for the browser alone is just fine 
+    
+     it's possible to turn on the user stack database with the "!gflag" debugging extension. it's too late to do this by the time the initial debugger breakpoint hits. The only reasonable way to do this is to 
+        * Launch GFlags.exe,
+        * Enable the user stack trace database (per image below) Image File Tab input chrome.exe and check Create user mode stack trace database,
+        * Launch Chrome under the debugger.
+        * Set a breakpont when chrome.dll loads with "sxe ld chrome.dll".
+        * Step up, to allow Chrome.dll to initialize.
+        * Disable the stack trace database in GFlags.exe.
+        * Continue chrome, optionally detaching the debugger.
+        
+    when a memory leak happend then use command to trivially the result 
+    $ umdh -p:<my browser pid> > chrome-browser-leak-umdh-dump.txt
+    
+- other tools 
+application verifier, only works for window 7, vista, 2008 https://www.microsoft.com/en-us/download/details.aspx?id=20028
+
+To put a breakpoint on CreateFile(), add this break point:{,,kernel32.dll}_CreateFileW@28
+{,,kernel32.dll}specifies the DLL (context operator). _ prefix means extern "C".@28 postfix means _stdcall with the stack pop at the end of the function. i.e. the number of arguments in BYTES.
+
+You can use DebugView from SysInternals to view LOG() messages that normally goes to stderr on POSIX
+
+- reference 
+https://www.chromium.org/developers/design-documents/multi-process-architecture
+window debugging msdn doc, https://msdn.microsoft.com/en-us/library/windows/hardware/ff551063(v=vs.85).aspx
+
+
+# Multi-process Architecture 
+- Chromium high-level architecture. use process the seperate user and data 
+- Architectural overview 
+    + main process that runs the UI and manages tab and plugin processes as the browser process 
+    tab specific process called render process which use blink to layout 
+    https://www.chromium.org/blink
+    
+    ===Browser===
+    ***I/O thread ***
+    resourceDispatcher host 
+    A
+    |
+    V 
+    filter channel <---------------------------------------------------------+-----+
+    A                                                                                                          |       |
+    |                                                                                                           |       |
+    V                                                                                                          |       |
+    ChannelProxy                                                                                   |       |
+    A                                                                                                          |       |
+    |                                                                                                           |       |
+    V                                                                                                         |       |
+    ***Main thread***                                                                          |       |
+    RenderProcessHost <-----> RenderViewHost                             |       |
+                                                      ......                                                  IPC  IPC
+                                                                                                                 |      ....
+    ===Renderer===  <---------------------------------------------------+      
+    ***Main thread*** 
+    RenderProcess <-----------------------> RenderView 
+         A                      <---------------->RenderView    A
+         |                                                              A            |
+         |                                                              |             |
+         |                                                              V            V
+         +------------->ResourceDispatcher->     WebKit 
+    ...
+
+    + explain 
+    each render process has a global RenderProcess which maanges communication with parent browser and maintain global state. The browser maintains a corresponding RenderProcessHost for each render process 
+    
+    communicate with Chromium's IPC system     https://www.chromium.org/developers/design-documents/inter-process-communication
+
+- managing views , render process has one or more RenderView objects managed by RenderProcess correspond to tabs of content The corresponding RenderProcessHost maintains a RenderViewHost corresponding to each view in the renderer. each view is given a view ID, which unique inside one renderer. identify a view required a RenderProcessHost and a view ID 
+
+communication from browser to a specific tab of content is done through these RenderViewHost objects which known how to send message to their RenderProcessHost
+
+RenderView represent the contents of one web page in a tab or pop up window. RenderWidgetHost handles the input and painting for RenderWidget in the browser 
+
+- in general sharing the render process. the browser will spwan a new process and instruct it to create a single RenderView 
+
+sometimes we need share the render process when process number is too large or user already has a process open navigate to that domain 
+
+check process model for detail 
+https://www.chromium.org/developers/design-documents/process-models
+
+- detecting crashed or misbehaving renderers, Each IPC connection to a browser process watches the process handles.
+
+- sandbox, run each process on a separate window "desktop" which is not visible to the user.
+https://www.chromium.org/developers/design-documents/sandbox
+https://msdn.microsoft.com/en-us/library/windows/desktop/ms682573(v=vs.85).aspx
+
+- giving back memory 
+Normally, minimized processes on Windows have their memory automatically put into a pool of "available memory." 
+
+Windows will swap this memory to disk before it swaps out higher-priority memory, helping to keep the user-visible programs more responsive. We can apply this same principle to hidden tabs. When a render process has no top-level tabs, we can release that process's "working set" size as a hint to the system to swap that memory out to disk first if necessary. Windows will only actually reclaim such data if it needs it, so there is no performance hit when there is ample memory.
+
+Because we found that reducing the working set size also reduces tab switching performance when the user is switching between two tabs, we release this memory gradually.
+
+- Plugins and extensions 
+NPAPI plugins ran in their own processes separate from their renderers 
+
+plugin architecture 
+https://www.chromium.org/developers/design-documents/plugin-architecture
+
+
+# Inter-process communication  (IPC)
+- Our main inter-process communication primitive is the named pipe. On Linux & OS X, we use a socketpair(). A named pipe is allocated for each renderer process for communication with the browser process.
+
+The pip is used in async mode 
+
+- IPC in the browser 
+message have to be proxied over to the main thread using a ChannelProxy::MessageFilter 
+
+- IPC in the renderer, each renders also have a thread that manages communication which means main thread. extra thread is to support synchronous renderer-to-browser message 
+
+- type of messages 
+routed and control, control message are handled by the class that created the pip, sometimes that class will allow others to received message by having a MessageRouter object other listener can register with unique (per pip) id. 
+
+ control messages are not specific to a given view and will be handled by the RenderProcess (renderer) or the RenderProcessHost (browser). 
+ 
+ technically any class can receive routed messages by using RenderProcessHost::GetNextRoutingID and registering itself with RenderProcessHost::AddRoute. Currently both RenderViewHost and RenderFrameHost instances have their own routing IDs.
+
+Messages related to a document's frame sent from the browser to the renderer are called Frame messages because they are being sent to the RenderFrame. 
+
+Messages sent from the renderer to the browser are called FrameHost messages because they are being sent to the RenderFrameHost. You will notice the messages defined in frame_messages.h 
+
+there are PluginProcess messages (sent from the browser to the plugin process) and PluginProcessHost messages (
+
+- Declaring messages
+IPC_MESSAGE_ROUTED2(FrameHostMsg_MyMessage, GURL, int)
+IPC_MESSAGE_CONTROL0(FrameMsg_MyMessage)
+
+- pickling values 
+Parameters are serialized and de-serialized to message bodies using the ParamTraits template defined in ipc_message_utils.h
+
+if you define your own types then you have to define your own ParamTraits specification for it 
+e.g for the FrameMsg_Navigate message, the CommonNavigationParams structure is defined in navigation_params.h. frame_messages.h defines the ParamTraits specializations for the structures using the IPC_STRUCT_TRAITS family of macros.
+
+- sending message, message are sent by pointer and wll be deleted by IPC layer after they are dispatched 
+Send(new ViewMsg_StopFinding(routing_id_));
+Both the RenderWidgetHost (base class for RenderViewHost) and the RenderWidget (base class for RenderView) have GetRoutingID() members that you can use
+
+- handling messages by implementing the IPC::Listener interface
+MyClass::OnMessageReceived(const IPC::Message& message) {
+  IPC_BEGIN_MESSAGE_MAP(MyClass, message)
+    // Will call OnMyMessage with the message. The parameters of the message will be unpacked for you.
+    IPC_MESSAGE_HANDLER(ViewHostMsg_MyMessage, OnMyMessage)  
+    ...
+    IPC_MESSAGE_UNHANDLED_ERROR()  // This will throw an exception for unhandled messages.
+  IPC_END_MESSAGE_MAP()
+}
+
+// This function will be called with the parameters extracted from the ViewHostMsg_MyMessage message.
+MyClass::OnMyMessage(const GURL& url, int something) {
+  ...
+}
+
+you can also use IPC_DEFINE_MESSAGE_MAP to implement the function definition for you as well. In this case, do not specify a message variable name, it will declare a OnMessageReceived function on the given class and implement its guts.
+
+IPC_MESSAGE_FORWARD: This is the same as IPC_MESSAGE_HANDLER but you can specify your own class to send the message to, instead of sending it to the current class.
+IPC_MESSAGE_FORWARD(ViewHostMsg_MyMessage, some_object_pointer, SomeObject::OnMyMessage)
+IPC_MESSAGE_HANDLER_GENERIC: This allows you to write your own code, but you have to unpack the parameters from the message yourself:
+IPC_MESSAGE_HANDLER_GENERIC(ViewHostMsg_MyMessage, printf("Hello, world, I got the message."))
+
+- security tips for IPC https://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc
+
+- channels 
+IPC::Channel,  defines the methods for communicating across pipes. IPC::SyncChannel provides additional capabilities for synchronously waiting for responses to some messages
+
+Channels are not thread safe. We often want to send messages using a channel on another thread.  
+
+- synchronous messages. some message can be synchronous from the renderer's perspecitive 
+spell-checking and getting the cookies for JavaScript. Synchronous browser-to-renderer IPC is disallowed to prevent blocking the user-interface on a potentially flaky renderer.
+
+Danger: Do not handle any synchronous messages in the UI thread! You must handle them only in the I/O thread
+
+- declaring synchronous messages 
+control function which takes two input parameters and returns one parameter, you would append 2_1 to the macro name to get:
+
+IPC_SYNC_MESSAGE_CONTROL2_1(SomeMessage,  // Message name
+                            GURL, //input_param1
+                            int, //input_param2
+                            std::string); //result
+
+- issue synchronous messges 
+const GURL input_param("http://www.google.com/");
+std::string result;
+content::RenderThread::Get()->Send(new MyMessage(input_param, &result));
+printf("The result is %s\n", result.c_str());
+
+- handling synchronous messages, synchronous and asynchronous messages use the same IPC_MESSAGE_HANDLER 
+
+IPC_MESSAGE_HANDLER(MyMessage, OnMyMessage)
+to the OnMessageReceived function, and write:
+void RenderProcessHost::OnMyMessage(GURL input_param, std::string* result) {
+  *result = input_param.spec() + " is not available";
+}
+
+- converting message type to a message name 
+If you get a crash and you have the message type you can convert this to a message name. The message type will be 32-bit value, the high 16-bits are the class and the low 16-bits are the id. The class is based on the enums in ipc/ipc_message_start.h
+
+
+# Sandbox 
+- 
+
+
+# Life of a Chromium developer 
+- git workflow 
+    + get into work 
+$ git pull --rebase && gclient sync 
+
+    + hack on some files then create, upload and try changelist 
+$ git checkout -t -b my-new-feature origin/master 
+$ git cl upload 
+$ git cl try 
+
+    + try server reports your patch failed because you forgot a file 
+$ git add *.cc 
+$ git commit 
+
+    + iterate with reviewers, make sure to try your patches 
+$ git cl upload 
+$ git cl try 
+
+- commmitting the patch, use the commit queue(CQ)
+it's usually a commit button or checkbox on code review 
+
+- handy links 
+    + document, dev.chromium.org 
+    + source, src.chromium.org 
+    + bugs, bugs.chromium.org or crbug.com 
+    + buildbots, build.chromium.org 
+    + code review codereview.chromium.org 
+    
+- overview 
+    + build env 
+    + get code 
+    + modify 
+    + test 
+    + upload and review 
+    + commit patch and waiting game 
+    
+- development machien 
+    + mac requires, https://www.google.com/url?q=http://goto/apple&sa=D&ust=1490905625106000&usg=AFQjCNHa8rkI7AJv-nDgGL91dFtirpymMg
+    
+    instructions 
+    https://www.google.com/url?q=http://code.google.com/p/chromium/wiki/MacBuildInstructions&sa=D&ust=1490909233781000&usg=AFQjCNHMdX80DePWD43WdexyU2kTYf50lg
+    + window https://www.google.com/url?q=http://dev.chromium.org/developers/how-tos/build-instructions-windows&sa=D&ust=1490905625107000&usg=AFQjCNEiV43gYRSp7Fj41bTre3fBS4Ag_Q
+
+    + linux 64bit ubuntu precise or newer 
+    https://www.google.com/url?q=http://code.google.com/p/chromium/wiki/LinuxBuildInstructions&sa=D&ust=1490909233783000&usg=AFQjCNEEkPHugdcxaXJBv6V9rUp01p-a3g
+    
+- getting the code 
+    + source tree 
+    consists of all the files under the src directory 
+    
+    + core chromium code 
+    https://www.google.com/url?q=http://src.chromium.org/viewvc/chrome/trunk/src/&sa=D&ust=1490909233818000&usg=AFQjCNEP6TMmHmmHc_yb1pbRenZdyjK7Cw
+    
+    https://src.chromium.org/viewvc/chrome/trunk/src/
+
+- getting the code 
+    + install depot tools 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

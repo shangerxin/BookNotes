@@ -26,4 +26,435 @@ Integrating Qt Quick with C++=Tod Gentille;Note=Erxin
     
 
 # Using the QML context from C++
-- 
+- Overview 
+QML <QQMLContext>, engine.rootContext() you could set reference after include the context. 
+
+after have the context we could use signals, slots and properties between your QML and C++ classes 
+
+    + two way communication 
+    use QML signal swallowed up by a C++ slot also we could use C++ signal and handled by QML slot 
+    
+    there are better way in most of the time than directy use slot and signal 
+    
+    in C++ we could use Qt property macro and make two way communication even easier 
+    
+    to get more deeper understanding of the Qt property by go to the Qt assistent use the index tab and type property 
+    
+- demo signals to C++ slots and demo C++ signals to QML slots 
+    + create a Qt application from Qt creator 
+    + adding a c++ class and the class have to inherit from QObject 
+    //message.h
+    class Message: public QObject 
+    {
+            Q_OBJECT
+        public:
+            explicit Message(QObject *parent=0);
+        public slots:
+            void doMessageChange(); //use context menu to add this definition into cpp
+        signals:
+           //the name of the parameter is important to be used by outside of this class, such the power of the meta-object compiler 
+            void messageChanged(QString value);
+            
+        private:
+            int m_counter;
+            QString m_message;
+            explicit Message(const Message&rhs) = delete;
+            Message& operator=(const Message&rhs)=delete;
+            
+    }
+    
+    //message.cpp 
+    #include "message.h"
+    #inculde <iostream>
+    
+    using std::cout;
+    using std::endl;
+    
+    Message::Message(QObject *parent):QObject(parent),
+        m_counter(0),
+        m_message("hello");
+    {
+    }
+    
+    void Message::doMessageChange()
+    {
+        cout << "recieved message from qml" << endl;
+        
+        emit messageChanged(m_message.arg(m_counter++));
+    }
+    
+    //main.cpp 
+    #include <QApplication>
+    #include <QQmlApplicationEngine>
+    #include <QQmlContext> //the key to make the magic happen 
+    #include "message.h"
+    
+    int main(int argc, char* argv[])
+    {
+        QApplication app(argc, argv);
+        QQmlApplicationEngine engine;
+        Message my_msg;
+        
+        auto root_context = engine.rootContext();
+        root_context->setContextProperty("messageClass", &my_msg);
+        
+        engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
+        return app.exec();
+    }
+    
+    //*.pro   in the project file add support to C++11 by 
+    QT += qml quick widgets 
+    QMAKE_CXXFLAGS += -std=c++11 
+    ...
+    
+    //main.qml 
+    import QtQuick 2.3 
+    import QtQuick.Controls 1.2 
+    
+    ApplicationWindow{
+        visible: true 
+        width: 640 
+        height: 480 
+        title: qsTr("hello integration world")
+        
+        //isn't just good for forwarding on signals inside QML it can also do it from C++ 
+        Connections{
+            target:messageClass
+            onMessageChanged:textId.text = value; //the handle automatic get the value parameter 
+        }
+        
+        Column{
+            Text{
+                id:textId
+                text: qsTr("hello")
+            }
+            Button{
+                text: "change text"
+                onClicked:messageClass.doMessageChange()
+            }
+        }
+    }
+   
+- demo Q_PROPERTY, normally this should be the first choice for communication between C++ and QML 
+//message.h
+class Message: public QObject 
+{
+    Q_OBJECT
+    Q_PROPERTY(QString message READ message WRITE setMessage NOTIFY messageChanged )
+    
+public:
+    explicit Message(QObject *parent=0);
+    QString message() const {return m_message;}
+    void setMessage(QString value);
+    
+    signals:
+        void messageChanged();
+}
+
+//message.cpp 
+#include "message.h"
+
+Message::Message(QObject *parent):
+    QObject(parent),
+    m_count(0),
+    m_message("Start me")
+{
+}
+
+void Message::doMessageChange()
+{
+    setMessage("Hello property world ");
+}
+
+void Message::setMessage(QString value)
+{
+    m_message = value.arg(++m_counter);
+    emit messageChanged();
+}
+
+//main.qml 
+ApplicationWindow{
+    ...
+
+    Column{
+        Text {
+            id: textId 
+             //the notify signal in the MACRO will notify the changes. so we don't need to
+             //manually connect the signal with Connection 
+            text: messageClass.message 
+        }
+        
+        Button{
+            text: "change text"
+            onClicked: messageClass.doMessageChange()
+        }
+    }
+}
+
+- inovking methods, when we have context avaliable in QML then the public slot is avaliable and two way communication 
+
+    + calling C++ function in QML is easy as pie
+
+in c++ 
+Q_INVOKABLE int someMethod(const QString value);
+
+in QML 
+{var result = ctxName.someMethod("some value")}
+
+    + calling JavaScript in QML from C++, "I know C++ and you Mr.JavaScript function are no C++", you can't deal directly with the root context you now need a actual object and a minimum you'll need the root object 
+    
+    Get root object 
+        => Get QQuickItem* 
+            => QMetaObject::invokeMethod 
+                => Q_ARG for pass parameter 
+                    => Q_RETURN_ARG 
+
+    //main.cpp 
+    ...
+    #include <QDebug>
+    ...
+    void TestInvoke(QObject* rootObject)
+    {
+        QVariant return_value;
+        QVariant msg = "This is a C++ parameter"; 
+        
+        //lots of overload only use the rootObject method 
+        QMetaObject::invokeMethod(rootObject,
+                                                            "javaScriptFunction",
+                                                            Q_RETURN_ARG(QVariant, return_value),
+                                                            Q_ARG(QVariant, msg)); 
+        qDebug() << "QML returned " << return_value";
+    }
+    
+    int main(int argc, char* argv[])
+    {
+        ...
+        auto root_object = engine.rootObjects().first();
+        
+        
+        ...
+    }
+    
+    //main.qml 
+    ApplicationWindow{
+        ...
+        function javaScriptFunction(value){
+            print("c++ called the javaScriptFunction");
+            return "return from javaScriptFunction";
+        }
+        ...
+    }
+- data conversion 
+    + basic types 
+Qt types                        QML basic type 
+bool                                bool 
+unsigned int, int           int 
+double, float, qreal      double 
+QString                          string 
+QUrl                               url 
+QColor                           color 
+QFont                             font 
+QDate                             date 
+QPoint, QPointF           point 
+QSize, QSizeF               size 
+QRect, QRectF              rect 
+QMatrix4x4                  matrix4x4 
+MQuaternion                 quaternion
+QVector2D...QVector4D           vector2d...vector4d 
+Q...ENUMS                   enumeration 
+
+    + in qt document use Index|data type to find 
+    
+    + Q_ENUMS, should consideration. CONSTANT attribute will prevent have WRITE or NOTIFY attribute as you might expect. It will prevent warning when define Q_ENUMS type which is unnotifyable 
+    
+    //in the MessageClass definition 
+    Q_ENUMS(Status)
+    Q_PROPERTY(Status status READ status CONSTANT)
+    public: 
+        enum Status(Newbie, Learning, QtWizard);
+        Status status() const {return m_status;}
+        
+    private: 
+        Status m_status;
+        
+    // using the enum 
+    messageClasss.status;
+        
+    + parent child relationships
+        * in C++ new and delete should be paired 
+        * in qt normally you new it and set the parent and then the parent will take care of delete the instance 
+        * caveat in qt, one exceptio, when a QObject is returned from a explicit C++ method call... when QML will take ownership. 
+        there is exception for this caveat case. if the item you return has set ownership with the parent semantics of Qt, QML will never take owership of the object 
+        
+    + QML flexibility 
+    Item{
+        property rect myRect1: Qt.rect(50, 50, 100, 100)
+        property rect myRect2: "50, 50, 100x100"
+        propety size mySize1: Qt.size(10, 20)
+        property size mySize2: "10x20"
+        property point myPoint1: Qt.point(30, 40)
+        property point myPoint2: "30, 40"
+    }
+    
+        * date localization 7 localization functions 
+        string fromLocaleDateString(local, dateString, format)
+        string fromLocalString(locale, dateTimeString, format)
+        string fromLocalTimeString...
+        string timeZoneUpdated()
+        string toLocaleDateString()
+        string toLocalString 
+        string toLocaleTimeString
+        
+        * number localization 
+        string fromLocalString()
+        string toLocalCurrrencyString()
+        tring toLocalString()
+        
+        * string flexibility 
+        QML adds the arg() function to strings 
+        
+    + Arrays, Maps and other containers, many of the containers of Qt directly map to javascript array 
+    QList<int> -> Array 
+    QList<qreal>
+    ...
+    
+        * QVariantList 
+        QColor kermit = Qt::green;
+        QVariantList my_list;
+        my_list << 3.1415 << 30 << kermit << "guitars";
+        
+        //javascript function, the my_list could be passed as parameter 
+        function LogArray(anArray){
+            anArray.forEach(logger);
+        }
+        
+        * QVariantMap will map as a javascript object  
+        QVariantMap my_map;
+        my_map.insert("new language", "C++11");
+        my_map.insert("stdReleased", QDate(2011, 8, 12));
+        ...
+        
+        //in javascript 
+        for(var element in theMap){
+            print(theMap[element]);
+        }
+
+- QVariantList and QVariantMap 
+//DataTypes.h and DataTypes.cpp 
+class DataTypes:public QObject 
+{
+    Q_OBJECT
+    public: 
+        explicit DataTypes(QObject *parent=0);
+        void logVariantList(QObject* root);
+        void logVariantMap(QObject* root);
+        
+    private:
+        explicit DataTypes(const DataTypes& rhs) = delete;
+        DataTypes& operator= (const DataTypes& rhs) = delete;
+}
+
+void DataTypes::logVariantList(QObject* root)
+{
+    QColor kermit = Qt::green;
+    QVariantList my_list;
+    my_list << 3.1415 << 30 << kermit << "guitars"; 
+    QMetaObject::invokeMethod("root", 
+                                                        "logArray",
+                                                        Q_ARG(QVariant,
+                                                                     QVariant::fromValue(my_list));
+}
+
+void DataTypes::logVariantMap(QObject* root)
+{
+    QVariantMap my_map;
+    my_map.insert("new language", "c++ x11");
+    my_map.insert("std released", QDate(2011, 8, 12));
+    ...
+    QMetaObject::invokeMethod(root, "logMap", Q_ARG(QVariant, QVariant::fromValue(my_map)));
+}
+
+// inthe main.qml 
+function logArray(anArray){
+    anArray.forEach((item)=>{
+        print(item);
+    });
+}
+
+function logMap(theMap){
+    for(var element in theMap){
+        print(theMap[element]);
+    }
+}
+
+//main.cpp 
+...
+DataTypes my_dts;
+my_dts.logVariantList(root_object);
+my_dts.logVariantMap(root_object);
+...
+
+- Summary 
+    + QQmlContext 
+    engine.rootContext()->setContextProperty() 
+    
+    to make QML aware of your c++ class 
+    
+    + using signal and slots to communicate with Connection object 
+    + use two way communication with macro Q_PROPERTY
+    + data conversation, QVariantList & QVariantMap 
+
+    
+# Creating a Qt quick instrument GUI 
+- challengages 
+- first up the knob control 
+    + create a project and select 1.2 component controls 
+    + in the main.qml and set the width and height 
+    + create folders structures, view folder will not be created and the *.qml will live with resources 
+    /
+        Model/
+        ViewManager/
+        main.cpp 
+        main.qml 
+        
+    + in qt creator, create class with context menu and make them inherit from QObject 
+    //Startup.h 
+    #include <QObject> 
+    
+    class QQmlApplicationEngine;
+    
+    class Startup: public QObject 
+    {
+        Q_OBJECT 
+        public: 
+            explicit Startup(QObject *parent=0);
+            
+        private: 
+            QQmlApplicationEngine& m_engine;
+            
+            explicit Startup(const Startup& rhs) = delete;
+            Startup& operator=(const Startup& rhs) = delete;
+    };
+...
+
+# Instrument GUI: C++ side 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
