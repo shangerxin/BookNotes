@@ -409,7 +409,7 @@ my_dts.logVariantMap(root_object);
 - challengages 
 - first up the knob control 
     + create a project and select 1.2 component controls 
-    + in the main.qml and set the width and height 
+    + in the main.qml and set the width and height and delete the MenuBar item and other default contents 
     + create folders structures, view folder will not be created and the *.qml will live with resources 
     /
         Model/
@@ -431,12 +431,290 @@ my_dts.logVariantMap(root_object);
             
         private: 
             QQmlApplicationEngine& m_engine;
+            MainViewMgr& m_mainViewMgr;
             
             explicit Startup(const Startup& rhs) = delete;
             Startup& operator=(const Startup& rhs) = delete;
     };
-...
 
+    //startup.cpp 
+    #include "startup.h"
+    #include <QQmlApplicationEngine>
+    #include <QQmlContext>
+    #include "ViewManager/mainviewmgr.h"
+    
+    Startup::Startup(QObject *parent): 
+        QObject(parent)
+        m_engine(*new QQmlApplicationEngine())
+        m_mainViewMgr(*new MainViewMgr())
+    {
+        auto root_context = m_engine.rootContext();
+        rootContext->setContextProperty("MainViewMgr", &m_mainViewMgr);
+        m_engine.load(QUrl(QStringLiteral("*qrc:/main.qml")));
+    }
+    
+    //mainviewmgr.h turn off namespace derive from QObject and place it to ViewManager/ folder 
+    #include <QObject> 
+    #include <QString>
+    
+    class MainViewMgr: public QObject
+    {
+        Q_OBJECT 
+        Q_PROPERTY(QString appName READ appName CONSTANT)
+        public: 
+            explicit MainViewMgr(QObject *parent=0);
+            QString appName() const {return m_appName;}
+            
+        private: 
+            QString m_appName;
+            explicit MainViewMgr(const MainViewMgr& rhs) = delete; 
+            MainViewMgr& operator= (const MainViewMgr& rhs) = delete;
+    }
+    
+    //mainviewmgr.cpp 
+    #include "mainviewmgr.h"
+    
+    MainViewMgr::MainViewMgr(QObject *parent):
+        QObject(parent),
+        m_appName("target simulation")
+    {
+    }
+    
+    //main.qml 
+    import QtQuick 2.3 
+    import QtQuick.Controls 1.2 
+    
+    ApplicationWindow{
+        id: mainWindow 
+        visible: true 
+        width: 1024 
+        height: 600 
+        title: qsTr(MainViewMgr.appName)
+    }
+    
+    //main.cpp 
+    #include <QApplication>
+    #include <QQmlApplicationEngine>
+    #include <startup.h> 
+    
+    int main(int argc, char *argv[])
+    {
+        QApplication app(argc, argv);
+        QQmlApplicationEngine engine;
+        
+        Startup my_startup;
+        return app.exec();
+    }
+    
+    before start your QT application make sure close all the previous ones in the QT creator or check in the tasklist 
+    
+    + modify the project file ARS.pro to support c++ 11 by add 
+    ...
+    QT += qml quick widgets
+    QMAKE_CXXFLAGS += .std=c++11 
+    ...
+    
+- Header areas and automatic version numbering 
+    + add images foler and put image resource into it 
+    + in the QT project add prefix /images into the qml.qrc and add all the files into the project 
+    + add colors and string and font size into the main.qml 
+    + add a Gradient area into the qml 
+    
+    ApplicationWindow{
+        ...
+        property string headerFontFamily: "Tahoma"
+        property int companyFontSize: 10 
+        property string graidentStartColor: "skyblue"
+        ...
+        
+        Gradient{
+            id: appGradientId 
+            GradientStop{position: 0.0; color: graidentStartColor}
+            GradientStop{position: 1.0; color: gradientEndColor}
+        }
+        
+        //=========MAIN VIEW ====================
+        //the objectName property could be used by C++ code to dig down 
+        //into QML to find a specific object using the objectName
+        Rectange 
+        {
+            id: mainViewRect 
+            objectName: "mainViewRect"
+            anchros.fill: parent 
+            gradient: appGradientId 
+            
+            //-------------------Header ---------------------
+            Rectange{
+                color: headerBgColor 
+                anchors {top: parent.top; left:parent.left; right:parent.right}
+                height: 65 
+                
+                RowLayout
+                {
+                    id: logoGrid 
+                    anchors {left: parent.left; right: parent.right}
+                    transform: Translate{x: -20; y:-10}
+                    
+                    Image{
+                        id: swatLogo 
+                        source: "images/images/swatteam.png"
+                        scale: .7
+                    }
+                    
+                    Text{
+                        text: "Software and technical\nTeam\nat Syncor"
+                        font{family: headerFontFamily; pointSize: companyFontSize}
+                        color: companyFontColor 
+                    }
+                    
+                    Text{
+                        text: MainViewMgr.appName
+                        font{family:}
+                        ...
+                    }
+                }
+            }
+            //-------------------Controls Area--------------
+        }
+    }
+    
+    + make a hardcode version number in *.pro for the QML project, we could use DEFINES marco to make variable avaliable in C++ by the compiler 
+    
+    TEMPLATE = app 
+    VERSION = 1.0.0 
+    DEFINES += APP_VER=\\\"$$VERSION\\\"
+    
+    QT += qml quick widgets 
+    ....
+    
+    + add property into the mainviewmgr.h 
+    ...
+    Q_PROPERTY(QString appName READ appName CONST)
+    Q_PROPERTY(QString appNameVer READ appNameVer CONST)
+    
+    public: 
+        ...
+        QString appNameVer() const { return m_appName+" " + APP_VER;}
+        
+        //the APP_VER is defined in the *.pro QT project file and generated by the compiler
+        
+    + update qml to reference app ver instead of the appName property 
+    
+    + automatic update the version by using the source control command in project file *.pro 
+    ...
+    VERSION = $$system(hp parents --template '{latesttag}.{latesttagdistance}')
+    
+    + get more information from qmake by the Qt Assistant 
+    
+- Demo RF power area 
+    + Plan of attack, review the wireframe for raw layout, consider the layout type to used 
+    
+    + add relative codes in main.qml 
+    property url powerOnSource: "images/images/power_on.png"
+    property url powerOffSource: "images/images/power_off.png"
+    property url powerSource : powerOffSource
+    property bool powerOn : MainViewMgr.powerOn 
+    
+    function togglePower(){
+        print(" power on ", powerOn);
+        powerOn = !powerOn
+        powerSource = powerOn ? powerSource: powerOffSource;
+        MainViewMgr.powerOn = powerOn
+    }
+    
+    ...
+    
+    ColumnLayout
+    {
+        id:powerAreaid 
+        Layout.alignment: Qt.AlignTop
+        Text{
+            text: "RF Power"
+            Layout.alignment: Qt.AlignCenter 
+            color: "white"
+            font.pointSize: 16 
+            font.family: boldLabelFont 
+        }
+        Image{
+            id: powerButtonId 
+            source: powerSource
+            Layout.preferredWidth: 64 
+            Layout.preferredHeight.Layout.preferredWidth
+            MouseArea{
+                onClicked: togglePower()
+                anchors.fill:parent 
+                hoverEnable:true 
+                onHoverChanged: parent.opacity? = containsMouse? hoverOpacity:1.0
+            }
+        }
+    }
+    
+- the problem with Q_PROPERTY, when you use the this feature you have to write all the supporting code for example 
+
+private:
+Q_PROPERTY(QString myProp READ myProp WRITE setMyProp NOTIFY myPropChanged)
+
+//getter 
+QString myProp() const { return m_myProp; }
+
+//setter 
+void setMyProp(const QString& value ){
+    if(value == m_myProp) return;
+    m_initMessage = value;
+    emit myPropChanged();
+}
+
+//signals 
+signals:
+    void myPropChanged(QString value);
+public: 
+QString m_myProp;
+    
+    + we could use customized micro to make life easier 
+    
+    AUTO_PROPETY(TYPE, NAME)
+    Q_PROPERTY(TYPE, NAME READ NAME WRITE Name NOTIFY NAMEChanged)
+    
+    READONLY_PROPERTY(TYPE, NAME)
+    Q_PROPERTY(TYPE, NAME READ NAME CONSTANT)
+    
+    + implement the AUTO_PROPETY
+#pragma once 
+#include <QObject> 
+
+#define AUTO_PROPETY(TYPE, NAME) \
+    Q_PROPERTY(TYPE NAME READ NAME WRITE NAME NOTIFY NAME ## Changed) \
+    public:\ 
+        TYPE NAME() const {return a_## NAME;} \ 
+        void NAME(TYPE value) { \  
+            if( a_ ## NAME == value) return ;\ 
+            a_ ## NAME = value;\ 
+            emit NAME ## Changed(value);\ 
+        }\ 
+        Q_SIGNAL void NAME ## Changed(TYPE value);\
+        
+        private: \
+            TYPE a_ ## NAME{};
+            
+    + implement the READONLY_PROPERTY
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 # Instrument GUI: C++ side 
 
 

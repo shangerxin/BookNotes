@@ -22,13 +22,23 @@ When you select Run in the debugger, only the main browser process will be debug
     
     it's not perfect because some problems won't manifest themselves in this mode. and worker threads are still spawned into new processes 
     
-- manullay attaching to a child processs, debugging something that only happends on startup with parameter --renderer-startup-dialog --no-sandbox
+    + manullay attaching to a child processs, debugging something that only happends on startup with parameter --renderer-startup-dialog --no-sandbox
 
 and attach process and click ok for the pop up dialog 
 
 Startup dialogs also exist for other child process types: --gpu-startup-dialog, --ppapi-startup-dialog, --plugin-startup-dialog (for NPAPI).
 
-- semi-automatically attaching the debugger to child process 
+    + use vs-chromium plugin, http://chromium.github.io/vs-chromium/
+
+    +  semi-automatically attaching the debugger to child process, make child process wait for 60 seconds in a busy loop for a debugger to attach to the process 
+    
+    --wait-for-debugger-children=[filter]
+    
+    the filter if match --type parameter to the process, values include renderer, plugin(for NPAPI), ppapi, gpu-process and utility 
+    
+    limit the render process number by 
+    --renderer-process-limit=1 
+
 - image file execution options, Using Image File Execution Options (IFEO) will not work because CreateProcess() returns the handle to the debugger process instead of the intended child process
 
 - visual studio hints  automatically not step into functions based on regular expression:
@@ -55,7 +65,7 @@ https://www.chromium.org/developers/design-documents/chromium-graphics/debugging
 
 - debugging on another machine 
     + build the mini_installer target on your main build machine e.g.
-    $ ninjia -C out\Debug mini_installer 
+    $ ninja -C out\Debug mini_installer 
     
     next on the debug machine 
     
@@ -96,6 +106,7 @@ You can use DebugView from SysInternals to view LOG() messages that normally goe
 - reference 
 https://www.chromium.org/developers/design-documents/multi-process-architecture
 window debugging msdn doc, https://msdn.microsoft.com/en-us/library/windows/hardware/ff551063(v=vs.85).aspx
+https://www.chromium.org/developers/how-tos/debugging-on-windows
 
 
 # Multi-process Architecture 
@@ -134,9 +145,9 @@ window debugging msdn doc, https://msdn.microsoft.com/en-us/library/windows/hard
     ...
 
     + explain 
-    each render process has a global RenderProcess which maanges communication with parent browser and maintain global state. The browser maintains a corresponding RenderProcessHost for each render process 
+    each render process has a global RenderProcess which manages communication with parent browser and maintain global state. The browser maintains a corresponding RenderProcessHost for each render process 
     
-    communicate with Chromium's IPC system     https://www.chromium.org/developers/design-documents/inter-process-communication
+    communicate with Chromium's IPC system 
 
 - managing views , render process has one or more RenderView objects managed by RenderProcess correspond to tabs of content The corresponding RenderProcessHost maintains a RenderViewHost corresponding to each view in the renderer. each view is given a view ID, which unique inside one renderer. identify a view required a RenderProcessHost and a view ID 
 
@@ -144,7 +155,7 @@ communication from browser to a specific tab of content is done through these Re
 
 RenderView represent the contents of one web page in a tab or pop up window. RenderWidgetHost handles the input and painting for RenderWidget in the browser 
 
-- in general sharing the render process. the browser will spwan a new process and instruct it to create a single RenderView 
+- in general sharing the render process. the browser will spawn a new process and instruct it to create a single RenderView 
 
 sometimes we need share the render process when process number is too large or user already has a process open navigate to that domain 
 
@@ -171,7 +182,141 @@ plugin architecture
 https://www.chromium.org/developers/design-documents/plugin-architecture
 
 
+# Process models
+- reference 
+https://www.chromium.org/developers/design-documents/process-models
+
+- user can view the resource usage of each process in Chormium's task manager 
+- chromium supports four different process models to allow experimentation 
+    + default, chromium use separate os process for each instance of a web site 
+    + one process for all instances 
+    + one process for each group of connected tabs 
+    + everything in a single process 
+    
+- process-per-site-instance 
+default, a renderer process is created for each instance of a site for each user
+
+two tabs may display pages in same process, while navigating to a cross-site page in a given tab may switch the tab's rendering process 
+
+the "site" as a registered domain name plus a scheme (e.g. https://), but it groups subdomains and ports into the same site which is a little bit different from the same origin policy. 
+
+if javascript set document.domain variable to same in subdomain or port then same origin policy will allow the script access each other 
+
+    + site instance is a collection of connected pages from the same site. one page opened the other in a new window 
+    
+    + strengthes, isolates content from different sites and isolates independent tabs showing the same site. Visiting the same site independently in different tabs will create different processes 
+    
+    + weaknesses
+    more memory overhead than process-per-site model 
+    more complex to implement 
+    
+- process-per-site, use commandline --process-per-site 
+    + less memory overhead 
+    + weaknesses 
+    result in large renderer processes and make browser seem less responsive 
+    more complex to implement
+    
+- process-per-tab, chromium also support a similar model which dedicates one renderer process to each group of script-connected tabs. this model can be selected using the --process-per-tab command line switch 
+
+process per tab create renderer engine for each tab 
+
+    + strengths 
+    simple to understand
+    
+    + leads to undesirable fate sharing between flags, If the user navigates a tab in a browsing instance to a different web site, the new page will share fate with any other pages in the browsing instance.
+
+- single process, both browser and rendering engine are run within a single os process, design for test and development 
+
+- sandboxes and plug-ins 
+Browser plug-ins, such as Flash and Silverlight, are also executed in their own processes, and some plug-ins like Flash even run within Chromium's sandbox
+
+In each of the multi-process architectures, Chromium's renderer processes are executed within a sandboxed process that has limited access to the user's computer. 
+
+- caveats 
+    + Most renderer-initiated navigations within a tab do not yet lead to process swaps. If the user follows a link, submits a form, or is redirected by a script, Chromium will not attempt to switch renderer processes in the tab if the navigation is cross-site.
+    + Subframes are currently rendered in the same process as their parent page. Although cross-site subframes do not have script access to their parents and could safely be rendered in a separate process, Chromium does not yet render them in their own processes.
+    + There is a limit to the number of renderer processes that Chromium will create. This prevents the browser from overwhelming the user's computer with too many processes. The limit is is proportional to the amount of memory on the computer, and may be as high as 80 processes. 
+    
+- implementation notes 
+Two classes in Chromium represent the abstractions needed for the various process models: BrowsingInstance and SiteInstance.
+
+The BrowsingInstance class represents a set of script-connected tabs within the browser, In the process-per-tab model, we create a renderer process for each BrowsingInstance.
+    
+The SiteInstance class represents a set of connected pages from the same site, It is a subdivision of pages within a BrowsingInstance, and it is important that there is only one SiteInstance per site within a BrowsingInstance. In the process-per-site-instance model, we create a renderer process for each SiteInstance. 
+
+
+# Submitting an awesome performance bug 
+- reference 
+https://www.chromium.org/developers/how-tos/submitting-a-performance-bug
+
+- summary 
+These instructions are relevant for Windows, Mac, or Linux computers. For Android and more, click for advanced instructions.
+Note: Uploading a trace to Google may share personal information such as the titles and URLs of open tabs.
+
+In the address bar of a new tab, type chrome://tracing
+start record 
+do something 
+end record 
+analyzed 
+
+# Chromium modularization 
+- background, chromium is a big project and it makes sense to modularize 
+
+- quick start 
+Say you need to make a change that adds or changes something in base for the benefit of something in chrome.
+
+First you make your change, get it reviewed and checked in. At this point, Chromium is still pulling a specific, older revision of base without your changes. It does this by pulling in a specific version of webkit, and then specifying that it should use the version of base that the webkit module is currently using 
+
+Then you update the webkit module to pull in your new version of base. First you need to figure out which version your new version is. It's a good idea to first do svn update in base/ to make sure everything is up-to-date, then do svn info.
+
+Put this revision number into the webkit/DEPS file for the base module. Get this change reviewed and submitted.
+
+On the Chromium buildbot page one of the builders is called chrome-release-webkit-latest. This pulls Chromium with the most recent version of WebKit. If your change introduced incompatibilities between base and chrome, this will be red until you check in your corresponding changes to Chromium.
+
+- dependencies 
+Each project depends on a variety of modules. For example, the WebKit project depends on the networking code, our shared base code, and some third-party libraries. Chromium and V8 in turn both depend on WebKit. (In practice, Chromium depends on everything since we are in the Chromium tree). Each project must list the projects it depends on, and which version it wants to pull. We do not support transitive dependencies, so each project must list all of the projects it depends onA user's client specifies a set of target solutions to check out. (Yes, please excuse the Visual Studio jargon.) In the simplest case, a user's client only specifies a single solution, say the chrome solution. The root directory of each solution has a text file named DEPS that defines the set of dependencies for the project. you can override these dependencies 
+
+e.g.
+deps = {
+  "breakpad" : "http://google-breakpad.googlecode.com/svn/trunk@189",
+  "webkit"   : "http://src.chromium.org/chrome/trunk/src/webkit@3395",
+  "v8"       : "http://v8.googlecode.com/svn/trunk@77829",
+  ...
+}
+
+Given that dependencies are not computed recursively, it can be a pain to maintain complex dependency trees manually, especially if modules have multiple overlapping dependencies. To simplify such situations, gclient supports the From keyword which can be used to express a dependency in terms of the DEPS file of another module. 
+
+- test data 
+- tooling 
+- installation, checkout depot_tools package which includes glicent, gcl and svn 
+
+
+# Chromium dev google group and IRC 
+https://groups.google.com/a/chromium.org/forum/#!forum/chromium-dev
+https://www.chromium.org/developers/irc
+the #chromium IRC channel on irc.freenode.net
+
+
+# Configure chromium build proxy 
+https://cloud.google.com/storage/docs/gsutil/commands/config
+
+
+# Setup visual studio debugger visualizers 
+- VS support additional visulizers 
+Copy the contents of Chrome\src\tools\win\DebugVisualizers\ to %USERPROFILE%\My Documents\Visual Studio 2013\Visualizers\ (or for newer versions, %USERPROFILE%\Documents\Visual Studio 2015\Visualizers\)
+Start the debugger, and be amazed at the fancy new way it displays your favorite objects. When you edit the file, you shouldn't have to restart all of Visual Studio - it will get re-loaded when you start the debugge
+
+- reference 
+https://www.chromium.org/developers/how-tos/how-to-set-up-visual-studio-debugger-visualizers
+
+
+# Use VSCode on chromium code base 
+- https://chromium.googlesource.com/chromium/src/+/master/docs/vscode.md
+
+
 # Inter-process communication  (IPC)
+- reference 
+https://www.chromium.org/developers/design-documents/inter-process-communication
 - Our main inter-process communication primitive is the named pipe. On Linux & OS X, we use a socketpair(). A named pipe is allocated for each renderer process for communication with the browser process.
 
 The pip is used in async mode 
@@ -269,7 +414,212 @@ If you get a crash and you have the message type you can convert this to a messa
 
 
 # Sandbox 
-- 
+- leverages the OS provided security 
+    + mac os 
+    http://dev.chromium.org/developers/design-documents/sandbox/osx-sandboxing-design
+    On Mac OS X versions starting from Leopard, individual processes can have their privileges restricted using the sandbox(7) facility of BSD, also referred to in some Apple documentation as "Seatbelt". This is made up of a single API call, sandbox_init()
+    
+    + linux 
+    https://chromium.googlesource.com/chromium/src/+/master/docs/linux_sandboxing.md
+    We have a two layers approach:
+
+    Layer-1 (also called the “semantics” layer) prevents access to most resources from a process where it's engaged. The setuid sandbox is used for this.
+    Layer-2 (also called “attack surface reduction” layer) restricts access from a process to the attack surface of the kernel. Seccomp-BPF is used for this.
+    
+    + window 
+    https://www.chromium.org/developers/design-documents/sandbox
+    
+- design principles 
+    + do not re-invent the wheel 
+    + principle of least privilege 
+    + assume sandboxed code is malicious code 
+    + be nimble, should impose near-zero performance impact when the non-malicious codes execution 
+    + emulation is not security, should not reply on code emulation 
+    
+- window architecture, minimal sandbox configuration has two process, one is a privileged controller known as broker, one or more sandboxed processes known as target. sandbox provided as static library and must be linked to both the broker and the target executables 
+
+    + the broker processes, is always the browser process, controller/supervisor or activities of the sandboxed processes 
+    
+    specify the policy for each target process 
+    spawn the target processes 
+    host the sandbox policy engine service 
+    host the sandbox interception manager 
+    host the sandbox IPC service to target processes 
+    perform the policy allowed actions on behalf of the target process 
+    
+    + The sandbox IPC is a low-level mechanism (different from Chromium's IPC) that is used to transparently forward certain windows API calls from the target to the broker: these calls are evaluated against the policy. 
+
+- the target process, renderers are always target processes unless the --no-sandbox command line has been specified. 
+    + all code to be sandboxed 
+    the sandbox IPC client 
+    the sanbox policy engine client 
+    the sandbox interceptions 
+    
+policy is also evaluated in the target process to save IPCs for speed optimization 
+
+==broker ==
+interception manager ---------------+
+                                                             |
+IPC service --- policy engine ---- policy 
+|
+|           ==target==
++------IPC client -----Policy Engine client ---interceptions 
++------....
+
+- sandbox restrictions 
+a restricted token 
+windows job object 
+desktop object 
+windnow vista and above the integrity levels 
+
+    + highly effective at protecting the OS 
+    all the securable resources ahve a better than null security descriptor 
+    computer is not already compromised by malware 
+    third party software does not weaken the security of the system 
+    
+- the token 
+the most restrictive token for Windows XP takes the following form:
+
+    + regular groups 
+    logon sid: mandatory 
+    all other sids: deny only, mandatory 
+    
+    + restricted groups 
+    s-1-0-0:mandatory 
+    
+    + privileges None 
+    
+The Chromium renderer normally runs with this token, which means that almost all resources that the renderer process uses have been acquired by the Browser and their handles duplicated into the renderer process.
+    
+    + sandbox token can not protect 
+    mouted fat or fat32 volumnes 
+    + tcp/ip the security tcp/ip sokects in window 2000 and window xp is effectivily null, malicious code can send and receive network packects 
+    
+- the job object, target process also runs under a job object
+forbid per-use system wide changes using SystemParametersInfo()
+forbit the creation or switch of desktops 
+forbid changes to the per-user display configuration such as resolution and primary display 
+not read or write to clipboard 
+forbid windows message broadcasts 
+forbid setting global window hooks using SetWindowsHookEx() 
+forbit access to the global atom table 
+forbit access to USER handles created outside the job object 
+one active process limit(disallows creating child processes!??)
+
+    + use job object sandbox can prevent 
+excessive use of cpu cycles 
+excessive use of memory 
+excessive use of io
+
+reference http://dev.chromium.org/developers/design-documents/sandbox#TOC-References
+
+- the alternate desktop, check window stations for more information 
+- the integrity levels avaliable on vista and later versions, They don't define a security boundary in the strict sense, but they do provide a form of mandatory access control (MAC) and act as the basis of Microsoft's Internet Explorer sandbox. 
+
+Integrity levels are implemented as a special set of SID and ACL entries representing five levels of increasing privilege: untrusted, low, medium, high, system. Access to an object may be restricted if the object is at a higher integrity level than the requesting token. It also implement the User Interface Privilege Isolation 
+
+    + a low integrity process can access only the following shared resources 
+    Read access to most files
+    Write access to %USER PROFILE%\AppData\LocalLow
+    Read access to most of the registry
+    Write access to HKEY_CURRENT_USER\Software\AppDataLow
+    Clipboard (copy and paste for certain formats)
+    Remote procedure call (RPC)
+    TCP/IP Sockets
+    Window messages exposed via ChangeWindowMessageFilter
+    Shared memory exposed via LI (low integrity) labels
+    COM interfaces with LI (low integrity) launch activation rights
+    Named pipes exposed via LI (low integrity) labels
+    
+So, the integrity level is a bit redundant with the other measures, but it can be seen as an additional degree of defense-in-depth, it has no performance or resource impact 
+
+- processes mitigation policies sandbox API use to set various policies SetProcessMitigationPolicy
+    + relocate images 
+    >=win8 
+    address-load randomization (ASLR) on all images in process
+    
+    heap terminate 
+    >=win8 
+    terminates the process on windows heap corruption 
+    
+    bottom-up ASLR set random lower bound as minimum user address for the process 
+    
+    high-entropy ASLR, increase randomness range for bottom-up ASLR to 1TB 
+    
+    strict handle checks, immediately raise an exception on a bad handle 
+    
+    Win32.sys lockdown 
+    ProcessSystemCallDisablePolicy which allows selective disabling of system calls available from the target process 
+    Renderer processes now have this set to DisallowWin32kSystemCalls which means that calls from user mode that are serviced by win32k.sys are no longer permitted
+    
+    app container, low box token 
+    In Windows this is implemented at the kernel level by a Low Box token which is a stripped version of a normal token with limited privilege (normally just SeChangeNotifyPrivilege and SeIncreaseWorkingSetPrivilege), running at Low integrity level and an array of "Capabilities" which can be mapped to allow/deny what the process is allowed to do
+    The sandbox therefore takes the existing restricted token and adds the Low Box attributes, without granting any Capabilities, so as to gain the additional protection of no network access from the sandboxed process.
+    https://msdn.microsoft.com/en-us/library/windows/apps/hh464936.aspx
+
+    disable extension points 
+    ProcessExtensionPointDisablePolicy
+    The following injection vectors are blocked:
+        AppInit DLLs
+        Winsock Layered Service Providers (LSPs)
+        Global Window Hooks (not thread-targeted hooks)
+        Legacy Input Method Editors (IMEs)
+    
+    + control flow 
+    enabled in chrome.exe process not compiled into all chrome binaries 
+    take advantage of CFG security in microsoft system DLLs in our processes 
+    compiler/linker opt-in, not a runtime policy opt-in 
+    
+    disable font loading 
+    ProcessFontDisablePolicy 
+    
+    disable image load from remote devices 
+    ProcessImageLoadPolicy 
+    
+    disable child process creation 
+    If the Job level <= JOB_LIMITED_USER, set PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY to PROCESS_CREATION_CHILD_PROCESS_RESTRICTED via UpdateProcThreadAttribute(). This is an extra layer of defense, given that Job levels can be broken out of!??
+    
+- other caveats 
+    + injected dll also inject to sandbox 
+    + can't prevent window bug itself 
+    
+- sandbox policy, the broker calls 
+TargetPolicy::SetTokenLevel()
+TargetPolicy::SetJobLevel()
+TargetPolicy::SetIntegrityLevel()
+TargetPolicy::SetDesktop()
+
+an integer level parameter that goes from very strict to very loose; for example, the token level has 7 levels and the job level has 5 levels. Finally, the last (desktop) policy is binary and can only be used to indicate if a target is run on an alternate desktop or not.
+
+n exception is a way to take a specific Windows API call issued in the target and proxy it over to the broker. The broker can inspect the parameters and re-issue the call as is, re-issue the call with different parameters, or simply deny the call. To specify exceptions there is a single call: AddRule. The following kinds of rules for different Windows subsystems are supported at this time:
+    Files
+    Named pipes
+    Process creation
+    Registry
+    Synchronization objects
+The exact form of the rules for each subsystem varies, but in general rules are triggered based on a string pattern. For example, a possible file rule is:
+
+AddRule(SUBSYS_FILES, FILES_ALLOW_READONLY, L"c:\\temp\\app_log\\d*.dmp")
+
+Rules can only be added before each target process is spawned
+
+- target bootstrapping 
+    + target do not start executing with the restricting specified by policy to avoid undocument failed such as support CRT initlialization 
+    
+    + during the bootstrapping process uses two tokens,  the lockdown token which is the process token as is and the initial token which is set as the impersonation token of the initial thread. In fact the actual SetTokenLevel definition is:
+    
+    SetTokenLevel(TokenLevel initial, TokenLevel lockdown);
+    
+    After all the critical initialization is done, execution continues at main() or WinMain(), here the two tokens are still active, but only the initial thread can use the more powerful initial token. It is the target's responsibility to discard the initial token when ready. 
+    
+    LowerToken();
+    
+    After this call is issued by the target the only token available is the lockdown token and the full sandbox restrictions go into effect.
+    
+- reference 
+http://www.microsoft.com/msj/0399/jobkernelobj/jobkernelobj.aspx
+http://alt.pluralsight.com/wiki/default.aspx/Keith.GuideBook/WhatIsAToken.htm
+http://msdn.microsoft.com/en-us/library/bb625963.aspx
 
 
 # Life of a Chromium developer 
@@ -329,34 +679,1525 @@ it's usually a commit button or checkbox on code review
 
 - getting the code 
     + install depot tools 
+    $ git clone https://chromium.googlesource.com/chromium/tools/dept_tools.git 
+    $ export PATH=`pwd`/depot_tools:"PATH"
+    
+    + run fetch chromium to get all the code and geenrate the build files 
+    + reference, http://dev.chromium.org/developers/how-tos/get-the-code
+    
+- what depots tools does 
+    + set of scripts/utilities 
+    gclient, sync your source and creates build files 
+    git-cl, integration with code review and tryjobs 
+
+- depot tools quirks 
+    + gclient will attempts to update itself on each run 
+    + gclient sync both updates your source code and regenerated build files. implicitly doing 
+    $ gclient runhooks 
+    
+- gclient sync gotchas 
+    + does not update your git checkout 
+    + gclient sync does not download the same code on each platform 
+    src/DEPS is listed in the mac-only section 
+    
+- modifying and building 
+    + in src/ 
+    $ gn gen out/Default 
+    
+    + set build arguments 
+    $ gn args out/Default 
+    
+    + build 
+    $ ninja -C out/Default chrome 
+    
+    delete the output folder for clean build(rarely needed)
+    
+- common build issues 
+    + random c++ check the waterfall to see if the tree is red 
+    https://www.google.com/url?q=http://build.chromium.org/p/chromium/waterfall&sa=D&ust=1491516013070000&usg=AFQjCNFY_4qVdWxZBxqkYp4dDD2Bk1XQmg
+    
+- debug, attach to render process 
+manually attach renderer process to debugger 
+run with --single-process 
+
+- make good changes 
+- testing overview 
+    + unit test,
+        C++ test using gtest https://github.com/google/googletest
+    + browser tests 
+    + performance tests 
+    + layout tests, written in html/css/javascript and hosted in webkit's repository 
+    
+- try server usage, try uncommitted patches on multiple platform in an automated way 
+https://www.chromium.org/developers/testing/try-server-usage
+
+takes your uploaded change applies it to a clean checkout of the source, and compiles and runs tests affected by the patch 
+
+    + limitations 
+    binary content 
+    patches containing crlf characters 
+    
+- uploading for review     
+    + upload change to chromium's Rietveld instance at https://codereview.chromium.org/
+    
+- uploading code 
+$ git cl upload 
+
+enter your google credentials 
+
+- finding reviewers 
+    + check inspect commit logs 
+    $ git log/annotate [path]
+    
+    use "annotate" links on files at http://src.chromium.org/ 
+    
+    use one-liners 
+    $ git log --format=format:"%an" [path] | sort | uniq -c| sort -n
+    
+    it's your responsibility to find qualified reviewers for your change! 
+    
+- sending your review 
+publish+mail comments from rietveld 
+
+- follow the style guide 
+http://dev.chromium.org/developers/coding-style
+
+- more detail for contributing code 
+http://dev.chromium.org/developers/contributing-code
+
+- run some tests through Valgrind, code analyze tool 
+http://www.valgrind.org/
+
+- code review server 
+https://github.com/rietveld-codereview/rietveld
+
+- committing the patch, use the commit queue(CQ)
+it's usually a commit button or checkbox on code review 
+
+report a bug and use build-commitQueue label 
+
+- manual commit workflow 
+LGTM, but hold before committing let's check the tree(build tree https://build.chromium.org/)
+
+commit by 
+    + chromium 
+$ git cl land 
+
+    + blink 
+$ git cl dcommit 
+
+- getting commit access, http://www.chromium.org/getting-involved/become-a-committer
+    + checkout read-only version of the code 
+    + write and land some patches 
+    + get nominated for full committer status 
+    
+- troubleshootting, in open source no one can hear your scream 
+    + IRC? freenode.net? #chromium?
+    IRC is your friend and learn to use it 
+    
+- feeling lost? need help?
+    + first do your research 
+    search mail archives & change history 
+    if applicable see what older revisions, or other browsers do 
+    
+    + then ask on IRC 
+    e-mail chromium dev 
+    
+    + for best results, include enough information for someone to understand your question. this includes 
+    build platform 
+    what revision/version you are working with 
+    describe the expected behavior 
+    describe what you've tried and prior research 
+    
+- web idl code style for blink
+https://sites.google.com/a/chromium.org/dev/blink/webidl#TOC-Style
+https://heycam.github.io/webidl/
+
+- web development style guide
+https://chromium.googlesource.com/chromium/src/+/master/styleguide/styleguide.md
+https://sites.google.com/a/chromium.org/dev/developers/coding-style
+https://google.github.io/styleguide/javascriptguide.xml
+https://google.github.io/styleguide/htmlcssguide.html
+https://google.github.io/styleguide/cppguide.html#Formatting
+https://chromium.googlesource.com/chromium/src/+/master/styleguide/c++/c++.md
+https://sites.google.com/a/chromium.org/dev/developers/web-development-style-guide
+http://www.chromium.org/developers/coding-style
+
+- javscript closure 
+http://jibbering.com/faq/faq_notes/closures.html
+
+closure compiler to support add data type in comments to provide more information in the compiler 
+https://github.com/google/closure-compiler/wiki/Annotating-JavaScript-for-the-Closure-Compiler
+
+- debugging
+    + debuggers needs to attach to browser and render processes 
+    $ chrome.exe ... --single-process flags
+    
+    + manually attach renderer process to debugger, tricker; instructions depend on debugger 
+    
+- making good changes, TODOs to find tasks to work on 
+
+- testing 
+
+
+# Threading 
+- reference 
+https://www.chromium.org/developers/design-documents/threading
+- overview 
+discourage locking and threadsafe objects, instead object live on only one thread and pass messages between threads for communication, use callback interface(implement by message passing) for most cross-thread requests 
+
+Thread defined in base/threading/thread.h, each thread has a MessageLoop, base/message_loop/message_loop.h that process message for thread, get message loop for thread by Thread.message_loop() 
+
+- message loop detail, https://docs.google.com/document/d/1_pJUHO3f3VyRSQjEhKVvUU7NzCyuTCQshZvbWeQiCXU/edit#heading=h.okllz7fdmm0
+
+    + core primitives of chromium for process events and tasks for a particular thread 
+    
+    two important methods PostTask and Run, basic functionality is to accept posted task and run on the associated thread 
+    
+    normall MessageLoop instance can be retrieved via MessageLoop::current() static method
+    
+    + poast task methods family 
+    PostTask can be used to schedule a new task to run on the thread that is associated to the MessageLoop.  It is not encouraged to directly call the MessageLoop’s methods to post tasks instead use more generic TaskRunner.  The current thread’s TaskRunner can be retrieved by calling ThreadTaskRunnerHandle::Get().
+    
+    the APIs migrations from top to bottom one in pairs 
+
+    base::MessageLoop::Post*Task()
+    base::MessageLoop::task_runner()->Post*Task
+
+    base::Thread::message_loop_proxy()
+    base::Thread::task_runner()
+
+    base::MessageLoopProxy* blah
+    base::SingleThreadTaskRunner* blah
+
+    scoped_refptr<base::MessageLoopProxy>
+    scoped_refptr<base::SingleThreadTaskRunner>
+
+    base::MessageLoop::message_loop_proxy()
+    base::MessageLoop::task_runner()
+
+    base::MessageLoopProxy::current()
+    base::ThreadTaskRunnerHandle::Get()
+    
+    + run method, Run method tells the MessageLoop’s internal message pump to start processing native events (messages) as well as executing tasks that are posted on to the MessageLoop.
+    
+    thread class (base::Thread) calls this method in its thread function
+    
+    test code is encourage to run a message loop via RunLoop interface 
+    
+    + classes that work closely with MessageLoop 
+    MessageLoop class work very closely with a few classes, namely MessagePump, IncomingTaskQueue and MessageLoopProxyImpl. Instances of these classes are created when MessageLoop is instantiated they are own by the MessageLoop 
+    
+        * MesasgePump, is paired with a MessageLoop, that is platform specific message pump. provides Delegate interface has a set of DoWork methods be called in within the platform's native message/event loop. MessageLoop implement this Delegate interface and runs the posted tasks in the DoWork methods 
+        
+        MessagePump is another beast that probably needs a separate document to explain its details
+        
+        * IncommingTaskQueue, a thread-safe task queue accumulate tasks for its corresponding MessageLoop. two important methods AddToInCommingQueue and ReloadWorkQueue. ReloadWorkQueue swaps a given task queue with its internal task queue
+        
+        he tasks queued into the IncomingTaskQueue are then eventually loaded into the MessageLoop’s internal work queue by ReloadWorkQueue.
+
+        * MessageLoopProxyImpl, MessageLoopProxyImpl extends MessageLoopProxy (which extends SingleThreadTaskRunner), which provides MessageLoopProxy and TaskRunner interfaces on top of IncomingTaskQueue
+        
+        provides a set of PostTask methods just forward posted task to IncommingTaskQueue 
+        
+        MessageLoop::message_loop_proxy() and MessageLoop::task_runner() return an instance of this class. 
+        
+        A task passed to MessageLoop::PostTask() is forward to MessageLoopProxyImpl::PostTask(), which in turn calls IncomingTaskQueue::AddToIncomingQueue() to queue the task to IncomingTaskQueue’s internal thread-safe task queue.
+        
+    + PostTask flow, if we allow customers of MessageLoop to override its TaskRunner interface
+    proxying MessageLoop tasks to the scheduler, https://docs.google.com/document/d/1qxdh2I61_aB_Uzh1QgNqvdWFBCL_E65G2smoSySw7KU/edit#heading=h.u9qu5v718qyp
+    The flow will look like add a middle layer between MessageLoop PostTask() => Overriding TaskRunner PostTask => thrid party logic => IncommingTaskQueue AddToInCommingQueue()
+    
+    + run loop flow, Tasks queued to the IncomingTaskQueue’s internal queue are eventually loaded to the MessageLoop’s work queue by ReloadWorkQueue() and then run in one of the DoWork() methods family, that are called within MessagePump’s native event loop
+    
+     Note that the work queue reloading only happens when the local work queue becomes completely empty
+    
+- Exiting threads 
+    + most threads are managed by the BrowserProcess object, which acts as the service manager for the main "browser" process. it has getters for following threads 
+    
+    ui_thread, main thread where the application starts up 
+    io_thread, mis-named, it is the dispatcher thread that handles communication between browser process and all the sub-processes. 
+    file_thread, a general process thread for file operations 
+    db_thread, thread for database operations 
+    safe_browsing_thread 
+    
+    + several components have their own threads 
+    History, the history service object has its own thread, might be merged with db_thread above might be . we need make sure things happen in the correct order, cookies are loaded before history 
+    proxy service, net/http/http_proxy_service.cc 
+    automation proxy, used to communicate with the UI test program driving the app 
+    
+- keeping the browser responsive, avoid heavy work on UI thread, lock when result ready 
+
+check the best practice for lock and condition variable 
+http://www.chromium.org/developers/lock-and-condition-variable
+
+Many APIs in Chromium are asynchronous.  Usually this means that they either need to be executed on a particular thread and will return results via a custom delegate interface, or they take a base::Callback<> object that is called when the requested operation is completed. 
+
+- Getting stuff to other threads, base::Callback<>, Async APIs, and Currying
+    + base::Callback<> see docs in callback.h https://src.chromium.org/viewvc/chrome/trunk/src/base/callback.h?content-type=text%2Fplain
+    
+    It is templated class with a Run() method. It is a generalization of a function pointer and is created by a call to base::Bind. Async APIs often will take a base::Callback<> as a means to asynchronously return the  results of an operation
+
+    example:
+    void ReadToString(const std::string& filename, const base::Callback<void(const std::string&)>& on_read);
+
+    void DisplayString(const std::string& result) {
+      LOG(INFO) << result;
+    }
+
+    void SomeFunc(const std::string& file) {
+      ReadToString(file, base::Bind(&DisplayString));
+    };
+    
+    The type of the generated base::Callback<> is inferred from the arguments.  Why not just pass the function pointer directly?  The reason is base::Bind allows the caller to adapt function interfaces and/or attach extra context via Currying 
+    http://en.wikipedia.org/wiki/Currying
+    
+    For instance, if we had a utility function DisplayStringWithPrefix that took an extra argument with the prefix, we use base::Bind to adapt the interface as follows.
+    
+    void DisplayStringWithPrefix(const std::string& prefix, const std::string& result) {
+      LOG(INFO) << prefix << result;
+    }
+
+    void AnotherFunc(const std::string& file) {
+      ReadToString(file, base::Bind(&DisplayStringWithPrefix, "MyPrefix: "));
+    };
+    
+- PostTask 
+The lowest level of dispatching to another thread is to use the MessageLoop.PostTask and MessageLoop.PostDelayedTask (see base/message_loop/message_loop.h). PostTask schedules a task to be run on a particular thread.  A task is defined as a base::Closure, which is a typedef for a base::Callback<void(void)>. PostDelayedTask schedules a task to be run after a delay on a particular thread.
+
+A task is represented by the base::Closure typedef, which contains a Run() function, and is created by calling base::Bind().  To process a task, the message loop eventually calls base::Closure's Run function, and then drops the reference to the task object. Both PostTask and PostDelayedTask take a tracked_objects::Location parameter, which is used for lightweight debugging purposes
+
+generally, the macro value FROM_HERE is the appropriate value to use in this parameter
+
+Note that new tasks go on the message loop's queue, and any delay that is specified is subject to the operating system's timer resolutions. This means that under Windows, very small timeouts (under 10ms) will likely not be honored (and will be longer). 
+
+The following is an example of a creating a task for a function and posting it to another thread (in this example, the file thread):
+
+void WriteToFile(const std::string& filename, const std::string& data);
+BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
+                        base::Bind(&WriteToFile, "foo.txt", "hello world!"));
+You should always use BrowserThread to post tasks between threads. Never cache MessageLoop pointers as it can cause bugs such as the pointers being deleted while you're still holding on to them.
+
+- base::Bind() and class methods 
+The base::Bind() API also supports invoking class methods as well.  The syntax is very similar to calling base::Bind() on a function, except the first argument should be the object the method belongs to. By default, the object that PostTask uses must be a thread-safe reference-counted object. Reference counting ensures that the object invoked on another thread will stay alive until the task completes.
+
+class MyObject : public base::RefCountedThreadSafe<MyObject> {
+ public:
+  void DoSomething(const std::string16& name) {
+    thread_->message_loop()->PostTask(
+       FROM_HERE, base::Bind(&MyObject::DoSomethingOnAnotherThread, this, name));
+  }
+
+  void DoSomethingOnAnotherThread(const std::string16& name) {
+    ...
+  }
+ private:
+  // Always good form to make the destructor private so that only RefCountedThreadSafe can access it.
+  // This avoids bugs with double deletes.
+  friend class base::RefCountedThreadSafe<MyObject>;
+
+  ~MyObject();
+  Thread* thread_;
+};
+
+If you have external synchronization structures that can completely insure that an object will always be alive while the task is waiting to execute, you can wrap the object pointer with base::Unretained() when calling base::Bind() to disable the refcounting.  This will also allow using base::Bind() on classes that are not refcounted.  Be careful when doing this!
+
+- how arguments are handled by base::Bind()
+The arguments given to base::Bind() are copied into an internal InvokerStorage structure object. base/bind_interal.h 
+
+ If you need a reference to the original argument, you can wrap the argument with base::ConstRef().
+ 
+ Sometimes, you will want to pass reference-counted objects as parameters (be sure to use RefCountedThreadSafe and not plain RefCounted as the base class for these objects)
+
+he Closure generated by base::Bind must keep a reference to it. This can be done by passing scoped_refptr as the parameter type, or by wrapping the raw pointer with make_scoped_refptr():
+
+class SomeParamObject : public base::RefCountedThreadSafe<SomeParamObject> {
+ ...
+};
+
+class MyObject : public base::RefCountedThreadSafe<MyObject> {
+ public:
+  void DoSomething() {
+    scoped_refptr<SomeParamObject> param(new SomeParamObject);
+    thread_->message_loop()->PostTask(FROM_HERE
+       base::Bind(&MyObject::DoSomethingOnAnotherThread, this, param));
+  }
+  void DoSomething2() {
+    SomeParamObject* param = new SomeParamObject;
+    thread_->message_loop()->PostTask(FROM_HERE
+       base::Bind(&MyObject::DoSomethingOnAnotherThread, this, 
+                         make_scoped_refptr(param)));
+  }
+  // Note how this takes a raw pointer. The important part is that
+  // base::Bind() was passed a scoped_refptr; using a scoped_refptr
+  // here would result in an extra AddRef()/Release() pair.
+  void DoSomethingOnAnotherThread(SomeParamObject* param) {
+    ...
+  }
+};
+
+If you  want to pass the object without taking a reference on it, wrap the argument with base::Unretained(). Again, using this means there are external guarantees on the lifetime of the object
+
+- callback cancellation 
+two major reasons to cancel a task 
+    + do something later on your object , at the time your callback runs your object may have been destroyed 
+    + when input changes (e.g. user input) old tasks become unnecessary 
+    
+- important nodes about cancellation 
+It 's dangerous to cancel a task with owned parameters.
+
+class MyClass {
+ public:
+  // Owns |p|.
+  void DoSomething(AnotherClass* p) {
+    ...
+  }
+  WeakPtr<MyClass> AsWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
+ private:
+  base::WeakPtrFactory<MyClass> weak_factory_;
+};
+
+...
+Closure cancelable_closure = Bind(&MyClass::DoSomething, object->AsWeakPtr(), p);
+Callback<void(AnotherClass*)> cancelable_callback = Bind(&MyClass::DoSomething, object->AsWeakPtr());
+...
+
+void FunctionRunLater(const Closure& cancelable_closure,
+                      const Callback<void(AnotherClass*)>& cancelable_callback) {
+  ...
+  // Leak memory!
+  cancelable_closure.Run();
+  cancelable_callback.Run(p);
+}
+
+In FunctionRunLater, both Run() calls will leak p when object is already destructed. Using scoped_ptr can fix the bug.
+
+class MyClass {
+ public:
+ //the right way to define the parameter 
+  void DoSomething(scoped_ptr<AnotherClass> p) {
+    ...
+  }
+  ...
+};
+
+- base::WeakPtr and Cancellation [NOT THREAD SAFE]
+You can use a base::WeakPtr and base::WeakPtrFactory (in base/memory/weak_ptr.h) to ensure that any invokes can not outlive the object they are being invoked on, without using reference counting. 
+
+The base::Bind mechanism has special understanding for base::WeakPtr that will disable the task's execution if the base::WeakPtr has been invalidated. The base::WeakPtrFactory object can be used to generate base::WeakPtr instances that know about the factory object. When the factory is destroyed, all the base::WeakPtr will have their internal "invalidated" flag set which will make any tasks bound to them to not dispatch. By putting the factory as a member of the object being dispatched to, you can get automatic cancellation.
+
+This only works when the task is posted to the same thread. Currently there is not a general solution that works for tasks posted to other threads
+    
+class MyObject {
+ public:
+  MyObject() : weak_factory_(this) {}
+
+  void DoSomething() {
+    const int kDelayMS = 100;
+    MessageLoop::current()->PostDelayedTask(FROM_HERE,
+        base::Bind(&MyObject::DoSomethingLater, weak_factory_.GetWeakPtr()),
+        kDelayMS);
+  }
+
+  void DoSomethingLater() {
+    ...
+  }
+
+ private:
+  base::WeakPtrFactory<MyObject> weak_factory_;
+};
+
+- CancelableTaskTracker for cancel tasks running on another thread 
+With CancelableTaskTracker you can cancel a single task with returned TaskId. This is another reason to use CancelableTaskTracker instead of base::WeakPtr, even in a single thread context.
+
+CancelableTaskTracker has 2 Post methods doing the same thing as the ones in base::TaskRunner, with additional cancellation support. 
+
+class UserInputHandler : public base::RefCountedThreadSafe<UserInputHandler> {
+  // Runs on UI thread.
+  void OnUserInput(Input input) {
+    CancelPreviousTask();
+    DBResult* result = new DBResult();
+    task_id_ = tracker_->PostTaskAndReply(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB).get(),
+        FROM_HERE,
+        base::Bind(&LookupHistoryOnDBThread, this, input, result),
+        base::Bind(&ShowHistoryOnUIThread, this, base::Owned(result)));
+  }
+
+  void CancelPreviousTask() {
+    tracker_->TryCancel(task_id_);
+  }
+
+  ...
+
+ private:
+  CancelableTaskTracker tracker_;  // Cancels all pending tasks while destruction.
+  CancelableTaskTracker::TaskId task_id_;
+  ...
+};
+
+There's no guarantee it can be successfully canceled when TryCancel() is called:
+    If neither task nor reply has started running, both will be canceled.
+    If task is already running or has finished running, reply will be canceled.
+    If reply is running or has finished running, cancelation is a noop.
+
+    
+# Chromium project contributing code 
+http://dev.chromium.org/developers/contributing-code
+
+
+# google design documents 
+- reference 
+http://www.chromium.org/developers/design-documents
+
+- security architecture of the chromium browser 
+http://seclab.stanford.edu/websec/chromium/chromium-security-architecture.pdf
+
+- chromium startup 
+http://www.chromium.org/developers/design-documents/startup
+
+- protecting browsers from extension vulnerabilities 
+https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-185.pdf
+
+
+# code search 
+https://cs.chromium.org/
+
+
+# Startup 
+- most of time chrome shipped as single executable 
+    First there's the platform-specific entry point: wWinMain() on Windows, main() on Linux.  This lives in chrome/app/chrome_exe_main_*.  On Mac and Windows, that function loads modules as described later, while on Linux it does very little, and all of them call into:
+
+    ChromeMain(), which is the place where cross-platform code that needs to run in all Chrome processes lives.  It lives in chrome/app/chrome_main*.  For example, here is where we call initializers for modules like logging and ICU.  We then examine the internal --process-type switch and dispatch to:
+
+    A process-type-specific main function such as BrowserMain() (for the outer browser process) or RendererMain() (for a tab-specific renderer process).
+
+- platform-specific entry points 
+    + On Windows we build the bulk of Chrome as a DLL.  (XXX: why?)  wWinMain loads chrome.dll, does some other random stuff (XXX: why?) and calls ChromeMain in the DLL.
+    
+    + Mac is also packaged as a framework and an executable, but they're linked together: main() calls ChromeMain() directly. There is also a second entry point, in chrome_main_app_mode_mac.mm, for app mode shortcuts: "On Mac, one can't make shortcuts with command-line arguments. Instead, we produce small app bundles which locate the Chromium framework and load it, passing the appropriate data."  This executable also calls ChromeMain().
+    
+    + Linux, On Linux due to the sandbox we launch subprocesses by repeatedly forking from a helper process.  This means that new subprocesses don't enter through main() again, but instead resume from clones in the middle of startup.  The initial launch of the helper process still executes the normal startup path, so any initialization that happens in ChromeMain() will have been run for all subprocesses but they will all share the same initialization.
+    
+
+# prebuild chromium 
+http://commondatastorage.googleapis.com/chromium-browser-snapshots/index.html?prefix=Win_x64/
+
+# chrome version history 
+https://en.wikipedia.org/wiki/Google_Chrome_version_history
+
+
+# ninja 
+is a small build system with a focus on speed 
+https://ninja-build.org/
+https://github.com/ninja-build/ninja
+
+
+# Multi-process resource loading, currently out date doc 
+https://www.chromium.org/developers/design-documents/multi-process-resource-loading
+
+# How chromium displays web pages 
+- reference https://www.chromium.org/developers/design-documents/displaying-a-web-page-in-chrome
+- Conceptual application layers 
+tab helpers ------> browser           chrome/ui 
+...                             WebContent[Impl]    content/browser/web_contents 
+                                Renderer host Render[View[Widget]Host[Impl]]  content/browser/renderer_host
+                            ---------------------------------------------------------------------- process boundary 
+                                 Renderer RenderView[Impl], RenderWidgetImpl    content/renderer 
+                                 WebKit glue, WebView, WebWidget, WebFrame, etc     webkit/glue 
+                                 WebKit port & WebKit       third_party/Webkit 
+WebKit, rendering engine shared between safari, chromium and all other webkit baed browsers. The port is part of WebKit that integrates platform dependent system services such as resource loading and graphic 
+
+Glue, converts WebKit types to chromium types 
+
+Renderer/Render host is chromium's "multi-process" embedding layer. it proxy notify and commands across the process boundary 
+
+WebContents, a reusable component that is the main class of the content module. multiprocess rendering of html into view 
+
+Browser, the browser window, contains multiple WebContents 
+
+tab helpers, individual objects that can be attached to a webcontents. via the WebContentsUserData mixin 
+
+- WebKit 
+https://webkit.org/
+
+chromium only use the render engine and replace the javascript engine 
+
+- webkit port, implementation of required platform specific functionality that interfaces with the platform independent webCore code 
+
+- webkit glue, provide a more convenient embedding API for WebKit using google coding conventions and types such as use std::string instead of use WebCore::String and GURL instead of KURL 
+
+glue objects named similar to webkit object which starts with "Web" WeBCore::Frame becomes WebFrame 
+
+the "test shell" application is a bare-bones web browser for testing WebKit port and glue code 
+
+- the render process 
+            IPC to browser      Main(render) thread 
+            |
+            |
+            V
+i/o thread 
+IPC::ChannelProxy <----------------> RenderProcess                                              RenderView 
+IPC::Channel                                        RenderThread  IPC::Listener<------>         RenderWidget 
+
+- RenderView, render_view_impl.cc represetns a web page. it derives from RenderWidget and handles all navigation related commands fromt he browser process. It communicated with browser process with per render process global RenderProcess object 
+
+    + difference between RenderWidget and RenderView 
+    WebCore::Widget implement the interface in glue layer called WebWidgetDelegate. RenderView inherits from RenderWidget and is the content of a tab or popup window. 
+    
+- low-level browser process objects 
+all IPC communication with the render processesis done on the I/O thread of the browser. this thread also handles all network communication which keeps it from interfering with the user interface 
+
+RenderProcessHost is initialized on the main thread it creates the new renderer process and a ChannelProxy IPC object with a named pipe to the renderer. this object runs on the i/o thread of the browser listening to the named pipe to the renderer, and automatically forwards all messages back to the RenderProcessHost on the UI thread 
+
+A ResourceMessageFilter will be installed in this channel which filter out cetain messages 
+
+RenderProcessHost on UI thread is responsible for dispatching all view-specific messages to the appropriate RenderViewHost in RenderProcessHost::OnMessageReceived
+
+- High level browser process objects, view specific message come into RenderViewHost::OnMessageReceived and RenderWidgetHost base class. each platform has a viwe class to implement integration into the native view system 
+
+above the RenderView/Widget is the WebContents object which represent content of a webpage. It contain in a TabContentsWrapper 
+
+- illustrative examples 
+    + life of a "set cursor" message, send from the renderer to the browser. in the renderer here is what happens 
+        * set cursor message are generated by WebKit internally RenderWidget::SetCursor in content/renderer/render_widget.cc 
+        * it will call RenderWidget::Send to dispatch the message This method is also used by RenderView to send messages to the browser. It will call RenderThread::Send.
+        * This will call the IPC::SyncChannel which will internally proxy the message to the main thread of the renderer and post it to the named pipe for sending to the browser.
+        
+        then the browser takes control 
+        * The IPC::ChannelProxy in the RenderProcessHost receives all message on the I/O thread of the browser. It first sends them through the ResourceMessageFilter that dispatches network requests and related messages directly on the I/O thread. Since our message is not filtered out, it continues on to the UI thread of the browser (the IPC::ChannelProxy does this internally).
+        * RenderProcessHost::OnMessageReceived in content/browser/renderer_host/render_process_host_impl.cc gets the messages for all views in the corresponding render process. It handles several types of messages directly, and for the rest forwards to the appropriate RenderViewHost corresponding to the source RenderView that sent the message.
+        * The message arrives at RenderViewHost::OnMessageReceived in content/browser/renderer_host/render_view_host_impl.cc. Many messages are handled here, but ours is not because it's a message sent from the RenderWidget and handled by the RenderWidgetHost.
+        * All unhandled messages in RenderViewHost are automatically forwarded to the RenderWidgetHost, including our set cursor message.
+        * The message map in content/browser/renderer_host/render_view_host_impl.cc finally receives the message in RenderWidgetHost::OnMsgSetCursor and calls the appropriate UI function to set the mouse cursor.
+        
+    + life of a "mouse click" message sending a mouse click is a typical example of a message going from the browser to the render 
+    
+        * The Windows message is received on the UI thread of the browser by RenderWidgetHostViewWin::OnMouseEvent which then calls ForwardMouseEventToRenderer in the same class.
+        * The forwarder function packages the input event into a cross-platform WebMouseEvent and ends up sending it to the RenderWidgetHost it is associated with.
+        * RenderWidgetHost::ForwardInputEvent creates an IPC message ViewMsg_HandleInputEvent, serializes the WebInputEvent to it, and calls RenderWidgetHost::Send.
+        * This just forwards to the owning RenderProcessHost::Send function, which in turn gives the message to the IPC::ChannelProxy.
+        * Internally, the IPC::ChannelProxy will proxy the message to the I/O thread of the browser and write it to the named pipe of the corresponding renderer.
+        
+        many other types of messages are created in the WebContents, especially navigational ones. These follow a similar path from the WebContents to the RenderViewHost.
+        
+        * IPC::Channel on the main thread of the renderer reads the message sent by the browser, and IPC::ChannelProxy proxies to the renderer thread.
+        * RenderView::OnMessageReceived gets the message. Many types messages are handled here directly. Since the click message is not, it falls through (with all other unhandled messages) to RenderWidget::OnMessageReceived which in turn forwards it to RenderWidget::OnHandleInputEvent.
+        * The input event is given to WebWidgetImpl::HandleInputEvent where it is converted to a WebKit PlatformMouseEvent class and given to the WebCore::Widget class inside WebKit.
+    
+    
+# Content module for explain why separate the code out of chrome project 
+- reference 
+https://www.chromium.org/developers/content-module
+
+
+# Getting around the chromium source code directory structure 
+- chromium separated into three main parts 
+    + the browser, the main process and represents all the UI and I/O 
+    + the renderer the per-tab sub-process that is driven by the browser and embed webkit 
+    + the webkit/blink, do layout and rendering  
+
+- quick introduction to the solution file 
+the solution file is chrome/chrome.sln 
+
+    + the startup code is in the App/chrome_dll and App/chrome projects 
+    + common shared library code is in the Libraries/base project this code is shared between all projects and we try to keep it as small as possible 
+    + common browser specific code is in the Browser/common project which shared between browser and renderer 
+    + webkit code is in the projects Webkit(readonly). on top of the google's webkit(ours)/port which interfaces with windows and then webkit(ours)/glue which is our embedding layer 
+    + the glue talks to the Browser/renderer project, represent the subprocess where we run each tab 
+    + the Browser/browser project provides the user interface, storage, network requests, etc 
+    
+- top-level projects, a number of top-level directories in the chromium project folder, which folder represent a project 
+android_webivew 
+    + apps, chrome packaged apps, https://developer.chrome.com/apps/about_apps, like native apps, and offline by default, support host webcontent in app 
+    + base, common code shared between all sub-projects, contains like string manipulation, generic utilities etc 
+    + breakpad, open source crash reporting project, pull directly from google subversion repo 
+    + build, build-relative configuration shared by all projects 
+    + cc, the chromium compositor implementation 
+    + chrome, the chromium browser
+    + chrome/test/data, data files for running certain tests 
+    + components, directory for components that have the content module as the uppermost layer they depend on 
+    + content, the core code needed for a multi-process sandboxed browser. for the reason why separate the code please check https://www.chromium.org/developers/content-module
+    + device, cross-platform abstractions of common low-level hardware APIs 
+    + net, the networking library 
+    + sandbox, the sandbox project prevent a hacked renderer from modifying the system 
+    + skia, google's skia graphics library developed for Android. a copy from android's tree 
+    + sql, wrap around sqlite 
+    + third_party, a bunch of external libraries such as image decoders and compression libraries, also contain chrome specific third_party in chrome/third_party 
+    + tools 
+    + ui/gfx, shared graphics classes 
+    + ui/views, a simple framework for doing UI development, provide rendering, layout and event handling. Some more browser-specific objects are in chrome/browser/ui/views
+    + url, google's open source url parsing and canonicalization library 
+    + v8, the javascript library, pull directly 
+    + webkit, all of chromium's webkit-related stuff 
+        appcache 
+        base 
+        blob 
+        build 
+        data 
+        glue 
+        tools 
+            layout_tests 
+            merge, scripts for helping merge to webkit's tree 
+            npapi_layout_test_plugin 
+            test_shell, a very simple standalone browser, allows testing of our glue and port code without having to compile and run very large chromium application 
+        
+- module dependencies a module is lower can't include code from a higher module directly, but talks to it using embedded APIs 
+
+chrome <-------------+-------------------------+
+A       A                       |content API                |
+|       |                        |                                     | 
+|       |                       content <-----------+     |
+|       |                       A A A                        |     |WebKit API
+|       V                       | |  |                        |     |
+|       net   <---------+  |  |                        |     |
+|       A                          |   webkit_glue   |     |
+|       |                           |   (src/webkit)  |     |
+V      V                           |   A             A      |      |
+base<-------------------+--+             +----+---+--->Web Kit (src/third_party/WebKit)
+                                                                                    A
+                                                                                    |
+                                                                                    V
+                                                                                    V8 
+- Quick reference for directory tree under "content/"
+browser, the backend for the application which handles all I/O and communication with the child processes. this talks to the renderer to manage web pages 
+common, files shared between the multiple processes, code specific to chromium 
+gpu, code for the GPU processes, which is used for 3D compositing and 3D APIs 
+plugin, code for running browser plugins in other processes 
+ppapi_plugin, code for the pepper plugin process, https://www.chromium.org/developers/design-documents/pepper-plugin-implementation. it is used for the Native Client project 
+renderer, code for the subprocess in each tab 
+utility, code for running random operations in a sandboxed process 
+worker, code for running HTML5 web workers 
+
+- Quick reference for the directory tree under "chrome/"
+app, the "app" is the most basic levle of the program, it is run on startup and dispatches to either the browser or renderer code depending on which capabilities the current process is in. contains projects for chrome.exe and chrome.dll 
+    locales, projects for building localized dlls 
+    resources, icons and cursors 
+    theme, images for the theme of window 
+browser, the frontend including the main window, ui and the backend for the application which handles all I/O and storage. this talks to the renderer to manage web pages 
+    ui model, view and controller code for UI features and functionality 
+common, files shared between the browser and the renderer that is specific to the chrome module 
+    net, some chromium specific stuff on top of the net top-level module, this should be merged with browser/net 
+installer, source files and projects for making the installer(MSI installer)
+renderer, chrome specific code that runs in the renderer process, adds features like autofill, translate etc to the content module 
+test
+    automation, used by tests to drive the browser UI, for example, test/ui, test/startup etc, communciate with browser/automation in the browser 
+    page_cycler, code for running page cycler tests 
+    reliability, for distributed testing of pages loads for reliability metrics and crash finding 
+    selenium, for running selenium test, test suite for ajaxy and javascript stuff, see test/third_party/selenium_core 
+    ui, ui tests for poking at the browser UI, opening tabs etc 
+    unit , the base code for the unit tests 
+third_party, third_party specific to chromium other third_party libraries are in the top-level third_party folder 
+tools 
+    build 
+        buildbot, buildbot configuration 
+        win, windows build stuff including some .vsprops 
+        memory, tools for memory stuff, currently include gflags for setting page heap options 
+        perf/dashboard, code for converting performance logs into data and graphs 
+        profiles, generator for random history data used for make test profiles 
+        
+- code pathes for common operations 
+    + application startup 
+    win main function is in chrome/app/main.cc is linked in the chrome project 
+    
+    WinMain launches the google update client, which is the installer/autoupdater. it will find the subdirectory for the current version and load chrome.dll from there 
+    
+    it calls ChromeMain in the newly loaded library, which is in chrome_main.cc in chrome_dll project 
+    
+    ChromeMain does initialization for components, and then forwards to either RendererMain in chrome/renderer/renderer_main.cc if the command line flag indicates that this should be a subprocess, or BrowserMain in chrome/browser/browser_main.cc if not to load a new copy of the application. Since this is startup, we're launching the browser.
+    
+    BrowserMain does common browser initialization. It has different modes for running installed webapps, connecting to the automation system if the browser is being tested, etc.
+    
+    It calls LaunchWithProfile in browser_init.cc which creates a new Browser object in chrome/browser/ui/browser.cc. This object encapsulates one toplevel window in the application. The first tab is appended at this time.!??
+
+    + tab startup & initial navigation 
+    Browser::AddTab in chrome/browser/ui/browser.cc is called to append a new tab.
+    
+    It will create a new TabContents object from browser/tab_contents/tab_contents.cc
+    
+    TabContents creates a RenderViewHost (chrome/browser/renderer_host/render_view_host.cc) via the RenderViewHostManager's Init function in chrome/browser/tab_contents/render_view_host_manager.cc). Depending on the SiteInstance, the RenderViewHost either spawns a new renderer process, or re-uses an existing RenderProcessHost. RenderProcessHost is the object in the browser that represents a single renderer subprocess.
+    
+    The NavigationController in chrome/browser/tab_contents/navigation_controller.cc which is owned by the tab contents, is instructed to navigate to the URL for the new tab in NavigationController::LoadURL. "Navigating from the URL bar" from step 3 onward describes what happens from this point.
+
+- navigating from the url bar 
+    When the user types into or accepts an entry in the URL bar, the autocomplete edit box determines the final target URL and passes that to AutocompleteEdit::OpenURL. (This may not be exactly what the user typed - for example, an URL is generated in the case of a search query.)
+    
+    The navigation controller is instructed to navigate to the URL in NavigationController::LoadURL.
+    
+    The NavigationController calls TabContents::Navigate with the NavigationEntry it created to represent this particular page transition. It will create a new RenderViewHost if necessary, which will cause creation of a RenderView in the renderer process. A RenderView won't exist if this is the first navigation, or if the renderer has crashed, so this will also recover from crashes.
+    
+    Navigate forwards to RenderViewHost::NavigateToEntry. The NavigationController stores this navigation entry, but it is marked as "pending" because it doesn't know for sure if the transition will take place (maybe the host can not be resolved).
+    
+    RenderViewHost::NavigateToEntry sends a ViewMsg_Navigate to the new RenderView in the renderer process.
+    
+    When told to navigate, RenderView may navigate, it may fail, or it may navigate somewhere else instead (for example, if the user clicks a link). RenderViewHost waits for a ViewHostMsg_FrameNavigate from the RenderView.
+    
+    When the load is "committed" by WebKit (the server responded and is sending us data), the RenderView sends this message, which is handled in RenderViewHost::OnMsgNavigate.
+    
+    The NavigationEntry is updated with the information on the load. In the case of a link click, the browser has never seen this URL before. If the navigation was browser-initiated, as in the startup case, there may have been redirects that have changed the URL.
+    
+    The NavigationController updates its list of navigations to account for this new information
+    
+- navigations and session history, Each NavigationEntry stores a page ID and a block of history state data. The page ID is used to uniquely identify a page load, so we know which NavigationEntry it corresponds to. It is assigned when the page is committed commit, so a pending NavigationEntry will have a page ID of -1. The history state data is simply a WebCore::HistoryItem serialized to a string. Included on this item are things like the page URL, subframe URLs, and form data
+
+    When the browser initiates the request (typing in the URL bar, or clicking back/forward/reload)
+    
+    A WebRequest is made representing the navigation, along with extra information like a page ID for bookkeeping. New navigations have an ID of -1. Navigations to old entries have the ID assigned to the NavigationEntry when the page was first visited. This extra information will be queried later when the load commits.
+    
+    The main WebFrame is told to load the new request.
+    
+    When the renderer initiates the request (user clicks a link, javascript changes the location, etc):
+    
+    WebCore::FrameLoader is told to load the request via one of its bajillion varied load methods.
+    
+    In either case, when the first packet from the server is received, the load is committed (no longer "pending" or "provisional").
+    
+    If this was a new navigation, WebCore will create a new HistoryItem and add it to the BackForwardList, a WebCore class. In this way, we can differentiate which navigations are new, and which are session history navigations.
+    
+    RenderView::DidCommitLoadForFrame handles the commit for the load. Here, the previous page's state is stored in session history, via the ViewHostMsg_UpdateState message. This will tell the browser to update the corresponding NavigationEntry (identified by RenderView's current page ID) with the new history state.
+    
+    RenderView's current page ID is updated to reflect the committed page. For a new navigation, a new unique page ID is generated. For a session history navigation, it will be the page ID originally assigned when it was first visited, which we had stored on the WebRequest when initiating the navigation.
+    
+    A ViewHostMsg_FrameNavigate message is sent to the browser, updating the corresponding NavigationEntry (identified by RenderView's newly updated page ID) with the new URL and other information.
+
+
+# find somebody who knows how a piece of code works 
+- reference 
+https://www.chromium.org/developers/finding-somebody-who-knows-how-a-piece-of-code-works
+
+
+# identify leak gdi object in windows 
+- reference 
+https://www.chromium.org/developers/how-tos/leak-gdi-object-in-windows
+- anit patterns 
+DeleteObject with HICON
+
+- tools 
+    + task manager add gdi columns 
+    + gdi view, http://www.nirsoft.net/utils/gdi_handles.html
+    
+- leak screen dc aka GetDC(NULL), GetDC(NULL) returns newly created screen DC. So, you must release it by using ReleaseDC. You may want to use ScopedGetDC 
+
+    + get screen dpi 
+    299  int screen_dpi = GetDeviceCaps(GetDC(NULL), LOGPIXELSX);
+     300  xform.eM11 = xform.eM22 =
+     301      static_cast<float>(screen_dpi) / static_cast<float>(render_dpi);
+     
+- Play Enhanced Metafile Record More Than Once
+- references 
+GdIQueryTable
+    Explanation of GDI handle table
+    http://www.fileinview.com/chms/Windows%20Graphics%20Programming%20Win32%20GDI%20and%20DirectDraw/Win32GDI/32.htm
+    Implementation of GDIQueryTable in ReactOS
+    http://doxygen.reactos.org/d9/db3/dll_2win32_2gdi32_2misc_2misc_8c_a4086f8e85c3c92a3c6d518ef5bf8a690.html
+    WinXP/32bit returns 0x00410000.
+
+Process Environment Block (PEB)
+    http://en.wikipedia.org/wiki/Win32_Thread_Information_Block
+    http://undocumented.ntinternals.net/UserMode/Undocumented%20Functions/NT%20Objects/Thread/TEB.html
+    reinterpret_cast<PEB*>(__readfsdword(0x30))->GdiSharedHandleTable (PEB+0x94)
+
+GDI Object Handle Encoding
+    [0:15] Index
+    [16:22] Object Type (1=DC, 4=Region, 5=Bitmap, 8=Pallete, A=Font, 10=Brush, 21=EnhMF, 30=Pen, 50=ExtPen)
+    [23:23] Stock Object
+    [24:31] Unknown
+    
+    
+# Checking out and building chromium for windows 
+- reference 
+https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Instructions-for-Google-Employees
+
+- install depot_tools 
+https://storage.googleapis.com/chrome-infra/depot_tools.zip
+
+set up environment path to install dir 
+
+dd a DEPOT_TOOLS_WIN_TOOLCHAIN system variable in the same way, and set it to 0, to use local installed VS 
+
+- set proxy if necessary 
+dep_tools\bootstrapping\get_file.js 
+    + for window 7 need add addtional   xml_http = new ActiveXObject("MSXML2.ServerXMLHTTP.6.0");
+xml_http.setProxy(2, proxyIP:Port); 
+
+HTTP_PROXY 
+HTTPS_PROXY 
+environment variable 
+- install git for window 
+https://git-scm.com/download/win
+- run gclient 
+- get the code, use fetch tool in dep_tools 
+$ mkdir chromium && cd chromium 
+$ fetch chromium 
+$ cd src 
+
+- setup build 
+$ gn gen out/Deafult 
+
+    + using VS 
+$ gn gen --ide=vs out\Default 
+$ devenv out\Default\all.sln 
+
+Use the --filters argument to restrict generating project files for only the code you're interested in --filters=//chrome 
+
+check filter help 
+$ gn gen --help 
+
+check help by 
+$ gn help gen 
+
+- build chromium 
+$ ninja -C out\Default chrome 
+
+- run 
+$ out\Deafult\chrome.exe 
+
+- run test 
+$ out\Default\unit_tests.exe --gtest_filter="PushClientTest.*"
+
+- update checkout 
+$ git rebase-update 
+$ gclient sync 
+
+
+# Chromium graphics//chrome gpu 
+- reference 
+https://www.chromium.org/developers/design-documents/chromium-graphics
+
+
+# how to use dep_tools 
+https://www.chromium.org/developers/how-tos/depottools
+http://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html
+
+# Switch to a branch of chromium code 
+- reference 
+http://stackoverflow.com/questions/4481803/how-to-get-code-of-specified-tag-version-of-chromium-from-git
+https://www.chromium.org/developers/how-tos/get-the-code/working-with-release-branches
+- switch branch or tag 
+//inside chromium/src/
+git fetch origin 38.0.2125.106
+
+// Create a new branch "my_stable_branch" that is based on the just-fetched HEAD.
+git checkout -b my_stable_branch FETCH_HEAD
+
+//... apply the patch ...
+# (e.g. by editing the files)
+# (e.g. by using git cherry-pick [commit id] )
+# (e.g. by using git checkout [commit id] [file path] )
+
+// Commit changes (assuming that you want to keep track of your changes)
+git commit -va
+
+- configure gclient by 
+go to the chromium base folder and then run gclient sync 
+
+// Now synchronize the dependencies to the current branch
+gclient sync --with_branch_heads  # --jobs 16  if you wish to use parallelism
+
+// Now compile the release build. The output will be stored in src/out/Release.
+ninja -C out/Release chrome chrome_sandboxcd..
+
+- working with release branches
+    + references https://www.chromium.org/developers/how-tos/get-the-code/working-with-release-branches
+// Make sure you have all the release tag information in your checkout.
+$ git fetch --tags
+
+// Checkout whatever version you need (known versions can be seen with 'git show-ref --tags') 
+$ git checkout -b your_release_branch 34.0.1847.9  # or more explicitly, tags/34.0.1847.9
+
+$ gclient sync --with_branch_heads --jobs 16
+
+- checkout a release branch 
+Make sure you are in 'src'.
+This part should only need to be done once, but it won't hurt to repeat it.  The first
+time might take a while because it fetches an extra 1/2 GB or so of branch commits. 
+$ gclient sync --with_branch_heads
+
+You may have to explicitly 'git fetch origin' to pull branch-heads/
+$ git fetch
+
+Checkout the branch 'src' tree.
+$ git checkout -b branch_$BRANCH branch-heads/$BRANCH
+
+Checkout all the submodules at their branch DEPS revisions.
+$ gclient sync --jobs 16
+
+Edit files, 'git commit', and 'git cl upload' as normal. After that, 'git cl land' commits to the right branch magically! (Don't try to use the CQ on a branch.)
+
+To get back to the "trunk":
+Make sure you are in 'src'.
+$ git checkout -f master
+$ gclient sync --jobs 16
+
+
+#the chromium project how to 
+https://www.chromium.org/developers/how-tos
+
+
+# how webkit/blink works 
+- reference 
+https://docs.google.com/presentation/d/1ZRIQbUKw9Tf077odCh66OrrwRIVNLvI_nhLm2Gi__F0/pub?slide=id.p
+
+
+# Gn build configuration 
+- reference 
+https://www.chromium.org/developers/gn-build-configuration
+
+- understanding gn build flags 
+$ gn args out/myBuild 
+
+generally go in a subdirector of src/out, set build arguments on a build directory by typing 
+
+... TODO
+
+# Gn quick start guide 
+- reference 
+https://chromium.googlesource.com/chromium/src/+/master/tools/gn/docs/quick_start.md
+
+- running gn, will find the binary in the source free containing in the current directly and run it 
+$ gn 
+
+- setting up a build 
 
 
 
 
+#  Important abstractions and data structures 
+- TaskRunner, SequencedTaskRunner, SingleThreadTaskRunner 
+interfaces positing base::Callbacks "tasks" to be run by the TaskRunner, TaskRunner makes no guarantees about execution (order, concurrency, run at all)
+
+SequencedTaskRunner offers certain guarantees about the sequence of execution FIFO 
+
+SingleThreadTaskRunner similar to SequencedTaskRunner and run all task on same thread 
+
+TaskRunner.PostTaskAndReplay(), which will post a task to a target TaskRunner and on completion post a "relay" task to the origin TaskRunner
+
+- MessageLoop, MessageLoopProxy, BrowserThread, RunLoop 
+MessageLoop is a concrete object used by MessageLoopProxy 
+
+chrome/ or content/ you can use BrowserThread 
+
+BrowserThread will delete the task if the underlying MessageLoop is already destroyed 
+
+There's some debate about when to use SequencedTaskRunner vs MessageLoopProxy vs BrowserThread. Using an interface class like SequencedTaskRunner makes the code more abstract/reusable/testable. On the other hand, due to the extra layer of indirection, it makes the code less obvious. Using a concrete BrowserThread ID makes it immediately obvious which thread it's running on, although arguably you could name the SequencedTaskRunner variable appropriately to make it more clear.
+
+- base::SequencedWorkerPool, base::WorkerPool 
+These are two primary worker pools in chromium 
+
+SequencedWorkerPool is a more complicated worker pool inherits from TaskRunner, block shutdown on task execution, do not run task when browser is shutdown. It is base on a SequenceToken 
+
+- base::Callback() and base::Bind() 
+base::Callback is a set of internally refcounted templated calblack with different arities and return values. 
+
+base::Bind() will bind arguments to a function pointer and returns a base::Callback 
+
+base::Bind() will automagically AddRef()/Release() the first argument if the function is a member function and will complain if the type is not refcounted (avoid this problem with base::WeakPtr or base::Unretained()). Also, for the function arguments, it will use a COMPILE_ASSERT to try to verify they are not raw pointers to a refcounted type (only possible with full type information, not forward declarations). Instead, use scoped_refptrs or call make_scoped_refptr() to prevent bugs(memory leak, http://code.google.com/p/chromium/issues/detail?id=28083)
+
+base::Bind() understands base::WeakPtr. If the function is a member function and the first argument is a base::WeakPtr to the object, base::Bind() will inject a wrapper function that only invokes the function pointer if the base::WeakPtr is non-NULL. base::Bind() also has the following helper wrappers for arguments.
+
+base::Unretained(), base::Unretained() - disables the refcounting of member function receiver objects (which may not be of refcounted types) and the COMPILE_ASSERT on function arguments. 
+
+base::Owned() - transfer ownership of a raw pointer to the returned base::Callback storage. Very useful because TaskRunners are not guaranteed to run callbacks
+
+base::Passed() - useful for passing a scoped object (scoped_ptr/ScopedVector/etc) to a callback. The primary difference between base::Owned() and base::Passed() is base::Passed() requires the function signature take the scoped type as a parameter, and thus allows for transferring ownership via .release(). 
+
+base::ConstRef() - passes an argument as a const reference instead of copying it into the internal callback storage. Useful for obvious performance reasons, but generally should not be used, since it requires that the lifetime of the referent must live beyond when the callback can be invoked.
+
+base::IgnoreResult() - use this with the function pointer passed to base::Bind() to ignore the result. Useful to make the callback usable with a TaskRunner which only takes Closures
+, callbacks with no parameters nor return values
+
+- scoped_refptr<T>, base::RefCounted, base::RefCountedThreadSafe
+when ownership is truly shared (for example, multiple tabs sharing the same renderer process), not for when lifetime management is difficult to reason about.
+
+- Singleton, base::LazyInstance 
+They're globals, generally should avoid using them
+
+http://www.object-oriented-security.org/lets-argue/singletons
+
+prefer base::LazyInstance over Singleton. The reason to use these classes is construction is lazy (thereby preventing startup slowdown due to static initializers) and destruction order is well-defined.
+
+- base::Thread, base::PlatformThread 
+Generally you shouldn't use these, since you should usually post tasks to an existing TaskRunner. PlatformThread is a platform-specific thread. base::Thread contains a MessageLoop running on a PlatformThread.
+
+- base::WeakPtr, base::WeakPtrFactory 
+Mostly thread-unsafe weak pointer that returns NULL if the referent has been destroyed. It's safe to pass across threads (and to destroy on other threads), but it should only be used on the original thread it was created on. base::WeakPtrFactory is useful for automatically canceling base::Callbacks when the referent of the base::WeakPtr gets destroyed.
+
+- FilePath, cross platform representation of a file path 
+
+- ObserverList, ObserverListThreadSafe 
+ObserverList is a thread-unsafe object that is intended to be used as a member variable of a class. It provides a simple interface for iterating on a bunch of Observer objects 
+
+ObserverListThreadSafe similar. It contains multiple ObserverLists, and observer notifications are invoked on the same PlatformThreadId that the observer was registered on, thereby allowing proxying notifications across threads and allowing the individual observers to receive notifications in a single threaded manner.
+
+- Pickle, basic facility for object serialization and deserialization in binary form 
+
+- Value, allow for specifying recursive data classes containing simple values
+
+- LOG, for logging 
+
+- FileUtilProxy, you should not do file I/O on jank-sensitive threads, (BrowserThread::UI and BrowserThread::IO), so you can proxy them to another thread (such as BrowserThread::FILE) via these utilities.
+
+- Time, TimeDelta, TimeTicks, Timer 
+use TimeTicks instead of Time to keep a stable tick counter (Time may change if the user changes the computer clock).
+
+- PreService, ExtensionPrefs
+persistent state associated with a user profile 
+
+
+# Smart pointer guidelines 
+- The pattern where scoping objects are used to automatically manage the lifetime of heap-allocated objects is called RAII - Resource Acquisition Is Initialization.
+
+Here's some sample use of std::unique_ptr<>, the most common type of smart pointer:
+
+ // We can put a pointer into a std::unique_ptr<> at construction time...
+std::unique_ptr value(base::JSONReader::Read(data));
+std::unique_ptr foo_ptr(new Foo(...));
+
+// ...or by using reset().
+std::unique_ptr bar_ptr;      // Like "Bar* bar_ptr = nullptr;".
+bar_ptr.reset(new Bar(...));  // Now |bar_ptr| is non-nullptr and owns the object.
+
+// We can test the std::unique_ptr<> directly.
+if (!value)
+  return false;
+
+// get() accesses the raw pointer underneath.
+Foo* raw_ptr = foo_ptr.get();
+
+// We can call through the std::unique_ptr<> as if it were a raw pointer.
+DictionaryValue* dict;
+if (!value->GetAsDictionary(&dict))
+  return false;
+
+- what types of smart pointers exist? 
+two common smart pointers in Chromium are std::unique_ptr<> and scoped_refptr<>. The former is used for singly-owned objects, while the latter is used for reference-counted objects . scoped_refptr is inherit from std::shared_ptr<>
+
+    + base/memory/ has a few others 
+    linked_ptr<> is a deprecated object that was used mainly for storing smart pointers in containers pre-C++11. Now that Chromium supports C++11, you shouldn't use this; store std::unique_ptr<>s in containers directly (see below).
+    
+    ScopedVector<> is also deprecated; this is a vector that owns the objects it contains. Use std::vector<std::unique_ptr<>> instead.
+    
+    WeakPtr<> is not actually a smart pointer; it functions like a pointer type, but rather than being used to automatically free objects, it's used to track whether an object owned elsewhere is still alive. When the object is destroyed, the WeakPtr<> will be automatically set to null, so you can see that it's no longer alive. (You still need to test for null before dereferencing -- a blind dereference of a null WeakPtr<> is the equivalent of dereferencing null, rather than a no-op.) This is somewhat like C++11's std::weak_ptr<>, but with a different API and fewer restrictions.
+
+- when to use each? 
+Singly-owned objects - use std::unique_ptr<>. Specifically, these are for non-reference-counted, heap-allocated objects that you own.
+
+Non-owned objects - use raw pointers or WeakPtr<>. Note that WeakPtr<>s must only be dereferenced on the same thread where they were created 
+
+Ref-counted objects - use scoped_refptr<>, but better yet, rethink your design. Reference-counted objects make it difficult to understand ownership and destruction order, especially when multiple threads are involved. 
+
+Avoiding refcounting in multithreaded situations is usually easier if you restrict each class to operating on just one thread, and use PostTask() and the like to proxy calls to the correct thread. base::Bind(), WeakPtr<>, and other tools make it possible to automatically cancel calls to such an object when it dies.
+
+Platform-specific types - use one of the many platform-specific scoping objects, such as base::win::ScopedHandle, base::win::ScopedComPtr, or base::mac::ScopedCFTypeRef. Note that these may have slightly different usage patterns than std::unique_ptr<>; for example, they might be assigned as outparams via a .receive() type of method.
+
+- what are the calling conventions involving different kinds of pointers? 
+If a function takes a std::unique_ptr<>, that means it takes ownership of the argument. Callers need to use std::move() to indicate that they're passing ownership if the object being passed is not a temporary:
+ // Foo() takes ownership of |bar|.
+void Foo(std::unique_ptr<Bar> bar);
+
+...
+std::unique_ptr<Bar> bar_ptr(new Bar());
+Foo(std::move(bar_ptr));          // After this statement, |bar_ptr| is null.
+Foo(std::unique_ptr<Bar>(new Bar()));  // No need to use std::move() on temporaries.
+
+If a function returns a std::unique_ptr<>, that means the caller takes ownership of the returned object. Usage of std::move() while returning an object is only needed if the return type of the function differs from the type of the local variable.
+ class Base { ... };
+class Derived : public Base { ... };
+
+// Foo takes ownership of |base|, and the caller takes ownership of the returned
+// object.
+std::unique_ptr<Base> Foo(std::unique_ptr<Base> base) {
+  if (cond) {
+    return base;                           // Transfers ownership of |base| back to
+                                           // the caller.
+  }
+
+  // Note that on these next codepaths, |base| is deleted on exit.
+  if (cond2) {
+    return std::unique_ptr<Base>(new Base()));  // No std::move() necessary on temporaries.
+  }
+  std::unique_ptr<Derived> derived(new Derived());
+  return std::move(derived);              // Note that std::move() is necessary because
+                                                               // type of |derived| is different from the return
+                                                               // type of the function.
+}
+
+If a function takes or returns a raw pointer, it may mean no ownership is transferred, or it may not. Much of Chromium was written before std::unique_ptr<> existed, or by people unfamiliar with using it to indicate ownership transfers, and thus takes or returns raw pointers but transfers ownership in the process. functions which take or return raw pointers should never transfer ownership.
+
+- what about passing or returning a smart pointer by reference? 
+Don't do this.
+
+This declaration also forces callers to heap-allocate the objects in question, even if they could otherwise have declared them on the stack.
+
+One exception is lambda functions used with STL algorithms operating on containers of smart pointers; these may have to take e.g. const std::unique_ptr<T>& in order to compile. And speaking of that...
+
+- I want to use an STL container to hold pointers. Can I use smart pointers?
+
+Yes! As of C++11, you can store smart pointers in STL containers. In particular, there's no longer a need to use ScopedVector<T>, since you can use std::vector<std::unique_ptr<T>> instead. 
+
+
+# Chromium string usage
+- types of strings 
+In the Chromium code base, we use std::string and string16.  WebKit uses WTF::string instead, which is patterned on std::string, but is a slightly different class.
+
+We also have a StringPiece class, which is basically a pointer to a string that is owned elsewhere with a length of how many characters from the other string form this “token”. Finally, there is also WebCString and WebString, which is used by the webkit glue layer.
+
+- string encoding 
+UTF-8 is most common, but we also use UTF-16, UCS-2, and others.  
+
+UTF-8 is an encoding where characters are one or more bytes (up to 6) in length. Each byte indicates whether another byte follows. ASCII text (common in HTML, CCS, and JavaScript) uses one byte per character.
+
+UTF-16 is an encoding where all characters are at least 2 bytes long.  There are also 4 byte UTF-16 characters
+
+UCS-2 is an older format that is very similar to UTF-16 (think of UTF-16 with 2 byte characters only, no 4 byte characters).
+
+ASCII is the older 7-bit encoding which includes 0-9, a-z, A-Z, and a few common punctuation characters, but not much else. ASCII is always one byte per character.
+
+- When to use which encoding
+The most important rule here is the meta-rule, code in the style of the surrounding code. In the frontend, we use std::string/char for UTF-8 and string16/char16 for UTF-16 on all platforms. 
+
+std::string is encoding agnostic, we only put UTF-8 into it. std::wstring/wchar_t is banned in cross-platform code
+
+only allowed in Windows-specific code where appropriate to interface with native APIs (which often take wchar_t* or similar). Most UI strings are UTF-16. URLs are generally UTF-8. Strings in the webkit glue layer are typically UTF-16 with several exceptions.
+
+- GURL class and strings 
+One common data type using strings is the GURL class. The constructor takes a std::string in UTF-8 for the URL itself. If you have a GURL, you can use the spec() method to get the std::string for the entire URL, or you can use component methods to get parsed parts, such as scheme(), host(), port(), path(), query(), and ref(), all of which return a std::string.
+
+the ref string may have UTF-8 characters which are not also ASCII characters.
+
+- Guidlines for string use in our codebase 
+Use std::string from the C++ standard library for normal use with strings
+
+Length checking - if checking for empty, prefer “string.empty():” to “string.length() == 0”
+
+When you make a string constant at the top of the file, use char[] instead of a std::string: ex) const char kFoo[] = “foo”; 
+there are no shutdown order dependencies.
+
+There are many handy routines which operate on strings. You can use IntToString() if you want to do atoi(), and StringPrintf() if you need the full power of printf. You can use WriteInto() to make a C++ string writeable by a C API. StringPiece makes it easy and efficient to write functions that take both C++ and C style strings.
+
+For function input parameters, prefer to pass a string by const reference instead of making a new copy.
+
+For function output parameters, it is OK to either return a new string or pass a pointer to a string. Performance wise, there isn’t much difference.
+
+Often, efficiency is not paramount, but sometimes it is - when working in an inner loop, pay special attention to minimize the amount of string construction, and the number of temporary copies made.
+
+When you use std::string, you can end up constructing lots of temporary string objects if you aren’t careful, or copying the string lots of times. Each copy makes a call to malloc, which needs a lock, and slows things down. Try to minimize how many temporaries get constructed.
+
+When building a string, prefer “string1 += string2; string1 += string3;” to “string1 = string1 + string2 + string3;”  Better still, if you are doing lots of this, consider a string builder class.
+
+For localization, we have the ICU library, with many useful helpers to do things like find word boundaries or convert to lowercase or uppercase correctly for the current locale.
+
+We try to avoid repeated conversions between string encoding formats, as converting them is not cheap. It's generally OK to convert once, but if we have code that toggles the encoding six times as a string goes through some pipeline, that should be fixed.
+
+
+# Content module 
+- high level overview 
+"content" module locate in src/content, and is the core code needed to render a page using a multi-process sandboxed browser 
+
+include all the web platform features(i.e. HTML5) and GPU acceleration. it does not include chrome features (i.e. extensions/autofill/spelling etc)
+
+the goal is any embedder should be able to build a browser by starting with content and then pick and choose chrome features 
+
+- motivation 
+    + As the Chromium code has grown, features inevitably hooked into the wrong places, causing layering violations and dependencies that shouldn't exist. It's been hard for developers to figure out what the "best" way is because the APIs (when they existed) and features were together in the same directory.
+    
+    + add a clear separation between the core pieces of the code that render a page using a multi-process browser, consensus was reached to move the core Chrome code into src/content (content not chrome :) )
+    
+- content vs chrome 
+Chrome features use APIs that are provided by content to filter IPCs and get notified of events that they require.
+
+Content should only have the core code needed to render a page 
+
+    + non exhaustive list of features that chrome only and so are not in content 
+    Extensions
+    NaCl
+    ChromeFrame
+    SpellCheck
+    Autofill
+    Sync
+    Prerendering
+    Safe Browsing
+    Translate
+
+- content API reference, is how code in content can indirectly call chrome. a ContentClient interface that the embedder (Chrome) implements. ContentClient is available in all processes 
+
+Some processes also have their own callback API as well, i.e. ContentBrowserClient/ContentRendererClient/ContentPluginClient.
+
+https://www.chromium.org/developers/content-module/content-api
+    + goal 
+    embedder API is under src/content/pubilc 
+    DEPS rules would prevent chrome from reaching to the implementation files 
+    
+    + design follow the WebKit API 
+    
+- Status and roadmap 
+The current status is content doesn't depend on chrome at all 
+
+developers working on web platform and core code only have to build/test content instead of all the chrome 
+
+We have a separate target for content's unit tests in content_unittests, and integration tests in content_browsertests
+
+content is build at a separate dll to speed up the build.
+
+
+# Structure of layered components within the chromium codebase 
+https://www.chromium.org/developers/design-documents/structure-of-layered-components-within-the-chromium-codebase
+    
+    
+# How to add new features (without bloating RenderView/RenderViewHost/WebContents)
+https://www.chromium.org/developers/design-documents/multi-process-architecture/how-to-add-new-features
+
+
+# Chrome security architecture 
+- reference 
+http://seclab.stanford.edu/websec/chromium/chromium-security-architecture.pdf
+
+- abstract 
+chrome has two modules in separate protection domains, browser kernel interacts with the operating system and a rendering engine, which runs with restricted priviledges in a sandbox 
+
+- introduction 
+    + monolithic browser such as IE or old Firefox, crash from one web application can take odwn entire browser 
+    
+    + modular architecture like chrome
+    akin to prvilege separation in SSHD 
+    
+    the browser kernel module acts on behalf of the user 
+    
+    the rendering engine module acts on behalf of "the web" which run in the sandbox 
+    
+    + the architecture allocates high risk componetns such as the html parser, the javascript virtual machine and the document object model to its sandboxed rendering engine 
+    
+    + the browser kernel is responsbile for managing persistent resources, such as cookies and password database 
+    
+    + the chrome architecture base on two design decisions 
+        * compatible with exiting web which means transparent to websites 
+        
+        * treats rendering engine as a black box that takes unparsed html as input and produces rendered bitmaps as output. it relaies on the rendering engine alone to implement the same origin policy 
+        
+    + after investigate previous vulnerabilities in IE, Firefox and Safari. 67.4% of the it have occurred in rendering engine 
+    
+    + development process 
+    architecture -> check previous historical data -> test on existing solution for compatibilies -> fix issues -> test on latest data 
+
+    + kernel and render engine 
+    browser kernel  <--------------- rendered bitmap---------- sandbox--------------------+
+                                   -----------------html, js, css---------------> |    rendering engine      |
+                                                                                                        +----------------------------+
+
+- Thread model, define by enumerating the attacher's abilities and goals 
+
+    + attacker abilities
+    web site not addin browser's malware blacklist 
+    site contain a valid https certificate for the domain 
+    
+    + attacker convience use to visit the web site 
+    + attacker might know of an unpatched buffer overflow in the browser's html parser, an integer overflow in the reglar expression or a buffer overflow in the bookmarks systems 
+    
+- in-scope goals 
+    + persistent mailware 
+    + transient keylogger 
+    + file theft 
+    
+- out scope goals which means chrome's architecture does not provide addtional protection 
+    + phishing
+    + origin isolation, the attacker could compromises the rendering engine can act on behalf of any web site 
+    + firewall circumvention 
+    + web site vulnerabilities 
+    
+- chromium's architecture 
+    + rendering engine, also responsible for enforcing the same-origin policy 
+    
+    + compare 
+Rendering Engine                        Browser Kernel
+HTML parsing                             Cookie database
+CSS parsing                                 History database
+Image decoding                          Password database
+JavaScript interpreter                  Window management
+Regular expressions                     Location bar
+Layout                                          Safe Browsing blacklist
+Document Object Model               Network stack
+Rendering                                   SSL/TLS
+SVG                                             Disk cache
+XML parsing                                 Download manager
+XSLT                                            Clipboard
+                        Both 
+                        url parsing 
+                        unicode parsing 
+
+    + browser kernel, One exception to this pattern is the network stack. The HTTP stack is responsible for parsing HTTP response headers and invoking a gzip or bzip2 decoder to decompress HTTP responses with these Content-Encodings. 
+
+- process granularity, chromium uses a separate instance of rendering engine for each tab. chromium also use rendering engine dispatch trusted content such as certificate errors but the engine will not be used to render normal web content 
+
+The main exception to this pattern is the Web Inspector, which displays trusted content and is rendered by a rendering engine that contains web content. Chromium uses this design because the Web Inspector interacts extensively with the page it is inspecting.
+
+- plug-ins, each plugin runs in a separate host process outside of the rendering engines and browser kernel, there is only one instance for entire web 
+
+by default each plugin runs outside of the sandbox and with the user's full privileges 
+
+e.g. flash player 
+
+attacker can exploit unpatched vulnerabilities of plugin to install malware 
+
+use option --safe-plugins to run plugins in chrome sandbox 
+
+- the sandbox force render engine to use browser kernel API 
+    + implementation, currently chromium relies on windows specific features to sandbox the rendering engine instead of running with the user's window security token 
+    
+    the sandbox restricts the rendering engine's security token 
+
+    Before rendering web content, the rendering engine adjusts the security token of its process by converting its security identifiers (SIDs) to “DENY_ONLY,” adding a restricted SID, and calling the AdjustTokenPrivileges function. 
+
+    Additionally, the rendering engine runs in a Windows Job Object, restricting the rendering engine’s ability to create new processes, read or write to the clipboard, or access USER handles.
+
+    limitations: 
+    FAT32  does not support 
+    misconfigured objects, if an object has a NULL discretionar access control list(DACL)
+    TCP/IP 
+    
+- the browser kernel interface 
+    + user interaction 
+    rendering 
+    user input 
+    
+    + persistent storage 
+    uploads, drag/drop file will grant a render engine file access right during it's life time 
+    downloads 
+
+    + prevent render engine access file schema URLs 
+    
+- security evaluation 
+    + browser CVE analysis 
+
+     If a module has had a greater proportion of vulnerabilities in the past, we assume that the module is likely to contain a greater proportion of future vulnerabilities. In almost all cases, the classification was self-evident.
+
+    + arbitrary code execution 
+
+
+# Protecting browsers from extension vulnerabilities 
+- abstract 
+- introduction 
+- attacks on extensions 
+- thread model 
+
+
+# Managing multiple working directories 
+- with script in dep_tools 
+$ gclient-new-workdir.py /path/to/original/chromium chromium2
+
+- window devs 
+gclient-new-workdir.py doesn't support Windows, but you can try https://github.com/joero74/git-new-workdir to do the same thing (needs to be run as admin). For the curious, the script essentially uses mklink /D and other minor tricks to setup the mirrored .git repo.
+
+
+# Handling blink failures 
+- reference 
+https://www.chromium.org/blink/sheriffing
+
+
+# Run chrome with flags 
+- reference 
+https://www.chromium.org/developers/how-tos/run-chromium-with-flags
+
+command line switches, http://peter.sh/examples/?/chromium-switches.html
+- setting flags for chrome on android 
+Visit 'about:version' to review the flags that are effective in the app. it required rooted device 
+
+    + alternative setting content shell doesn't require a rooted device 
+There's an alternative method for setting flags with ContentShell that doesn't require a rooted device:
+
+1. Download a LKGR build of Android.
+2. This will include both ChromePublic.apk and ContentShell.apk
+3. Install ContentShell APK to your device.
+4. Run this magic incantation
+
+adb shell am start \
+  -a android.intent.action.VIEW \
+  -n org.chromium.content_shell_apk/.ContentShellActivity \
+  --es activeUrl "http://chromium.org" \
+  --esa commandLineArgs --show-paint-rects,--show-property-changed-rects
+  
+- setting flags for chrome os 
+$Put the device into dev mode so you can get a root shell
+Modify /etc/chrome_dev.conf (read the comments in the file for more details)
+Restart the UI via:
+sudo restart ui
+
+- check google, chrome://flags/
+such as silence debugging to prevent the pop up dialog when develop a background script 
+
+
+# Policy settings in chrome 
+- reference 
+document for administrator, https://www.chromium.org/administrators
+https://www.chromium.org/developers/how-tos/enterprise/adding-new-policies
+
+- use chrome://settings control by GUI
+
+- terms 
+user policy, common kind associated with a user login 
+device policy, chromeos only 
+
+- adding new policy settings 
+This section describes the steps to add a new policy setting to Chromium, which administrators can then configure via Windows Group Policy, the Google Apps control panel, etc.  Administrator documentation about for setting up Chrome management is 
+
+- policy template 
+https://cs.chromium.org/chromium/src/components/policy/resources/policy_templates.json
+
+- policy list 
+http://dev.chromium.org/administrators/policy-list-3
 
 
 
 
+# Using the heap leak checker 
+- reference 
+https://www.chromium.org/developers/testing/leaksanitizer
+https://www.chromium.org/developers/how-tos/using-the-heap-leak-checker
+https://chromium.googlesource.com/chromium/src/+/master/docs/memory-infra/heap_profiler.md
+
+# Using R to reduce page cycler regressions 
+https://www.chromium.org/developers/how-tos/using-r-to-reduce-page-cycler-regressions
+
+# How to use drover, Drover is a tool, included with depot tools, that allows developers (should be a committer) to rapidly merge and revert changes on our trunk/branches without any previously checked out working copy. 
+- reference 
+https://www.chromium.org/developers/how-tos/drover
 
 
+# Using Dr. memory to check memory errors. it is a open source project 
+https://www.chromium.org/developers/how-tos/using-drmemory
 
 
+# Presumbit scripts 
+https://www.chromium.org/developers/how-tos/depottools/presubmit-scripts
 
 
+# Understanding about::tracing results 
+https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/trace-event-reading
+http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/tracing-event-instrumentation
 
 
+# Startup tracing with memory profiling 
+- reference 
+https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/memory/startup-tracing-with-memory-profiling
+
+https://chromium.googlesource.com/chromium/src/+/master/docs/memory-infra/README.md
+
+https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/memory/howto-adding-memory-infra-tracing-to-a-component
 
 
+# Recording tracing runs 
+https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs
 
 
+# Mojo 
+- introduction 
+mojo is a collection of interprocess communication technologies protocols and a runtime for creating applications and services that are composable while being loose coupled 
+
+- reference 
+https://github.com/domokit/mojo/blob/master/README.md
 
 
-
-
-
-
-
-
-
-
-
+# reliability tests 
+- reference 
+https://www.chromium.org/developers/how-tos/reliability-tests
