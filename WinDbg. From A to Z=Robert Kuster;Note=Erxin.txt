@@ -1,0 +1,851 @@
+Why WinDbg. From A to Z=Robert Kuster;Note=Erxin
+
+# Why windbg?
+- used by window product team 
+- much more powerfull than VS debugger 
+- extensible through extension dlls 
+- its debug engine is part of the window OS 
+- windbg learning curve is very steep 
+- contents 
+    + using windbg 
+    + global flags 
+    + application verifier 
+    + process dumps 
+    
+- debugging tools for window xp 
+    + reference the dbgeng.dll 
+windbg.exe 
+ntsd.exe 
+cdb.exe 
+kd.exe 
+dbgsrv.exe 
+userdump.exe 
+drwtsn32.exe 
+
+    + dbghelp.dll included starting with win 2000
+livekd.exe 
+OlyDbg.exe 
+ProcessExplorer.exe 
+...
+
+dbghelp.dll contain support process dumping, obtaining stack traces, symbol handling, obtaining info about executable images 
+
+- dbghelp!ImageNtHeader vs imagehlp!ImageNtHeader 
+$ uf dbgHelp!ImageNtHeader 
+
+- ImageHlp Dependencies 
+- Debugger Engine API: dbgeng.dll 
+documented in windbg's documentation 
+
+check dependency for DbgEng 
+
+- debug symbols 
+executable are just sequences of raw bytes 
+symbols help the debugger to 
+    + map raw addresses in the executable to source-code lines 
+    + analyze internal layout and data of applications 
+    + program database -> pdb files 
+    the newest microsoft debug information format 
+    pdb's are stored in a file separately from 
+    there are special APIs to work with it DbgHelp.dll and MsDiaXY.dll 
+- kinds of debug information 
+public functions and variables, across several compilation units(source files)
+FPO information, additional information needed for retrieving stack-frames when compiling with FPO optimiztion 
+private functions and variables
+souce file and line information 
+type information 
+
+public symbols for MS modules (kernel32.dll, user32.dll, ..) are always stripped 
+
+- generating debug infromation 
+    + build process 
+    compiler, generates machine instructions stored into .OBJ files 
+    liner, combines all available .OBJ and .LIB files into the final executable 
+    
+    + for debug information we also need two steps 
+    compiler generates debug information for every source file 
+    linker, combines available debug information into the final ste of debug information for the executable 
+    
+    compiler options: /Z7, /Zi, /ZI 
+    linker options, /debug, /pdb, /pdbstripped 
+    
+- machine debug information 
+    + signature stored into executable and PDB file during build 
+    + for a debugger match this signature must be the same 
+    + algorithm to search PDB files 
+    try module EXE or DLL folder 
+    try name and path specified in the PE file 
+    try environment variables, _NT_SYMBOL_PATH, _NT_ALT_SYMBOL_PATH 
+- call stack 
+    + without valid symbols 
+002df550 MFC80UD!AfxDlgProc+0x3e
+002df57c USER32!InternalCallWinProc+0x28
+002df5f8 USER32!UserCallDlgProcCheckWow+0x102
+002df648 USER32!DefDlgProcWorker+0xb2
+002df668 USER32!DefDlgProcW+0x29
+002df694 USER32!InternalCallWinProc+0x28
+002df70c USER32!UserCallWinProcCheckWow+0x16a
+...
+    + with valid symbols 
+002df350 ntdll!DbgBreakPoint
+002df43c TestApplication!CMyDlg::PreInit+0x3b [MyDlg.cpp @ 75]
+002df544 TestApplication!CMyDlg::OnInitDialog+0x52 [MyDlg.cpp @ 91]
+002df550 MFC80UD!AfxDlgProc+0x3e
+002df57c USER32!InternalCallWinProc+0x28
+002df5f8 USER32!UserCallDlgProcCheckWow+0x102
+...
+
+- invasive noninvasive debugging and attaching 
+    + invasive attach 
+    DebugActiveProcess is called 
+    break-in thread is created 
+    prior to window xp, target application is killed on debugger exit or detach 
+    there can be only one invasive debugger attached to a process at any time 
+    
+    + noninvasive attach 
+    OpenProcess is called 
+    no break-in thread i created 
+    we don't attach to the processes as a debugger 
+    all threads of the traget application are frozen 
+    can change and examine memory 
+    cannot set breakpoint 
+    cannot step through the application 
+    can attach several noninvasive debuggers to a process(+ one invasive debugger )
+        * target application is attached by VS then we could still attach noninvasive debugger 
+        * the target application is completely frozen and cannot lauch the break-in thread necessary for a true attach 
+        
+- exceptions 
+    + a system mechanism that isn't language specific 
+    + exceptions are made accessible through language extensions 
+    + don't use try-catch-except for condition checking in time critical parts of your application. for every exceptions the system creates an exception record, searches for frame based exception handlers(catch-except) through all stack frames in reverse order, and finally continues with program execution. 
+    
+- exception dispatching 
+exception dispatcher|=> debugger first chance 
+                                    |=> frame-based handlers (__try, __except) =not handlered?
+                                    |                                                                                  |
+                                    |                                                                                  V 
+                                    |                                                                                  UnhandledExceptionFilter 
+                                    |                                                                                  |
+                                    |                                                                                  V
+                                    |                                                                                  Debugger present?
+                                    |                                                                                  |
+                                    |                                                                    +--Yes--+--No--> postmortem debugger 
+                                    |                                                                    |                                             |
+                                    |                                                                    V                                            V
+                                    |                                                                   RaiseException(second chance) 
+                                    |=> Debugger (second chance) 
+                                    
+the postmortem debugger is the AeDebug
+
+- Exception Dispatching and SetUnhandleExceptionFilter 
+- AeDebug? Postmortem Debugging 
+    + set change postmortem debugger 
+    $ WinDbg -I 
+    $ drwtsn32 -i 
+    
+    + Postmortem settings 
+    HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug 
+    
+    Whatever program is specified in AeDebug is run. No validation is made that the program is actually a debugger!
+    
+
+# Using Windbg 
+- regular commands 
+k
+lm 
+g 
+
+- meta or dot-commands 
+control the behavior of the debugger 
+
+.sympath 
+.cls 
+.lastevent 
+.detach 
+.if 
+
+- extension commands 
+implemented as exported functions in extension DLLs 
+a large poart of what makes WinDbg such a powerful debugger 
+preinstalled extension dlls, exts.dll, ntsdexts.dll, uext.dll, wow64exts.dll, kdexts.dll, ....
+!analyze
+!address 
+!handle 
+!peb 
+
+- Main extensions 
+!exts.help, general extensions 
+!Uext.help, user mode extensions(non-OS specific)
+!Ntsdexts.help, user mode extensions(OS specific)
+!Kdexts.help, kernal mode extensions 
+!logexts.help, logger extensions 
+!clr10\sos.help, debugging managed code 
+!wow64exts.help, wow64 debugger extensions 
+...
+
+- symbols in WinDbg 
+_NT_SYMBOL_PATH environment variable must be set 
+
+in windbg access system setting from File->Symbol File Path...(Ctrl+S)
+
+Commands 
+.sympath, get/set path for symbol search 
+.sympath + XY, append XY directory to the searched symbol path 
+.sym noisy, instructs the debugger to display information about its search for symbosl 
+ld kernel32, load symbols for kernel32.dll 
+ld *, load symbols for all modules 
+.reload
+x kernel32!*, examine and list all symbols in kernel32 
+x kernel32!*LoadLibrary*, list all symbols in kernel32 with contain *LoadLibrary* 
+dt ntdll!*, display all variables in ntdll 
+
+- Sources in WinDbg 
+_NT_SOURCE_PATH, environment variable 
+
+in windbg, File->Source File Path 
+
+command 
+.srcpath 
+.srcpath + XY 
+
+- processes and threads on windows NT 
+every window process is represented by an executive process block(PEROCESS) in kernel mode 
+    + user mode process address space contain PEB and TEB 
+    + kernel mode system addres space contain process block EPROCESS 
+    
+    EPROCESS points to a number of related data structures; such as thread blocks ETHREAD 
+    EPROCESS points to a process environment block in process address space 
+    ETHREAD points to a thread environment block (TEB) in process address space 
+    EPROCESS contains handle table, PID etc... 
+    
+
+- PEB and TEB 
+PEB, process environment block 
+basic image information 
+process heap information 
+environment variables 
+command line parameter 
+DLL search path 
+display it, !peb, dt nt!_PEB 
+
+TEB thread environment block 
+stack information, stack base and stack limit 
+TLS, thread local storage array 
+display it, !teb, dt nt!_TEB 
+
+many windbg commands rely on the data retrieved from PEB and TEB, such as lm !dlls, !imgreloc, !tls, !gle etc 
+
+- example PEB dump, the address of process's PEB 
+$ dt nt!_PEB -r @$peb 
+
+- WinDbg commands for retrieving process and module information 
+!peb, displays a formatted view of the information in the process environment block PEB 
+dt nt!_PEB address full PEB 
+dt nt!_PEB Addr, full PEB dump 
+lm, list loaded and unloaded modules 
+lmD -||- (ouput in debugger markup language)
+lm vm kernel32 verbose output for kernel32 
+!lmi kernel32, similar implementation as an extension 
+!dlls, display list of loaded modules with loader specific information 
+!dlls -c kernel32, same as before for kernel32 only 
+!imgreloc display relocation information 
+!dh kernel32, display the headers for kernel32 
+
+- example module information 
+!dlls -c msvcrt 
+
+- Commands for retrieving thread information 
+~, thread status for all threads 
+~0 for thread 0 
+~. current active thread 
+~* for all threads with some extra information(priority, start address)
+~* k, call stacks for all threads  ~ !uniqstack 
+~<thread>s, set current thread 
+!gle Get last error 
+!runaway, displays information about time consumed by each thread, quick way to find out which threads are spinning out of control or consuming too much CPU time 
+!teb, display a formatted view of the information in the thread environment block (TEB)
+dt nt!_TEB Addr, full TEB dump 
+
+- example threads 
+- windbg's windows can be docked or loating 
+- each window in windbg has its own menu 
+
+- debugger markup language (DML)
+    + allows debugger output to include directives and extra non-display  information 
+    + user interface parse out the extra information to provide new behavior 
+    + DML is primarily intended to address the following issues 
+        * linking of related information 
+        * discoverability of debugger and extension functionality 
+        * enhancing output from the debuggger and extensions 
+    + DML was introduced with version 6.6.0.7 of debugging tools 
+    
+- DML start 
+.dml_start, kick of to other DML commands 
+.prefer_dml 1, global setting all DML enhanced commands with produce DML output 
+.help /D a* 
+.chain /D, a new DML mode where extensions are linked to a .extmatch 
+
+- DML in windbg 
+.prefer_dml 1/l?
+
+- Memory, stack details 
+       |4GB                                                                 Stack identifier        Memory identifier
+       |
+       |--MEM_COMMIT                                            Teb!StackBase                                             |
+       |Protect: PAGE_READWRITE                                                                                               |SubRegion3 size
+       |                                                                                                                                           |
+       |--State:MEM_COMMIT                                   Teb!StackLimit          SubRegion3 base 
+       |Protect: PAGE_READWRITE|PAGE_GUARD
+       |--State:MEM_RESERVE                                                                   SubRegion2 base 
+       |Protect:0
+       |
+       |0                                                                       Teb!DeallocationStack       AllocationBase, SubRegion1 Base
+memory growth from 0 to 4GB 
+stack growth from COMMIT to 0 
+
+each new thread receives its own stack space consisting of both committed and reserved memory 
+each thread uses 1 Mb of reserved memory, and one page of committed memory 
+system will commit one page block from the reserved stack memory as needed(CreateThread >dwStackSize > "Thread Stack Size")
+
+- stack size for a thread 
+$ !teb 
+$ !address esp 
+
+- stack growth, when the stack growth
+ESP register points to the current stack location of a thread 
+
+if a program attempts to access an address within a guard page, system raises a STATUS_GUARD_PAGE_VIOLATION exception 
+
+if stack g rows until the end of reserved memory a STATUS_STACK_OVERFLOW is raised 
+
+- stack growth 
+!uniqstack, displays call stacks for all of the threads in the current processes 
+!findstack MySymbol 2, locates all call stacks that contain MySymbol 
+k, current call stack 
+kP, P == full parameters for each function called 
+kf, distance between adjacent frames to be displayed useful to check stack consumption of each frame 
+kv, v == display FPO information + calling convention 
+kb, b == display the first three parameters passed to each function 
+kM, output in DML format frame numbers link to a .frame/dv command 
+
+- commands for memory handling 
+d, dd, da, du, display memory dd double word variable, da display ascii characters, du display unicode characters 
+f, fill memory 
+!vprot myaddr, display virtual memory protection information 
+!address myaddr, display information about the memory specified by myaddr 
+!address -regionUsageStack, display stack regions for all threds in the process 
+dds, display words and symbols 
+ddp, display referenced memory 
+
+- process's memory information 
+$ !address 
+
+- commands for retrieving heap information 
+!heap -?, brief help 
+!heap -h, list heaps with index and range(=startAddr, endAddr)
+!heap -s 0, summary for all heaps = reserved and committed memory 
+!heap -flt s Size, dump info for allocations matching size 
+!heap -stat, dump heap handle list heapHandle=value returned by heapCreate and GetProcessHeap 
+!heap -stat -h 0, dump usage statistic for every alloSize 
+!heap -p, GFlags settings, heapHandle list 
+!heap -p -all, details of all allocations in all heaps in the process 
+!heap -p a UserAddr, details of heap allocation containing UserAddr(i.e. the address returned by HeapAllo), prints back traces when avaliable 
+
+- more heap structs 
+-if page heap is disabled for your application, then following structs apply 
+
+_HEAP struct 
+    + defined in ntdll.dll: dt ntdll!_HEAP 
+    + for every HeapCreate there is a unique _HEAP 
+    + you can use "!heap -p -all" to get address for all _HEAP structs in your proces 
+    
+_HEAP_ENTRY struct 
+    + defined in ntdll.dl:dt ntdll!_HEAP_ENTRY 
+    + for every heapAlloc tehre is unique _HEAP_ENTRY 
+    + you can use "!heap -p -all" to get addresses for all heap entries in your processes 
+    
+- page heap structs 
+_DPH_HEAP_ROOT struct 
+    + defined in ntdll.dll dt ntdll!_DPH_HEAP_ROOT 
+    + for every heap create there is a unique _DPH_HEAP_ROOT
+    + you can use "!heap -p -all" to get addresses for all heap roots in your process 
+    
+_DPH_HEAP_BLOCK struct 
+    + defined in ntdll.dll, dt ntdll!_DPH_HEAP_BLOCK 
+    + for every heapAlloc there is a unique _DPH_HEAP_BLOCK 
+    + use "!heap -p -all" to get addresses for all heap blocks in your process 
+
+- who called HeapAlloc 
+    + enable stack traces and page heap for your application 
+    start GFlags, select "Create user mode stack trace database" and "Enable page heap" for your image 
+    or from the command line: gflags.exe /i <IMAGE.EXE>+ust+hpa 
+    + restart your application and attach winDBG 
+    
+- from windbg's command line 
+    + !heap -p -a <UserAddr> 
+    address of your allocation returned by HeapAlloc, new, ... 
+    will dump the call stack but without source information 
+    
+    + dt ntdll!_DPH_HEAP_BLOCK StackTrace <MyHeapBlockAddr> 
+    MyHeapBlock = DPH_HEAP_BLOCK address retrieved in previous step 
+    StackTrace = member of DPH_HEAP_BLOCK with stores the call stadck for your HeapAlloc 
+
+    + dds stackTrace 
+    stackTrace retrieved in previous step
+
+- who called heapAlloc 
+$ !heap -p -a 0x025F1000
+
+- who called heapCreate?
+    + enable stck traces and page heap for you application 
+    
+- finding memory leaks on the heap 
+$ !address -summary 
+summary about memory usage for your process if RegionUsageHeap or RegionUsagePageHeap 
+
+$ !heap -stat -h 0 
+will list down handle specific allocation statistics for every AllocSize for every AllocSize the following is listed AllocSize, #blocks, and TotalMem 
+
+$ !heap -flt -s <size> 
+allocated by HeapAlloc value retrieved in previous step 
+
+$ !heap -p -a <UserAddr> 
+address of our allocation 
+will dump the call-stack but without source information 
+
+- cirtical section related commands 
+!locks, displays a list of locked critical sections for the process 
+!locks -v display all critical sections for the process 
+!cs [Opt][CsAddr] displays one or more critical sections or the entire critical section tree 
+!avrf -cs, display a list of deleted critical sections 
+
+- other useful windbg commands 
+dt, display information about a local variable 
+dt ntdll!*peb*, list all ntdll.dll variables which containt he world peb 
+dt ntdll!_PEB, display type for PEB 
+dt ntdll!_PEB 7efde00, dump PEB at address 7efde00 
+dv, display local variable 
+dv /t /i /v, display local variable /i classify into categories, /V show addresses and offset, /t display type information 
+
+
+# pseudo-registers in windbg 
+- virtual registers provided by debugger 
+ - begin with a dollar sign ($)
+    + automatic set debugger by certain useful values 
+    + example $ra, $peb, $teb...
+    
+- user-defined pseudo-registers 
+    + there are twenty user-defined registers: $t0, $t1, $t2, ...$t19 
+    + integer variables that can be used to store intermediate data 
+    + can additionally hold type information 
+    + r? assign a typed result to an lvalue 
+        * r? $t0 = @peb-> ProcessParamter 
+        assign a typed value to $t0 
+        * ?? @$t0->CommandLine 
+        
+- automatic pseudo-registers 
+$ra, return address currently on the stack useful in execution commands, i.e. "g $ra"
+$ip, teh instruction pointer 
+$exentry entry point of the first executable of the current process 
+$retreg, primary return value register. x86=EAX, Itanium=ret0, x64=rax 
+$csp, call stack pointer 
+$peb, address of the process environment block (PEB)
+$teb, address of the thread environment block(TEB) of current thread 
+$tpid, process id 
+$tid, thread id 
+$ptrsize, size of a pointer 
+$pagesize, number of bytes in one page of memory 
+
+
+# Expression in windbg 
+- MASM expressions 
+    + evaluate by the ? command 
+    + each symbol is treated as an address. numberical value of a symbol is the memory address of that symbol -> to get its value you must deference it with poi 
+    + source line expressions can be used `myfile.c:43`
+    + the at sign for register values is optional(eax or @eax are both fine)
+    + used in almost all examples in windbg's help 
+    + the only expressions syntax used prior to windbg version 4.0 of debugging tools 
+    
+- c++ expressions 
+    + evalutated by the ?? command 
+    + symbols are understood as appropriate data types 
+    + source line expressions cannot be used 
+    + the at sign for register values is required (eax will not work )
+    
+MASM operations are alwasy byte based. C++ operations follow the c++ type rules. numberical are treated internally as ULON64 values 
+
+- more about expression 
+    + MASM 
+    numberical value of any symbol is its memory address 
+    any operator can ber used with any number 
+    numbericals are interpreted according to the current radix: n[8|10|16]
+    overridden prefix 0x(hex), 0n(decimal), 0t(octal), 0y(binary)
+    
+    + C++ 
+    numberical value of a variable is its actual value 
+    operators can ber used only with corresponding data types 
+    a symbol that does not correspond to a C++ data type will result in a syntax error 
+    data structure that does not correspond to a c++ data type will result in a syntax error 
+    data structure are treated as actual structures and must be used accordingly 
+    the value of a function name or any other entry point is the memory address, treated as a function pointer 
+    numbericals the default is always decimal 
+    0x hex, 0(zero -octal)
+    
+- example 
+void myfunction(){
+    int nLocalVar = 7;
+}
+
+$ dd nLocal L1 
+00007 
+
+$ ? nLocalVar 
+0012f830, address of nLocalVar
+$ ? dwo(nLocalVar), double word 
+$ ? poi(nLocalVar) , pointer sized data 
+
+//C++ syntax 
+$ ??nLocalVar
+$ ?? &nLocalVar
+    
+- common numberic MASM operators 
+dwo, qwo, poi    
+dwo, dword from specificed address 
+qwo, qword from specified address 
+poi, pointer size data 
+wo, low-order word from specified address 
+by, low order byte from specified address 
+
+- binary operators 
+=(or ==), != equal to not equal to 
+<, >, <=, >= 
+and (or &), xor (or ^), or (or |), bitwise AND, XOR OR 
++, -, *, / 
+<<, >>, >>>, arithemetic right shift 
+
+- non numberic operators in MASM 
+$iment(address), returns the image entry point address = image base address 
+$scmp("String1", "String2"), evaluates to -1, 0, or 1. see strcmp 
+$sicmp("String1", "String2"), evaluates to -1, 0 or 1, see strcmp 
+$spat("String", "Pattern"), TRUE-> String matches pattern; FALSE-> String doesn't match pattern; Pattern can be alias or string constant but not a memory pointer 
+$vvalid(Address, Length), memory in the given range is valid, 0-> memory is invalid
+    
+- optimization 
+    + MASM, usage of @ for registers is recommanded 
+    + C++
+    prefix for local symbols: $!My!Symbol 
+    prefix for global symbols: <moduleName>!MySymbol 
+    
+- MASM operation are always byte based, whereas pointer arithmetic is used for c++ oeprations 
+$ ? (myInt + 4)
+$ ??(myInt + 1)
+
+- default expression evaluator 
+    + use c++ expression evaluator 
+    ?? 
+    watch window 
+    local window 
+    
+    + all other commands and debugging information windows use the default expression evaluator 
+    + you can use the .expr command to change the default evaluator 
+    .expr, show current 
+    .expr, /q, show avaliable 
+    .expr /s c++, set c++ as default 
+    .expr /s masm, set masm as default 
+    
+- mixing both evaluators on the fly 
+@@(...)
+the expression wrap with @@ will be evaluate with different from default expression evaluator 
+
+explicity specify 
+@@c++(...)
+@@masm(...)
+    
+    
+# Aliases in windbg 
+- strings that are automatically replaced with other character strings 
+conssit of alias name + alias equivalent 
+
+- user name aliases 
+as or aS, set Alias 
+ad, delete alias 
+al, list alias 
+
+- fixed name aliases 
+set by the user, named $u0, $u1, ... $u9 
+set by the r(register) command + .(dot) before the "u"
+r $.u0 = "dd esp+8;g"
+
+- automatic aliases 
+set and named by the debugger 
+are similar to automatic pseudo registers, except that they can be used with alias-related tokens 
+such as ${...} (pseudo-registers cannot)
+
+examples:
+$ntsym 
+$CurrentDumpFile 
+$CurrentDumpPath, ....
+
+- user named and fixed name aliases 
+    + user named aliases
+    must be separated form other characters, enclosed in ${}
+    can be used in the definition of a fixed nane alias 
+    
+    + fixed name aliases 
+    automatically replaced if they are used adjacent to other text 
+    can be used in the definition of any alias
+    
+- user-named aliases 
+as Name Equivalent, set alias 
+as /ma Name Address, as alias to the null-terminated ascii string at address 
+as /mu Name Address
+...
+
+ad Name, delete alias 
+ad * 
+
+${Alias}, ${Alias} is replaced by the alias equivalent, even if it is touching other text. if the alias is not defined, the ${Alias} is not replaced 
+${/f:Alias}
+${/n:Alias}
+${/d:Alias}
+
+
+# debugger command programs 
+- consist of 
+debugger commands 
+control flow tokens (.if, .for, .while, ...)
+
+- variables 
+use user-named aliases or fixed-name aliases as "local variables" 
+use pseduo-registers($t0, ...) for numeric or typed variables 
+
+- for comments use $$[any text] 
+- a pair of braces {} is used to surround a block of statements 
+when each block is entered all aliases within a block are evaluated 
+control flow token before the opening brace 
+to create a block solely to evaluate aliases use the .block{..}
+use ${Alias}(alias interpreter) for user-named aliases that touch other text 
+
+- control flow tokens 
+used to create execution loops and for conditional execution 
+each condition must be an expression (commands are not permitted)
+
+.block, performs no action. it is used solely to introduce a block, note that you can not simply use {} to create a block 
+.if, .else, .elseif 
+.for, .while, .Break, .continue 
+.foreach 
+
+- program execution 
+    + enter all statements into debuger window as single string 
+    + store all statements into a script file and use $$>< to run the file. $$><(run script file)
+    open the specific file 
+    replaces all carriage returns with semicolons 
+    executes the resulting text as a single command block 
+    
+- useful breakpoint commands 
+bl, breakpoint list 
+bp, set breakpoint 
+bu, set unresolved breakpoint, defers teh actual setting of the break point until the module is loaded 
+ba, break on access 
+bc, breakpoint clear 
+be, bd, breakpoint enable disable 
+
+- complex breakpoints 
+    + specificed source code line 
+    $ bp `mod!source.c:12` 
+    
+    + breakpoint that will starts hitting after 5 passes 
+    $ bu kernel32!LoadLibraryExW 5 
+    $ bl 
+    
+    + break only if called from thread ~1 
+    $ ~1 bu kernel32!LoadLibraryExW 
+    $ bl 
+    
+    + break at all symbols with pattern myFunc* 
+    $ bp mod!myFunc* 
+    
+    + break on member methods 
+    $ bp @@c++(MyClass::mymethod)
+    useful if the method is overloaded and thus present on several addresses 
+    
+- breakpoints with commands 
+    + skipi execution of WinMain 
+    $ bu MyApp!WinMain "r eip = poi(@esp); r esp = @esp + 0x14; .echo WinSpy!WinMain entered; gc"
+    right at a function's entry point the value found on the top of the stack contains the return address 
+        r eip = poi(@esp) -> Set EIP(instruction pointer) to the value found at offset 0x0 
+    WinMain has 4x4 byte parameters = 0x10 bytes + 4bytes for the return address = 0x14 
+        r esp = @esp + 0x14 -> Add 0x14 to ESP, effectively unwinding the stack pointer 
+        
+    + break only if LoadLibrary is called for MyDLL 
+    $ bu kernel32!LoadLibraryExW ";as /mu ${/v:MyAlias} poi(@esp+4); .if($spat(\"${MyAlias}\", \"*MYDLL*\") != 0) {kn; }.else{gc}"
+    the first parameter to LoadLibrary is a string pointer to the DLL name in question 
+    MASM $spat operator will compare this pointer to a predefined string-wildcard, this *MYDLL* in our example 
+    unfortunately $spat can accept aliases or constants, but no memory pointers. this is why we store our pointer in question to an alias first 
+    our kernel32!LoadLibraryExW breakpoint will hit only if the pattern compared by $spat matches otherwise the application will continue executing 
+    
+- exception analysis commands 
+.lastevent, first-change or second-chance? 
+!analyze -v, displays detailed information about the current exception 
+.exr -1, display most recent exception 
+.exr Addr, display exception at Addr 
+!cppexr, display c++ exception at address 7c901230 
+g, gH, go with exception handled 
+gN, go with exception not handled 
+
+
+# Remote debugging with windbg 
+- target computer(server)
+copy dbgsrv.exe, dbgeng.dll and dbghelp.dll to remote computer 
+disable the firewall for "dbgsrv.exe" 
+run-> dbgsrv.exe -t tcp:port=1025 
+
+windows vista: start dbgsrv.exe with admin priviledges to see all processes 
+
+- host computer(client) 
+run -> windbg.exe -premote tcp:server=TargetIP_or_Name, port=1025 
+file(Menu)->Attach to process -> select process on target computer that you would like to debug 
+
+- commands for remote debugging 
+Cdb.exe -QR server(IP or name), list all debugging servers running on the specified network server 
+.detach, detach from processes 
+.endpsrv, end dbgsrv.exe on remote computer. this command will kill the debugged process if you don't detach first 
+.tlist, lists all processes running on the (remote) system 
+
+- Monitoring events 
+the debugger engine provides facilities for monitoring and responding to events in the target application 
+events are generally divided into   
+    + exception events 
+    breakpoint 
+    access violation 
+    stack overflow 
+    division-by-zero 
+    specific exceptions 
+    
+    + non-exception events 
+    create process 
+    create thread 
+    load module 
+    unload module 
+    for a full list see DEBUG_FILTER_XXX 
+    
+    + whenever a debugging session is accessible, there is a last event. command .lastevent 
+    
+- event filter in windbg 
+    + provide simple event filtering 
+    + influence how the debugger engine proceeds after an event occurs in a target 
+    + to list all events: sx 
+    
+    + break or execution status 
+    first change break on event(sxe )
+    second change break event(sxd)
+    debugger message output on event(sxn)
+    ignore event(sxi)
+    
+    + handling or continue status 
+    gN 
+    gH 
+    
+- events filter dialog 
+- event arguments 
+    + some filters take arguments that restrict which events they match 
+    + no arguments -> no restriction 
+    create process, the name of the created process must match the argument 
+    exit process, the name of the exited process must match the argument 
+    load module, the name of the loaded module must match the argument 
+    target output, the debug output from the target must match the argument 
+    unload module, the base address of the unloaded module must be the same as the argument 
+
+    
+# Roadmap 
+- Flags, GFlags, Global Flags 
+- GFlag enables and disable features by editing the window registry 
+- GFlag can set system-wide or image-specific settings 
+- image specific settings are stored in 
+ HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\ImageFileName\GlobalFlag 
+ 
+- the os reads these settings and adopts its functionality accordingly 
+- GFlags can be run from the command line or by using a dialog box 
+- We can also use !gflags in WinDbg to set or display the global flags 
+- With GFlags we can enable 
+heap checking 
+heap tagging 
+Loader snaps 
+Debugger for an Image 
+Application verifier 
+Etc 
+
+- GFlag dialog 
+system registry 
+kernel flags, run time settings 
+image file 
+
+- enable application verifier 
+is a runtime verification tool for windows applications 
+is monitoring an application's interaction with the OS 
+profiles and tracks 
+    + microsoft win32 APIs 
+    + exceptions 
+    + kernel objects 
+    + registry 
+    + file system 
+with !avrf we get access to this tracking information 
+
+- application verifier variants 
+    + GFlags application verifier 
+    only verifier.dll is injected into the target process 
+    verifier.dll is installed with windows xp 
+    offers a verify limited subset of application verifier options 
+    probably this option in GFlags is obsolete and will eventually be removed? 
+    
+    + application verifier 
+    can freely be download and installed from the MS website 
+    additionally installs vrfcore.dll, vfbasics.dll, vfcompat.dll and more into window\system32 
+    enables much more options and full functionality of the !avrf 
+ 
+- !avrf parameters 
+!vrf, displays current application verifier options 
+!avrf -cs, displays the critical section delete*log 
+!avrf -hp 5, displays the heap operation log 
+!avrf -dlls, displays the dll load/unload log 
+!avrf -ex, display the exception log 
+!avrf -cnt, display a list of global counters WaitForSingleObject calls, CreateEvent calls, HeapAllocation calls
+ !avrf -threads, displays information about threads in the target process 
+ !avrf -trm, display a log of all terminated* and suspended threads 
+ 
+ 
+# Process dumps 
+- types of dumps 
+    + kernel mode dumps,  Complete Memory Dump, Kernel Memory Dump, Small Memory Dump
+    + full user-mode dumps 
+    windbg with ".dump /f" or by Dr.Watson on windows 2000 
+    includes the entire memory space of a process the program's executable image itself, the handle table 
+    widely used in the past, MS is slowly dropping support for it 
+    
+    + minidumps 
+    .dump /m ?? 
+    the modern dump format 
+    fine-grained control about what is included in the dump 
+    despite their names, the largest minidump file actually contains more information than a full user mode dump 
+    
+- choosing the best tools 
+adplus 
+dr. watson 
+cdb and windbg 
+userDump 
+ 
+- references 
+WinDbg’s Documentation, MSDN
+Common WinDbg Commands (Thematically Grouped), http://software.rkuster.com/windbg/printcmd.htm
+Matching Debug Information, http://www.debuginfo.com/articles/debuginfomatch.html
+Generating Debug Information with Visual C++, http://www.debuginfo.com/articles/gendebuginfo.html
+Microsoft Windows Internals, Fourth Edition
+M.E. Russinovich, D.A. Solomon, ISBN 0-7356-1917-4
+Advanced Kernel Debugging
+Andre Vachon, PowerPoint, WinHec 2004
+Application Verifier’s Documentation
+ 
+ 
+ 
+    
+    
