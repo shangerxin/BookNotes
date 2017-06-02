@@ -527,28 +527,2380 @@ abstract class Animal {
 
 
 # Functions 
+- typing function 
+function add(x: number, y: number): number {
+    return x + y;
+}
+
+let myAdd = function(x: number, y: number): number { return x+y; };
+
+- writing the function type 
+let myAdd: (x: number, y: number)=>number = function(x: number, y: number): number { return x+y; };
+    
+// myAdd has the full function type
+let myAdd = function(x: number, y: number): number { return  x + y; };
+
+// The parameters 'x' and 'y' have the type number
+let myAdd: (baseValue:number, increment:number) => number =  function(x, y) { return x + y; };    
+
+- optional and default parameters. in typescript every parameter is assumed to be required by the function.  in TypeScript by adding a ? to the end of parameters we want to be optional
+
+function buildName(firstName: string, lastName?: string) {
+    if (lastName)
+        return firstName + " " + lastName;
+    else
+        return firstName;
+}
+
+let result1 = buildName("Bob");                  // works correctly now
+let result2 = buildName("Bob", "Adams", "Sr.");  // error, too many parameters
+
+- rest parameters 
 
 
+function buildName(firstName: string, ...restOfName: string[]) {
+    return firstName + " " + restOfName.join(" ");
+}
+
+let employeeName = buildName("Joseph", "Samuel", "Lucas", "MacKinzie");
+
+- this
+    + reference understand javascript this 
+    http://yehudakatz.com/2011/08/11/understanding-javascript-function-invocation-and-this/
+    
+    + Arrow functions capture the this where the function is created rather than where it is invoked
+
+    + this parameters, in the arrow function the this.suites[pickedSuit] is still any.  To fix this, you can provide an explicit this parameter. this parameters are fake parameters that come first in the parameter list of a function:
+
+    interface Card {
+        suit: string;
+        card: number;
+    }
+    interface Deck {
+        suits: string[];
+        cards: number[];
+        createCardPicker(this: Deck): () => Card;
+    }
+    let deck: Deck = {
+        suits: ["hearts", "spades", "clubs", "diamonds"],
+        cards: Array(52),
+        // NOTE: The function now explicitly specifies that its callee must be of type Deck
+        createCardPicker: function(this: Deck) {
+            return () => {
+                let pickedCard = Math.floor(Math.random() * 52);
+                let pickedSuit = Math.floor(pickedCard / 13);
+
+                return {suit: this.suits[pickedSuit], card: pickedCard % 13};
+            }
+        }
+    }
+
+    let cardPicker = deck.createCardPicker();
+    let pickedCard = cardPicker();
+
+    alert("card: " + pickedCard.card + " of " + pickedCard.suit);
+
+    + this parameter in callbacks  callback will call it like a normal function, this will be undefined. With some work you can use this parameters to prevent errors with callbacks too.
+
+    interface UIElement {
+        addClickListener(onclick: (this: void, e: Event) => void): void;
+    }
+
+     arrow functions don’t capture this, so you can always pass them to something that expects this: void. The downside is that one arrow function is created per object
+
+- overloads, Let’s create a list of overloads that describe what our pickCard accepts and what it returns
+let suits = ["hearts", "spades", "clubs", "diamonds"];
+
+function pickCard(x: {suit: string; card: number; }[]): number;
+function pickCard(x: number): {suit: string; card: number; };
+function pickCard(x): any {
+    // Check to see if we're working with an object/array
+    // if so, they gave us the deck and we'll pick the card
+    if (typeof x == "object") {
+        let pickedCard = Math.floor(Math.random() * x.length);
+        return pickedCard;
+    }
+    // Otherwise just let them pick the card
+    else if (typeof x == "number") {
+        let pickedSuit = Math.floor(x / 13);
+        return { suit: suits[pickedSuit], card: x % 13 };
+    }
+}
+
+Note that the function pickCard(x): any piece is not part of the overload list
 
 
+# Generics 
+- introduction,  creating reusable components is generics, Instead, we need a way of capturing the type of the argument in such a way that we can also use it to denote what is being returned
+
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+instead of 
+
+function identity(arg: any): any {
+    return arg;
+}
+
+so that we could use the type information T later 
+let output = identity<string>("myString");  // type of output will be 'string'
+
+Here we use type argument inference – that is, we want the compiler to set the value of T for us automatically based on the type
+let output = identity("myString");  // type of output will be 'string'
+
+- Working with Generic Type Variables, Generic Types 
+    + generic functions definition 
+    
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+let myIdentity: <T>(arg: T) => T = identity;
+
+    + write the generic type as a call signature of an object literal type:
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+let myIdentity: {<T>(arg: T): T} = identity;
+
+    + generic interface 
+interface GenericIdentityFn {
+    <T>(arg: T): T;
+}
+
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+let myIdentity: GenericIdentityFn = identity;
+
+    +  move the generic parameter to be a parameter of the whole interface. 
+interface GenericIdentityFn<T> {
+    (arg: T): T;
+}
+
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+let myIdentity: GenericIdentityFn<number> = identity;
+
+- Note that it is not possible to create generic enums and namespaces.
+- Generic classes, Generic classes have a generic type parameter list in angle brackets (<>) following the name of the class.
+
+class GenericNumber<T> {
+    zeroValue: T;
+    add: (x: T, y: T) => T;
+}
+
+let myGenericNumber = new GenericNumber<number>();
+myGenericNumber.zeroValue = 0;
+myGenericNumber.add = function(x, y) { return x + y; };
+
+ Generic classes are only generic over their instance side rather than their static side, so when working with classes, static members can not use the class’s type parameter.
+
+- generic constraints, , we’ll create an interface that has a single .length property and then we’ll use this interface and the extends keyword to denote our constraint
+
+interface Lengthwise {
+    length: number;
+}
+
+function loggingIdentity<T extends Lengthwise>(arg: T): T {
+    console.log(arg.length);  // Now we know it has a .length property, so no more error
+    return arg;
+}
+
+- using type parameters in generic constraints, declare a type parameter that is constrained by another type parameter.
+
+    + get a property from an object given its name. We’d like to ensure that we’re not accidentally grabbing a property that does not exist on the obj
+    
+    function getProperty<T, K extends keyof T>(obj: T, key: K) {
+        return obj[key];
+    }
+
+    let x = { a: 1, b: 2, c: 3, d: 4 };
+
+    getProperty(x, "a"); // okay
+    getProperty(x, "m"); // error: Argument of type 'm' isn't assignable to 'a' | 'b' | 'c' | 'd'.
+
+- using class types in generics,  it is necessary to refer to class types by their constructor functions. 
+
+    function create<T>(c: {new(): T; }): T {
+        return new c();
+    }
+
+    + A more advanced example uses the prototype property to infer and constrain relationships between the constructor function and the instance side of class types
+    class BeeKeeper {
+        hasMask: boolean;
+    }
+
+    class ZooKeeper {
+        nametag: string;
+    }
+
+    class Animal {
+        numLegs: number;
+    }
+
+    class Bee extends Animal {
+        keeper: BeeKeeper;
+    }
+
+    class Lion extends Animal {
+        keeper: ZooKeeper;
+    }
+
+    function createInstance<A extends Animal>(c: new () => A): A {
+        return new c();
+    }
+
+    createInstance(Lion).keeper.nametag;  // typechecks!
+    createInstance(Bee).keeper.hasMask;   // typechecks!
 
 
+# Enums 
+- define a set of numeric constants. 
+enum Direction {
+    Up = 1,
+    Down,
+    Left,
+    Right
+}
+
+A constant enum expression is a subset of TypeScript expressions that can be fully evaluated at compile time.
+enum FileAccess {
+    // constant members
+    None,
+    Read    = 1 << 1,
+    Write   = 1 << 2,
+    ReadWrite  = Read | Write,
+    // computed member
+    G = "123".length
+}
+
+- Enums are real objects that exist at runtime. One reason is the ability to maintain a reverse mapping from enum values to enum names.
+
+enum Enum {
+    A
+}
+let a = Enum.A;
+let nameOfA = Enum[Enum.A]; // "A"
+
+- Const enums can only use constant enum expressions and unlike regular enums they are completely removed during compilation.
+
+const enum Directions {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+let directions = [Directions.Up, Directions.Down, Directions.Left, Directions.Right]
+
+generated code will be 
+var directions = [0 /* Up */, 1 /* Down */, 2 /* Left */, 3 /* Right */];
+
+- ambient enums, are used to describle the shape of already existing enum types 
+declare enum Enum {
+    A = 1,
+    B,
+    C = 2
+}
+
+One important difference between ambient and non-ambient enums is that, in regular enums, members that don’t have an initializer are considered constant members. For non-const ambient enums member that does not have initializer is considered computed.
 
 
+# Type inference 
+- introduction
+- basics 
+let x = 3;
+
+x is number type 
+
+- best common type 
+let x = [0, 1, null];
+
+    + there are some cases where types share a common structure, but no one type is the super type of all candidate types
+let zoo = [new Rhino(), new Elephant(), new Snake()];
+
+no one type is a super type of all other candidates:
+let zoo: Animal[] = [new Rhino(), new Elephant(), new Snake()];
+
+- contextual type, Contextual typing occurs when the type of an expression is implied by its location. 
+window.onmousedown = function(mouseEvent) {
+    console.log(mouseEvent.buton);  //<- Error
+};
+
+If the contextually typed expression contains explicit type information, the contextual type is ignored. 
+window.onmousedown = function(mouseEvent: any) {
+    console.log(mouseEvent.buton);  //<- Now, no error is given
+};
 
 
+Contextual typing applies in many cases. Common cases include arguments to function calls, right hand sides of assignments, type assertions, members of object and array literals, and return statements. The contextual type also acts as a candidate type in best common type. 
+
+function createZoo(): Animal[] {
+    return [new Rhino(), new Elephant(), new Snake()];
+}
 
 
+# Type compatibility 
+- compatibility is based on structural subtyping. structural typing is a way of relating types based solely on their members 
+interface Named {
+    name: string;
+}
+
+class Person {
+    name: string;
+}
+
+let p: Named;
+// OK, because of structural typing
+p = new Person();
+
+TypeScript’s structural type system was designed based on how JavaScript code is typically written.
+
+- a note on soundness, TypeScript’s type system allows certain operations that can’t be known at compile-time to be safe. 
+
+    + starting out,  TypeScript’s structural type system is that x is compatible with y if y has at least the same members as x
+interface Named {
+    name: string;
+}
+
+let x: Named;
+// y's inferred type is { name: string; location: string; }
+let y = { name: "Alice", location: "Seattle" };
+x = y;
+
+    + comparing two functions 
+
+    Note that the names of the parameters are not considered, only their types. In this case, every parameter of x has a corresponding compatible parameter in y, so the assignment is allowed.
+    
+let x = (a: number) => 0;
+let y = (b: number, s: string) => 0;
+
+y = x; // OK
+x = y; // Error
 
 
+    The type system enforces that the source function’s return type be a subtype of the target type’s return type.
+let x = () => ({name: "Alice"});
+let y = () => ({name: "Alice", location: "Seattle"});
+
+x = y; // OK
+y = x; // Error because x() lacks a location property
+
+    + function parameter bivariance, When comparing the types of function parameters, assignment succeeds if either the source parameter is assignable to the target parameter, or vice versa.
+    
+enum EventType { Mouse, Keyboard }
+
+interface Event { timestamp: number; }
+interface MouseEvent extends Event { x: number; y: number }
+interface KeyEvent extends Event { keyCode: number }
+
+function listenEvent(eventType: EventType, handler: (n: Event) => void) {
+    /* ... */
+}
+
+// Unsound, but useful and common
+listenEvent(EventType.Mouse, (e: MouseEvent) => console.log(e.x + "," + e.y));
+
+// Undesirable alternatives in presence of soundness
+listenEvent(EventType.Mouse, (e: Event) => console.log((<MouseEvent>e).x + "," + (<MouseEvent>e).y));
+listenEvent(EventType.Mouse, <(e: Event) => void>((e: MouseEvent) => console.log(e.x + "," + e.y)));
+
+// Still disallowed (clear error). Type safety enforced for wholly incompatible types
+listenEvent(EventType.Mouse, (e: number) => console.log(e));
+
+    + optional parameter and rest parameters, When comparing functions for compatibility, optional and required parameters are interchangeable.
+
+    When a function has a rest parameter, it is treated as if it were an infinite series of optional parameters.
+
+    function invokeLater(args: any[], callback: (...args: any[]) => void) {
+        /* ... Invoke callback with 'args' ... */
+    }
+
+    // Unsound - invokeLater "might" provide any number of arguments
+    invokeLater([1, 2], (x, y) => console.log(x + ", " + y));
+
+    // Confusing (x and y are actually required) and undiscoverable
+    invokeLater([1, 2], (x?, y?) => console.log(x + ", " + y));
+
+- functions with overloads, When a function has overloads, each overload in the source type must be matched by a compatible signature on the target type.
+
+- enums are compatible with numbers and numbers are compatible with enums 
+enum Status { Ready, Waiting };
+enum Color { Red, Blue, Green };
+
+let status = Status.Ready;
+status = Color.Green;  //error
+
+- Classes work similarly to object literal types and interfaces with one exception: they have both a static and an instance type. When comparing two objects of a class type, only members of the instance are compared. Static members and constructors do not affect compatibility
+    
+class Animal {
+    feet: number;
+    constructor(name: string, numFeet: number) { }
+}
+
+class Size {
+    feet: number;
+    constructor(numFeet: number) { }
+}
+
+let a: Animal;
+let s: Size;
+
+a = s;  //OK
+s = a;  //OK
+
+this means only the instance's none static and properties are consider to be compared 
+
+- private and protected members in classes are affect their compatibility. if the target type contains a private member, then the source type must also contain a private member that originated from the same class.
+    
+- generics, typescript is a structural type system, type parameters only affect the resulting type when consumed as part of the type of a member
+    + OK
+interface Empty<T> {
+}
+let x: Empty<number>;
+let y: Empty<string>;
+
+x = y;  // okay, y matches structure of x due to their structure do not use the type argument in a differentiating way 
+
+    + ERROR
+interface NotEmpty<T> {
+    data: T;
+}
+let x: NotEmpty<number>;
+let y: NotEmpty<string>;
+
+x = y;  // error, x and y are not compatible due to data have different types 
+
+    + For generic types that do not have their type arguments specified, compatibility is checked by specifying any 
+    
+- advanced topics. typescript there are two kinds of compatibility: subtype and assignment. These differ only in that assignment extends subtype compatibility with rules to allow assignment to and from any and to and from enum with corresponding numeric values.
+    
+    
+# Advanced Types 
+- intersection types, this allows combines multiple types into one 
+    
+You will mostly see intersection types used for mixins and other concepts
+
+function extend<T, U>(first: T, second: U): T & U {
+    let result = <T & U>{};
+    for (let id in first) {
+        (<any>result)[id] = (<any>first)[id];
+    }
+    for (let id in second) {
+        if (!result.hasOwnProperty(id)) {
+            (<any>result)[id] = (<any>second)[id];
+        }
+    }
+    return result;
+}
+
+class Person {
+    constructor(public name: string) { }
+}
+interface Loggable {
+    log(): void;
+}
+class ConsoleLogger implements Loggable {
+    log() {
+        // ...
+    }
+}
+var jim = extend(new Person("Jim"), new ConsoleLogger());
+var n = jim.name;
+jim.log();
+
+- union types, are closely related to intersection types. A union type describes a value that can be one of several types. We use the vertical bar (|) to separate each type, so number | string | boolean
+
+union types are fit for the types have overlapped properties but doesn't have equal structure. you can only access members that are guaranteed to be in all the constituents of a union type. access other memebers will trigger exception 
+    
+interface Bird {
+    fly();
+    layEggs();
+}
+
+interface Fish {
+    swim();
+    layEggs();
+}
+
+function getSmallPet(): Fish | Bird {
+    // ...
+}
+
+let pet = getSmallPet();
+pet.layEggs(); // okay
+pet.swim();    // errors if the pet is a Bird instance 
+
+- type guards and differentiating types
+function isFish(pet: Fish | Bird): pet is Fish {
+    return (<Fish>pet).swim !== undefined;
+}
+pet is Fish is our type predicate in this example. A predicate takes the form parameterName is Type, where parameterName must be the name of a parameter from the current function signature.
+
+- typeof type guards, for primitive type we could directly use typeof in typescript 
+function padLeft(value: string, padding: string | number) {
+    if (typeof padding === "number") {
+        return Array(padding + 1).join(" ") + value;
+    }
+    if (typeof padding === "string") {
+        return padding + value;
+    }
+    throw new Error(`Expected string or number, got '${padding}'.`);
+}
+
+"typename" must be "number", "string", "boolean", or "symbol". 
+
+- instanceof type guards are a way of narrowing types using their constructor function.
+the type of the function’s prototype property if its type is not any
+the union of types returned by that type’s construct signatures
+
+- nullable types. The --strictNullChecks flag fixes this: when you declare a variable, it doesn’t automatically include null or undefined. You can include them explicitly using a union type:
+let s = "foo";
+s = null; // error, 'null' is not assignable to 'string'
+let sn: string | null = "bar";
+sn = null; // ok
+
+sn = undefined; // error, 'undefined' is not assignable to 'string | null'
+
+- optional parameters and properties. with --strictNullChecks an optional parameter automatically adds |undefined 
+
+the same is true for optional properties definition in class 
+
+- type guards and type assertions Since nullable types are implemented with a union, you need to use a type guard to get rid of the null. 
+function f(sn: string | null): string {
+    return sn || "default";
+}
+
+    + manually remove them. The syntax is postfix !: identifier! removes null and undefined from the type of identifier
+
+function broken(name: string | null): string {
+  function postfix(epithet: string) {
+    return name.charAt(0) + '.  the ' + epithet; // error, 'name' is possibly null
+  }
+  name = name || "Bob";
+  return postfix("great");
+}
+
+function fixed(name: string | null): string {
+  function postfix(epithet: string) {
+    return name!.charAt(0) + '.  the ' + epithet; // ok name! removed null 
+  }
+  name = name || "Bob";
+  return postfix("great");
+}
+
+- type aliases create a new name for a type. similar to interfaces but can name primitives 
+type Name = string;
+type NameResolver = () => string;
+type NameOrResolver = Name | NameResolver;
+function getName(n: NameOrResolver): Name {
+    if (typeof n === "string") {
+        return n;
+    }
+    else {
+        return n();
+    }
+}
+
+type aliases can also be generic 
+type Container<T> = { value: T };
+
+reference itself 
+type Tree<T> = {
+    value: T;
+    left: Tree<T>;
+    right: Tree<T>;
+}
+
+    + together with intersection types, we can make some pretty mind-bending types 
+type LinkedList<T> = T & { next: LinkedList<T> };
+
+interface Person {
+    name: string;
+}
+
+var people: LinkedList<Person>;
+var s = people.name;
+var s = people.next.name;
+var s = people.next.next.name;
+var s = people.next.next.next.name;
+
+However, it’s not possible for a type alias to appear anywhere else on the right side of the declaration
+
+- interfaces with type aliases
+
+    + one difference is that interfaces create a new name that is used everywhere 
+    + type aliases cannot be extended or implemented from. always use interface over a type alias if possible 
+    + you can't express some shape with an interface and you need to use a union or tuple type, type alias are usually the way to go 
+    
+- string literal types, specify the exact value a string must have, string literal types combine nicely with union types, type guards, and type aliases. 
+
+type Easing = "ease-in" | "ease-out" | "ease-in-out";
+class UIElement {
+    animate(dx: number, dy: number, easing: Easing) {
+        if (easing === "ease-in") {
+            // ...
+        }
+        else if (easing === "ease-out") {
+        }
+        else if (easing === "ease-in-out") {
+        }
+        else {
+            // error! should not pass null or undefined.
+        }
+    }
+}
+let button = new UIElement();
+button.animate(0, 0, "ease-in");
+button.animate(0, 0, "uneasy"); // error: "uneasy" is not allowed here
+
+    + String literal types can be used in the same way to distinguish overloads:
+function createElement(tagName: "img"): HTMLImageElement;
+function createElement(tagName: "input"): HTMLInputElement;
+// ... more overloads ...
+function createElement(tagName: string): Element {
+    // ... code goes here ...
+}
+
+- discriminated unions, You can combine string literal types, union types, type guards, and type aliases to build an advanced pattern called discriminated unions, also known as tagged unions or algebraic data types. Discriminated unions are useful in functional programming. 
+
+    + types that have a common, string literal property - the discriminant 
+    + a type alias that takes the union of thoses types the union 
+    + type guards on the common property 
+
+interface Square {
+    kind: "square";
+    size: number;
+}
+interface Rectangle {
+    kind: "rectangle";
+    width: number;
+    height: number;
+}
+interface Circle {
+    kind: "circle";
+    radius: number;
+}
+
+type Shape = Square | Rectangle | Circle;
+
+function area(s: Shape) {
+    switch (s.kind) {
+        case "square": return s.size * s.size;
+        case "rectangle": return s.height * s.width;
+        case "circle": return Math.PI * s.radius ** 2;
+    }
+}
+
+- polymorphic this types, represents a type that is subtype of the containing class or interface. this is called bounded polymorphism 
+
+class BasicCalculator {
+    public constructor(protected value: number = 0) { }
+    public currentValue(): number {
+        return this.value;
+    }
+    public add(operand: number): this {
+        this.value += operand;
+        return this;
+    }
+    public multiply(operand: number): this {
+        this.value *= operand;
+        return this;
+    }
+    // ... other operations go here ...
+}
+
+let v = new BasicCalculator(2)
+            .multiply(5)
+            .add(1)
+            .currentValue();
+
+class ScientificCalculator extends BasicCalculator {
+    public constructor(value = 0) {
+        super(value);
+    }
+    public sin() {
+        this.value = Math.sin(this.value);
+        return this;
+    }
+    // ... other operations go here ...
+}
+
+let v = new ScientificCalculator(2)
+        .multiply(5)
+        .sin()
+        .add(1)
+        .currentValue();
+        .currentValue();
+
+- index types, you can get the compiler to check code that uses dynamic property names. 
+//First is keyof T, the index type query operator. For any type T, keyof T is the union of known, public property names of T
+//The second operator is T[K], the indexed access operator. Here, the type syntax reflects the expression syntax. That means that person['name'] has the type Person['name']
+function pluck<T, K extends keyof T>(o: T, names: K[]): T[K][] {
+  return names.map(n => o[n]);
+}
+
+interface Person {
+    name: string;
+    age: number;
+}
+
+let personProps: keyof Person; // 'name' | 'age'
+let strings: string[] = pluck(person, ['name']); // ok, string[]
+
+- index types and string index signatures, keyof and T[K] interact with string index signatures. If you have a type with a string index signature, keyof T will just be string. And T[string] is just the type of the index signature
+
+interface Map<T> {
+    [key: string]: T;
+}
+let keys: keyof Map<number>; // string
+let value: Map<number>['foo']; // number
+
+- mapped types, take an existing type and make each of its properties optional. mapped types is a way to create new types based on old types (mapped type)
+type Readonly<T> = {
+    readonly [P in keyof T]: T[P];
+}
+type Partial<T> = {
+    [P in keyof T]?: T[P];
+}
+
+Real applications, however, look like Readonly or Partial above. 
+type NullablePerson = { [P in keyof Person]: Person[P] | null }
+type PartialPerson = { [P in keyof Person]?: Person[P] }
+
+The compiler knows that it can copy all the existing property modifiers before adding any new ones. For example, if Person.name were readonly, Partial<Person>.name would be readonly and optional.
+
+Note that Readonly<T> and Partial<T> are so useful, they are included in TypeScript’s standard library along with Pick and Record. Record is not homomorphic 
+type Pick<T, K extends keyof T> = {
+    [P in K]: T[P];
+}
+type Record<K extends string | number, T> = {
+    [P in K]: T;
+}
+
+type ThreeStringProps = Record<'prop1' | 'prop2' | 'prop3', string>
+
+- inference from mapped types.  unwrap them 
+function unproxify<T>(t: Proxify<T>): T {
+    let result = {} as T;
+    for (const k in t) {
+        result[k] = t[k].get();
+    }
+    return result;
+}
+
+let originalProps = unproxify(proxyProps);
 
 
+# Symbols 
+- ECMAScript 2015 symbol is a primitive data type just like number and string. But symbols are immutable and unique  
+let sym1 = Symbol();
+let sym2 = Symbol('key'); //optional string key 
+
+let sym2 = Symbol("key");
+let sym3 = Symbol("key");
+sym2 === sym3; // false, symbols are unique
 
 
+    + can be used as keys for object propeties 
+let sym = Symbol();
+
+let obj = {
+    [sym]: "value"
+};
+
+console.log(obj[sym]); // "value"
+
+    + Symbols can also be combined with computed property 
+const getClassNameSymbol = Symbol();
+
+class C {
+    [getClassNameSymbol](){
+       return "C";
+    }
+}
+
+let c = new C();
+let className = c[getClassNameSymbol](); // "C"
+
+- well-known symbols, list of well known symbols 
+Symbol.hasInstance, method determines if a constructor object recognizes an object as one of the constructor's instances 
+Symbol.isConcatSpreadable, a boolean value indicating that an object should be flatten to its array element by Array.prototype.concat 
+Symbol.iterator, a method that returns the default iterator for an object. Called by the semantics of the for-of statement 
+Symbol.match, a regular expression method that matches the regular expression against a string. String.prototype.match 
+Symbol.replace, a regular expression method that replaces matches substrings of a string. String.prototype.replace 
+Symbol.search, returns the index with a string that matches the regular expression called by the String.prototype.search 
+Symbol.species,  a function valued property that is the constructor function that is used to create derived objects 
+Symbol.split, a regular expression method that splits a string at the indices that match the regular expression. called by the String.prototype.split 
+Symbol.toPrimitive, method that converts an object to corresponding primitive value, called by the ToPrimitive abstract operation 
+Symbol.toStringTag, string value that is used in the creation of the default string description of an object. called by the built-in method Object.prototype.toString 
+Symbol.unscopables, an object whose own property names are property names that are excluded from the 'with' environment bindings of the associate objects 
 
 
+# iterators and generators 
+- iterables, An object is deemed iterable if it has an implementation for the Symbol.iterator property. Some built-in types like Array, Map, Set, String, Int32Array, Uint32Arra
+
+- for...of statements, for..in returns a list of keys on the object being iterated, whereas for..of returns a list of values. Another distinction is that for..in operates on any object; it serves as a way to inspect properties on this object. for..of on the other hand, is mainly interested in values of iterable objects. Built-in objects like Map and Set implement Symbol.iterator property allowing access to stored values.
+let someArray = [1, "string", false];
+
+for(let entry of someArray){
+    console.log(entry);
+}
 
 
+# Modules 
+-ECMAScript 2015 has a concept of modules. TypeScript share this concept 
+
+module are execute within their own scope, unless explicitly exported using one of the export forms 
+
+module have to be import
+
+module are defined at the file level 
+
+module import one another using a module loader, well known module loaders are 
+CommonJS module loader for Node.js and require.js for web application 
+
+in typescript any file containing a top-level import or export is consider a module 
+
+- export 
+export expression;
+
+    + modules can wrap one or more modules and combine all their exports using export * from "module"
+    
+export * from "./StringValidator"; // exports interface 'StringValidator'
+export * from "./LettersOnlyValidator"; // exports class 'LettersOnlyValidator'
+export * from "./ZipCodeValidator";  // exports class 'ZipCodeValidator'
+
+- import
+import { ZipCodeValidator } from "./ZipCodeValidator";
+import { ZipCodeValidator as ZCV } from "./ZipCodeValidator";
+import * as validator from "./ZipCodeValidator";
+
+import a module for side-effects only. some module set up some global state that can be used by other modules without any exports
+import "./my-module.js";
+
+- default exports are marked with keyword default. there can only be one default export per module 
+    + have a default export of jQuery or $ which probably aslo import under the name $ or jQuery 
+//jQuery.d.ts 
+declare let $: JQuery;
+export default $;
+
+//App.ts 
+import $ from "JQuery";
+
+$("button.continue").html( "Next Step..." );
+
+
+//default export class ZipCodeValidator.ts 
+export default class ZipCodeValidator {
+    static numberRegexp = /^[0-9]+$/;
+    isAcceptable(s: string) {
+        return s.length === 5 && ZipCodeValidator.numberRegexp.test(s);
+    }
+}
+
+//import 
+import validator from "./ZipCodeValidator";
+
+- export = and import = require()
+TypeScript supports export = to model the traditional CommonJS and AMD workflow. the export = syntax specifies a single object that is exported from the module. This can be a class interface namespace function or enum 
+
+    + The export = syntax specifies a single object that is exported from the module. This can be a class, interface, namespace, function, or enum.
+
+    + importing a module using export =, TypeScript-specific import module = require("module") must be used to import the module.
+//ZipCodeValidator.ts 
+let numberRegexp = /^[0-9]+$/;
+class ZipCodeValidator {
+    isAcceptable(s: string) {
+        return s.length === 5 && numberRegexp.test(s);
+    }
+}
+export = ZipCodeValidator;
+
+//test.ts 
+import zip = require("./ZipCodeValidator");
+
+// Some samples to try
+let strings = ["Hello", "98052", "101"];
+
+// Validators to use
+let validator = new zip();
+
+// Show whether each string passed each validator
+strings.forEach(s => {
+  console.log(`"${ s }" - ${ validator.isAcceptable(s) ? "matches" : "does not match" }`);
+});
+
+- code generation for modules, Node.js (CommonJS), require.js (AMD), isomorphic (UMD), SystemJS, or ECMAScript 2015 native modules (ES6) module-loading systems. 
+
+//SimpleModule.ts 
+import m = require("mod");
+export let t = m.something + 1;
+
+    + AMD/RequireJS SimpleModule.js 
+define(["require", "exports", "./mod"], function (require, exports, mod_1) {
+    exports.t = mod_1.something + 1;
+});    
+
+    + CommonJS/Node SimpleModule.js 
+var mod_1 = require("./mod");
+exports.t = mod_1.something + 1;
+
+    + UMD SimpleModule.js 
+(function (factory) {
+    if (typeof module === "object" && typeof module.exports === "object") {
+        var v = factory(require, exports); if (v !== undefined) module.exports = v;
+    }
+    else if (typeof define === "function" && define.amd) {
+        define(["require", "exports", "./mod"], factory);
+    }
+})(function (require, exports) {
+    var mod_1 = require("./mod");
+    exports.t = mod_1.something + 1;
+});
+
+    + SimpleModule.js 
+System.register(["./mod"], function(exports_1) {
+    var mod_1;
+    var t;
+    return {
+        setters:[
+            function (mod_1_1) {
+                mod_1 = mod_1_1;
+            }],
+        execute: function() {
+            exports_1("t", t = mod_1.something + 1);
+        }
+    }
+});
+
+    + ECMAScript 2015 
+import { something } from "./mod";
+export var t = something + 1;
+
+    + compile parameter 
+$ tsc --module commonjs Test.ts
+
+- optional module loading and other advanced loading scenarios 
+    +  If a module identifier is only ever used as part of a type annotations and never as an expression, then no require call is emitted for that module.
+    
+    + The core idea of the pattern is that the import id = require("...") statement gives us access to the types exposed by the module. The module loader is invoked (through require) dynamically loaded when needed 
+//dynamic module loading in node
+declare function require(moduleName: string): any;
+
+import { ZipCodeValidator as Zip } from "./ZipCodeValidator";
+
+if (needZipValidation) {
+    let ZipCodeValidator: typeof Zip = require("./ZipCodeValidator");
+    let validator = new ZipCodeValidator();
+    if (validator.isAcceptable("...")) { /* ... */
+}
+
+- working with other javascript libraries 
+    + describe the shape of libraries not written in typescript, we need to declare the API that the library exposes 
+    
+    + We call declarations that don’t define an implementation “ambient”. Typically, these are defined in .d.ts files. similar to C/C++ .h file 
+    
+    + Ambient module 
+    in node.js We could define each module in its own .d.ts file with top-level export declarations, but it’s more convenient to write them as one larger .d.ts file. we use a construct similar to ambient namespaces
+    
+//node.d.ts simplified excerpt 
+declare module "url" {
+    export interface Url {
+        protocol?: string;
+        hostname?: string;
+        pathname?: string;
+    }
+
+    export function parse(urlStr: string, parseQueryString?, slashesDenoteHost?): Url;
+}
+
+declare module "path" {
+    export function normalize(p: string): string;
+    export function join(...paths: any[]): string;
+    export var sep: string;
+}
+    
+Now we can /// <reference> node.d.ts and then load the modules using import url = require("url"); or import * as URL from "url".
+    
+
+/// <reference path="node.d.ts"/>
+import * as URL from "url";
+let myUrl = URL.parse("http://www.typescriptlang.org");
+
+- shorthand ambient modules 
+
+//declarations.d.ts 
+declare module "hot-new-module";
+
+//all imports from a shorthand module will have the any type 
+import x, {y} from "hot-new-module";
+x(y);
+
+    + wild card modules declarations, SystemJS and AMD allow non-JavaScript content to be imported. These typically use a prefix or suffix to indicate the special loading sematic. wildcard module declarations can be used to cover these cases 
+declare module "*!text" {
+    const content: string;
+    export default content;
+}
+// Some do it the other way around.
+declare module "json!*" {
+    const value: any;
+    export default value;
+}
+
+//import things that match "*!text" or "json!*"
+import fileContent from "./xyz.txt!text";
+import data from "json!http://example.com/data.json";
+console.log(data, fileContent);
+
+    + UMD modules, Some libraries are designed to be used in many module loaders, or with no module loading (global variables). These are known as UMD or Isomorphic modules
+//match-lib.d.ts 
+export const isPrime(x: number): boolean;
+export as namespace mathLib;
+
+// the library can then be used as an import within modules 
+import { isPrime } from "math-lib";
+isPrime(2);
+mathLib.isPrime(2); // ERROR: can't use the global definition from inside a module
+
+it can also be used as a global variable, but only inside of a script(a script is a file with no imports or exports)
+mathLib.isPrime(2);
+
+- guidance for structuring modules 
+    + export as close to top-level as possible
+    
+    if you're only exporting a single class or function use export default 
+    
+    //MyClass.ts 
+    export default class SomeType {
+      constructor() { ... }
+    }
+    
+    //MyFunc.ts 
+    export default function getThing() { return "thing"; }
+    
+    //Consumer.ts 
+    import t from "./MyClass";
+    import f from "./MyFunc";
+    let x = new t();
+    console.log(f());
+
+- exporting multiple objects, put them all at top-level 
+export class SomeType { /* ... */ }
+export function someFunc() { /* ... */ }
+
+//explicitly list imported names 
+import { SomeType, someFunc } from "./MyThings";
+let x = new SomeType();
+let y = someFunc();
+
+    + using namespace import pattern if you're importing a large number of things 
+export class Dog { ... }
+export class Cat { ... }
+export class Tree { ... }
+export class Flower { ... }
+
+//consumer.js 
+import * as myLargeModule from "./MyLargeModule.ts";
+let x = new myLargeModule.Dog();
+
+- re-export to extend, extend functionality on a module, recommended solution is to not mutate the original object, but rather export a new entity that provides the new functionality 
+    + example extend a Calculator class 
+
+import { Calculator } from "./Calculator";
+
+class ProgrammerCalculator extends Calculator {
+    static digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"];
+
+    constructor(public base: number) {
+        super();
+        if (base <= 0 || base > ProgrammerCalculator.digits.length) {
+            throw new Error("base has to be within 0 to 16 inclusive.");
+        }
+    }
+
+    protected processDigit(digit: string, currentValue: number) {
+        if (ProgrammerCalculator.digits.indexOf(digit) >= 0) {
+            return currentValue * this.base + ProgrammerCalculator.digits.indexOf(digit);
+        }
+    }
+}
+
+- do not use namespaces in modules, namespaces are important to avoid naming collisions in the global scope. in a module which is a file system based don't need namespaces to do this. 
+
+- Red Flags
+A file whose only top-level declaration is export namespace Foo { ... } (remove Foo and move everything ‘up’ a level)
+A file that has a single export class or export function (consider using export default)
+Multiple files that have the same export namespace Foo { at top-level (don’t think that these are going to combine into one Foo!)
+
+
+# Namespaces 
+- internal modules are now namesapces. external modules are now simply modules to align with ECMAScript 2015
+
+namely that module X { is equivalent to the now-preferred namespace X{ 
+
+- introduction 
+namespace Name{
+    class A{
+    }
+}
+
+var a = new Name.A();
+
+- splitting across files 
+    + multi-file namespaces, split namespace across files. add reference tags to tell the compiler about the relationships between the files 
+    //Validation.ts 
+    namespace Validation{
+        export interface StringValidator{
+        }
+    }
+
+    //LettersOnlyValidator.ts 
+    ///<reference path="Validation.ts"/>
+    namespace Validation {
+        export class LettersOnlyValidator implement StringValidator{
+        }
+    }
+    
+    //test.ts 
+    ///<reference path="Validation.ts"/>
+    ///<reference path="LettersOnlyValidator"/>
+    let validators:{[s:string]: Validation.StringValidator} = {};
+    validator["Letters only"] = new Validation.LettersOnlyValidator();
+
+    Once there are multiple files involved, we’ll need to make sure all of the compiled code gets loaded. There are two ways of doing this.
+    First, we can use concatenated output using the --outFile flag to compile all of the input files into a single JavaScript output file:
+    
+    Alternatively, we can use per-file compilation (the default) to emit one JavaScript file for each input file. If multiple JS files get produced, we’ll need to use <script> tags on our webpage to load each emitted file in the appropriate order, for example:
+    <script src="Validation.js" type="text/javascript" />
+    <script src="LettersOnlyValidator.js" type="text/javascript" />
+    <script src="ZipCodeValidator.js" type="text/javascript" />
+    
+- Aliases, simplify working with of namespaces is to use import q = x.y.z to create shorter names for commonly-used objects. Not to be confused with the import x = require("name") syntax used to load modules, this syntax simply creates an alias for the specified symbol. 
+namespace Shapes {
+    export namespace Polygons {
+        export class Triangle { }
+        export class Square { }
+    }
+}
+
+import polygons = Shapes.Polygons;
+let sq = new polygons.Square(); // Same as 'new Shapes.Polygons.Square()'
+
+Importantly, for values, import is a distinct reference from the original symbol, so changes to an aliased var will not be reflected in the original variable.
+
+- Working with other javascript libraries 
+The popular library D3 defines its functionality in a global object called d3. Because this library is loaded through a <script> tag (instead of a module loader), its declaration uses namespaces to define its shape. 
+
+
+# Namespace and modules 
+- Using namespaces 
+Namespaces are simply named JavaScript objects in the global namespace. This makes namespaces a very simple construct to use. They can span multiple files, and can be concatenated using --outFile
+
+- Using modules 
+Just like namespaces, modules can contain both code and declarations. The main difference is that modules declare their dependencies.
+
+Modules also have a dependency on a module loader (such as CommonJs/Require.js). For a small JS application this might not be optimal, but for larger applications, the cost comes with long term modularity and maintainability benefits. 
+
+- pitfalls of namespaces and modules 
+    + A common mistake is to try to use the /// <reference ... /> syntax to refer to a module file, rather than using an import statement.
+    
+    + understance how the compiler can locate the information for a module based on the path of an import 
+    
+    The compiler will try to find a .ts, .tsx, and then a .d.ts with the appropriate path. If a specific file could not be found, then the compiler will look for an ambient module declaration. Recall that these need to be declared in a .d.ts file.
+
+- needless namespacing, converting a program from namespaces to modules 
+
+//DO NOT DO THIS
+export namespace Shapes {
+    export class Triangle { /* ... */ }
+    export class Square { /* ... */ }
+}
+
+A key feature of modules in TypeScript is that two different modules will never contribute names to the same scope. 
+
+- trade-offs of modules. Just as there is a one-to-one correspondence between JS files and modules, TypeScript has a one-to-one correspondence between module source files and their emitted JS files. 
+
+
+# Module resolution 
+- module resolution 
+import {a} from "moduleA";
+
+the compiler will ask “what’s the shape of moduleA?” While this sounds straightforward, moduleA could be defined in one of your own .ts/.tsx files, or in a .d.ts that your code depends on .ts/.tsx files or in a .d.ts that your code depends on 
+
+- relatives vs non-relative module imports 
+    + relative module import is starts with. relative cannot resolve to an ambient module delcaration 
+    
+import Entry from "./components/Entry";
+import { DefaultHeaders } from "../constants/http";
+import "/mod";
+
+    + non-relative import can be reosolved realtive to baseUrl or through path mapping which we'll cover below 
+    
+import * as $ from "jquery";
+import { Component } from "@angular/core";
+
+- module resolution strategies, Node and Classic 
+    + use --moduleResolution flags to specify the strategy 
+    + default is Classic  for --module AMD | System | ES2015
+
+    + classic typescript's default resolution strategy. mainly present for backward compatibility 
+
+        * A relative import will be resolved relative to the importing file. So import { b } from "./moduleB" in source file /root/src/folder/A.ts would result in the following lookup
+        
+        /root/src/folder/moduleB.ts
+        /root/src/folder/moduleB.d.ts
+        
+        * For non-relative module imports, however, the compiler walks up the directory tree starting with the directory containing the importing file
+        
+        non-relative import to moduleB such as import { b } from "moduleB",  in a source file /root/src/folder/A.ts, would result in attempting the following locations for locating "moduleB"
+        
+        /root/src/folder/moduleB.ts
+        /root/src/folder/moduleB.d.ts
+        /root/src/moduleB.ts
+        /root/src/moduleB.d.ts
+        /root/moduleB.ts
+        /root/moduleB.d.ts
+        /moduleB.ts
+        /moduleB.d.ts        
+        
+    + Node, resolution mimic the Node.js module resolution mechanism at runtime. require is given a relative path or a non-relative path.
+
+        * Relative paths are fairly straightforward. As an example, let’s consider a file located at /root/src/moduleA.js, which contains the import var x = require("./moduleB"); Node.js resolves that import in the following order:
+
+         As the file named /root/src/moduleB.js, if it exists.
+
+        As the folder /root/src/moduleB if it contains a file named package.json that specifies a "main" module. In our example, if Node.js found the file /root/src/moduleB/package.json containing { "main": "lib/mainModule.js" }, then Node.js will refer to /root/src/moduleB/lib/mainModule.js.
+
+        As the folder /root/src/moduleB if it contains a file named index.js. That file is implicitly considered that folder’s “main” module.        
+        
+        * non relative module loading, Node will look for your modules in special folders named node_modules. A node_modules folder can be on the same level as the current file, or higher up in the directory chain
+        
+    + typeScript overlays the TypeScript source file extensions (.ts, .tsx, and .d.ts) over the Node’s resolution logic. TypeScript will also use a field in package.json named "typings" to mirror the purpose of "main"
+        
+        * For example relative loading, an import statement like import { b } from "./moduleB" in /root/src/moduleA.ts would result in attempting the following locations for locating "./moduleB":
+/root/src/moduleB.ts
+/root/src/moduleB.tsx
+/root/src/moduleB.d.ts
+/root/src/moduleB/package.json (if it specifies a "typings" property)
+/root/src/moduleB/index.ts
+/root/src/moduleB/index.tsx
+/root/src/moduleB/index.d.ts
+        
+        * For example non-relative loading So import { b } from "moduleB" in source file /root/src/moduleA.ts would result in the following lookups:
+
+/root/src/node_modules/moduleB.ts
+/root/src/node_modules/moduleB.tsx
+/root/src/node_modules/moduleB.d.ts
+/root/src/node_modules/moduleB/package.json (if it specifies a "typings" property)
+/root/src/node_modules/moduleB/index.ts
+/root/src/node_modules/moduleB/index.tsx
+/root/src/node_modules/moduleB/index.d.ts 
+
+/root/node_modules/moduleB.ts
+/root/node_modules/moduleB.tsx
+/root/node_modules/moduleB.d.ts
+/root/node_modules/moduleB/package.json (if it specifies a "typings" property)
+/root/node_modules/moduleB/index.ts
+/root/node_modules/moduleB/index.tsx
+/root/node_modules/moduleB/index.d.ts 
+
+/node_modules/moduleB.ts
+/node_modules/moduleB.tsx
+/node_modules/moduleB.d.ts
+/node_modules/moduleB/package.json (if it specifies a "typings" property)
+/node_modules/moduleB/index.ts
+/node_modules/moduleB/index.tsx
+/node_modules/moduleB/index.d.ts
+        
+- additional module resolution flags. typescript compiler has a set of addtional flags to inform the compiler of transformations that are expected to happen to the source 
+        + base url 
+        use a baseUrl is common practice in AMD module where modules are "deployed" to a single folder at run-time 
+        
+        setting baseUrl informs the compiler where to find modules 
+        value of baseUrl command line argument
+        value of baseUrl property in ‘tsconfig.json’ 
+        
+        relative module imports are not impacted by setting the baseUrl, as they are always resolved relative to their importing files.
+        
+        find more documentation in RequireJS and SystemJS
+        
+        + path mapping, loaders use a mapping configuration to map module names to files at run-time, check RequireJS and SystemJS
+        
+        typescript define  mappings using "paths" property in tsconfig.json
+        {
+          "compilerOptions": {
+            "baseUrl": ".", // This must be specified if "paths" is.
+            "paths": {
+              "jquery": ["node_modules/jquery/dist/jquery"] // This mapping is relative to "baseUrl"
+            }
+          }
+        }
+        
+        {
+          "compilerOptions": {
+            "baseUrl": ".",
+            "paths": {
+              "*": [
+                "*",
+                "generated/*"
+              ]
+            }
+          }
+        }
+
+        Using "paths" also allows for more sophisticated mappings including multiple fall back locations. 
+        "*": meaning the same name unchanged, so map <moduleName> => <baseUrl>\<moduleName>
+        
+        + Using ‘rootDirs’, you can inform the compiler of the roots making up this “virtual” directory; and thus the compiler can resolve relative modules imports within these “virtual” directories as if were merged together in one directory.
+        To specify this relationship to the compiler, use"rootDirs". "rootDirs" specify a list of roots whose contents are expected to merge at run-time. 
+         src
+         └── views
+             └── view1.ts (imports './template1')
+             └── view2.ts
+
+         generated
+         └── templates
+                 └── views
+                     └── template1.ts (imports './view2')
+        
+        {
+          "compilerOptions": {
+            "rootDirs": [
+              "src/views",
+              "generated/templates/views"
+            ]
+          }
+        }
+        
+        The supplied array may include any number of ad hoc, arbitrary directory names, regardless of whether they exist or not. This allows the compiler to capture sophisticated bundling and runtime features such as conditional inclusion and project specific loader plugins in a in a type safe way.
+        
+        interpolating a special path token, say #{locale}, as part of a relative module path such as ./#{locale}/messages. 
+        
+        {
+          "compilerOptions": {
+            "rootDirs": [
+              "src/zh",
+              "src/de",
+              "src/#{locale}"
+            ]
+          }
+        }
+        
+        The compiler will now resolve import messages from './#{locale}/messages' to import messages from './zh/messages' for tooling purposes
+        
+- tracing module resolution
+    + use compiler parameter Enabling the compiler module resolution tracing using --traceResolution provides insight in what happened
+        
+- using --noResolve, The --noResolve compiler options instructs the compiler not to “add” any files to the compilation that were not passed on the command line. 
+        
+- common questions 
+tsconfig.json turns a folder into a “project”. Without specifying any “exclude” or “files” entries, all files in the folder containing the tsconfig.json and all its sub-directories are included in your compilation. If you want to exclude some of the files use “exclude”, if you would rather specify all the files instead of letting the compiler look them up, use “files”.
+        
+So to exclude a file from the compilation, you need to exclude it and all files that have an import or /// <reference path="..." /> directive to it.
+        
+        
+# Declaration merging 
+- “declaration merging” means that the compiler merges two separate declarations declared with the same name into a single definition. It's not limited to two declarations 
+
+- basic concepts 
+
+Declaration Type	    Namespace	    Type	    Value
+Namespace	            X	 	                            X
+Class	 	                                        X	        X
+Enum	 	                                        X	        X
+Interface	 	                                    X	 
+Type Alias	 	                                X	 
+Function	 	 	                                            X
+Variable	 	 	                                            X
+        
+- interface merging 
+    + non function members must have different names 
+    + function members have the same name will be treat as overload 
+interface Document {
+    createElement(tagName: any): Element;
+}
+interface Document {
+    createElement(tagName: "div"): HTMLDivElement;
+    createElement(tagName: "span"): HTMLSpanElement;
+}
+interface Document {
+    createElement(tagName: string): HTMLElement;
+    createElement(tagName: "canvas"): HTMLCanvasElement;
+}
+
+interface Document {
+    createElement(tagName: "canvas"): HTMLCanvasElement;
+    createElement(tagName: "div"): HTMLDivElement;
+    createElement(tagName: "span"): HTMLSpanElement;
+    createElement(tagName: string): HTMLElement;
+    createElement(tagName: any): Element;
+}
+        
+If a signature has a parameter whose type is a single string literal type (e.g. not a union of string literals), then it will be bubbled toward the top of its merged overload list.
+
+- merging namespace
+    + To merge the namespaces, type definitions from exported interfaces declared in each namespace are themselves merged, forming a single namespace with merged interface definitions inside.
+    
+    + To merge the namespace value, at each declaration site, if a namespace already exists with the given name, it is further extended by taking the existing namespace and adding the exported members of the second namespace to the first.
+    
+    namespace Animal {
+        let haveMuscles = true;
+
+        export function animalsHaveMuscles() {
+            return haveMuscles;
+        }
+    }
+
+    namespace Animal {
+        export function doAnimalsHaveMuscles() {
+            return haveMuscles;  // <-- error, haveMuscles is not visible here
+        }
+    }
+    
+    haveMuscles is not exported, only the animalsHaveMuscles function that shares the same un-merged namespace can see the symbol. The doAnimalsHaveMuscles function, even though it’s part of the merged Animal namespace can not see this un-exported member.
+    
+- merging namespace with classes, functions and enums 
+
+    + merging namespace with class 
+class Album {
+    label: Album.AlbumLabel;
+}
+namespace Album {
+    export class AlbumLabel { }
+}
+    
+the AlbumLabel must be exported to let the merging class Album to see 
+
+    + merging function 
+function buildLabel(name: string): string {
+    return buildLabel.prefix + name + buildLabel.suffix;
+}
+
+namespace buildLabel {
+    export let suffix = "";
+    export let prefix = "Hello, ";
+}
+
+alert(buildLabel("Sam Smith"))
+
+    + merging enum to extend enums with static members 
+enum Color {
+    red = 1,
+    green = 2,
+    blue = 4
+}
+
+namespace Color {
+    export function mixColor(colorName: string) {
+        if (colorName == "yellow") {
+            return Color.red + Color.green;
+        }
+        else if (colorName == "white") {
+            return Color.red + Color.green + Color.blue;
+        }
+        else if (colorName == "magenta") {
+            return Color.red + Color.blue;
+        }
+        else if (colorName == "cyan") {
+            return Color.green + Color.blue;
+        }
+    }
+}
+
+- module augmentation, javascript do not support module merging. But we could still importing then updating the module 
+    
+// observable.js
+export class Observable<T> {
+    // ... implementation left as an exercise for the reader ...
+}
+
+// map.js
+import { Observable } from "./observable";
+Observable.prototype.map = function (f) {
+    // ... another exercise for the reader
+}
+
+but typescript compile doesn't know the Observable.prototype.map. we need use module augmentation. We can not declare new top-level declarations in the augmentation – just patches to existing declarations
+// observable.ts stays the same
+// map.ts
+import { Observable } from "./observable";
+declare module "./observable" {
+    interface Observable<T> {
+        map<U>(f: (x: T) => U): Observable<U>;
+    }
+}
+Observable.prototype.map = function (f) {
+    // ... another exercise for the reader
+}
+
+
+// consumer.ts
+import { Observable } from "./observable";
+import "./map";
+let o: Observable<number>;
+o.map(x => x.toFixed());
+
+- global augmentation, add augmentation to global namespace 
+// observable.ts
+export class Observable<T> {
+    // ... still no implementation ...
+}
+
+declare global {
+    interface Array<T> {
+        toObservable(): Observable<T>;
+    }
+}
+
+Array.prototype.toObservable = function () {
+    // ...
+}
+    
+
+# JSX
+- JSX is an embeddable XML-like syntax. JSX came to popularity with the React framework, but has since seen other applications as well. 
+    
+typescript support JSX and compiling it to javascript
+
+JSX specification 
+https://facebook.github.io/jsx/
+
+JSX in depth 
+https://facebook.github.io/react/docs/jsx-in-depth.html#html-tags-vs.-react-components
+
+- basic usage 
+    + name your file as .tsx extension 
+    + enable the jsx option 
+    --jsx command line flag
+    default with .js and .jsx if allowJs is set to true in tsconfig.json
+- TypeScript ships with three JSX modes: preserve, react, and react-native. the modes only affect the emit stage 
+
+The preserve mode will keep the JSX as part of the output to be further consumed by another transform step (e.g. Babel). Additionally the output will have a .jsx file extension. 
+The react mode will emit React.createElement and the output will have a .js file extension 
+The react-native mode is equivalent of preserve in that it keeps all JSX output will have a .js file extension 
+
+Mode                Input       Output                                      File extension 
+preserve	        <div />	        <div />	                                    .jsx
+react	            <div />	        React.createElement("div")	    .js
+react-native	    <div />	        <div />	                                    .js
+    
+- as operator, is a replacement for .ts type assertion
+//syntax for write a type assertion, TypeScript disallows angle bracket type assertions in .tsx files.
+var foo = <foo>bar;
+
+//new format of type assertion is added for fix this issue 
+var foo = bar as foo; 
+
+- type checking 
+understand the difference between intrinsic elements and value-based elements. Given a JSX expression <expr />, expr may either refer to something intrinsic to the environment (e.g. a div or span in a DOM environment) or to a custom component that you’ve created
+
+    + For React, intrinsic elements are emitted as strings (React.createElement("div")), whereas a component you’ve created is not (React.createElement(MyComponent)).
+    + The types of the attributes being passed in the JSX element should be looked up differently. Intrinsic element attributes should be known intrinsically whereas components will likely want to specify their own set of attributes.
+
+- intrinsic elements, Intrinsic elements are looked up on the special interface JSX.IntrinsicElements. By default, if this interface is not specified, then anything goes and intrinsic elements will not be type checked. If interface present then the name of the intrinsic element is looked up as a property on the JSX.IntrinsicElements interface 
+
+declare namespace JSX {
+    interface IntrinsicElements {
+        foo: any
+    }
+}
+
+<foo />; // ok
+<bar />; // error
+
+    + You can also specify a catch-all string indexer on JSX.IntrinsicElements as follows
+declare namespace JSX {
+   interface IntrinsicElements {
+       [elemName: string]: any;
+   }
+}
+    
+- value based elements are simply looked up by identifiers that are in scope 
+import MyComponent from "./myComponent";
+
+<MyComponent />; // ok
+<SomeOtherComponent />; // error
+
+    + two new terms: the element class type and the element instance type.
+    element class type, Given <Expr />, the element class type is the type of Expr. So in the example above, if MyComponent was an ES6 class the class type would be that class. If MyComponent was a factory function, the class type would be that function.
+    
+    the instance type is determined by the union of the return types of the class type’s call signatures and construct signatures. So again, in the case of an ES6 class, the instance type would be the type of an instance of that class, and in the case of a factory function, it would be the type of the value returned from the function.
+    
+class MyComponent {
+  render() {}
+}
+
+// use a construct signature
+var myComponent = new MyComponent();
+
+// element class type => MyComponent
+// element instance type => { render: () => void }
+
+function MyFactoryFunction() {
+  return {
+    render: () => {
+    }
+  }
+}
+
+// use a call signature
+var myComponent = MyFactoryFunction();
+
+// element class type => FactoryFunction
+// element instance type => { render: () => void }
+
+    + The element instance type is interesting because it must be assignable to JSX.ElementClass or it will result in an error. By default JSX.ElementClass is {}
+    
+- attribute type checking, use element.attributes 
+    + for intrinsic elements, it is the property on JSX.intrinsicElements 
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    foo: { bar?: boolean }
+  }
+}
+
+// element attributes type for 'foo' is '{bar?: boolean}'
+<foo bar />;
+
+For value-based elements, it is a bit more complex. It is determined by the type of a property on the element instance type that was previously determined. Which property to use is determined by JSX.ElementAttributesProperty
+
+declare namespace JSX {
+  interface ElementAttributesProperty {
+    props; // specify the property name to use
+  }
+}
+
+class MyComponent {
+  // specify the property on the element instance type
+  props: {
+    foo?: string;
+  }
+}
+
+// element attributes type for 'MyComponent' is '{foo?: string}'
+<MyComponent foo="bar" />
+
+If an attribute name is not a valid JS identifier (like a data-* attribute), it is not considered to be an error if it is not found in the element attributes type.
+
+var props = { requiredProp: "bar" };
+<foo {...props} />; // ok
+
+- the JSX result type, By default the result of a JSX expression is typed as any. You can customize the type by specifying the JSX.Element interface but cannot retrieve type information about the element, attributes or children of the JSX from this interface 
+
+- embedding expressions with curly braces {}, the output use the preserve option 
+var a = <div>
+  {["foo", "bar"].map(i => <span>{i / 2}</span>)}
+</div>
+
+- react integration, use React typing 
+/// <reference path="react.d.ts" />
+
+interface Props {
+  foo: string;
+}
+
+class MyComponent extends React.Component<Props, {}> {
+  render() {
+    return <span>{this.props.foo}</span>
+  }
+}
+
+<MyComponent foo="bar" />; // ok
+<MyComponent foo={0} />; // error
+
+
+# Decorators 
+- Decorators provide a way to add both annotations and a meta-programming syntax for class declarations and members. 
+
+- To enable experimental support for decorators, you must enable the experimentalDecorators compiler option
+$ tsc --target ES5 --experiementalDecorators 
+
+tsconfig.json 
+{
+    "compilerOptions": {
+        "target": "ES5",
+        "experimentalDecorators": true
+    }
+}
+
+- decorators, Decorators use the form @expression, where expression must evaluate to a function, similar to python 
+function sealed(target){
+}
+
+@sealed
+function foo(){
+}
+
+    + decorator factories  If we want to customize how a decorator is applied to a declaration, we can write a decorator factory. A Decorator Factory is simply a function that returns the expression 
+function color(value: string) { // this is the decorator factory
+    return function (target) { // this is the decorator
+        // do something with 'target' and 'value'...
+    }
+}
+
+- decorator composing 
+    + oneline 
+    @f @g x
+    
+    + multple line 
+    @f
+    @g
+    x 
+
+    + The expressions for each decorator are evaluated top-to-bottom. The results are then called as functions from bottom-to-top.
+
+function f() {
+    console.log("f(): evaluated");
+    return function (target, propertyKey: string, descriptor: PropertyDescriptor) {
+        console.log("f(): called");
+    }
+}
+
+function g() {
+    console.log("g(): evaluated");
+    return function (target, propertyKey: string, descriptor: PropertyDescriptor) {
+        console.log("g(): called");
+    }
+}
+
+class C {
+    @f()
+    @g()
+    method() {}
+}
+
+//results 
+f(): evaluated
+g(): evaluated
+g(): called
+f(): called
+
+- decorator evaluation 
+Parameter Decorators, followed by Method, Accessor, or Property Decorators are applied for each instance member.
+Parameter Decorators, followed by Method, Accessor, or Property Decorators are applied for each static member.
+Parameter Decorators are applied for the constructor.
+Class Decorators are applied for the class.
+
+- class decorators, The class decorator is applied to the constructor of the class and can be used to observe, modify, or replace a class definition. It cannot be used in a declaration file or any other ambient context 
+
+If the class decorator returns a value, it will replace the class declaration with the provided constructor function.
+function sealed(constructor: Function) {
+    Object.seal(constructor);
+    Object.seal(constructor.prototype);
+}
+
+@sealed
+class Greeter {
+    greeting: string;
+    constructor(message: string) {
+        this.greeting = message;
+    }
+    greet() {
+        return "Hello, " + this.greeting;
+    }
+}
+
+    + overwrite constructor 
+function classDecorator<T extends {new(...args:any[]):{}}>(constructor:T) {
+    return class extends constructor {
+        newProperty = "new property";
+        hello = "override";
+    }
+}
+
+@classDecorator
+class Greeter {
+    property = "property";
+    hello: string;
+    constructor(m: string) {
+        this.hello = m;
+    }
+}
+
+console.log(new Greeter("world"));
+
+- method decorators, A Method Decorator is declared just before a method declaration. The decorator is applied to the Property Descriptor for the method, and can be used to observe, modify, or replace a method definition. It cannot be used in declaration file or ambient context(such as in a declare class)
+
+The decorator will be call as a function with three arguments 
+    + Either the constructor function of the class for a static member, or the prototype of the class for an instance member.
+    + The name of the member.
+    + The Property Descriptor for the member.
+    The Property Descriptor will be undefined if your script target is less than ES5.
+    
+if the method decorator returns a value it will be used as the property descriptor for the method 
+
+function enumerable(value: boolean) {
+    return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+        descriptor.enumerable = value;
+    };
+}
+
+class Greeter {
+    greeting: string;
+    constructor(message: string) {
+        this.greeting = message;
+    }
+
+    @enumerable(false)
+    greet() {
+        return "Hello, " + this.greeting;
+    }
+}
+
+- accessor decorators, An Accessor Decorator is declared just before an accessor declaration. The accessor decorator is applied to the Property Descriptor for the accessor and can be used to observe, modify, or replace an accessor’s definitions. 
+
+ TypeScript disallows decorating both the get and set accessor for a single member. decorators apply to a Property Descriptor, which combines both the get and set accessor
+ 
+The accessor decorator will be called as a function with three arguments 
+    + Either the constructor function of the class for a static member, or the prototype of the class for an instance member.
+    + The name of the member.
+    + The Property Descriptor for the member.
+
+If the accessor decorator returns a value, it will be used as the Property Descriptor for the member.
+function configurable(value: boolean) {
+    return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+        descriptor.configurable = value;
+    };
+}
+
+class Point {
+    private _x: number;
+    private _y: number;
+    constructor(x: number, y: number) {
+        this._x = x;
+        this._y = y;
+    }
+
+    @configurable(false)
+    get x() { return this._x; }
+
+    @configurable(false)
+    get y() { return this._y; }
+}
+
+- property decorators, A Property Decorator is declared just before a property declaration.
+
+The expression for the property decorator will be called as a function at runtime, with the following two arguments
+
+    + Either the constructor function of the class for a static member, or the prototype of the class for an instance member.
+    + The name of the member.
+
+A Property Descriptor is not provided as an argument to a property decorator due to how property decorators are initialized in TypeScript. This is because there is currently no mechanism to describe an instance property when defining members of a prototype, and no way to observe or modify the initializer for a property.
+
+import "reflect-metadata";
+
+const formatMetadataKey = Symbol("format");
+
+function format(formatString: string) {
+    return Reflect.metadata(formatMetadataKey, formatString);
+}
+
+function getFormat(target: any, propertyKey: string) {
+    return Reflect.getMetadata(formatMetadataKey, target, propertyKey);
+}
+
+class Greeter {
+    @format("Hello, %s")
+    greeting: string;
+
+    constructor(message: string) {
+        this.greeting = message;
+    }
+    greet() {
+        let formatString = getFormat(this, "greeting");
+        return formatString.replace("%s", this.greeting);
+    }
+}
+
+- parameter decorator, A Parameter Decorator is declared just before a parameter declaration. The parameter decorator is applied to the function for a class constructor or method declaration.
+
+arguments for the decorator
+    + Either the constructor function of the class for a static member, or the prototype of the class for an instance member.
+    + The name of the member.
+    + The ordinal index of the parameter in the function’s parameter list.
+    
+customize the @required and @validate decorator 
+    
+import "reflect-metadata";
+
+const requiredMetadataKey = Symbol("required");
+
+function required(target: Object, propertyKey: string | symbol, parameterIndex: number) {
+    let existingRequiredParameters: number[] = Reflect.getOwnMetadata(requiredMetadataKey, target, propertyKey) || [];
+    existingRequiredParameters.push(parameterIndex);
+    Reflect.defineMetadata(requiredMetadataKey, existingRequiredParameters, target, propertyKey);
+}
+
+function validate(target: any, propertyName: string, descriptor: TypedPropertyDescriptor<Function>) {
+    let method = descriptor.value;
+    descriptor.value = function () {
+        let requiredParameters: number[] = Reflect.getOwnMetadata(requiredMetadataKey, target, propertyName);
+        if (requiredParameters) {
+            for (let parameterIndex of requiredParameters) {
+                if (parameterIndex >= arguments.length || arguments[parameterIndex] === undefined) {
+                    throw new Error("Missing required argument.");
+                }
+            }
+        }
+
+        return method.apply(this, arguments);
+    }
+}
+    
+class Greeter {
+    greeting: string;
+
+    constructor(message: string) {
+        this.greeting = message;
+    }
+
+    @validate
+    greet(@required name: string) {
+        return "Hello " + name + ", " + this.greeting;
+    }
+}
+
+- metadata, use the reflect-metadata library which adds a polyfill for an experimental metadata API. Decorator metadata is an experimental feature and may introduce breaking changes in future releases.
+
+install this library by 
+$ npm i reflect-metadata --save
+
+required emitDecoratorMetadata compiler option either on the command line or in your tsconfig.json
+$ tsc --target ES5 --experimentalDecorators --emitDecoratorMetadata
+
+tcsconfig.json 
+{
+    "compilerOptions": {
+        "target": "ES5",
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true
+    }
+}
+
+The TypeScript compiler will inject design-time type information using the @Reflect.metadata decorator. 
+
+metadata API for typescripts 
+https://github.com/rbuckton/reflect-metadata
+
+
+# Mixins 
+- building up classes from reusable components is to build them by combining simpler partial classes
+// Disposable Mixin
+class Disposable {
+    isDisposed: boolean;
+    dispose() {
+        this.isDisposed = true;
+    }
+
+}
+
+// Activatable Mixin
+class Activatable {
+    isActive: boolean;
+    activate() {
+        this.isActive = true;
+    }
+    deactivate() {
+        this.isActive = false;
+    }
+}
+
+class SmartObject implements Disposable, Activatable {
+    constructor() {
+        setInterval(() => console.log(this.isActive + " : " + this.isDisposed), 500);
+    }
+
+    interact() {
+        this.activate();
+    }
+
+    // Disposable
+    isDisposed: boolean = false;
+    dispose: () => void;
+    // Activatable
+    isActive: boolean = false;
+    activate: () => void;
+    deactivate: () => void;
+}
+applyMixins(SmartObject, [Disposable, Activatable]);
+
+let smartObj = new SmartObject();
+setTimeout(() => smartObj.interact(), 1000);
+
+////////////////////////////////////////
+// In your runtime library somewhere
+////////////////////////////////////////
+
+function applyMixins(derivedCtor: any, baseCtors: any[]) {
+    baseCtors.forEach(baseCtor => {
+        Object.getOwnPropertyNames(baseCtor.prototype).forEach(name => {
+            derivedCtor.prototype[name] = baseCtor.prototype[name];
+        });
+    });
+}
+
+
+# Triple-slash directives 
+- triple-slash directives are single-line comments containing a XML tag. The contents of the comment are used as compiler directives.
+/// <reference path="..." />
+
+ A triple-slash directive can only be preceded by single or multi-line comments, including other triple-slash directives. If they are encountered following a statement or a declaration they are treated as regular single-line comments
+
+- preprocessing input files 
+
+The process starts with a set of root files; these are the file names specified on the command-line or in the "files" list in the tsconfig.json file. These root files are preprocessed in the same order they are specified. 
+
+Triple-slash references are resolved in a depth first manner, in the order they have been seen in the file.
+
+- errors, It is an error to reference a file that does not exist. It is an error for a file to have a triple-slash reference to itself.
+
+- noResolve, If the compiler flag --noResolve is specified, triple-slash references are ignored; they neither result in adding new files, nor change the order of the files provided.
+
+/// <reference types="..." />
+
+Similar to a /// <reference path="..." /> directive, this directive serves as a declaration of dependency; a /// <reference types="..." />, however, declares a dependency on an @types package.
+
+For declaring a dependency on an @types package in a .ts file, use --types on the command line or in your tsconfig.json instead. See using @types, typeRoots and types in tsconfig.json files for more details.
+
+/// <reference no-default-lib="true"/>
+This directive marks a file as a default library. This directive instructs the compiler to not include the default library (i.e. lib.d.ts) in the compilation. The impact here is similar to passing --noLib on the command line.
+
+/// <amd-module />
+By default AMD modules are generated anonymous. 
+
+/// <amd-dependency path="x" /> informs the compiler about a non-TS module dependency that needs to be injected in the resulting module’s require call.
+    + example 
+/// <amd-dependency path="legacy/moduleA" name="moduleA"/>
+declare var moduleA:MyType
+moduleA.callStuff()
+
+generated code 
+define(["require", "exports", "legacy/moduleA"], function (require, exports, moduleA) {
+    moduleA.callStuff()
+});
+
+
+# Declaration files 
+- introduction, how to write a high quality typescript declaration file 
+
+- library structure. 
+
+    + global library, access global scope without any import 
+    The template file global.d.ts defines an example library myLib. Be sure to read the 
+    
+    If your library depends on a global library, use a /// <reference types="..." /> directive:
+    
+    + module library, for example express only works in node.js and must be loaded using CommonJS require function 
+    Unconditional calls to require or define
+    Declarations like import * as a from 'b'; or export c;
+    Assignments to exports or module.exports
+    
+    + UMD, A UMD module is one that can either be used as module (through an import), or as a global (when run in an environment without a module loader). Many popular libraries, such as Moment.js, are written this way. 
+(function (root, factory) {
+    if (typeof define === "function" && define.amd) {
+        define(["libName"], factory);
+    } else if (typeof module === "object" && module.exports) {
+        module.exports = factory(require("libName"));
+    } else {
+        root.returnExports = factory(root.libName);
+    }
+}(this, function (b) {
+...
+
+There are three templates available for modules, module.d.ts, module-class.d.ts and module-function.d.ts.
+
+    + module plugin or UMD plugin, Use the module-plugin.d.ts template
+    Do not use a /// <reference directive to declare a dependency to a UMD library!
+    
+    + template, use the global-plugin.d.ts template 
+    
+    + preventing name conflicts 
+
+- by example 
+    + variable 
+Code
+console.log("Half the number of widgets is " + (foo / 2));
+
+Declaration
+/** The number of widgets present */
+declare var foo: number;
+
+    + global functions 
+Code
+greet("hello, world");
+Declaration
+
+Use declare function to declare functions.
+
+declare function greet(greeting: string): void;
+    + object with properties 
+    + overloaded functions 
+    + reusable types 
+    + reference http://www.typescriptlang.org/docs/handbook/declaration-files/by-example.html
+
+- Do's and Don'ts 
+    + primitive types 
+Don’t ever use the types Number, String, Boolean, or Object. These types refer to non-primitive boxed objects that are almost never used appropriately in JavaScript code
+
+Do use the types number, string, and boolean. which implemented in typescript 
+
+    + generaic
+    Don’t use the return type any for callbacks whose value will be ignored:
+    
+    Do use the return type void for callbacks whose value will be ignored witll prevent accident return value 
+    
+    + optinal parameters in callbacks 
+    Don’t use optional parameters in callbacks unless you really mean it:
+    
+    Do write callback parameters as non-optional:
+    
+    there’s no need to make the parameter optional to accomplish this – it’s always legal to provide a callback that accepts fewer arguments.
+    
+    /* OK */
+    interface Fetcher {
+        getObject(done: (data: any, elapsedTime: number) => void): void;
+    }
+    
+    + overloads and callbacks 
+    Don’t write separate overloads that differ only on callback arity:    
+        
+    Do write a single overload using the maximum arity:
+    
+    + function overloads 
+    Don’t put more general overloads before more specific overloads
+    
+    Do sort overloads by putting the more general signatures after more specific signatures:
+    
+    + use optinal parameters 
+    Don’t write several overloads that differ only in trailing parameters:
+    
+    do use optional parameters 
+    /* OK */
+    interface Example {
+        diff(one: string, two?: string, three?: boolean): number;
+    }
+    
+    + use union types 
+    Don’t write overloads that differ by type in only one argument position:
+    
+    Do use union types 
+    /* OK */
+    interface Moment {
+        utcOffset(): number;
+        utcOffset(b: number|string): Moment;
+    }
+    
+- Deep div 
+    + key concepts of typescripts 
+    
+    + types, each of these declaration forms creates a new type name 
+        * A type alias declaration (type sn = number | string;)
+        * An interface declaration (interface I { x: number[]; })
+        * A class declaration (class C { })
+        * An enum declaration (enum E { A, B, C })
+        * An import declaration which refers to a type
+    
+   + values, the following things create values 
+        * let, const, and var declarations
+        * A namespace or module declaration which contains a value
+        * An enum declaration
+        * A class declaration
+        * An import declaration which refers to a value
+        * A function declaration
+    
+    + namespaces. Types can exist in namespaces. For example, if we have the declaration let x: A.B.C, we say that the type C comes from the A.B namespace. This distinction is subtle and important here A.B is not necessarily a type or a value 
+    
+    + simple combinations, one name multiple meanings, Given a name A, we might find up to three different meanings for A: a type, a value or a namespace depends on the context in which it is used. 
+    
+    + in the declaration let m: A.A = A;, A is used first as a namespace, then as a type name, then as a value. These meanings might end up referring to entirely different declarations!
+    
+    + built-in combinations, The declaration class C { } creates two things: a type C which refers to the instance shape of the class, and a value C which refers to the constructor function of the class. Enum declarations behave similarly.
+    
+    + user combinations 
+    export var Bar: { a: Bar };
+    export interface Bar {
+      count: number;
+    }
+
+    + //consuming code,  we’ve used Bar as both a type and a value here. the type and value are independent 
+    import { Bar } from './foo';
+    let x: Bar = Bar.a;
+    console.log(x.count);
+    
+    + advanced combinations, Some kinds of declarations can be combined across multiple declarations. For example, class C { } and interface C { } can co-exist and both contribute properties to the C types 
+    
+    A general rule of thumb is that values always conflict with other values of the same name unless they are declared as namespaces, types will conflict if they are declared with a type alias declaration (type s = string), and namespaces never conflict.
+
+    //adding members to an interface with another interface/classes delclaration 
+    interface Foo {
+      x: number;
+    }
+    // ... elsewhere ...
+    interface Foo {
+      y: number;
+    }
+    let a: Foo = ...;
+    console.log(a.x + a.y); // OK
+    
+    class Foo {
+      x: number;
+    }
+    // ... elsewhere ...
+    interface Foo {
+      y: number;
+    }
+    let a: Foo = ...;
+    console.log(a.x + a.y); // OK
+    
+    + adding using a namespace
+    class C {
+    }
+    // ... elsewhere ...
+    namespace C {
+      export let x: number;
+    }
+    let y = C.x; // OK
+    
+    we added a value to the static side of C (its constructor function). This is because we added a value, and the container for all values is another value. types are contained by namespaces and namespaces are contained by other namespaces 
+    
+    add a namespaced type to a class 
+    class C {
+    }
+    // ... elsewhere ...
+    namespace C {
+      export interface D { }
+    }
+    let y: C.D; // OK
+    
+    + using of export = or import 
+    An important rule is that export and import declarations export or import all meanings of their targets.
+    
+    + comlex example 
+namespace X {
+  export interface Y { }
+  export class Z { }
+}
+
+// ... elsewhere ...
+namespace X {
+  export var Y: number;
+  export namespace Z {
+    export class C { }
+  }
+}
+type X = string;
+    
+In this example, the first block creates the following name meanings:
+
+A value X (because the namespace declaration contains a value, Z)
+A namespace X (because the namespace declaration contains a type, Y)
+A type Y in the X namespace
+A type Z in the X namespace (the instance shape of the class)
+A value Z that is a property of the X value (the constructor function of the class)
+The second block creates the following name meanings:
+
+A value Y (of type number) that is a property of the X value
+A namespace Z
+A value Z that is a property of the X value
+A type C in the X.Z namespace
+A value C that is a property of the X.Z value
+A type X
+    
+- templates, declaration file templates 
+global-modifying-module.d.ts
+global-plugin.d.ts
+global.d.ts
+module-class.d.ts
+module-function.d.ts
+module-plugin.d.ts
+module.d.ts
+
+reference http://www.typescriptlang.org/docs/handbook/declaration-files/templates.html
+
+- publishing to npm, there are two main ways 
+    + bundling with your npm package
+    + publishing to the @types organization on npm 
+    https://www.npmjs.com/~types
+
+the first one if for you control the npm package 
+
+    + including declarations in your npm package, Set the types property to point to your bundled declaration file. 
+{
+    "name": "awesome",
+    "author": "Vandelay Industries",
+    "version": "1.0.0",
+    "main": "./lib/main.js",
+    "types": "./lib/main.d.ts"
+}
+"typings" field is synonymous with "types", and could be used as well
+
+    + dependencies 
+All dependencies are managed by npm. Make sure all the declaration packages you depend on are marked appropriately in the "dependencies" section in your package.json. example to used browserify and typescript 
+
+{
+    "name": "browserify-typescript-extension",
+    "author": "Vandelay Industries",
+    "version": "1.0.0",
+    "main": "./lib/main.js",
+    "types": "./lib/main.d.ts",
+    "dependencies": [
+        "browserify@latest",
+        "@types/browserify@latest",
+        "typescript@next"
+    ]
+}
+
+    + red flags
+    /// <reference path="..." />
+
+    Don’t use /// <reference path="..." /> in your declaration files.
+    Do use /// <reference types="..." /> instead.
+
+    + publish to @types with types publisher tool 
+    https://github.com/DefinitelyTyped/DefinitelyTyped
+    https://github.com/Microsoft/types-publisher
+    http://definitelytyped.org/guides/contributing.html
+
+- consumption 
+    + downloading 
+    $ npm install --save @types/lodash
+
+    + consuming 
+    import * as _ from "lodash";
+    _.padStart("Hello TypeScript!", 20, " ");
+
+    or use global variable _
+
+    + searching type declaration package https://aka.ms/types
+
+
+# Project configuration 
+- tsconfig.json 
+http://www.typescriptlang.org/docs/handbook/tsconfig-json.html
+- compiler option 
+http://www.typescriptlang.org/docs/handbook/compiler-options.html
+- compiler option for msbuild 
+http://www.typescriptlang.org/docs/handbook/compiler-options-in-msbuild.html
+- integrate with build tool 
+Browserify
+Duo
+Grunt
+Gulp
+Jspm
+Webpack
+MSBuild
+NuGet
+
+- nightly build 
+http://www.typescriptlang.org/docs/handbook/nightly-builds.html
 
 
 
