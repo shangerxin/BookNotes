@@ -1,0 +1,1074 @@
+Jump start mysql=Timothy Boronczyk;Note=Erxin
+
+# Preface 
+- This book is an introduction to the basic concepts of working with a Relational Database Management System (RDBMS)—specifically, the popular, open source RDBMS MySQL. Like other installments in SitePoint’s Jump Start series
+
+- common types digital database 
+    + flat file, sequentially, in plain text, easy to create 
+    + hierarchical databases, parent/child relationships 
+    + key-value documentoriented databases 
+    , redis and couchdb, nosql 
+    + relational database 
+    data Manipulation Language (DML), those for table and database management make up the Data Definition Language (DDL), and those that grant or revoke access to the database make up the Data Control Language (DCL). 
+    
+- MySQL is the second most popular SQL RDBMS (the number one spot is held by SQLite thanks in large part to its use in smartphones and embedded software).
+    
+
+- forks 
+    + MariaDB ― a fork by Monty Widenius himself in response to the Sun and Oracle acquisitions. It aims to be a community-friendly replacement that maintains feature-parity for most use cases.
+- install 
+    + on linux 
+    $ sudo apt-get install mysql-server
+    $ su -c 'yum install mariadb-server'.
+    
+        * start/stop mysql 
+
+        Ubuntu — sudo service mysql start
+
+        Debian — sudo systemctl start mysqld
+
+        Red Hat/CentOS — su -c 'systemctl start mysql'
+
+        Ubuntu — sudo service mysql stop
+
+        Debian — sudo systemctl stop mysqld
+
+        Red Hat/CentOS — su -c 'systemctl stop mysql'
+
+        
+     We’ll use the command-line client that’s included in the MySQL installation to connect and communicate with the running server throughout most of this book, and in Chapter 5 we’ll discuss sending SQL statements programmatically.
+    
+    + on window
+    download mysql installer 
+    
+    start stop mysql service in commandline 
+    Start MySQL — net start mysql
+
+    Stop MySQL — net stop mysql
+
+    
+- create account 
+CREATE USER 'jump'@'localhost' IDENTIFIED BY 'secret';
+
+GRANT CREATE, DROP, ALTER, INSERT, UPDATE, SELECT, DELETE, 
+INDEX ON jumpstart.* TO 'jump'@'localhost';
+
+    + Privileges that are no longer needed can be revoked with a REVOKE statement, the syntax of which is identical to that of GRANT:
+REVOKE CREATE, DROP, ALTER, INDEX ON jumpstart.* TO
+'jump'@'localhost';
+
+    + FLUSH PRIVILEGES statement to instruct MySQL
+    
+    
+# Storing data 
+- create table 
+    + reference 
+    http://dev.mysql.com/doc/refman/5.6/en/create-table.html
+    
+    + example 
+CREATE TABLE address (
+    employee_id INTEGER UNSIGNED NOT NULL,
+    address VARCHAR(50) NOT NULL,
+    city VARCHAR(30) NOT NULL,
+    state CHAR(2) NOT NULL,
+    postcode CHAR(5) NOT NULL,
+
+    FOREIGN KEY (employee_id)
+        REFERENCES employee (employee_id)
+)
+ENGINE=InnoDB;
+
+- data types and storage requirements 
+    + MySQL offers the INTEGER (also abbreviated as INT), TINYINT, SMALLINT, MEDIUMINT, and BIGINT(8 bytes) data types for storing integer data. 
+    
+    + string, MySQL devotes several data types to storing textual data: CHAR, VARCHAR, BINARY, VARBINARY, TEXT, TINYTEXT, MEDIUMTEXT, LONGTEXT, BLOB, TINYBLOB, MEDIUMBLOB, and LONGBLOB.
+    
+    ENUM, up to 2 bytes, 65535 values 
+    SET, up to 8 bytes, 64 members 
+    
+    + The data types DATETIME, TIMESTAMP, DATE, TIME, and YEAR are for working with date and time values. Both DATETIME and TIMESTAMP hold values containing date and time parts using the format 
+    
+    DATETIME and TIMESTAMP hold values containing date and time parts using the format 'YYYY-MM-DD HH:mm:ss'
+    
+    MySQL can automatically initialize and update DATETIME and TIMESTAMP values with the current date and time whenever a row is added or updated. 
+    
+    + special data types 
+        * The Open Geospatial Consortium has published a large number of standards focused on the representation of geographic information in various formats. MySQL offers a few types based on the consortium’s work for storing such data: POINT, LINESTRING, POLYGON, GEOMETRY, MULTIPOINT, MULTISTRING, MULTIPOLYGON, and GEOMETRYCOLLECTION.
+        
+        
+        * mysql manual extensions for spatial data 
+        http://dev.mysql.com/doc/refman/5.6/en/spatial-extensions.html
+        * mysql gis forum 
+        http://forums.mysql.com/list.php?23
+        * open geospatial consortium 
+        http://www.opengeospatial.org/
+        
+- Storage engines 
+SHOW ENGINES;
+
+    + InnoDB has been MySQL’s default storage engine since MySQL 5.5 
+    Atomicity ― Each transaction is committed in its entirety or not at all. If part of a transaction fails—perhaps one statement fails in the middle of the batch
+    
+    Consistency ― All changes made by a transaction must leave the data in a valid state as defined by any constraints and other rules
+        
+    Isolation ― All transactions must be isolated from one another. Two transactions that occur at the same time must not affect or be affected by each other
+        
+    Durability ― Once a transaction’s changes are committed, they are final and can’t be rolled back.
+
+    + other storage engine 
+    Archive ― The Archive engine is useful if you need to save a large amount of data
+    
+    Blackhole ― The Blackhole engine behaves like a /dev/null device. It accepts any data we send and then immediately discards it.
+    
+    CSV ― The CSV engine stores comma-separated data in text files. 
+    
+    Federated ― The Federated engine is useful when you need to work with data from a remote MySQL table as if it were local.
+    
+    Merge ― MyISAM tables are limited in size by restrictions put in place by the operating system’s file system.
+    
+    Memory ― The Memory engine stores data in RAM, which gives us lower latency and faster access than disk-based storage can offer.
+    
+    
+
+    NDB ― NDB is MySQL’s engine designed to support database clustering. Like InnoDB, NDB is also ACID-compliant.
+
+- adding data
+INSERT INTO employee
+    (first_name, last_name, email, hire_date)
+VALUES
+    ('Nischal', 'Bhatia', 'nbhatia@example.com', '2014-12-15');
+
+- using transactions 
+START TRANSACTION;
+
+INSERT INTO employee
+    (employee_id, last_name, first_name, email, hire_date)
+VALUES
+    (42, 'Virey', 'Gener', 'gvirey@example.com', '2015-04-02');
+
+SELECT * FROM employee;
+    
+COMMIT;
+    + The transaction ends with either a COMMIT or ROLLBACK statement. COMMIT finalizes the transaction, making the changes official, and ROLLBACK rolls back the transaction, discarding any changes
+
+    
+    + switch back to the first client and roll back the transaction. 
+ROLLBACK;
+
+SELECT * FROM employee;
+    
+    
+    
+# Retrieving and updating data 
+- update content 
+UPDATE customer SET last_name = 'DAY-WEBB' WHERE
+customer_id = 245;
+
+- delete 
+DELETE FROM customer WHERE customer_id = 245;
+
+- ordering result
+SELECT last_name, first_name FROM actor ORDER BY last_name;
+    + reference 
+    http://dev.mysql.com/doc/refman/5.6/en/globalization.html
+
+ascending with the keyword ASC or descending order (Z–A or …, 3, 2, 1) with DESC
+
+The statement SHOW COLLATION will return a list of collations that your installation of MySQL is aware of. The first part of a collation’s name is the character set it’s designed to work with.
+
+- managing the number of returned rows 
+SELECT last_name, first_name FROM actor ORDER BY last_name, 
+first_name DESC LIMIT 5;
+
+- operators 
+A = B True when A and B are equal 
+A < B True when A is less than B 
+A <= B True when A equal or less than B 
+A > B True when A is greater than B 
+A >= B True when A equal or greater than B 
+A != B or A <> B True when A and B are not equal 
+A IS NULL True when A is a NULL value 
+A LIKE 'PATTERN%' True when A matches the pattern string (pattern wildcards are % and _) 
+A REGEXP '/EXPRESSION/' True when A matches the regular expression 
+A BETWEEN B AND C True when A is in the range of B and C inclusive (same as A >= B AND A <= C) 
+A IN (B,C,D) True when A is equal to one of the values in the given set (same as A = B OR A = C OR A = D) 
+
+combine selection by union 
+SELECT title FROM film WHERE title LIKE 'A%'
+UNION 
+SELECT title FROM film WHERE title LIKE 'Z%';
+
+- aggregate functions and grouping 
+MAX() returns the largest value from all of its rows.
+The COUNT() function simply counts the number of rows it passes over.
+
+SELECT COUNT(payment_id) FROM payment;
+
+The GROUP BY clause gathers the rows into groups
+
+- keeping data fresh 
+
+
+
+# Working with multiple tables 
+- joining tables, JOIN lets us do exactly that by connecting two or more tables based on a relationship that we specify.
+
+SELECT
+    a.first_name, a.last_name, 
+    COUNT(fa.film_id) AS appearance_count
+FROM
+    film_actor AS fa
+    JOIN actor AS a ON a.actor_id = fa.actor_id
+GROUP BY
+    fa.actor_id
+ORDER BY
+    appearance_count DESC,
+    a.first_name ASC,
+    a.last_name ASC
+LIMIT 5;
+    
+- using as statement 
+The AS keyword is optional when you define a column or table alias. I typically don’t use AS to alias table names in my own day-to-day statements
+
+    + three types of joins, INNER JOIN, LEFT OUTER JOIN, and RIGHT OUTER JOIN. The default is INNER JOIN, so when JOIN appears by itself 
+    
+    
+example:
+CREATE TABLE foo (
+    foo_id INTEGER,
+    foo_value CHAR(3)
+);
+
+CREATE TABLE bar (
+    bar_id INTEGER,
+    bar_value CHAR(3),
+    foo_id INTEGER
+);
+
+INSERT INTO foo (foo_id, foo_value) VALUES (1, 'foo');
+INSERT INTO foo (foo_id, foo_value) VALUES (2, 'bar');
+
+INSERT INTO bar (bar_id, bar_value, foo_id) VALUES (1, 'baz', 2);
+INSERT INTO bar (bar_id, bar_value, foo_id) VALUES (2, 'qux', 3);
+
+        * using inner join 
+SELECT * FROM foo f INNER JOIN bar b ON b.foo_id = f.foo_id;
+    
+each row in the first table against each in the second table and identifies matching pairs based on the ON condition. The rows that match are joined together and included in the result
+only one pair of rows meets the requirement.
+    
++--------+-----------+--------+-----------+--------+
+| foo_id | foo_value | bar_id | bar_value | foo_id |
++--------+-----------+--------+-----------+--------+
+|      2 | bar       |      1 | baz       |      2 |
++--------+-----------+--------+-----------+--------+
+1 row in set (0.00 sec)
+    
+        * The two OUTER JOINs return the same rows as INNER JOIN, but also include the unmatched rows from one table or the other (the outer parts of the intersecting circles).
+        
+        * LEFT OUTER JOIN includes the unmatched rows from the table that appears to the left of the JOIN keyword.
+        
+        * RIGHT OUTER JOIN is the opposite of LEFT OUTER JOIN, returning the unmatched rows from the table appearing to the right of the JOIN keyword.
+    
+        * no condition is specified for how tables should joined, mysql will matches every row in the first table against every row in the second. which is  Cartesian product
+        
+        *  MySQL does not support FULL OUTER JOIN—a join that includes the unmatched rows of both the left and right tables
+
+- abstracting with views 
+    + Views give us a way to abstract a complex statement by presenting its result as a virtual table
+    
+    Views look like regular tables to our SELECT statements, and we can even join multiple views if we want
+    
+    create view:
+CREATE VIEW actor_appearance
+AS SELECT
+    a.first_name, a.last_name, 
+    COUNT(fa.film_id) AS appearance_count
+FROM
+    film_actor AS fa
+    JOIN actor AS a ON a.actor_id = fa.actor_id
+GROUP BY
+    fa.actor_id;
+    
+    use view 
+SELECT * FROM actor_appearance ORDER BY appearance_count
+DESC LIMIT 5;
+
+    when the tables contain same name column we could use as statement 
+CREATE VIEW customer_address (
+    first_name, last_name, cust_last_update, address,
+    addr_last_upate
+)
+AS SELECT
+    c.first_name, c.last_name, c.last_update, a.address,
+    a.last_update
+FROM
+    customer AS c
+    JOIN address AS a ON a.address_id = c.address_id;
+    
+    + when alter the table structure the view will break we need use alter view statement to change the view 
+ALTER VIEW customer_address AS SELECT …
+
+- normal forms 
+    +  The term normalization refers to the process of organizing data—by following specific rules—to eliminate redundancy and inconsistencies.
+
+    + main benefits of database normalization 
+    Decreased storage requirements 
+    Data integrity — if the same data appears in several places
+    Maintainability 
+
+
+- normalization levels
+    + first normal form 
+    First Normal Form is simple and pretty much states that every field should hold only one value. Some RDBMSs support compound data types like arrays, but MySQL doesn’t. This fortunately goes a long way in helping us avoid breaking this rule
+
+    
++------------+-----------+-----------------------------+
+| first_name | last_name | film_title                  |
++------------+-----------------------------------------+
+| SCARLETT   | BENING    | ROOF CHAMPION, YOUTH KICK   |
+| MICHAEL    | BOLGER    | HOMEWARD CIDER, SANTA PARIS |
+| VAL        | BOLGER    | PATIENT SISTER, YOUTH KICK  |
+| DARYL      | CRAWFORD  | BROTHERHOOD BLANKET         |
++------------+-----------+-----------------------------+
+|
+change to 
+|
+V 
++------------+-----------+---------------------+
+| first_name | last_name | film_title          |
++------------+---------------------------------+
+| SCARLETT   | BENING    | ROOF CHAMPION       |
+| SCARLETT   | BENING    | YOUTH KICK          |
+| MICHAEL    | BOLGER    | HOMEWARD CIDER      |
+| MICHAEL    | BOLGER    | SANTA PARIS         |
+| VAL        | BOLGER    | PATIENT SISTER      |
+| VAL        | BOLGER    | YOUTH KICK          |
+| DARYL      | CRAWFORD  | BROTHERHOOD BLANKET |
++------------+-----------+---------------------+
+
+    + second normal form,  Second Normal Form when it meets the criteria for 1NF (so all 2NF tables are also 1NF) and every non-key field can be accessed using a logically related key
++----------+------------+-----------+---------+--------------------+
+| actor_id | first_name | last_name | film_id | film_title         |
++----------+------------+-----------+---------+--------------------+
+|      124 | SCARLETT   | BENING    |     742 | ROOF CHAMPION      |
+|      124 | SCARLETT   | BENING    |     997 | YOUTH KICK         |
+|      185 | MICHAEL    | BOLGER    |     427 | HOMEWARD CIDER     |
+|      185 | MICHAEL    | BOLGER    |     761 | SANTA PARIS        |
+|       37 | VAL        | BOLGER    |     663 | PATIENT SISTER     |
+|       37 | VAL        | BOLGER    |     997 | YOUTH KICK         |
+|      129 | DARYL      | CRAWFORD  |     101 | BROTHERHOOD BLANKET|
++----------+------------+-----------+---------+--------------------+
+|
+change to 
+|
+V
++----------+------------+-----------+---------+
+| actor_id | first_name | last_name | film_id |
++----------+------------+-----------+---------+
+|      124 | SCARLETT   | BENING    |     742 |
+|      124 | SCARLETT   | BENING    |     997 |
+|      185 | MICHAEL    | BOLGER    |     427 |
+|      185 | MICHAEL    | BOLGER    |     761 |
+|       37 | VAL        | BOLGER    |     663 |
+|       37 | VAL        | BOLGER    |     997 |
+|      129 | DARYL      | CRAWFORD  |     101 |
++----------+------------+-----------+---------+
+
++---------+---------------------+
+| film_id | title               |
++---------+---------------------+
+|     742 | ROOF CHAMPION       |
+|     997 | YOUTH KICK          |
+|     427 | HOMEWARD CIDER      |
+|     761 | SANTA PARIS         |
+|     663 | PATIENT SISTER      |
+|     101 | BROTHERHOOD BLANKET |
++---------+---------------------+    
+    
+    + third normal form, A table is in Third Normal Form when the criteria for 2NF are met and all non-key fields are accessible by the table’s primary key.
++----------+---------+
+| actor_id | film_id |
++----------+---------+
+|      124 |     742 |
+|      124 |     997 |
+|      185 |     427 |
+|      185 |     761 |
+|       37 |     663 |
+|       37 |     997 |
+|      129 |     101 |
++----------+---------+
+
++----------+------------+-----------+
+| actor_id | first_name | last_name |
++----------+------------+-----------+
+|      124 | SCARLETT   | BENING    |
+|      185 | MICHAEL    | BOLGER    |
+|       37 | VAL        | BOLGER    |
+|      129 | DARYL      | CRAWFORD  |
++----------+------------+-----------+
+
++---------+---------------------+
+| film_id | title               |
++---------+---------------------+
+|     742 | ROOF CHAMPION       |
+|     997 | YOUTH KICK          |
+|     427 | HOMEWARD CIDER      |
+|     761 | SANTA PARIS         |
+|     663 | PATIENT SISTER      |
+|     101 | BROTHERHOOD BLANKET |
++---------+---------------------+
+    
+- altering tables 
+
+ALTER TABLE actor ADD COLUMN bio VARCHAR(255) AFTER last_name;
+    
+The position clause AFTER last_name instructs MySQL to place the new column after the last_name column in the table’s definition. 
+    
+The statement creates an index named idx_last_update against the last_update column of the actor table. 
+because you simply forgot what you named it, you can find out by issuing a SHOW CREATE TABLE statement. Alternatively, you can send a SHOW INDEX statement:
+SHOW INDEX FROM actor;
+ALTER TABLE actor
+    ADD COLUMN bio VARCHAR(255) AFTER last_name,
+    ADD INDEX idx_last_update (last_update);
+    
+- references 
+http://en.wikipedia.org/wiki/Database_normalization
+
+    
+# Connecting from code 
+- python 
+https://www.python.org/dev/peps/pep-0249/
+
+pip install --allow-external mysql-connector-python \
+ mysql-connector-python
+    
+    + example 
+import mysql.connector
+
+conn = mysql.connector.Connect(host="localhost", user="jump",
+    password="secret", database="sakila")
+
+cursor = conn.cursor()
+
+query = ("SELECT last_name, first_name FROM actor "
+    "ORDER BY last_name, first_name")
+cursor.execute(query)
+
+for row in cursor:
+    print("{:<45} {:<45}".format(*row))
+
+cursor.close()
+conn.close()
+    
+In general, you can think of the MySQLCursor object as an iterator that traverses a collection of records, one row at a time, making each available to us as a tuple.
+ 
+it’s necessary to commit your changes with the connection’s commit() method. Statements in the transaction can alternatively be rolled back using the connection’s rollback() method.
+# send a query - affects the database
+query = ("INSERT INTO actor (last_name, first_name) "
+    "VALUES ('OLIVER', 'BRENDA')")
+cursor.execute(query)
+
+# commit the transaction
+conn.commit()
+ 
+- buffered and unbuffered results 
+default behavior for Connector/Python is to use unbuffered results.  An unbuffered result set resides on the MySQL server, and each row is transmitted to the client when it’s needed. 
+
+Buffered results, on the other hand, are transferred immediately from MySQL and sit client-side where they wait to be accessed by our program.
+but when the cursor will be closed prematurely, the way to avoid raising the exception is to use buffered results.
+
+- prepared statements 
+Prepared statements are often the most efficient route to take because the overhead for the server to parse and analyzing the statement is incurred only once.
+
+
+Question mark — WHERE first_name = ? AND last_name = ?
+
+Numeric position — WHERE first_name = :1 AND last_name = :2
+
+Named parameter — WHERE first_name = :fname AND last_name = :lname
+
+C-style format code — WHERE first_name = %s AND last_name = %s
+
+Pyformat code — WHERE first_name = %(fname)s AND last_name = %(lname)s
+
+This is done by passing the argument prepared=True to the connection object’s cursor() method. 
+# obtain a cursor capable of using prepared statements
+cursor = conn.cursor(prepared=True)
+
+- connectiong from php with pdo 
+    +  You just need to update your php.ini file by adding or uncommenting the following line:
+    
+    + basic 
+<?php
+// Step 1: open a connection
+$db = new PDO("mysql:host=localhost;dbname=sakila", "jump",
+    "secret");
+
+// Step 2: construct and send a query
+$query = "SELECT last_name, first_name FROM actor " .
+    "ORDER BY last_name, first_name";
+$result = $db->query($query);
+
+// Step 3: iterate the results
+echo "<ul>";
+while ($row = $result->fetch()) {
+    vprintf("<li>%s %s</li>", $row);
+}
+echo "</ul>";
+
+// Step 4: clean up
+$result->closeCursor();
+$db = null;
+
+a new PDO object, passing to it a DSN string, username, and password.
+
+The query() method returns an object instance of the PDOStatement class which offers several methods to retrieve rows from the query’s result set: fetch(), fetchObject() and fetchAll(). 
+
+    + common fetch style 
+PDO::FETCH_ASSOC ― returns the row as an associative array with column names as the array keys
+
+PDO::FETCH_NUM ― returns the row as an array with column positions as the array indexes
+
+PDO::FETCH_BOTH ― returns the row as an array with members accessible by both column name and position (default behavior)
+
+PDO::FETCH_OBJECT ― return the row as an anonymous object with column names as its public properties
+
+    + reference http://php.net/pdostatement.fetch
+
+    + PDO uses buffered results by default, so all of the rows are sent immediately from MySQL, You can specify whether PDO should use buffered or unbuffered results by setting the PDO::MYSQL_ATTR_USE_BUFFERED_QUERY attribute
+    
+<?php
+$db = new PDO("mysql:host=localhost;dbname=sakila", "jump",
+    "secret");
+// use buffered results, set false for unbuffered
+$db->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
+
+    + handle error 
+PDO::ERRMODE_SILENT ― silent mode, does not interrupt the script’s execution (default behavior)
+
+PDO::ERRMODE_WARNING ― warning mode, triggers an E_WARNING message
+
+PDO::ERRMODE_EXCEPTION ― exception mode, throws a PDOException object
+
+We can check the error using the errorInfo() method, 
+    
+// Set error mode to silent
+$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
+
+// submit a malformed query
+$query = "MALFORMED QUERY";
+try {
+    $result = $db->query($query);
+}
+catch (PDOException $e) {
+    // Display the exception message
+    echo $e->getMessage();
+}
+
+    + prepared statements 
+        * PDO supports both anonymous positional placeholders (?) and named placeholders (:name).
+// construct a query template
+$query = "INSERT INTO actor (last_name, first_name) VALUES " .
+    "(:last, :first)";
+
+// prepare the statement
+$stmt = $db->prepare($query);
+
+// here's some data...
+$records = [
+    ["last" => "AFFLECK", "first" => "LAUREN"],
+    ["last" => "BUTTERFIELD", "first" => "MIKE"],
+    ["last" => "EASTERBROOK", "first" => "ANGELA"]
+];
+
+// execute the query for each record
+foreach ($records as $row) {
+    $stmt->execute($row);
+}
+
+- connecting with R RMysql
+
+
+# Programming the database 
+- stored routine,  routines can provide an additional level of security because we can give users access through an API of routines instead of allowing them to access or modify data in the tables directly.
+
+using a procedural language that closely adheres to SQL/PSM, a standard that extends SQL with common programming concepts like variables, IF constructs, and loops. 
+
+- learning the basics 
+    + The body of a stored routine can consist of many statements. change the current session’s delimiter to something other than a semicolon. It can be reset to practically anything, but $$ or // are the most common choices
+    
+DELIMITER $$
+
+DELIMITER ; //change back to ; 
+    
+- variable types 
+    + Local variables ― the variable appears in the body of a routine and is named as a bare literal 
+    
+     named as a bare literal (for example, my_var). Local variables are scoped to a BEGIN/END block defined using DECLARE
+    
+    + Session variables ― the variable can appear pretty much anywhere, inside or outside of a routine. 
+    
+    Session variable names carry the leading sigil @ (for example, @my_var)
+    
+    + System variables ― the variable is predefined by MySQL and is used to inspect or change the behavior of the server and connection environment.
+    
+    annotated with the keyword GLOBAL or carry the prefix @@global
+
+- assigning variable 
+SET my_var = 42;
+
+- if 
+IF my_var >  0 THEN
+    SELECT 'value is positive';
+ELSEIF my_var < 0 THEN
+    SELECT 'value is negative';
+ELSE
+    SELECT 'value is zero';
+END IF;
+
+- case 
+CASE rating
+WHEN 'G', 'PG', 'PG-13' THEN
+    SELECT 'family friendly';
+WHEN 'R' THEN
+    SELECT 'adults only';
+ELSE
+    SELECT 'unknown rating';
+END CASE;
+
+- while 
+WHILE countdown > 0 DO
+    SET countdown = countdown - 1;
+END WHILE;
+
+- repeat construct test 
+REPEAT
+    SET countdown = countdown - 1;
+UNTIL countdown = 0
+END REPEAT;
+
+- cursors programmatic iteration 
+DECLARE id, i INTEGER UNSIGNED;
+DECLARE name CHAR(45);
+DECLARE curs CURSOR FOR SELECT customer_id, last_name
+  FROM customer;
+
+OPEN curs;
+SET i = FOUND_ROWS();
+WHILE i > 0 THEN
+    SET i = i - 1;
+    FETCH curs INTO id, name;
+END WHILE;
+CLOSE curs;
+
+- comments 
+-- this is a single-line comment
+
+# this is another single-line comment
+
+/* this comment can span
+   multiple lines */
+   
+- functions, A function is a stored routine that accepts input via arguments and returns a value to the calling. use create function to create routine. When the body contains more than one statement, the statements must be grouped in a BEGIN/END block
+
+DELIMITER $$
+
+CREATE FUNCTION UCWords (
+    string VARCHAR(255)
+) RETURNS VARCHAR(255)
+BEGIN
+    DECLARE buffer VARCHAR(255) DEFAULT '';
+    DECLARE word   VARCHAR(255);
+    DECLARE pos    TINYINT UNSIGNED;
+
+    REPEAT
+        -- pop word from beginning of string
+        SET pos = LOCATE(' ', string);
+        IF pos > 0 THEN
+            SET word = SUBSTRING(string, 1, pos - 1);
+            SET string = SUBSTRING(string, pos + 1);
+        ELSE
+            -- reached the last word
+            SET word = string;
+            SET string = '';
+        END IF;
+
+        SET word = CONCAT(
+            UPPER(SUBSTRING(word, 1, 1)),
+            LOWER(SUBSTRING(word, 2)));
+
+        SET buffer = CONCAT(buffer, ' ', word);
+    UNTIL LENGTH(string) = 0
+    END REPEAT;
+
+    -- trim leading space
+    RETURN SUBSTRING(buffer, 2);
+END$$
+
+DELIMITER ;
+
+    + use the function 
+SELECT UCWords(title) AS title FROM film ORDER BY title;
++-----------------------------+
+| UCWords(title)              |
++-----------------------------+
+| Academy Dinosaur            |
+| Ace Goldfinger              |
+| Adaptation Holes            |
+…
+| Zoolander Fiction           |
+| Zorro Ark                   |
++-----------------------------+
+1000 rows in set (0.02 sec)
+
+- list stored functions variables 
+SHOW FUNCTION STATUS;
+
+- view the definition of a stored function 
+SHOW CREATE FUNCTION function_name;
+
+- delete a stored function 
+drop function function_name 
+
+- stored procedure, Stored procedures are essentially small programs stored in the database.
+
+Whereas functions are used for calculations, procedures are intended for more general tasks or to execute business logic
+
+DELIMITER $$
+
+CREATE PROCEDURE rental_report (
+    IN cust_id INTEGER UNSIGNED,
+    OUT film_count TINYINT
+) BEGIN
+    DECLARE cust_name VARCHAR(92);
+    DECLARE i INTEGER;
+    -- cursors must be declared after all other variables
+    DECLARE curs CURSOR FOR SELECT
+        UCWords(CONCAT(c.last_name, ', ', c.first_name)),
+        COUNT(i.film_id)
+    FROM
+        rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN customer c ON r.customer_id = c.customer_id
+    WHERE
+        r.return_date IS NULL
+        AND r.customer_id = cust_id
+    GROUP BY
+        r.customer_id;
+
+    OPEN curs;
+    IF FOUND_ROWS() > 0 THEN
+        FETCH curs INTO cust_name, film_count;
+
+        -- header
+        (SELECT
+            cust_id AS `CUSTOMER ID`,
+            cust_name AS `CUSTOMER NAME`,
+            film_count AS `RENTALS`)
+        UNION
+
+        -- list film rentals
+        (SELECT
+            ' ', ' ', UCWords(f.title)
+        FROM
+            rental r
+            JOIN inventory i ON r.inventory_id = i.inventory_id
+            JOIN film f ON i.film_id = f.film_id
+        WHERE
+            r.return_date IS NULL
+            AND r.customer_id = cust_id
+        ORDER BY
+            f.title);
+    ELSE
+        SET film_count = 0;
+        SELECT
+            customer_id AS `CUSTOMER ID`,
+            UCWords(CONCAT(last_name, ', ', first_name))
+              AS `CUSTOMER NAME`,
+            0 AS `RENTALS`
+        FROM
+            customer
+        WHERE
+            customer_id = cust_id;
+    END IF;
+    CLOSE curs;
+END$$
+
+DELIMITER 
+    + call the procedure 
+CALL rental_report(560, @count);
++-------------+-------------------+-------------------+
+| CUSTOMER ID | CUSTOMER NAME     | RENTALS           |
++-------------+-------------------+-------------------+
+| 560         | Archuleta, Jordan | 2                 |
+|             |                   | Pianist Outfield  |
+|             |                   | Movie Shakespeare |
++-------------+-------------------+-------------------+
+3 rows in set (0.00 sec)
+
+Query OK, 0 rows affected (0.01 sec)
+
+- trigger is a stored routine that's automatically invoked by mysql 
+
+Triggers are bound to a table and execute either before or after an INSERT, UPDATE, or DELETE statement is performed
+
+ALTER TABLE customer
+    ADD COLUMN payment_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN average_amount DECIMAL(5,2) NOT NULL DEFAULT 0.00;
+    
+Each statement can be wrapped in a function that returns the desired value which we can then use in a simple UPDATE
+    
+    + Triggers don’t accept input from parameters like the other stored routines we’ve seen. They do, however, have access to the row’s modified values. For INSERT statements, the new values added to the table are accessible by prefixing NEW.
+    
+    removed by a DELETE statement are available by prefixing OLD. to their column name
+    
+    + list trigger 
+    SHOW TRIGGERS 
+    
+    + view the definition of a specific trigger 
+    SHOW TRIGGERS LIKE 'TRIGGER_NAME'
+    
+    + delete a trigger 
+    drop trigger procedure_name 
+    
+- events 
+    + Events are sometimes referred to as “temporal triggers” because they are routines scheduled to run at a certain time. They’re similar in concept to the Unix scheduling services cron and at, or Windows Task Scheduler
+    
+    + so we need to set event_scheduler to “ON” to start it.
+DELIMITER $$
+
+CREATE EVENT inactive_customer_maintenance
+    ON SCHEDULE
+        EVERY 1 DAY
+    DO
+BEGIN
+    UPDATE
+        customer c
+        JOIN rental r ON c.customer_id = r.customer_id
+    SET
+        c.active = 0
+    WHERE
+        r.rental_date < DATE_SUB(NOW(), INTERVAL 3 YEAR);
+END$$
+
+DELIMITER ;
+
+    
+    + events can be scheduled to execute just once or  on a recurring basis 
+CREATE EVENT inactive_customer_maintenance
+    ON SCHEDULE
+        EVERY 1 DAY
+        STARTS CURRENT_TIMESTAMP
+        ENDS CURRENT_TIMESTAMP + INTERVAL 1 MONTH
+    DO
+BEGIN
+
+INTERVAL followed by a unit and measure. For example, INTERVAL 1 MONTH for one month, and INTERVAL 5 HOUR 
+    
+    + MySQL will automatically delete events after they’ve run through the duration of their schedule. We can add ON COMPLETION PRESERVE to the definition to preserve them
+    
+    + list events 
+    SHOW EVENTS 
+    
+    + show definition 
+    SHOW CREATE EVENT event_name 
+    
+    + disable/enable an event 
+    DROP EVENT name
+
+- user defined functions, UDF is code written in C or C++ which is compiled into a library 
+
+load into mysql as plugin 
+
+http://www.fromdual.com/mysql-plugins-and-udfs
+http://datagenetics.com/blog/march52012/index.html
+
+myfunc_init() ― initializes any resources needed by myfunc().
+
+myfunc() ― performs the actual work of the function.
+
+myfunc_deinit() ― frees any resources initialized by myfunc_init() and used in myfunc().
+
+
+#include <stdlib.h>
+#include <string.h>
+#include "mysql.h"
+
+my_bool benford_init(UDF_INIT *, UDF_ARGS *, char *);
+void benford_deinit(UDF_INIT *);
+void benford_clear(UDF_INIT *, UDF_ARGS *, char *, char *);
+void benford_add(UDF_INIT *, UDF_ARGS *, char *, char *);
+double benford(UDF_INIT *, UDF_ARGS *, char *, char *, char *);
+
+typedef struct
+{
+    int seen;  /* count of times the digit is seen */
+    int rows;  /* the number of rows processed */
+}
+benford_data;
+    
+my_bool benford_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+{
+    /* verify incoming arguments */
+    if (args->arg_count != 2) {
+        strcpy(message, "function expects two arguments.");
+        return 1;
+    }
+    /* coerce arguments - first arg to string will allow us to
+       accept INT, DOUBLE, and REAL values (and also easier to
+       extract most significant digit), the second arg must be
+       INT to compare */
+    args->arg_type[0] = STRING_RESULT;
+    args->arg_type[1] = INT_RESULT;
+
+    /* init shared data block */
+    benford_data *data;
+    if (!(data = (benford_data *)malloc(sizeof(benford_data)))) {
+        strcpy(message, "Couldn't allocate memory");
+        return 1;
+    }
+    data->seen = 0;
+    data->rows = 0;
+    initid->ptr = (char *)data;
+
+    /* function will return 2 decimal places */
+    initid->decimals = 2;
+
+    return 0;
+}
+    
+    + The resulting module needs to be copied to MySQL’s plugin directory which can be located by inspecting the value of the global system variable plugin_dir.
+SHOW GLOBAL VARIABLES like 'plugin_dir';
++---------------+------------------------+
+| Variable_name | Value                  |
++---------------+------------------------+
+| plugin_dir    | /usr/lib/mysql/plugin/ |
++---------------+------------------------+
+1 row in set (0.00 sec)
+
+    
+# backups and replication 
+- logical backups 
+A logical backup creates one or more files containing statements that can be used to reconstruct the database and its data.
+
+- using MYSQLDUMP, command-line utility mysqldump that’s included with MySQL to make logical backups. 
+    
+    + To make sure no changes are made during the process, we need to lock the tables with a “read lock” which makes the database read-only.
+    
+    FLUSH TABLES WITH READ LOCK;
+    
+    + Leave the client running in its current window and open a second terminal window or Command Prompt. In the second window, invoke mysqldump.
+    $ mysqldump -u root -p database_name > backup.sql
+
+    + 3.Go back to the command-line client running in the first window and release the lock:
+    $ UNLOCK TABLES 
+    
+    + avaliable options 
+    --add-drop-table — include a DROP TABLE statement before any CREATE TABLE statements in the output.
+    --disable-keys — add a statement that disables indexes and keys before the INSERT statements, and another statement afterwards to re-enable them. 
+    --events — export the definitions for any stored events associated with the database
+    --hex-blob — output binary values using hexadecimal notation. 
+    --tables — back up only specific tables instead of all tables in the database
+    --triggers — export the definitions for any triggers associated with the database.
+    --routines — export the definitions for any stored procedures associated with the database
+    --where — a WHERE condition used to return only specific rows. For example, --tables actor --where last_name LIKE 'B%' will only export rows from the actor table for actors whose last name starts with B.
+    
+- redirecting select,  SELECT statement, and redirect the data to a specific file using INTO OUTFILE
+
+SELECT * FROM actor INTO OUTFILE '/tmp/actor.txt';
+
+it’s also said to be the fastest way to get data out of MySQL:
+
+    + The LOAD DATA statement imports data exported to a file in this manner:
+
+LOAD DATA INFILE '/tmp/actor.txt' INTO TABLE actor;
+
+- physical backup, A physical backup is a raw copy of the files and directories managed by MySQL. Making a physical backup is generally faster than a logical backup, they can’t capture data that hasn’t been persisted to disk
+
+MEMORY keeps its data in RAM, so there are no files for us to copy
+
+    + identify the dirctory mysql stores data in 
+SHOW VARIABLES LIKE 'datadir';
++---------------+-----------------+
+| Variable_name | Value           |
++---------------+-----------------+
+| datadir       | /var/lib/mysql/ |
++---------------+-----------------+
+1 row in set (0.00 sec)
+
+    + backup 
+sudo service mysql stop
+sudo tar -cpzf /media/external/mysql-backup-$(date +%F).tgz \
+ /var/lib/mysql
+sudo service mysql start
+
+    + restore
+sudo service mysql stop
+sudo tar -C / --same-owner -xvzpf \
+ /media/external/mysql-backup-YYYY-MM-DD.tgz
+sudo service mysql start
+
+- replication, Replication is the ability for one or more slave servers to maintain a copy of another MySQL server’s data. 
+
+    + A master server doesn’t wait for each slave to process an event; each slave is responsible for itself. 
+    
+    + useful situation 
+Backups ― we can stop replication on a slave server and we can make a physical backup of its data without affecting the availability of the master.
+
+
+Redundancy ― if a full copy of the database is maintained on a slave, the master can be swapped out with a slave with little effort in failover or disaster-recovery scenarios.
+
+Scalability and performance ― in heavy-load environments, write operations can be issued against the master, while read operations can be executed against read-only slaves, fanned out behind a load balancer.
+
+Mixed-format logging records SQL statements for most events, but switches to change details under certain circumstances
+
+- setting up replication, need two machine with mysql installed 
+    + Locate MySQL’s configuration file on each system. The file is named my.cnf on Linux systems, and can be located using find / -name my.cnf.
+    
+    + 2.Edit the master server’s configuration file. If a configuration entry we want is commented out with a leading #, 
+    server-id ― identifies this server in the replication setup. 
+    
+    log_bin ― identifies the base name of the replication log file I mentioned earlier. This entry should be active.
+    
+    binlog_do_db ― identifies which databases will be logged for replication. Multiple databases can be listed, separated by spaces. This entry should be active
+    
+    skip_networking or bind-address ― these entries configure whether MySQL accepts connections from the outside world or not. If skip_neworking is enabled, or bind-address is set to a value like 127.0.0.1, the master rejects the slave's connection attempts. We’ll want these entries commented out.
+    
+        * example 
+    server-id = 1
+    log_bin = mysql-bin
+    binlog_do_db = sakila
+    # bind-address = 127.0.0.1
+
+    + 3.Save your changes to the master’s configuration file and restart its MySQL instance
+    
+    + 4.Connect to the master with the command-line client, using the root user to create a new user account for the slave to use. 
+    CREATE USER 'repluser'@'%' IDENTIFIED BY 'P@$$w0rd';
+    GRANT REPLICATION SLAVE ON *.* TO 'repluser'@'%';
+    FLUSH PRIVILEGES;
+
+    + 5.Take a backup of the master’s database. We’ll use the backup to populate the slave, to ensure it starts out in sync with the master.
+    
+    + 6.Issue a SHOW MASTER STATUS statement to get information about the current state of the master.
+
+    + 7.Copy the master’s backup file—made in step 5—over to the slave.
+    
+    + 8.On the slave, create the sakila database and import the backup file:
+    
+    mysql -u root -p -e 'CREATE DATABASE sakila'
+    mysql -u root -p < sakila-backup.sql
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
