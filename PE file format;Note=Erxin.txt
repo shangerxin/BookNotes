@@ -1,0 +1,181 @@
+PE file format;Note=Erxin
+
+# an in depth look into the win32 portable executable file format part 1 
+- reference 
+http://www.delphibasics.info/home/delphibasicsarticles/anin-depthlookintothewin32portableexecutablefileformat-part1
+
+- overview of pe file 
+    + pe derived from earlier common object file format COFF on VAX/VMS 
+    + OBJ files emitted by MS compilers use the COFF format 
+    +  A very handy aspect of PE files is that the data structures on disk are the same data structures used in memory.
+    + The distinction between EXE and DLL files is entirely one of semantics. They both use the exact same PE format. The only difference is a single bit that indicates if the file should be treated as an EXE or as a DLL. 
+    + The addition of 64-bit Windows required just a few modifications to the PE format. This new format is called PE32+. No new fields were added, and only one field in the PE format was deleted. 
+
+    + It's important to note that PE files are not just mapped into memory as a single memory-mapped file. Instead, the Windows loader looks at the PE file and decides what portions of the file to map in. 
+    
+    + The offset of an item in the disk file may differ from its offset once loaded into memory. However, all the information is present to allow you to make the translation from disk offset to memory offset
+    
+PE file                         In memory 
+unmapped data   
+
+.reloc section 
+
+other sections       ->   other sections 
+
+.data section         ->   .data section        
+
+.text section         ->    .text section 
+
+.section table        ->    section table 
+
+PE header                    PE header 
+
+DOS header          ->    DOS header        higher addresses 
+
+    + the starting address where the file mapping begins is called an HMODULE. This is a point worth remembering: given an HMODULE, you know what data structure to expect at that address, and you can use that knowledge to find all the other data structures in memory. 
+    
+    in window CE is difference which is another story 
+    
+    + Other parts of a PE file may be read, but not mapped in (for instance, relocations). Some parts may not be mapped in at all, for example, when debug information is placed at the end of the file. A field in the PE header tells the system how much memory needs to be set aside for mapping the executable into memory. Data that won't be mapped in is placed at the end of the file
+    
+    + From an API standpoint, the primary mechanism provided by Microsoft for reading and modifying PE files is IMAGEHLP.DLL.
+    
+- pe file sections 
+    + Each section has its own set of in-memory attributes, including whether the section contains code, whether it's read-only or read/write, and whether the data in the section is shared between all processes using the executable.
+    
+    + At a minimum, there are usually at least two sections in a PE file: one for code, the other for data. Commonly, there's at least one other type of data section in a PE file.
+    
+    + a section called .rdata indicates a read-only data section. Section names are used solely for the benefit of humans, and are insignificant to the operating system.
+    
+    + Microsoft typically prefixes their section names with a period, but it's not a requirement. For years, the Borland linker used section names like CODE and DATA.
+    
+    + You can create and name your own sections, and the linker happily includes them in the executable. In Visual C++, you can tell the compiler to insert code or data into a section that you name with #pragma statements.
+    
+    # pragma data_seg("MY_DATA_SECTION")
+    
+    causes all data emitted by Visual C++ to go into a section called MY_DATA, rather than the default .data section. 
+    
+    + The linker's job is to combine all the required sections from OBJ files and libraries into the appropriate final section in the PE file. For example, each OBJ file in your project probably has at least a .text section, which contains code. The linker takes all the sections named .text from the various OBJ files and combines them into a single .text section in the PE file. Likewise, all the sections named .data from the various OBJs are combined into a single .data section in the PE file. 
+    
+    + Sections have two alignment values, one within the disk file and the other in memory.  the name could be different 
+    
+    Each section starts at an offset that's some multiple of the alignment value. For instance, in the PE file, a typical alignment would be 0x200. Thus, every section begins at a file offset that's a multiple of 0x200.
+    
+    + a PE section is mapped into memory, the first byte of each section corresponds to a memory page. On x86 CPUs, pages are 4KB aligned, while on the IA-64, they're 8KB aligned. The following code shows a snippet of PEDUMP output for the .text and .data section
+    
+Section Table
+  01 .text     VirtSize: 00074658  VirtAddr:  00001000
+    raw data offs:   00000400  raw data size: 00074800
+•••
+  02 .data     VirtSize: 000028CA  VirtAddr:  00076000
+    raw data offs:   00074C00  raw data size: 00002400
+    
+The .text section is at offset 0x400 in the PE file and will be 0x1000 bytes above the load address of KERNEL32 in memory. Likewise, the .data section is at file offset 0x74C00 and will be 0x76000 bytes above KERNEL32's load address in memory
+
+    + It's possible to create PE files in which the sections start at the same offset in the file as they start from the load address in memory. This makes for larger executables, but can speed loading under Windows 9x or Windows Me. 
+    
+    linker /merge switch. For instance, the following linker option combines the .rdata and .text sections into a single section called .text:
+/MERGE:.rdata=.text 
+
+    + it's OK to merge .rdata into .text, but you shouldn't merge .rsrc, .reloc, or .pdata into other sections. Prior to Visual Studio .NET, you could merge .idata into other sections. In Visual Studio .NET, this is not allowed, but the linker often merges parts of the .idata into other sections, such as .rdata, when doing a release build.
+
+    +  Since portions of the imports data are written to by the Windows loader when they are loaded into memory, you might wonder how they can be put in a read-only section. This situation works because at load time the system can temporarily set the attributes of the pages containing the imports data to read/write. Once the imports table is initialized, the pages are then set back to their original protection attributes.
+    
+- relative virtual address 
+    + To avoid having hardcoded memory addresses in PE files, RVAs are used. An RVA is simply an offset in memory, relative to where the PE file was loaded
+    
+    For instance, consider an EXE file loaded at address 0x400000, with its code section at address 0x401000. The RVA of the code section would be:
+    (target address) 0x401000 - (load address)0x400000  = (RVA)0x1000.
+
+    + Incidentally, the actual memory address is called a Virtual Address (VA) in PE parlance. Another way to think of a VA is that it's an RVA with the preferred load address added in
+    
+- spelunking through some arbitrary DLL's data structures in memory? Here's how. Call GetModuleHandle with the name of the DLL. The HMODULE that's returned is just a load address; you can apply your knowledge of the PE file structures to find anything you want within the module.
+    
+- the data directory 
+    + Some obvious examples are the imports, exports, resources, and base relocations. All of these well-known data structures are found in a consistent manner, and the location is known as the DataDirectory.
+    
+    + The DataDirectory is an array of 16 structures. Each array entry has a predefined meaning for what it refers to. 
+    
+IMAGE_DATA_DIRECTORY values ( not contain all the descriptions):
+Value                                                                           Description
+IMAGE_DIRECTORY_ENTRY_EXPORT
+IMAGE_DIRECTORY_ENTRY_IMPORT    
+IMAGE_DIRECTORY_ENTRY_RESOURCE   
+IMAGE_DIRECTORY_ENTRY_EXCEPTION                    points to exception handler table 
+
+IMAGE_DIRECTORY_ENTRY_SECURITY                      Points to a list of WIN_CERTIFICATE structures, defined in WinTrust.H
+
+IMAGE_DIRECTORY_ENTRY_BASERELOC                     point to base relocation information 
+
+IMAGE_DIRECTORY_ENTRY_DEBUG                             Points to an array of IMAGE_DEBUG_DIRECTORY structures etc.
+
+IMAGE_DIRECTORY_ENTRY_ARCHITECTURE                  Points to architecture-specific data, which is an array of IMAGE_ARCHITECTURE_HEADER structures. DEC/Compaq Alpha etc
+
+IMAGE_DIRECTORY_ENTRY_GLOBALPTR                     The VirtualAddress field is the RVA to be used as the global pointer (gp) on certain architectures. 
+
+IMAGE_DIRECTORY_ENTRY_TLS                                   Points to the Thread Local Storage initialization section.
+
+IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG                   Points to an IMAGE_LOAD_CONFIG_DIRECTORY structure. The information in an IMAGE_LOAD_CONFIG_DIRECTORY is specific to Windows NT, Windows 2000, and Windows XP etc. 
+
+IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT              Points to an array of IMAGE_BOUND_IMPORT_DESCRIPTORs, one for each DLL that this image has bound against
+
+IMAGE_DIRECTORY_ENTRY_IAT                                   Points to the beginning of the first Import Address Table (IAT). The IATs for each imported DLL appear sequentially in memory.
+
+IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT                  Points to the delayload information, which is an array of CImgDelayDescr structures, defined in DELAYIMP.H from Visual C++. Delayloaded DLLs aren't loaded until the first call to an API in them occurs. The delayload feature is completely implemented by the linker and runtime library.
+
+IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR            This value has been renamed to IMAGE_DIRECTORY_ENTRY_COMHEADER in more recent updates to the system header files. It points to the top-level information for .NET information in the executable, including metadata. This information is in the form of an IMAGE_COR20_HEADER structure.
+
+- import functions
+    + When you use code or data from another DLL, you're importing it. When any PE file loads, one of the jobs of the Windows loader is to locate all the imported functions and data and make those addresses available to the file being loaded
+    + When you link directly against the code and data of another DLL, you're implicitly linking against the DLL. You don't have to do anything to make the addresses of the imported APIs available to your code. The loader takes care of it all. The alternative is explicit linking. This means explicitly making sure that the target DLL is loaded and then looking up the address of the APIs. This is almost always done via the LoadLibrary and GetProcAddress 
+    + When you implicitly link against an API, LoadLibrary and GetProcAddress-like code still executes, but the loader does it for you automatically. The loader also ensures that any additional DLLs needed by the PE file being loaded are also loaded.
+    + Visual C++ 6.0 added the delayload feature, which is a hybrid between implicit linking and explicit linking. When you delayload against a DLL, the linker emits something that looks very similar to the data for a regular imported DLL. However, the operating system ignores this data. Instead, the first time a call to one of the delayloaded APIs occurs, special stubs added by the linker cause the DLL to be loaded (if it's not already in memory), followed by a call to GetProcAddress to locate the called API. Additional magic makes it so that subsequent calls to the API are just as efficient as if the API had been imported normally.
+    + Within a PE file, there's an array of data structures, one per imported DLL. Each of these structures gives the name of the imported DLL and points to an array of function pointers. The array of function pointers is known as the import address table (IAT). Each imported API has its own reserved spot in the IAT where the address of the imported function is written by the Windows loader. This last point is particularly important: once a module is loaded, the IAT contains the address that is invoked when calling imported APIs.
+    
+    + The beauty of the IAT is that there's just one place in a PE file where an imported API's address is stored. No matter how many source files you scatter calls to a given API through, all the calls go through the same function pointer in the IAT
+    
+    a call to an imported API looks like this:
+    CALL DWORD PTR [0x00405030]
+    
+    The less efficient call to an imported API looks like this:
+    CALL 0x0040100C
+    •••
+    0x0040100C:
+    JMP       DWORD PTR [0x00405030]
+    
+    why the less efficient method would ever be used. There's a good explanation. Left to its own devices, the compiler can't distinguish between imported API calls and ordinary functions within the same module. As such, the compiler emits a CALL instruction of the form
+    CALL XXXXXXXX
+    where XXXXXXXX is an actual code address that will be filled in by the linker later. Note that this last CALL instruction isn't through a function pointer. Rather, it's an actual code address.  the linker needs to have a chunk of code to substitute for XXXXXXXX. the JMP stub come from? Surprisingly, it comes from the import library for the imported function.
+     The __declspec(dllimport) function modifier tells the compiler that the function resides in another DLL and that the compiler should generate this instruction
+    CALL DWORD PTR [XXXXXXXX]
+    rather than this one:
+    CALL XXXXXXXX
+
+    
+# pe wiki 
+https://code.google.com/archive/p/corkami/wikis/PE.wiki
+
+    
+    
+    
+    
+    
+    
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

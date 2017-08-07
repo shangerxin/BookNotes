@@ -129,6 +129,125 @@ different os
     + changing php configuration via windows registry 
     When running PHP on Windows, the configuration values can be modified on a per-directory basis using the Windows registry. The configuration values are stored in the registry key HKLM\SOFTWARE\PHP\Per Directory Values, in the sub-keys corresponding to the path names. 
     
+- install php on window 
+    + reference 
+    http://php.net/manual/en/install.windows.php
+    + requirements 
+    php 7.0+, crt 14  https://www.microsoft.com/en-us/download/details.aspx?id=48145
+    
+    + pecl extensions are pre-built for windows and available from 
+    http://windows.php.net/downloads/pecl/releases/
+    
+    + php installer tools on windows 
+    Microsoft's Web Platform Installer (WebPI).
+    XAMPP
+    WAMPP
+    bitnami, https://bitnami.com/stack/wamp
+    
+    + recommended configuration 
+    Opcache, compiles and optimizes php scripts and caches them in memory 
+        * in php.ini 
+        zend_extension=php_opcache.dll
+        opcache.enable=On
+        opcache.cli_enable=On
+    
+        * WinCache for iis . especially if in a shared whosting environment or using networked file storage(NAS)
+        http://pecl.php.net/package/WinCache, download and copy to php extension dir 
+        
+        setting in php.ini 
+        extension=php_wincache.dll
+        wincache.fcenabled=1
+        wincache.ocenabled=1
+
+        * IIS configuration 
+        In IIS Manager, Install FastCGI module and add a handler mapping for `.php` to the path to PHP-CGI.exe
+        
+        use the APPCMD command line tool to script IIS configuration
+        
+        * database 
+        PHP includes mysqli and pdo_mysql extensions.
+        mysql https://dev.mysql.com/downloads/windows/
+        
+    + manual php installation on windows 
+        * reference 
+        http://php.net/manual/en/install.windows.manual.php
+        http://php.net/manual/en/install.windows.legacy.index.php#install.windows.legacy.iis7
+        * choose web server 
+        iis, add server role 
+        
+        * command line to configure iis and php 
+        @echo off
+
+        REM download .ZIP file of PHP build from http://windows.php.net/downloads/
+        REM
+        REM path to directory you decompressed PHP .ZIP file into
+        set phpdir=c:\php
+        set phppath=php-5.6.19-nts-Win32-VC11-x86
+
+        REM Clear current PHP handlers
+        %windir%\system32\inetsrv\appcmd clear config /section:system.webServer/fastCGI
+        %windir%\system32\inetsrv\appcmd set config /section:system.webServer/handlers /-[name='PHP_via_FastCGI']
+
+        REM Set up the PHP handler
+        %windir%\system32\inetsrv\appcmd set config /section:system.webServer/fastCGI /+[fullPath='%phpdir%\%phppath%\php-cgi.exe']
+        %windir%\system32\inetsrv\appcmd set config /section:system.webServer/handlers /+[name='PHP_via_FastCGI',path='*.php',verb='*',modules='FastCgiModule',scriptProcessor='%phpdir%\%phppath%\php-cgi.exe',resourceType='Unspecified']
+        %windir%\system32\inetsrv\appcmd set config /section:system.webServer/handlers /accessPolicy:Read,Script
+
+        REM Configure FastCGI Variables
+        %windir%\system32\inetsrv\appcmd set config -section:system.webServer/fastCgi /[fullPath='%phpdir%\%phppath%\php-cgi.exe'].instanceMaxRequests:10000
+        %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+"[fullPath='%phpdir%\%phppath%\php-cgi.exe'].environmentVariables.[name='PHP_FCGI_MAX_REQUESTS',value='10000']"
+        %windir%\system32\inetsrv\appcmd.exe set config -section:system.webServer/fastCgi /+"[fullPath='%phpdir%\%phppath%\php-cgi.exe'].environmentVariables.[name='PHPRC',value='%phpdir%\%phppath%\php.ini']"
+        
+        * configuration for iis 7.0 and later
+        window server 2008 r2+ http://php.net/manual/en/install.windows.legacy.index.php#install.windows.legacy.iis7
+        
+        enable fastCGI support in IIS 
+            start menu -> run -> CompMgmtLauncher 
+            add role iis and enable CGI 
+            
+        configure iis to process php requests 
+            download php http://windows.php.net/download/
+            Thread-Safe(TS) - use for single process web serves, like Apache with mod_php
+
+            Non-Thread-Safe(NTS) - use for IIS and other FastCGI web servers (Apache with mod_fastcgi) and recommended for command-line scripts
+
+            x86 - production use of PHP 5.5 or 5.6 or 7.0.
+
+            x64 - production use of PHP 7.0+ unless its a 32-bit only version of Windows. 5.5 and 5.6 x64 are expiremental.
+            
+            configure php.ini 
+            fastcgi.impersonate = 1
+            fastcgi.logging = 0
+            cgi.fix_pathinfo=1
+            cgi.force_redirect = 0
+            
+            configure iis manager user interface to create a handler mapping for php 
+            run -> inetmgr 
+            select server node in connections tree 
+            feature view page open the handler mappings feature 
+            actions pane click "add module mapping..."
+            add module mapping dialog enter the following 
+                request path: *.php 
+                module: FastCgiModule 
+                executable: c:\[path to php installation]\php-cgi.exe 
+                name: PHP_via_FastCGI
+            click request restrictions button and then configure the mapping to invoke handler only if request is mapped to a file or a folder 
+            
+            configure iis with command for handler mapping for php 
+            %windir%\system32\inetsrv\appcmd set config /section:system.webServer/fastCGI ^/+[fullPath='c:\PHP\php-cgi.exe']
+            
+            createting handler mapping for php request 
+            %windir%\system32\inetsrv\appcmd set config /section:system.webServer/handlers ^
+            /+[name='PHP_via_FastCGI', path='*.php',verb='*',modules='FastCgiModule',^
+            scriptProcessor='c:\PHP\php-cgi.exe',resourceType='Either']
+            
+        impersonation and file system access 
+        
+- install php on azure app services 
+http://php.net/manual/en/install.cloud.azure.php
+
+- install on old window 98 etc 
+http://php.net/manual/en/install.windows.legacy.index.php#install.windows.legacy.commandline
     
 # Language reference 
 ## basic syntax 
@@ -510,20 +629,783 @@ Array
     foreach ($colors as &$color) {
         $color = strtoupper($color);
     }
+    + useful function 
+    unset() removing keys from an array. be aware that the array will not be reindexed if a true "remove and shift" behavior is desired, reindexed array with array_values() function 
     
-- object 
-- callable 
+    // Show all errors
+    error_reporting(E_ALL);
+    
+    $arr = array('fruit' => 'apple', 'veggie' => 'carrot');
+    //assigned to a constant named fruit.
+    define('fruit', 'veggie');
+    // The following is okay, as it's inside a string. Constants are not looked for
+    // within strings, so no E_NOTICE occurs here
+    print "Hello $arr[fruit]";      // Hello apple
+    // With one exception: braces surrounding arrays within strings allows constants
+    // to be interpreted
+    print "Hello {$arr[fruit]}";    // Hello carrot
+    print "Hello {$arr['fruit']}";  // Hello apple
+    
+    + convert to array 
+    If an object is converted to an array, the result is an array whose elements are the object's properties.
+    
+    integer properties are unaccessible; private variables have the class name prepended to the variable name; protected variables have a '*' prepended to the variable name. These prepended values have null bytes on either side
+    class A {
+        private $A; // This will become '\0A\0A'
+    }
+
+    class B extends A {
+        private $A; // This will become '\0B\0A'
+        public $AA; // This will become 'AA'
+    }
+    
+    + change array element by pass reference 
+    foreach ($colors as &$color) {
+        $color = strtoupper($color);
+    }
+    unset($color); /* ensure that following writes to
+    $color will not modify the last array element */
+
+    + fill in items from a directory 
+    // fill an array with all items from a directory
+    $handle = opendir('.');
+    while (false !== ($file = readdir($handle))) {
+        $files[] = $file;
+    }
+    closedir($handle);
 - iterable 
+iterable is a pseudo-type introduced in php 7.1. it accepts any array or object implementing the traversable interface. be used with foreach and yield from within a generator 
+
+function foo(iterable $iterable) {
+    foreach ($iterable as $value) {
+        // ...
+    } 
+}
+
+    + iterable parameter 
+function foo(iterable $iterable = []) {
+    // ...
+}
+
+    + iterable return value 
+function bar(): iterable {
+    return [1, 2, 3];
+}
+
+    + generator 
+function gen(): iterable {
+    yield 1;
+    yield 2;
+    yield 3;
+}
+
+    + iterable type variable 
+interface Example {
+    public function method(array $array): iterable;
+}
+
+class ExampleImplementation implements Example {
+    public function method(iterable $iterable): array {
+        // Parameter broadened and return type narrowed.
+    }
+}
+
+- object 
+    + create a new object use the new statement to instantiate a class 
+class foo
+{
+    function do_foo()
+    {
+        echo "Doing foo."; 
+    }
+}
+
+$bar = new foo;
+$bar->do_foo();
+    + converting to object 
+    object -> object unchange 
+    other type -> object a new instance of the stdClass built-in class is created 
+    NULL -> object, new instance will be empty 
+    array -> object properties named by keys. numeric keys will be only accessible by iterated 
+    
+    $obj = (object) array('1' => 'foo');
+    var_dump(isset($obj->{'1'})); // outputs 'bool(false)'
+    var_dump(key($obj)); // outputs 'int(1)'
+    
+    + any other value a member value named scalar will contain the value 
+    $object = (object) 'ciao';
+    echo $object->scalar; //'ciao'
+    
 - resource 
-- null 
-- mixed
-- number 
-- callback aka callable 
-array|object 
-- void 
-- pseudo-variable $....
+a special variable, holding a reference to an external resource. get_resource_type() 
+    + converting to resource 
+    resource hold opened files, database connections, image canvas etc 
+    other type convert resource is not needed 
+    + auto free resource. persistent dabase links are an exception to this rule. they are not destroyed by the garbage collector. 
+- NULL 
+represent no value. NULL is the only possbile valueo f type null 
+    + value consider to be null 
+t has been assigned the constant NULL.
+
+it has not been set to any value yet.
+
+it has been unset().
+    + syntax 
+$var = NULL;   
+    + empty array is converted to null by non-strict equal '==' comparison. Use is_null() or '===' if there is possible of getting empty array.
+
+    $a = array(); 
+
+    $a == null  <== return true
+    $a === null <== return false 
+    is_null($a) <== return false 
+- callable, callbacks 
+callable type hint as of php5.4 not only could be a function but also could be a object 
+
+Some functions like call_user_func() or usort() accept user-defined callback functions as a parameter.
+
+A PHP function is passed by its name as a string. Any built-in or user-defined function can be used, except language constructs such as: array(), echo, empty(), eval(), exit(), isset(), list(), print or unset().
+
+A method of an instantiated object is passed as an array containing an object at index 0 and the method name at index 1. Accessing protected and private methods from within a class is allowed.
+
+Static class methods can also be passed without instantiating an object of that class by passing the class name instead of an object at index 0. or ClassName::methodName 5.3+
+
+use defined function and anonymous functions are also ok
+
+examples:
+<?php
+
+// An example callback function
+function my_callback_function() {
+    echo 'hello world!';
+}
+
+// An example callback method
+class MyClass {
+    static function myCallbackMethod() {
+        echo 'Hello World!';
+    }
+}
+
+// Type 1: Simple callback
+call_user_func('my_callback_function');
+
+// Type 2: Static class method call
+call_user_func(array('MyClass', 'myCallbackMethod'));
+
+// Type 3: Object method call
+$obj = new MyClass();
+call_user_func(array($obj, 'myCallbackMethod'));
+
+// Type 4: Static class method call (As of PHP 5.2.3)
+call_user_func('MyClass::myCallbackMethod');
+
+// Type 5: Relative static class method call (As of PHP 5.3.0)
+class A {
+    public static function who() {
+        echo "A\n";
+    }
+}
+
+class B extends A {
+    public static function who() {
+        echo "B\n";
+    }
+}
+
+call_user_func(array('B', 'parent::who')); // A
+
+// Type 6: Objects implementing __invoke can be used as callables (since PHP 5.3)
+class C {
+    public function __invoke($name) {
+        echo 'Hello ', $name, "\n";
+    }
+}
+
+$c = new C();
+call_user_func($c, 'PHP!');
+?>
+
+// Our closure
+$double = function($a) {
+    return $a * 2;
+};
+
+// This is our range of numbers
+$numbers = range(1, 5);
+
+// Use the closure as a callback here to
+// double the size of each element in our
+// range
+$new_numbers = array_map($double, $numbers);
+
+print implode(' ', $new_numbers);
+
+    + Callbacks registered with functions such as call_user_func() and call_user_func_array() will not be called if there is an uncaught exception thrown in a previous callback.
+    
+    + calling callbacks as variable 
+A note on differences when calling callbacks as "variable functions" without the use of call_user_func() (e.g. "<?php $callback = 'printf'; $callback('Hello World!') ?>"):
+
+    Using the name of a function as string has worked since at least 4.3.0
+    Calling anonymous functions and invokable objects has worked since 5.3.0
+    Using the array structure [$object, 'method'] has worked since 5.4.0
+- Pseudo-types and avraibles used in this document 
 - convert variable types 
-forcibly convert a variable to a certain type, either cast the variable or use the settype() function on it.
+    + mixed indicates that a parameter may accept multiple (but not necessarily all) types.
+    getype() accept all types 
+    str_replace() will accept strings and arrays 
+    
+    + number intecate integer or float 
+    + callback callable type 
+    + array|object indicates that a parameter can be either array or object
+    + void as a return type means that the return value is useless 
+    + $... in function prototypes means and so on. means take endless number of arguments 
+    
+- forcibly convert a variable to a certain type, either cast the variable or use the settype() function on it.
+- type juggling
+    + auto type converson in php variable name 
+    + auto type conversion * number to float 
+    + force type conversion with settype() function 
+    + type case is similar to C 
+    $foo = 10;
+    $bar = (boolean) $foo;
+
+(int), (integer) - cast to integer
+(bool), (boolean) - cast to boolean
+(float), (double), (real) - cast to float
+(string) - cast to string
+(array) - cast to array
+(object) - cast to object
+(unset) - cast to NULL (PHP 5)
+
+    + casting literal string to binary strings 
+$binary = (binary) $string;
+$binary = b"binary string";
+
+    + check string is numeric by 
+    is_numeric()
+    
+    + more type conversons check the details of the document 
+
+
+## Variables 
+- variable start with $, case-sensitive 
+- $this is a special variable that can't be assigned.
+- basics 
+    + By default, variables are always assigned by value.
+    + assign value by reference, prepend with an ampersand(&) to the beginning 
+$foo = 'Bob';              // Assign the value 'Bob' to $foo
+$bar = &$foo;              // Reference $foo via $bar.
+$bar = "My name is $bar";  // Alter $bar...
+echo $bar;
+echo $foo;                 // $foo is altered too.
+    + isset() language construct can be used to detect if a variable has been already initialized.
+    
+- predefined variables 
+Superglobals — Superglobals are built-in variables that are always available in all scopes
+$GLOBALS — References all variables available in global scope
+$_SERVER — Server and execution environment information
+$_GET — HTTP GET variables
+$_POST — HTTP POST variables
+$_FILES — HTTP File Upload variables
+$_REQUEST — HTTP Request variables
+$_SESSION — Session variables
+$_ENV — Environment variables
+$_COOKIE — HTTP Cookies
+$php_errormsg — The previous error message
+$HTTP_RAW_POST_DATA — Raw POST data
+$http_response_header — HTTP response headers
+$argc — The number of arguments passed to script
+$argv — Array of arguments passed to script
+
+    + $_SERVER['PHP_SELF'] can include arbitrary user input. The documentation should be updated to reflect this.
+    
+- variable scope, is the context within which it is defined 
+    + variable reference inside a function is by default limited to the local function scope 
+$a = 1; /* global scope */ 
+
+function test()
+{ 
+    echo $a; /* reference to local scope variable */ 
+} 
+
+    + global keyword
+$a = 1;
+$b = 2;
+
+function Sum()
+{
+    global $a, $b;
+
+    $b = $a + $b;
+} 
+
+second way to access global variale is use the $GLOBALS array 
+    + Notice how $GLOBALS exists in any scope, this is because $GLOBALS is a superglobal.
+    
+    + using static variables 
+    A static variable exists only in a local function scope, but it does not lose its value when program execution leaves this scope. 
+    
+    + references with global and static varialbes 
+    The Zend Engine 1, driving PHP 4, implements the static and global modifier for variables in terms of references. 
+    
+function test_global_ref() {
+    global $obj;
+    $obj = &new stdclass;
+}
+
+function test_global_noref() {
+    global $obj;
+    $obj = new stdclass;
+}
+
+test_global_ref();
+var_dump($obj);
+test_global_noref();
+var_dump($obj);
+    + output 
+
+NULL
+object(stdClass)(0) {
+}
+
+    + static statement, references are not stored statically 
+function &get_instance_ref() {
+    static $obj;
+
+    echo 'Static object: ';
+    var_dump($obj);
+    if (!isset($obj)) {
+        // Assign a reference to the static variable
+        $obj = &new stdclass;
+    }
+    $obj->property++;
+    return $obj;
+}
+
+function &get_instance_noref() {
+    static $obj;
+
+    echo 'Static object: ';
+    var_dump($obj);
+    if (!isset($obj)) {
+        // Assign the object to the static variable
+        $obj = new stdclass;
+    }
+    $obj->property++;
+    return $obj;
+}
+
+$obj1 = get_instance_ref();
+$still_obj1 = get_instance_ref();
+echo "\n";
+$obj2 = get_instance_noref();
+$still_obj2 = get_instance_noref();
+
+    + output 
+Static object: NULL
+Static object: NULL
+
+Static object: NULL
+Static object: object(stdClass)(1) {
+["property"]=>
+int(1)
+}
+
+    + static class method variable, these are class-methods. Having an object is just a collection of properties, the functions remain at the class. So if you declare a variable as static inside a function, it's static for the whole class and all of its instances, not for each object
+class sample_class
+{
+  public function func_having_static_var($x = NULL)
+  {
+    static $var = 0;
+    if ($x === NULL)
+    { return $var; }
+    $var = $x;
+  }
+}
+
+$a = new sample_class();
+$b = new sample_class();
+
+echo $a->func_having_static_var()."\n";
+echo $b->func_having_static_var()."\n";
+// this will output (as expected):
+//  0
+//  0
+
+$a->func_having_static_var(3);
+
+echo $a->func_having_static_var()."\n";
+echo $b->func_having_static_var()."\n";
+// this will output:
+//  3
+//  3
+// maybe you expected:
+//  3
+//  0
+    
+- variable variables 
+- variables from external sources 
+    
+# Security 
+- introduction 
+- general considerations 
+- installed as cgi binary 
+    + possible attacks
+    only public files served 
+    using cgi.force_redirect 
+    setting doc_root or user_dir 
+    php parser outside of web tree 
+- installed as an apache module 
+- session security 
+- file system security 
+null types related issues 
+
+- database security 
+    + designning databases 
+    + connecting to database 
+    + encrypted storage model 
+    + sql injection 
+- error reporting 
+- using register globals 
+- user submitted data 
+- magic quotes 
+    + what are magic quotes 
+    + why did we use magic quotes 
+    + why not to use magic quotes 
+    + disabling magic quotes 
+- hiding php 
+- keeping current 
+
+# Features 
+- http authentication with php 
+- cookies 
+- sessions 
+- dealing with xforms 
+- handling file uploads 
+    + post method uploads 
+    + error messages explained 
+    + common pitfalls 
+    + uploading multiple files 
+    + PUT method support 
+- using remote files 
+- connection handling 
+- persistent databse connections 
+- safe mode 
+    + security and safe mode 
+    + functions restricted/disabled by safe mode 
+- command line usage 
+    + introduction 
+    + differences t o other SAPIs
+    + options 
+    + usage 
+    + i/o streams 
+    + interactive shell 
+    + built-in web server 
+    + ini settings 
+- garbage collection 
+    + reference counting basiscs 
+    + collecting cycles 
+    + performance considerations 
+- dtrace dynamic tracing 
+    + introduction to php and dtrace 
+    + using php and dtrace 
+    + using systemTap with php dtrace static probes 
+
+
+## Function reference 
+- affecting php's behaviour
+ APC, alternative php cache 
+    
+APCu, apc user cache 
+
+APD, advanced php debugger 
+
+bcompiler, php byte code compiler 
+
+BLENC, blenc blowfish encoder for php source scripts 
+
+Error Handling, error handling and logging 
+
+htscanner, htaccess like support for all SAPIs 
+
+included, inclusion hierarchy viewer 
+
+Memtrack
+
+OPcache
+
+Output Control, output 
+
+Php options/info 
+
+runkit 
+
+scream, break the silence operator 
+
+uopz 
+
+Weakref, weak reference 
+
+WinCache, windows cache for php 
+
+Xhprof, hierarchical profiler 
+
+- Audio formats manipulation 
+ID3 — ID3 Tags
+KTaglib
+oggvorbis — OGG/Vorbis
+OpenAL — OpenAL Audio Bindings
+
+- authentication service 
+KADM5 — Kerberos V
+Radius
+
+- command line specific extensions 
+Ncurses — Ncurses Terminal Screen Control
+Newt
+Readline — GNU Readline
+
+- compression and archive extensions 
+Bzip2
+LZF
+Phar
+Rar — Rar Archiving
+Zip
+Zlib — Zlib Compression
+
+- credit card processing 
+MCVE — MCVE (Monetra) Payment
+
+- cryptograhy extensions 
+Crack — Cracklib
+CSPRNG
+Hash — HASH Message Digest Framework
+Mcrypt
+Mhash
+OpenSSL
+Password Hashing
+
+- database extensions 
+Abstraction Layers
+Vendor Specific Database Extensions
+
+- data and time related extensions 
+Calendar
+Date/Time — Date and Time
+HRTime — High resolution timing
+
+- file system related extensions 
+Direct IO
+Directories
+Fileinfo — File Information
+Filesystem
+Inotify
+Mimetype
+Proctitle
+xattr
+xdiff
+
+- human language and character encoding support 
+Enchant — Enchant spelling library
+FriBiDi
+Gender — Determine gender of firstnames
+Gettext
+iconv
+intl — Internationalization Functions
+Multibyte String
+Pspell
+Recode — GNU Recode
+
+- image processing and generation 
+Cairo
+Exif — Exchangeable image information
+GD — Image Processing and GD
+Gmagick
+ImageMagick — Image Processing (ImageMagick)
+
+- mail related  extensions 
+Cyrus — Cyrus IMAP administration
+IMAP — IMAP, POP3 and NNTP
+Mail
+Mailparse
+vpopmail
+
+- mathenmatical extensions 
+BC Math — BCMath Arbitrary Precision Mathematics
+GMP — GNU Multiple Precision
+Lapack
+Math — Mathematical Functions
+Statistics
+Trader — Technical Analysis for Traders
+
+- non-text mime output 
+FDF — Forms Data Format
+GnuPG — GNU Privacy Guard
+haru — Haru PDF
+Ming — Ming (flash)
+PDF
+PS — PostScript document creation
+RPM Reader — RPM Header Reading
+
+- process control extensions 
+Eio
+Ev
+Expect
+Libevent
+PCNTL — Process Control
+POSIX
+Program execution — System program execution
+pthreads
+Semaphore — Semaphore, Shared Memory and IPC
+Shared Memory
+Sync
+
+- other basic extensions 
+GeoIP — Geo IP Location
+FANN — FANN (Fast Artificial Neural Network)
+JSON — JavaScript Object Notation
+Judy — Judy Arrays
+Lua
+Misc. — Miscellaneous Functions
+Parsekit
+SPL — Standard PHP Library (SPL)
+SPL Types — SPL Type Handling
+Streams
+Tidy
+Tokenizer
+URLs
+V8js — V8 Javascript Engine Integration
+Yaml — YAML Data Serialization
+Yaf — Yet Another Framework
+Taint
+
+- other services 
+chdb — Constant hash database
+cURL — Client URL Library
+Event
+FAM — File Alteration Monitor
+FTP
+Gearman
+Gopher — Net Gopher
+Gupnp
+Hyperwave API
+LDAP — Lightweight Directory Access Protocol
+Memcache
+Memcached
+mqseries
+Network
+RRD — RRDtool
+SAM — Simple Asynchronous Messaging
+SNMP
+Sockets
+SSH2 — Secure Shell2
+Stomp — Stomp Client
+SVM — Support Vector Machine
+SVN — Subversion
+TCP — TCP Wrappers
+Varnish
+YAZ
+YP/NIS
+0MQ messaging — ZMQ
+ZooKeeper
+
+- search engine extensions 
+mnoGoSearch
+Solr — Apache Solr
+Sphinx — Sphinx Client
+Swish — Swish Indexing
+
+- server specific extensions 
+Apache
+FastCGI Process Manager
+IIS — IIS Administration
+NSAPI
+
+- sessions extensions 
+Msession — Mohawk Software Session Handler Functions
+Sessions — Session Handling
+Session PgSQL — PostgreSQL Session Save Handler
+
+- text processing 
+BBCode — Bulletin Board Code
+PCRE — Regular Expressions (Perl-Compatible)
+POSIX Regex — Regular Expression (POSIX Extended)
+ssdeep — ssdeep Fuzzy Hashing
+Strings
+
+- variable and type related extensions 
+Arrays
+Classes/Objects — Class/Object Information
+Classkit
+Ctype — Character type checking
+Data Structures
+Filter — Data Filtering
+Function Handling
+Quickhash
+Reflection
+Variable handling
+
+- web services 
+OAuth
+SCA
+SOAP
+Yar — Yet Another RPC Framework
+XML-RPC
+
+- window only extensions 
+COM — COM and .Net (Windows)
+win32ps
+win32service
+
+- xml manipulation 
+DOM — Document Object Model
+libxml
+SDO — Service Data Objects
+SDO-DAS-Relational — SDO Relational Data Access Service
+SDO DAS XML — SDO XML Data Access Service
+SimpleXML
+WDDX
+XMLDiff — XML diff and merge
+XML Parser
+XMLReader
+XMLWriter
+XSL
+
+- gui extension 
+UI 
+
+
+## Php at the core:  a hacker's guide 
+- reference 
+http://php.net/manual/en/internals2.php
+
+## Appendices 
+- reference 
+http://php.net/manual/en/appendices.php
+
+### Standard php library (SPL)
+- reference 
+http://php.net/manual/en/book.spl.php
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
