@@ -2322,9 +2322,524 @@ class BadTemplate implements iTemplate
     }
 }
 
+    + extend an interface 
+interface a
+{
+    public function foo();
+}
 
+interface b extends a
+{
+    const b = 'Interface constant';
+    public function baz(Baz $baz);
+}
+
+- traits
+    + A Trait is similar to a class, but only intended to group functionality in a fine-grained and consistent way
+    
+    + It is not possible to instantiate a Trait on its own. It is an addition to traditional inheritance and enables horizontal composition of behavior;
+    
+trait ezcReflectionReturnInfo {
+    function getReturnType() { /*1*/ }
+    function getReturnDescription() { /*2*/ }
+}
+
+class ezcReflectionMethod extends ReflectionMethod {
+    use ezcReflectionReturnInfo;
+    /* ... */
+}
+
+class ezcReflectionFunction extends ReflectionFunction {
+    use ezcReflectionReturnInfo;
+    /* ... */
+}
+
+    + The precedence order is that members from the current class override Trait methods, which in turn override inherited methods. 
+
+class Base {
+    public function sayHello() {
+        echo 'Hello ';
+    }
+}
+
+trait SayWorld {
+    public function sayHello() {
+        parent::sayHello();
+        echo 'World!';
+    }
+}
+
+class MyHelloWorld extends Base {
+    use SayWorld;
+}
+
+$o = new MyHelloWorld();
+$o->sayHello();
+?>  
+
+The above example will output:
+
+Hello World!
+
+    + Multiple Traits can be inserted into a class by listing them in the use statement, separated by commas. 
+
+    + Since this only allows one to exclude methods, the as operator can be used to add an alias to one of the methods. as also could be used to adjust visibility of a method 
+trait A {
+    public function smallTalk() {
+        echo 'a';
+    }
+    public function bigTalk() {
+        echo 'A';
+    }
+}
+
+trait B {
+    public function smallTalk() {
+        echo 'b';
+    }
+    public function bigTalk() {
+        echo 'B';
+    }
+}
+
+class Talker {
+    use A, B {
+        B::smallTalk insteadof A;
+        A::bigTalk insteadof B;
+    }
+}
+
+class Aliased_Talker {
+    use A, B {
+        B::smallTalk insteadof A;
+        A::bigTalk insteadof B;
+        B::bigTalk as private talk;
+    }
+}
+
+    + trait also could be composed together 
+    
+- anonymous classes 
+// Pre PHP 7 code
+class Logger
+{
+    public function log($msg)
+    {
+        echo $msg;
+    }
+}
+
+$util->setLogger(new Logger());
+
+// PHP 7+ code
+$util->setLogger(new class(10) extends SomeClass implements SomeInterface {
+    private $num;
+
+    public function __construct($num)
+    {
+        $this->num = $num;
+    }
+
+    use SomeTrait;
+});
+    
+    + Nesting an anonymous class within another class does not give it access to any private or protected methods or properties of that outer class
+    
+    + In order to use the outer class' protected properties or methods, the anonymous class can extend the outer class. 
+    
+    + To use private properties of the outer, they must passed throught its constructor 
+    
+
+function anonymous_class()
+{
+    return new class {};
+}
+
+if (get_class(anonymous_class()) === get_class(anonymous_class())) {
+    echo 'same class';
+} else {
+    echo 'different class';
+}  
+
+The above example will output:
+
+same class
+
+- overloading
+    + Overloading in PHP provides means to dynamically "create" properties and methods.
+    + All overloading methods must be defined as public. 
+    + None of the arguments of these magic methods can be passed by reference. 
+    + multiple methods with the same name but different quantities and type of arguments 
+    
+    + property overloading 
+public void __set ( string $name , mixed $value ), is run when writing data to inaccessible properties. 
+
+public mixed __get ( string $name ), is utilized for reading data from inaccessible properties. 
+
+public bool __isset ( string $name ),  is triggered by calling isset() or empty() on inaccessible properties. 
+
+public void __unset ( string $name ), is invoked when unset() is used on inaccessible properties. 
+
+    + method overloading 
+public mixed __call ( string $name , array $arguments ), is triggered when invoking inaccessible methods in an object context. 
+
+public static mixed __callStatic ( string $name , array $arguments ), is triggered when invoking inaccessible methods in a static context. 
+
+- object iteration, provides a way for objects to be defined so it is possible to iterate through a list of items
+    + default object iteration 
+class MyClass
+{
+    public $var1 = 'value 1';
+    public $var2 = 'value 2';
+    public $var3 = 'value 3';
+
+    protected $protected = 'protected var';
+    private   $private   = 'private var';
+
+    function iterateVisible() {
+       echo "MyClass::iterateVisible:\n";
+       foreach ($this as $key => $value) {
+           print "$key => $value\n";
+       }
+    }
+}
+
+$class = new MyClass();
+
+foreach($class as $key => $value) {
+    print "$key => $value\n";
+}
+echo "\n";
+
+$class->iterateVisible();
+
+The above example will output:
+
+var1 => value 1
+var2 => value 2
+var3 => value 3
+
+MyClass::iterateVisible:
+var1 => value 1
+var2 => value 2
+var3 => value 3
+protected => protected var
+private => private var
+
+
+    + the Iterator interface may be implemented. This allows the object to dictate how it will be iterated and what values will be available on each iteration. 
+    
+class MyIterator implements Iterator
+{
+    private $var = array();
+
+    public function __construct($array)
+    {
+        if (is_array($array)) {
+            $this->var = $array;
+        }
+    }
+
+    public function rewind()
+    {
+        echo "rewinding\n";
+        reset($this->var);
+    }
+  
+    public function current()
+    {
+        $var = current($this->var);
+        echo "current: $var\n";
+        return $var;
+    }
+  
+    public function key() 
+    {
+        $var = key($this->var);
+        echo "key: $var\n";
+        return $var;
+    }
+  
+    public function next() 
+    {
+        $var = next($this->var);
+        echo "next: $var\n";
+        return $var;
+    }
+  
+    public function valid()
+    {
+        $key = key($this->var);
+        $var = ($key !== NULL && $key !== FALSE);
+        echo "valid: $var\n";
+        return $var;
+    }
+
+}
+
+$values = array(1,2,3);
+$it = new MyIterator($values);
+
+foreach ($it as $a => $b) {
+    print "$a: $b\n";
+}    
+    
+    + IteratorAggregate only requires the implementation of a single method
+class MyCollection implements IteratorAggregate
+{
+    private $items = array();
+    private $count = 0;
+
+    // Required definition of interface IteratorAggregate
+    public function getIterator() {
+        return new MyIterator($this->items);
+    }
+
+    public function add($value) {
+        $this->items[$this->count++] = $value;
+    }
+}
+
+$coll = new MyCollection();
+$coll->add('value 1');
+$coll->add('value 2');
+$coll->add('value 3');
+    
+foreach ($coll as $key => $val) {
+    echo "key/value: [$key -> $val]\n\n";
+}
+    
+- magic methods, The function names __construct(), __destruct(), __call(), __callStatic(), __get(), __set(), __isset(), __unset(), __sleep(), __wakeup(), __toString(), __invoke(), __set_state(), __clone() and __debugInfo() are magical in PHP classes. 
+    
+__sleep() and __wakeup() 
+
+serialize() checks if your class has a function with the magic name __sleep(). 
+    
+    + If the method doesn't return anything then NULL is serialized and E_NOTICE is issued
+    
+    + The intended use of __sleep() is to commit pending data or perform similar cleanup tasks. Also if you have large objects do not need to be saved completely
+    
+    + The intended use of __wakeup() is to reestablish any database connections 
+    
+class Connection
+{
+    protected $link;
+    private $dsn, $username, $password;
+    
+    public function __construct($dsn, $username, $password)
+    {
+        $this->dsn = $dsn;
+        $this->username = $username;
+        $this->password = $password;
+        $this->connect();
+    }
+    
+    private function connect()
+    {
+        $this->link = new PDO($this->dsn, $this->username, $this->password);
+    }
+    
+    public function __sleep()
+    {
+        return array('dsn', 'username', 'password');
+    }
+    
+    public function __wakeup()
+    {
+        $this->connect();
+    }
+}
+    
+    + The __toString() method allows a class to decide how it will react when it is treated like a string.
+    
+    + The __invoke() method is called when a script tries to call an object as a function. 
+    
+    + static object __set_state ( array $properties )
+
+    This static method is called for classes exported by var_export() since PHP 5.1.0. 
+
+    + array __debugInfo ( void )
+
+    This method is called by var_dump() when dumping an object to get the properties that should be shown
+
+- final keyword , which prevents child classes from overriding a method by prefixing the definition with final.
+    
+class BaseClass {
+   public function test() {
+       echo "BaseClass::test() called\n";
+   }
+   
+   final public function moreTesting() {
+       echo "BaseClass::moreTesting() called\n";
+   }
+}
+
+class ChildClass extends BaseClass {
+   // fatal error 
+   public function moreTesting() {
+       echo "ChildClass::moreTesting() called\n";
+   }
+}
+
+    + any class can not inherit from final class 
+    
+- object cloning 
+    + An object copy is created by using the clone keyword, perform a shallow copy of all of the object's properties.
+    + An object's __clone() method cannot be called directly. 
+$copy_of_object = clone $object;
+
+    + PHP 7.0.0 introduced the possibility to access a member of a freshly cloned object in a single expression: 
+$dateTime = new DateTime();
+echo (clone $dateTime)->format('Y');
+
+- Comparing objects 
+    + When using the comparison operator (==), object variables are compared in a simple manner, namely
+    + When using the identity operator (===), object variables are identical if and only if they refer to the same instance of the same class.
+
+- Late static bindings 
+    + static bindings which can be used to reference the called class in a context of static inheritance. 
+    
+    + A "forwarding call" is a static one that is introduced by self::, parent::, static::, or, if going up in the class hierarchy, forward_static_call(). The function get_called_class() can be used to retrieve a string with the name of the called class and static:: introduces its scope. 
+    
+    + This feature was named "late static bindings" with an internal perspective in mind. "Late binding" comes from the fact that static:: will not be resolved using the class where the method is defined but it will rather be computed using runtime information. 
+    
+    + Static references to the current class like self:: or __CLASS__ are resolved using the class
+class A {
+    public static function who() {
+        echo __CLASS__;
+    }
+    public static function test() {
+        self::who();
+    }
+}
+
+class B extends A {
+    public static function who() {
+        echo __CLASS__;
+    }
+}
+
+B::test();
+
+    + usage in a non-static context, call non-static method in static way. In non-static contexts, the called class will be the class of the object instance. Since $this-> will try to call private methods from the same scope, using static:: may give different results
+
+class A {
+    private function foo() {
+        echo "success!\n";
+    }
+    public function test() {
+        $this->foo();
+        static::foo();
+    }
+}
+
+class B extends A {
+   /* foo() will be copied to B, hence its scope will still be A and
+    * the call be successful */
+}
+
+class C extends A {
+    private function foo() {
+        /* original method is replaced; the scope of the new one is C */
+    }
+}
+
+$b = new B();
+$b->test();
+$c = new C();
+$c->test();   //fails
+?>  
+
+The above example will output:
+
+success!
+success!
+success!
+
+Fatal error:  Call to private method C::foo() from context 'A'
+
+    + forwarding and non-forwarding calls 
+class A {
+    public static function foo() {
+        static::who();
+    }
+
+    public static function who() {
+        echo __CLASS__."\n";
+    }
+}
+
+class B extends A {
+    public static function test() {
+        A::foo();
+        parent::foo();
+        self::foo();
+    }
+
+    public static function who() {
+        echo __CLASS__."\n";
+    }
+}
+class C extends B {
+    public static function who() {
+        echo __CLASS__."\n";
+    }
+}
+
+C::test();
+
+- objects and references 
+    + When an object is sent by argument, returned or assigned to another variable, the different variables are not aliases: they hold a copy of the identifier, which points to the same object. Same as python 
+    
+- object serialization, serialize() returns a string containing a byte-stream representation of any value that can be stored in PHP. unserialize() can use this string to recreate the original variable values.
+
+    + If an application is using sessions and uses session_register() to register objects, these objects are serialized automatically at the end of each PHP page
+    
+    unserialized automatically on each of the following pages, the session_register() is removed since PHP 5.4.0. 
+    
+    + Beyond the above advice, note that you can also hook into the serialization and unserialization events on an object using the __sleep() and __wakeup() methods. 
+  
 
 # Namespace 
+- broadest definition namespaces are a way of encapsulating items
+- namespace design to solve two problems 
+    + name collisons 
+    + ability to alias Extra_Long_Names designed to alleviate the first problem 
+    
+namespace my\name; // see "Defining Namespaces" section
+
+class MyClass {}
+function myfunction() {}
+const MYCONST = 1;
+
+$a = new MyClass;
+$c = new \my\name\MyClass; // see "Global Space" section
+
+$a = strlen('hi'); // see "Using namespaces: fallback to global
+                   // function/constant" section
+
+$d = namespace\MYCONST; // see "namespace operator and __NAMESPACE__
+                        // constant" section
+$d = __NAMESPACE__ . '\MYCONST';
+echo constant($d); // see "Namespaces and dynamic language features" section
+
+- define 
+    + only the following types of code are affected by namespaces: classes (including abstracts and traits), interfaces, functions and constants. 
+namespace MyProject;
+
+const CONNECT_OK = 1;
+class Connection { /* ... */ }
+function connect() { /* ... */ }
+
+    + The only code construct allowed before a namespace declaration is the declare statement
+<html>
+<?php
+namespace MyProject; // fatal error - namespace must be the first statement in the script
+?> 
+
+- declaring sub-namespaces 
+
+
 # Errors 
 # Exceptions 
 # Generators 
