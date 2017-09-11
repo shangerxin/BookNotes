@@ -2838,13 +2838,379 @@ namespace MyProject; // fatal error - namespace must be the first statement in t
 ?> 
 
 - declaring sub-namespaces 
+namespace MyProject\Sub\Level;
 
+const CONNECT_OK = 1;
+class Connection { /* ... */ }
+function connect() { /* ... */  }
 
+- defining multiple namespaces in the same file, this is strongly discouraged 
+namespace MyProject {
+
+const CONNECT_OK = 1;
+class Connection { /* ... */ }
+function connect() { /* ... */  }
+}
+
+namespace AnotherProject {
+
+const CONNECT_OK = 1;
+class Connection { /* ... */ }
+function connect() { /* ... */  }
+}
+
+namespace { // global code
+session_start();
+$a = MyProject\connect();
+echo MyProject\Connection::start();
+}
+
+- using namespace, three kinds of aliasing or importing: aliasing a class name, aliasing an interface name, and aliasing a namespace name
+
+namespace foo;
+use My\Full\Classname as Another;
+
+// this is the same as use My\Full\NSname as NSname
+use My\Full\NSname;
+
+// importing a global class
+use ArrayObject;
+
+// importing a function (PHP 5.6+)
+use function My\Full\functionName;
+
+// aliasing a function (PHP 5.6+)
+use function My\Full\functionName as func;
+
+// importing a constant (PHP 5.6+)
+use const My\Full\CONSTANT;
+    
+$obj = new namespace\Another; // instantiates object of class foo\Another
+$obj = new Another; // instantiates object of class My\Full\Classname
+
+    + The use keyword must be declared in the outermost scope
+
+- global space, Without any namespace definition, all class and function definitions are placed into the global space
+
+- using namespaces: fallback to global function/constant
+
+namespace A\B\C;
+class Exception extends \Exception {}
+
+$a = new Exception('hi'); // $a is an object of class A\B\C\Exception
+$b = new \Exception('hi'); // $b is an object of class Exception
+
+- namespace resolution rules 
+    + unqualified name , such as Foo 
+    + qualified name  Foo\Bar 
+    + fully qualified name \Foo\Bar or \Foo 
+    + relative name, identifier starting with namespace, namespace\Foo\Bar 
+    
+- FAQ 
+    
+    
 # Errors 
-# Exceptions 
+- Every error that PHP generates includes a predefined error type 
+    + In a development environment, you should always set error_reporting to E_ALL 
+    + In production, you may wish to set this to a less verbose level such as E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED
+    
+    + what php does with error depends on two further php.ini directives. display_errors controls whether the error is shown as part of the script's output. Disable in production 
+    
+    + log errors when the log_errors directive is enabled
+    + control error handling.  If PHP's default error handling is inadequate, you can also handle many types of error with your own custom error handler by installing it with set_error_handler()
+    
+- Errors in PHP7, most errors are now reported by throwing Error exceptions. Error exceptions will bubble up until they reach the first matching catch block. If there are no matching blocks, then any default exception handler installed with set_exception_handler() will be called
+
+As the Error hierarchy does not inherit from Exception, code that uses catch (Exception $e) { ... } blocks to handle uncaught exceptions in PHP 5 will find that these Errors are not caught by these blocks
+
+    + Error hierarchy 
+Throwable 
+    \Error 
+        \ArithemeticError
+            \DivisionByZeroError 
+        \AssertionError 
+        \ParseError 
+        \TypeError 
+    \Exception 
+        ...
+        
+- Extending Exceptions, user defined exception class can be defined by extending the built-in exception class 
+class Exception
+{
+    protected $message = 'Unknown exception';   // exception message
+    private   $string;                          // __toString cache
+    protected $code = 0;                        // user defined exception code
+    protected $file;                            // source filename of exception
+    protected $line;                            // source line of exception
+    private   $trace;                           // backtrace
+    private   $previous;                        // previous exception if nested exception
+
+    public function __construct($message = null, $code = 0, Exception $previous = null);
+
+    final private function __clone();           // Inhibits cloning of exceptions.
+
+    final public  function getMessage();        // message of exception
+    final public  function getCode();           // code of exception
+    final public  function getFile();           // source filename
+    final public  function getLine();           // source line
+    final public  function getTrace();          // an array of the backtrace()
+    final public  function getPrevious();       // previous exception
+    final public  function getTraceAsString();  // formatted string of trace
+
+    // Overrideable
+    public function __toString();               // formatted string for display
+}
+
+/**
+ * Define a custom exception class
+ */
+class MyException extends Exception
+{
+    // Redefine the exception so message isn't optional
+    public function __construct($message, $code = 0, Exception $previous = null) {
+        // some code
+    
+        // make sure everything is assigned properly
+        parent::__construct($message, $code, $previous);
+    }
+
+    // custom string representation of object
+    public function __toString() {
+        return __CLASS__ . ": [{$this->code}]: {$this->message}\n";
+    }
+
+    public function customFunction() {
+        echo "A custom function for this type of exception\n";
+    }
+}
+
+//use exception 
+try {
+    $o = new TestException(TestException::THROW_CUSTOM);
+} catch (MyException $e) {      // Will be caught
+    echo "Caught my exception\n", $e;
+    $e->customFunction();
+} catch (Exception $e) {        // Skipped
+    echo "Caught Default Exception\n", $e;
+}
+    
+
 # Generators 
+- reduce memory and works with foreach 
+function xrange($start, $limit, $step = 1) {
+    if ($start < $limit) {
+        if ($step <= 0) {
+            throw new LogicException('Step must be +ve');
+        }
+
+        for ($i = $start; $i <= $limit; $i += $step) {
+            yield $i;
+        }
+    } else {
+        if ($step >= 0) {
+            throw new LogicException('Step must be -ve');
+        }
+
+        for ($i = $start; $i >= $limit; $i += $step) {
+            yield $i;
+        }
+    }
+}
+
+foreach (xrange(1, 9, 2) as $number) {
+    echo "$number ";
+}
+
+- Generator syntax
+    + yield statement 
+    + PHP 7.0, a generator can return values, which can be retrieved using Generator::getReturn(). 
+    
+function gen_one_to_three() {
+    for ($i = 1; $i <= 3; $i++) {
+        // Note that $i is preserved between yields.
+        yield $i;
+    }
+}
+
+$generator = gen_one_to_three();
+foreach ($generator as $value) {
+    echo "$value\n";
+}
+
+    + difference between php5 and php7 
+$data = (yield $value); 
+But this is not, and will result in a parse error in PHP 5: 
+
+$data = yield $value; 
+The parenthetical restrictions do not apply in PHP 7. 
+
+    + The syntax for yielding a key/value pair is very similar to that used to define an associative array
+
+$input = <<<'EOF'
+1;PHP;Likes dollar signs
+2;Python;Likes whitespace
+3;Ruby;Likes blocks
+EOF;
+
+function input_parser($input) {
+    foreach (explode("\n", $input) as $line) {
+        $fields = explode(';', $line);
+        $id = array_shift($fields);
+
+        yield $id => $fields;
+    }
+}
+
+foreach (input_parser($input) as $id => $fields) {
+    echo "$id:\n";
+    echo "    $fields[0]\n";
+    echo "    $fields[1]\n";
+}
+
+    + Yield can be called without an argument to yield a NULL 
+
+function gen_three_nulls() {
+    foreach (range(1, 3) as $i) {
+        yield;
+    }
+}
+
+var_dump(iterator_to_array(gen_three_nulls()));
+?>  
+
+The above example will output:
+array(3) {
+  [0]=>
+  NULL
+  [1]=>
+  NULL
+  [2]=>
+  NULL
+}
+
+    + yield by reference 
+function &gen_reference() {
+    $value = 3;
+
+    while ($value > 0) {
+        yield $value;
+    }
+}
+
+/*
+ * Note that we can change $number within the loop, and
+ * because the generator is yielding references, $value
+ * within gen_reference() changes.
+ */
+foreach (gen_reference() as &$number) {
+    echo (--$number).'... ';
+}
+
+    + In PHP 7, generator delegation allows you to yield values from another generator. Traversable object, or array by using the yield from keyword. The outer generator will then yield all values from the inner generator, object
+
+function from() {
+    yield 1; // key 0
+    yield 2; // key 1
+    yield 3; // key 2
+}
+function gen() {
+    yield 0; // key 0
+    yield from from(); // keys 0-2
+    yield 4; // key 1
+}
+// pass 
+
+- comparing generators with iterator objects 
+    + The primary advantage of generators is their simplicity. Much less boilerplate code has to be written compared to implementing an Iterator class
+    
+    + This also means that the same generator can't be iterated over multiple times: the generator will need to be rebuilt by calling the generator function again. 
+
 # Reference explained 
+- same variable content by different names, not equal to c pointer. cannot perform pointer arithemetic etc 
+
+The closest analogy is with Unix filenames and files - variable names are directory entries, while variable content is the file itself
+
+- what references do, using references: assigning by reference, passing by reference, and returning by reference. This section will give an introduction to these operations
+
+    + reference global inside function 
+$var1 = "Example variable";
+$var2 = "";
+
+function global_references($use_globals)
+{
+    global $var1, $var2;
+    if (!$use_globals) {
+        $var2 =& $var1; // visible only inside the function
+    } else {
+        $GLOBALS["var2"] =& $var1; // visible also in global context
+    }
+}
+
+global_references(false);
+
+    + pass by reference 
+function foo(&$var)
+{
+    $var++;
+}
+
+$a=5;
+foo($a);
+    + return reference 
+function &bar()
+{
+    $a = 5;
+    return $a;
+}
+
+    + return references, to use return by reference must use reference assignment 
+class foo {
+    public $value = 42;
+
+    public function &getValue() {
+        return $this->value;
+    }
+}
+
+$obj = new foo;
+$myValue = &$obj->getValue(); // $myValue is a reference to $obj->value, which is 42.
+
+- unsetting reference 
+unset($a);
+
+- spotting reference, declare a variable as global $var equal to 
+<?php
+$var =& $GLOBALS["var"];
+?> 
+
+    + $this is always a reference to the caller object 
+    
+
 # Predefined variables 
+- superglobals, built-in variables that are always available 
+$GLOBALS, all variable in global 
+
+$_SERVER, an array containing information such as headers, paths, and script locations. The entries in this array are created by the web server.
+
+$_GET
+
+$_POST
+
+$_FILES
+
+$_COOKIE
+
+$_SESSION
+
+$_REQUEST
+
+$_ENV
+
+- cgi specification 
+http://www.faqs.org/rfcs/rfc3875.html
+
+
+
 # Predefined exceptions 
 # Predefined interfaces and classes 
 # Context options and parameters 

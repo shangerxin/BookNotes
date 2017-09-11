@@ -509,14 +509,239 @@ prog3 : prog3.o sort.o utils.o
     
     + When one phony target is a prerequisite of another, it serves as a subroutine of the other.
     
-- rules without recipes or prerequisite
+- rules without recipes or prerequisite, If a rule has no prerequisites or recipe, and the target of the rule is a nonexistent file, then make imagines this target to have been updated whenever its rule is run. All targets depending on this one will always have their recipe run. 
+
+clean: FORCE
+    rm $(objects)
+FORCE:
+
+it's equal to use ‘.PHONY: clean’. Using ‘.PHONY’ is more explicit and more efficient. However, other versions of make do not support ‘.PHONY’; thus ‘FORCE’ appears in many makefiles.
+
+- empty target files to record events; its used to hold recipes for an action, this target file can really exist but the content of the file do not matter. The purpose is to record its last-modification time when the rule's recipe was last executed 
+
+print: foo.c bar.c
+    lpr -p $?
+    touch print
+
+- special built-in target names 
+.PHONY, the prerequisite of the special target 
+
+.SUFFIXES, The prerequisites of the special target .SUFFIXES are the list of suffixes to be
+used in checking for suffix rules.
+
+.DEFAULT, the recipe sepcified for .DEFAULT is used for any target for which no rules are found 
+
+.PRECIOUS, The targets which .PRECIOUS depends on are given the following special treatment: if make is killed or interrupted during the execution of their recipes, the target is not deleted.
+
+.INTERMEDIATE, The targets which .INTERMEDIATE depends on are treated as intermediate files.
+
+. SECONDARY, The targets which .SECONDARY depends on are treated as intermediate files,
+except that they are never automatically deleted.
+
+.SECONDEXPANSION, is mentioned as a target anywhere in the makefile, then all prerequesite lists defined after it appears will be expanded a second time after all makefiles read in 
+
+.DELETE_ON_ERROR, anywhere in makefile
+
+.IGNORE, make will ignore errors 
+
+.LOW_RESOLUTION_TIME, make assumes that these files are created by commands that generate low resolution time stamps. such as 'cp -p' to prevent target be mistakenly conclude out of date 
+
+.SILENT, this is a historical switch use make -s or --silent in the future 
+
+.EXPORT_ALL_VARIABLES, mentioned as target tell make export variables to child process by default 
+
+.NOTPARALLEL, no parallel run for this target 
+
+.ONESHEL, all lines of the recipe will be given to a single invocation of the shell rather than each line
+being invoked separately
+
+.POSIX, makefile will be parsed and run
+in POSIX-conforming mode.. recipe will be invoked as the shell had been passed the -e flag 
+
+- multiple targets in a rule, A rule with multiple targets is equivalent to writing many rules each with one target. 
+    + you want just prerequesite no recipe 
+    kbd.o command.o files.o: command.h
     
+    + similar recipes work for all targets. The recipes do not need to be absolutely identical, since automtic '$@' can be used to substitute the particular target  
+
+    bigoutput littleoutput : text.g
+        generate text.g -$(subst output,,$@) > $@
+        
+    equal to 
     
+    bigoutput : text.g
+        generate text.g -big > bigoutput
+    littleoutput : text.g
+        generate text.g -little > littleoutput
+
+- multple rules for one target 
+    + one file can be the target of several rules. all the prerequisites mentioned in all the rules are merged into one list of prerequisites for the target 
     
+objects = foo.o bar.o
+foo.o : defs.h
+bar.o : defs.h test.h
+$(objects) : config.h
+
+- static pattern rules 
+    + syntax of static pattern rules 
+    
+    targets ...: target-pattern: prereq-patterns ...
+        recipe
+        ...
+
+    the target-pattern and prereq-patterns say how to compute the prerequisites of each target 
+    
+    each target is matched against the target pattern to extract a part of the target name called the stem 
+    
+    each pattern normally contains the character '%' just once, the prerequisite names for each target are made by substituting the stem for the '%' in each prerequisite. 
+
+    '%' characters in pattern rules can be quoted with preceding backslash('\'). backslashes could be quoted more backslashes. 
+    
+    objects = foo.o bar.o
+    all: $(objects)
+    $(objects): %.o: %.c
+        $(CC) -c $(CFLAGS) $< -o $@
+    
+    Here ‘$<’ is the automatic variable that holds the name of the prerequisite and ‘$@’ is the automatic variable that holds the name of the target
+
+    + use filter to filter out the files do not want to be match by the target-pattern to prevent warning message 
+    
+files = foo.elc bar.o lose.o
+$(filter %.o,$(files)): %.o: %.c
+    $(CC) -c $(CFLAGS) $< -o $@
+$(filter %.elc,$(files)): %.elc: %.el
+    emacs -f batch-byte-compile $<
+
+- static pattern rules versus implicit rules 
+    + An implicit rule can apply to any target that matches its pattern, if multiple implicit rules matched only one applies. it depends on the order 
+    
+    + By contrast, a static pattern rule applies to the precise list of targets that you specify in the rule. It cannot apply to any other target and it invariably does apply to each of the targets specified. Multiple matched will trigger a error 
+    
+    + static pattern can be bettern than implicit rule for these reasons 
+    
+        * You may wish to override the usual implicit rule for a few files whose names cannot be categorized syntactically but can be given in an explicit list.
+        
+        * static rules make no uncertainty 
+        
+- double-colon rules, written with :: instead of : after the target name 
+    
+    + When a target appears in multiple rules, all the rules must be the same type: all ordinary, or all double-colon. 
+    
+    + double-colon, each of them is independent of the others, Double-colon rules with the same target are in fact completely separate from one another. 
+    
+    + each rule with double-colon should independent with each other 
+    
+- generating prerequisites automatcially
+    + write often say only that some object file depends on some header file.
+    main.o: defs.h
+    
+    + To avoid this hassle, most modern C compilers can write these rules for you, by looking at the #include lines in the source files. with -M option to the compiler 
+    cc -M main.c 
+    
+    + The practice we recommend for automatic prerequisite generation is to have one makefile corresponding to each source file. For each source file name.c there is a makefile name.d which lists what files the object file name.o depends on.
+    
+        * example:
+%.d: %.c
+    @set -e; rm -f $@; \
+    $(CC) -M $(CPPFLAGS) $< > $@.$$$$; \
+    sed ’s,\($*\)\.o[ :]*,\1.o $@ : ,g’ < $@.$$$$ > $@; \
+    rm -f $@.$$$$
+    
+    the -e flag to the shell causes it to exit immediately if $(CC) fails 
+    
+    + Once you’ve defined the rule to remake the ‘.d’ files, you then use the include directive to read them all in.
+    sources = foo.c bar.c 
+    include $(sources:.c=.d)
     
 
+# Writing recipes in rules 
+- recipes in makefiles are always interpreted by /bin/sh 
 
+- recipe syntax 
+    + make syntax 
+    + shell syntax, make will do a preprocessing before handling to shell 
+    
+    + each line in recipe must start with a tab(.RECIPEPREFIX)
+        * A blank line that begins with a tab is not blank. it's a empty recipe 
+        * comment in recipe will be passed to shell 
+        * any thing indent with tab in recipe context will consider as a recipe 
+        
+- splitting recipe lines with backslash \, each single line will be invoked a shell to run it 
 
+the .RECIPEPREFIX character will be removed before pass to shell 
+
+    + pass script content as recipe, suggest to use make variable 
+    
+- using variables in recipes, never rebuild target will not trigger variable expansion 
+
+    + quoting rules, want a dollar sign appear in recipe then use double dollar $$ 
+    
+LIST = one two three
+all:
+    for i in $(LIST); do \
+    echo $$i; \
+    done
+    
+commands pass to shell
+
+for i in one two three; do \
+    echo $i; \
+done
+    
+- recipe echoing, a line start with '@' the echoing of that line is suppressed 
+@echo About to make distribution files
+
+when make is given -n or --just-print, in this case the '@' line will be printed too 
+
+flags -s or --silent flag to make prevents all echoing 
+
+- recipe execution, in single shell .ONESHELL special target is in effect
+
+- using one shell 
+    + If .ONESHELL is provided, then only the first line of the recipe will be checked for the special prefix characters (‘@’, ‘-’, and ‘+’). Subsequent lines will include the special characters in the recipe line when the SHELL is invoked.
+    
+.ONESHELL:
+SHELL = /usr/bin/perl
+.SHELLFLAGS = -e
+show :
+    # Make sure "@" is not the first character on the first line
+    @f = qw(a b c);
+    print "@f\n";
+
+- choose the shell 
+    + The argument(s) passed to the shell are taken from the variable .SHELLFLAGS. default is -c, or -ec in POSIX conforming mode 
+    
+- choosing a shell in dos and windows 
+    + SHELL is not set then COMSPEC is used instead 
+    + search current directory, default for /bin/sh 
+    + search path 
+- parallel execution 
+    + default make will execute each recipe one by one 
+    + However, the ‘-j’ or ‘--jobs’ option tells make to execute many recipes simultaneously.
+    + .NOTPARALLEL pseudo-target
+    + recipe failed normally make will ignore the remain recipe lines. with option -k or --keep-going then make will wait for the child process running 
+    
+    + use -l to tell make limit the number of parallel jobs or --max-load 
+    
+- output during parallel execution, use --output-sync to make. there are four level 
+none 
+line 
+target 
+recurse 
+
+- input during parallel execution two processes cannot bot take input from same device. 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 
