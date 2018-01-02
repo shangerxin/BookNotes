@@ -1,0 +1,348 @@
+Git Magic;Note=Erxin
+
+# Reference 
+- index 
+http://www-cs-students.stanford.edu/~blynn/gitmagic/index.html
+
+- chinese version
+http://www-cs-students.stanford.edu/~blynn/gitmagic/intl/zh_cn/
+
+
+# Basic 
+- init and save 
+$ git init
+$ git add .
+$ git commit -m "My first backup"
+
+- add, delete rename 
+$ git add readme.txt Documentation
+Similarly, if you want Git to forget about certain files:
+
+$ git rm kludge.h obsolete.c
+$ git rm -r incriminating/evidence/
+
+move equal remove the old name and adding the new name 
+$ git mv bug.c feature.c
+
+- advanced undo/redo 
+$ git log 
+
+restore to a commit 
+$ git reset --hard 766f
+
+$ git checkout changeset/branch_name 
+
+$ git checkout changeset [file lists]
+
+check git commit state 
+$ git commit -a 
+
+switch to a perticular state 5th-last saved state 
+$ git checkout master~5
+
+- reverting, undo a specific commit 
+
+$ git commit -a
+$ git revert 1b6d
+
+- download files 
+$ git clone git_repo_uri 
+
+- bleeding edge, update to the latest repo 
+$ git pull 
+
+- check difference 
+$ git diff 
+
+compare with yesterday 
+$ git diff "@{yesterday}" 
+
+the output is a patch which could be applied with git apply also 
+
+$ git whatchanged --since="2 weeks ago"
+
+- ui interface 
+qgit, https://sourceforge.net/projects/qgit/
+
+$ gitk 
+
+text interface 
+$ tig 
+
+- git diff a b | git apply 
+
+
+# Cloning around 
+- sync
+second copy of the files and Git repository. From now on,
+
+$ git commit -a
+$ git pull other.computer:/path/to/files HEAD
+
+- initialize a bare repository 
+$ mkdir proj.git
+$ cd proj.git
+$ git --bare init
+$ touch proj.git/git-daemon-export-ok
+Start the Git daemon if necessary:
+
+$ git daemon --detach  # it may already be running
+For Git hosting services, follow the instructions to setup the initially empty Git repository. Typically one fills in a form on a webpage.
+
+- Mercurial is a similar version control system that can almost seamlessly work in tandem with git. Use hg-git extension to directly communicate with git 
+
+hg-fast-export.sh script, available from:
+
+$ git clone git://repo.or.cz/fast-export.git
+To convert, in an empty directory:
+
+$ git init
+$ hg-fast-export.sh -r /hg/repo
+
+- Bazaar, We briefly mention Bazaar because it is the most popular free distributed version control system after Git and Mercurial.
+
+
+# Branch wizardry 
+- merging 
+You may omit the number for the first parent. For example, to show the differences with the first parent:
+
+$ git diff HEAD^
+You can combine this notation with other types. For example:
+
+$ git checkout 1b6d^^2~10 -b ancient
+starts a new branch “ancient” representing the state 10 commits back from the second parent of the first parent of the commit starting with 1b6d.
+
+- merge 
+$ git checkout master  # Go back to Part I.
+$ fix_problem
+$ git commit -a        # Commit the fixes.
+$ git checkout part2   # Go back to Part II.
+$ git merge master     # Merge in those fixes.
+
+
+# Lessons of history 
+- type a different comment 
+Did you just commit, but wish you had typed a different message? Then run:
+
+$ git commit --amend
+
+- rebase 
+$ git rebase -i changeset 
+
+pick 5c6eb73 Added repo.or.cz link
+pick a311a64 Reordered analogies in "Work How You Want"
+pick 100834f Added push target to Makefile
+
+Replace pick with:
+edit to mark a commit for amending.
+reword to change the log message.
+squash to merge a commit with the previous one.
+fixup to merge a commit with the previous one and discard the log message.
+
+marked a commit with edit, Git returns you to the past, to the oldest such commit. You can amend the old commit as described in the previous section, and even create new commits that belong here. Once you’re pleased with the “retcon”, go forward in time by running:
+
+$ git rebase --continue
+
+You can also abandon the rebase with:
+
+$ git rebase --abort
+
+This is a job for git rebase as described above. In many cases you can use the --onto flag and avoid interaction.
+
+- rewriting history
+$ git filter-branch --tree-filter 'rm top/secret/file' HEAD
+
+filter-branch lets you alter large sections of history with a single command.
+
+- where did it all go wrong, binary search for a defect 
+It’s too late for that now. However, provided you’ve been committing often, Git can pinpoint the problem:
+
+$ git bisect start
+$ git bisect bad HEAD
+$ git bisect good 1b6d
+
+Git checks out a state halfway in between. Test the feature, and if it’s still broken:
+
+$ git bisect bad
+If not, replace "bad" with "good". Git again transports you to a state halfway between the known good and bad versions, narrowing down the possibilities. After a few iterations, this binary search will lead you to the commit that caused the trouble. Once you’ve finished your investigation, return to your original state by typing:
+
+$ git bisect reset
+Instead of testing every change by hand, automate the search by running:
+
+$ git bisect run my_script
+
+- who made it all go wrong? 
+Like many other version control systems, Git has a blame command:
+
+$ git blame bug.c
+
+
+# Multiplayer git 
+- configure who you are 
+$ git config --global user.name "John Doe"
+$ git config --global user.email johndoe@example.com
+
+- sync without network 
+
+reference, http://www-cs-students.stanford.edu/~blynn/gitmagic/ch05.html#makinghistory
+
+    + use bundle command to bundle current git repo as a single file 
+The sender creates a bundle:
+
+$ git bundle create somefile HEAD
+then transports the bundle, somefile, to the other party somehow: email, thumb drive, an xxd printout and an OCR scanner, reading bits over the phone, smoke signals, etc. The receiver retrieves commits from the bundle by typing:
+
+$ git pull somefile
+
+    + bundle most recent commit for large project by 
+$ git bundle create somefile HEAD ^1b6d
+If done frequently, one could easily forget which commit was last sent. The help page suggests using tags to solve this. Namely, after you send a bundle, type:
+
+$ git tag -f lastbundle HEAD
+and create new refresher bundles with:
+
+$ git bundle create newbundle HEAD ^lastbundle
+
+    + send with email 
+In more formal settings, when author names and perhaps signatures should be recorded, generate the corresponding patches past a certain point by typing:
+
+$ git format-patch 1b6d
+
+The resulting files can be given to git-send-email, or sent by hand. You can also specify a range of commits:
+
+$ git format-patch 1b6d..HEAD^^
+On the receiving end, save an email to a file, then type:
+
+$ git am < email.txt
+
+- moved remoted repo 
+If the original repository moves, we can update the URL via:
+
+$ git config remote.origin.url git://new.url/proj.git
+The branch.master.merge option specifies the default remote branch in a git pull. During the initial clone, it is set to the current branch of the source repository,
+
+- list remote branches 
+List the remote branches with:
+
+$ git branch -r
+You should see something like:
+
+origin/HEAD
+origin/master
+origin/experimental
+
+- operate the remote 
+git cmd remote-name/branch-name 
+
+- git support multiple remote 
+We can follow more than one repository at a time with:
+
+$ git remote add other git://example.com/some_repo.git
+$ git pull other some_branch
+Now we have merged in a branch from the second repository, and we have easy access to all branches of all repositories:
+
+$ git diff origin/experimental^ other/some_branch~5
+
+
+# Git grandmastery 
+- archive release to users 
+$ git archive --format=tar --prefix=proj-1.2.3/ HEAD 
+
+- commit what changed 
+$ git ls-files -d -m -o -z | xargs -0 git update-index --add --remove
+The -z and -0 options prevent ill side-effects from filenames containing strange characters. As this command adds ignored files, you may want to use the -x or -X option.
+
+- my commit is too big 
+$ git add -p
+For each edit you made, Git will show you the hunk of code that was changed, and ask if it should be part of the next commit. Answer with "y" or "n". You have other options, such as postponing the decision; type "?" to learn more.
+
+-  commit -a is really a two-step process. The first step places a snapshot of the current state of every tracked file into the index. The second step permanently records the snapshot now in the index. Committing without the -a option only performs the second step, and only makes sense after running commands that somehow change the index, such as git add.
+
+- HEAD is like a cursor and always point to the latest commit 
+
+$ git reset HEAD~3
+will move the HEAD three commits back. Thus all Git commands now act as if you hadn’t made those last three commits, while your files remain in the present.
+
+    + find the deleted commit, By default, Git keeps a commit for at least two weeks, even if you ordered Git to destroy the branch containing it. The trouble is finding the appropriate hash. You could look at all the hash values in .git/objects and use trial and error to find the one you want. But there’s a much easier way.
+    
+    + git record every hash of commit it computes in .git/logs 
+    The reflog command provides a friendly interface to these log files. Try
+
+    $ git reflog
+    
+    Instead of cutting and pasting hashes from the reflog, try:
+
+    $ git checkout "@{10 minutes ago}"
+    Or checkout the 5th-last visited commit via:
+
+    $ git checkout "@{5}"
+
+- configure a longer grace period for doomed commits. For example:
+
+$ git config gc.pruneexpire "30 days"
+
+- building on git 
+Another is to print the current branch in the prompt, or window title. Invoking
+
+$ git symbolic-ref HEAD
+shows the current branch name. In practice, you most likely want to remove the "refs/heads/" and ignore errors:
+
+$ git symbolic-ref HEAD 2> /dev/null | cut -b 12-
+
+- daring stunts
+checkout, uncommitted changes cause checkout to fail. 
+
+uncommitted changes cause checkout to fail. To destroy your changes and checkout a given commit anyway use force flag 
+$ git checkout -f HEAD^ 
+
+Deleting branches fails if this causes changes to be lost. To force a deletion, type:
+$ git branch -D dead_branch  # instead of -d
+
+- preventing bad commits 
+Most frightening are missing files due to a forgotten git add. Lesser transgressions are trailing whitespace and unresolved merge conflicts: though harmless, I wish these never appeared on the public record.
+
+If only I had bought idiot insurance by using a hook to alert me about these problems:
+
+$ cd .git/hooks
+$ cp pre-commit.sample pre-commit  # Older Git versions: chmod +x pre-commit
+Now Git aborts a commit if useless whitespace or unresolved merge conflicts are detected.
+
+
+# Secrets revealed 
+- object database, which lives in the subdirectory .git/objects; the other residents of .git/ hold lesser data
+
+- reference 
+http://www-cs-students.stanford.edu/~blynn/gitmagic/ch08.html
+
+
+# Git shortcomings 
+- single files are not tracked, git tracks changes to the whole project. A solution is to break up your project into pieces, each consisting of related files. Use git submodule if you still want to keep everything in a single repository.
+
+- initial commit, A stereotypical computer scientist counts from 0, rather than 1. Unfortunately, with respect to commits, git does not adhere to this convention. Many commands are unfriendly before the initial commit. Additionally, some corner cases must be handled specially, such as rebasing a branch with a different initial commit.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

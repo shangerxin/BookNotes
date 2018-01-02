@@ -1,0 +1,1213 @@
+Fiddler documentation;Note=Erxin
+
+# introduction
+- the official fiddler document notes 
+- reference 
+http://docs.telerik.com/fiddler/configure-fiddler/tasks/configurefiddler
+
+
+# Configure fiddler 
+- configure browsers 
+    + clear cache before capture 
+    
+    + IE, Chrome, Safari, Opera 
+    File > Capture Traffic.
+
+    Record traffic sent to http://localhost or htp://127.0.0.1 from IE.
+    
+    Start fiddler before opera 
+    
+    + Firefox 
+    Click Tools > Monitor with Fiddler > Use Fiddler automatically to configure with FiddlerHook, or
+
+    Click Tools > Options > Advanced > Network > Settings > Use System Proxy Settings.
+
+        * configure fiddler 
+        Click Tools > Fiddler Options.
+
+        Click the HTTPS tab. Ensure the Decrypt HTTPS traffic checkbox is checked.
+
+        Click the Export Fiddler Root Certificate to Desktop button.
+    
+        * if enabled fiddler hook, then in Firefox click Tools > Monitor with Fiddler > Trust FiddlerRoot certificate....
+        
+        or install certificate manually by 
+        Click Tools > Options... > Advanced > Encryption > View Certificates > Authorities > Import.
+        
+        Select the FiddlerRoot.cer file from your desktop.
+
+        Click the checkbox next to Trust this CA to identify web sites.
+        
+- enable traffic decrypt in fiddler 
+Click Tools > Fiddler Options > HTTPS.
+
+Click the Decrypt HTTPS Traffic box.
+    
+- Skip traffic decryption for an application
+if (oSession.HTTPMethodIs("CONNECT") && oSession["X-PROCESSINFO"] && oSession["X-PROCESSINFO"].StartsWith("outlook")) 
+{ 
+    oSession["x-no-decrypt"] = "boring process";
+}    
+
+- Decrypt traffic from one hostname only 
+ if (oSession.HTTPMethodIs("CONNECT") && 
+    !oSession.HostnameIs("SiteICareAbout.com"))
+{ 
+    oSession["x-no-decrypt"] = "do not care."; 
+}
+
+- trust fiddler root certificate 
+    + enable https traffic decryption
+    + trust the certificate
+    
+- Respond to Requests Requiring a Client Certificate
+    + specify .CER file for fiddler to return for a given session 
+    oSession["https-Client-Certificate"] = "C:\\test\\someCert.cer";
+    
+    + specify a .CER file for fiddler to return otherwise, place .CER file in 
+    %USERPROFILE%\My Documents\Fiddler2\ClientCertificate.cer
+    
+- generate a certificate
+Install the certificate in the Current User's Personal Certificate Store.
+
+Right-click the certificate in Personal Certificates Store.
+
+Click All Tasks > Export....
+
+    + reference, user's personal certificate store 
+    https://docs.microsoft.com/zh-cn/windows-hardware/drivers/install/importing-an-spc-into-a-certificate-store
+    
+    pfx file, https://docs.microsoft.com/zh-cn/windows-hardware/drivers/install/personal-information-exchange---pfx--files
+    
+    Pvk2Pfx too, https://msdn.microsoft.com/library/windows/hardware/ff550672
+    
+- importing an SPC into a certificate store 
+Personal Information Exchange (.pfx) file is created to store a Software Publisher Certificate (SPC) and its private and public keys, the .pfx file must be imported into the Personal certificate store on the signing computer. 
+
+
+some certificate authorities (CAs) use different file formats to store this data. For example, some CAs store the certificate's private key in a Private Key (.pvk) file and store the certificate and public key in a .spc or .cer file.
+If the CA issued an .spc and its keys in non-.pfx files, you must convert and store the files in a .pfx file before they can be used for release-signing. The Pvk2Pfx tool is used to perform this conversion.
+
+- configure .net applications 
+    + temporarily connect a .NET application to Fiddler, use the GlobalProxySelection class to set a proxy:
+    GlobalProxySelection.Select = new WebProxy("127.0.0.1", 8888);
+    
+    + specify proxy at app.exe.config
+    <configuration>
+     <system.net>
+      <defaultProxy>
+       <proxy bypassonlocal="false" usesystemdefault="true" />
+      </defaultProxy>
+     </system.net>
+    </configuration>
+    
+    + running a different user account, edit the machine.config file 
+    <!-- The following section is to force use of Fiddler for all applications, including those running in service accounts -->  <system.net>
+     <defaultProxy>
+      <proxy autoDetect="false" bypassonlocal="false" proxyaddress="http://127.0.0.1:8888" usesystemdefault="false" />
+     </defaultProxy>
+    </system.net>
+    
+    + NOTE: .NET will always bypass the Fiddler proxy for URLs containing localhost. So, rather than using localhost, change your code to refer to the machine name. For instance
+    
+    This URL will not appear in Fiddler:
+    http://localhost/X509SignCodeService/X509SigningService.asmx
+    
+    This URL will appear in Fiddler:
+    http://mymachine/X509SignCodeService/X509SigningService.asmx
+    
+    + manually specify proxy for each webrequest 
+    objRequest = (HttpWebRequest)WebRequest.Create(url);
+    objRequest.Proxy= new WebProxy("127.0.0.1", 8888);
+    + reference 
+    http://msdn.microsoft.com/en-us/magazine/cc300743.aspx
+    
+- configure a php or cURL app. 
+    + in code 
+curl_setopt($ch, CURLOPT_PROXY, '127.0.0.1:8888');
+    
+    + command line 
+curl --proxy 127.0.0.1:8888
+    
+- configure java application to use fiddler 
+    + jre 
+    jre -DproxySet=true -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=8888
+    
+    or 
+    
+    jre -DproxySet=true -DproxyHost=127.0.0.1 -DproxyPort=8888 MyApp
+    
+    + change java's virtual machine settings 
+    System.setProperty("http.proxyHost", "127.0.0.1");
+    System.setProperty("https.proxyHost", "127.0.0.1");
+    System.setProperty("http.proxyPort", "8888");
+    System.setProperty("https.proxyPort", "8888");
+    
+- configure a WinHTTP application to use fiddler 
+netsh winhttp set proxy 127.0.0.1:8888
+
+on win7 run the above command in 32bit and 64bit both 
+
+    + winxp 
+    proxycfg -p http=127.0.0.1:8888;https=127.0.0.1:8888
+    
+- monitor RAS, VPN or Dialup Connections 
+    + monitor dialup or VPN Tools -> Fiddler Options... and click Monitor all connections
+    
+    + To monitor a VPN or dialup connection that is always active (instead of a LAN connection) HookConnectionNamed registry value to the name of the connection from Internet Options.
+    
+- capture traffic from another machine(any os )
+    + Start Fiddler on Fiddler server (the machine that will capture the traffic).
+    + Tools > Fiddler Options, ensure Allow remote clients to connect is checked 
+    + on the other machine set the proxy settings to the machine name of the fiddler server 
+    
+- Chain fiddler to an upstream proxy, add proxy before fiddler start 
+- use Fiddler as a Reverse proxy 
+Configure fiddler as reverse proxy 
+    + the hostname for the request to reroute must be 127.0.0.1:8888, localhost:8888, [::1]:8888, or the machine's NETBIOS hostname on port 8888.
+    
+    + Tools>Fiddler Options ensure allow remote clients to connect is checked 
+    + close fiddler 
+    + start regedit 
+    + create a new dword named ReverseProxyForPort inside HKEY_CURRENT_USER\SOFTWARE\Microsoft\Fiddler2.
+    + Set the DWORD to the local port where fiddler will re-route inbound traffic (usually port 80)
+    + Restart fiddler 
+    + navigate to http://127.0.0.1:8888.
+    + Write a fiddler script rule 
+    + Click Tools > Fiddler Options. Ensure Allow remote clients to connect is checked.
+    + restart fiddler, Click Rules > Customize Rules.
+    + inside OnBeforeRequest handler*, add a new line 
+    if (oSession.host.toLowerCase() == "webserver:8888") oSession.host = "webserver:80";
+    
+    + on client, navigate to http://webserver:8888
+    
+configure fiddler to listen to client application target port 
+    + Reconfigure your target server to listen on a different port. 
+    + Tools > Fiddler options > Connections tab
+    Type the client's target port number next to Fiddler listens to port, such as 8888
+    + configure Fiddler as a reverse proxy or write a FiddlerScript Rule to re-route traffic to the target server's new port (check Configure fiddler as reverse proxy ).
+
+- Capture traffic from a different account, configure that process to use the Fiddler proxy.
+- Capture windows 8 metro-style applications 
+    + create a loop back exemption 
+    + open fiddler with administrator 
+    + click "Win8 Config" in fiddler toolbar 
+    + check the box for the desire application 
+    http://stackoverflow.com/questions/13360309/using-fiddler-with-windows-store-unit-test
+    http://msdn.microsoft.com/en-us/library/windows/apps/br211380
+
+    + place fiddler root certificate in the machine's Trusted root store 
+    + Enable Fiddler HTTPS-decryption feature. A Warning dialog appears. Click Yes to trust the Fiddler Root certificate.
+    + Click yes 
+ 
+- configure for mac 
+- configure for ios 
+- configure for android 
+- configure for pokectPC, window phone 
+- fiddler certificate maker, http://fiddler2.com/add-ons
+- monitor traffic to localhost from IE or .net 
+    + Use your machine name as the hostname instead of Localhost or 127.0.0.1
+    
+    + for IPv4 use 
+    http://ipv4.fiddler
+      
+    + for IPv6 use 
+    http://ipv6.fiddler
+    
+    + add rule for customize rules 
+static function OnBeforeRequest(oSession:Fiddler.Session){
+    if (oSession.HostnameIs("MYAPP")) { oSession.host = "127.0.0.1:8081"; }
+}
+- bypass the upstream proxy for all requests to a specific domain 
+   if (oSession.HostnameIs("www.example.com")){
+    oSession.bypassGateway = true;
+    }
+
+- Capture https traffic from Firefox 
+    + configure fiddler 
+    + https tabs ensure decrypt https traffic checkbox is checked 
+    + click export fiddler root certificate to desktop button 
+    
+    + configure firefox 
+    
+        * if FiddlerHook is enabled, in Firefox tools> monitor with fiddler > trust fiddlerRoot certificate 
+        
+        * from the authorities tab and import certificate from the desktop 
+        
+
+# Troubleshooting 
+- untrusted root certificate, add root certificate warning 
+- client cannot confgirue to use proxy server then configure fiddler as a reverse proxy server 
+- connecting to a server protected with channel-binding tokens (CBT), the server returns a series of 401 errors, and the browser continuously prompts for credentials.
+
+check help to configure fiddler to authenticate to a CBT-protected server 
+
+    + click rules > customize rules in fiddler 
+    + scroll to OnPeekAtResponseHeaders function 
+    + add follow code 
+static function OnPeekAtResponseHeaders(oSession: Session) 
+{         
+    // To avoid problems with Channel-Binding-Tokens, this block allows Fiddler 
+    // itself to respond to Authentication challenges from HTTPS Intranet sites. 
+    if (oSession.isHTTPS && 
+        (oSession.responseCode == 401) && 
+        // Only permit auto-auth for local apps (e.g. not devices or remote PCs) 
+        (oSession.LocalProcessID > 0) && 
+        // Only permit auth to sites we trust 
+        (Utilities.isPlainHostName(oSession.hostname) 
+      // Replace telerik.com with whatever servers Fiddler should release credentials to.
+        || oSession.host.EndsWith("telerik.com"))  
+        ) 
+    { 
+        // To use creds other than your Windows login credentials, 
+        // set X-AutoAuth to "domain\\username:password" 
+        // Replace default with specific credentials in this format:
+      // domain\\username:password. 
+        oSession["X-AutoAuth"] = "(default)";    
+        oSession["ui-backcolor"] = "pink"; 
+    } 
+
+//... function continues
+
+    + replace "telerick.com" with whatever servers fiddler should release credentials to. By default fiddler will release credentials to any intranet sites 
+    
+    + replace "default" with specific credentials in this format 
+    domain\username:password 
+    
+    the default means fiddler will attempt to use the login credentials of whatever user-account that it is running under 
+    
+- unexpected 400 error from iis express 
+Replace http://ipv.fiddler:2468 with http://localhost.fiddler:2468.
+
+- office client should using WinHTTP do not properly authenticate while running fiddler 
+
+Configure fiddler to Authenticate to the Server 
+
+- Change AuthForwardServerList with REGEDIT 
+Configure fiddler to Authenticate to the Server 
+- Site on local machine rejects credentials 
+Configure fiddler to Authenticate to the Server 
+
+- Microsoft firewall client for ISA 2004 has a option to automatically reconfigure IE settings. This will detach fiddler at random times 
+
+    + disable web browser automatic configuration in the microsoft firewall client 
+If there's a Firewall Client icon Firewall Client in your system tray:
+
+Right click the Firewall Client icon in the system tray.
+Click Configure... from the context menu.
+If there is no Firewall Client icon in your system tray:
+
+Open the Start Menu.
+Type 'firewall' in the Start Menu search box.
+Click the Firewall Client Management icon.
+
+- No traffic is captured with ProxySettingsPerUser=0 group policy setting 
+
+Your system or domain Administrator has set the Group Policy setting ProxySettingsPerUser to 0. This means that instead of the default Windows behavior (each user has their own proxy settings), instead all user accounts share one set of proxy settings
+
+HKLM\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ 
+
+Run fiddler as administrator
+
+
+# Observe traffic 
+## Tasks 
+- view web traffic 
+File > Capture traffic 
+
+- Use 'P' or 'C' to select parent or child session for a web request 
+
+- View cookie information 
+    + install privacy scanner fiddler add-on 
+    http://fiddler2.com/add-ons
+    
+    
+Privacy 
+Privacy>Enabled 
+
+- Compare traffic with 
+Select two sessions in the Web Sessions List.
+Right-click one of the sessions.
+Click Compare from the context menu.
+
+You can set the fiddler.differ.ultradiff preference to False if you don't want Fiddler to attempt to reorganize the headers and URL for simpler diffing when saving the files.
+
+    + change default text comparison tool 
+    Click Tools > Fiddler Options > Tools.
+    
+    + traffic diff extension at http://fiddler2.com/add-ons
+    
+- inspect dataURL object 
+    + copy a dataUrl to your clipboard from fiddler to any other source 
+    + edit>paste files as sessions 
+    + use fiddler inspectors to examine the resulting object and click the ImageView tab 
+
+## Troubleshooting
+- all traffic is missing, check configuration
+- no traffic to localhost
+    + use machine name 
+    + use http://ipv4.fiddler
+    
+- HTTPS Traffic decryption is disabled by default. enable it to see the detail 
+-  "The underlying connection was closed: A connection that was expected to be kept alive was closed by the server."
+
+This is a bug in your application (it should handle this type of exception). enhanced connection resue support 
+
+- fiddler capture incomplete http response 
+
+ensure use HTTP1.1 through proxy servers is checked 
+
+
+# Modify traffic 
+- Customize a request 
+    + create a new 
+    + drag and drop a existing 
+    
+- Two modes 
+    + pasrsed mode, use the boxes to build 
+    + raw mode, past the text for the raw request 
+
+- Options 
+    + inspect session ,selects the new session and activates the inspector tab 
+    + fix context-length header, adjusts the value of the content length request header 
+    + follow redirects 
+    + automatically authenticate, automatically response to http/401 and 407 challenges 
+    
+- Tips and tricks 
+    + drag and drop from session list to create a new request based on a previously captured request 
+    
+    + Use a # character in the RequestURL to be prompted for a series of sequentially-numbered
+    
+    + Shift + click the execute button to immediately break the new request for further editing 
+    + add a dummy header Fiddler-encoding base64 
+    + add a dummy header fiddler-host targettesthost 
+    + click upload file to have the composer inject one or more local files 
+
+- Create traffic with custom matching rules 
+    + enable autoresponder 
+    
+    + compose autoresponder rules 
+    at the bottom of the autoresponder tab type rule editor 
+    match rule 
+    action string 
+    
+- Replay captured traffic 
+    + auto responder tab check enable automatic responses 
+    + create matching rules from the web session list 
+    press control to select multiple sessions 
+    
+    + click auto response 
+    
+- Modify matching rules 
+    + edit rule, select a rule from the autoresponder ruleset 
+    + edit rule 
+    + select active rules 
+    + set rule priority 
+    + move the rule up/down in the ruleset 
+    
+- Import or export matching rules 
+    + import a matching ruleset 
+    select a .saz or .farx file 
+    
+    + export a ruleset 
+    from the autoresponder tab click save button 
+    
+- test performance, use fiddler script to simulate traffic and display performance results 
+- crawl sequential urls 
+public static ToolsAction("Crawl Sequential URLs") 
+function doCrawl(){ 
+  var sBase: String;
+  var sInt: String;
+
+  sBase = FiddlerObject.prompt("Enter base URL with ## in place of the start integer", "http://www.example.com/img##.jpg");
+  sInt = FiddlerObject.prompt("Start At", "1");
+  var iFirst = int.Parse(sInt);
+  sInt = FiddlerObject.prompt("End At", "12");
+  var iLast = int.Parse(sInt);
+
+  for (var x=iFirst; x<=iLast; x++)
+  {
+    //Replace 's' with your HTTP Request. Note: \ is a special character in JScript
+    // If you want to represent a backslash in a string constant, double it like \\ 
+    var s = "GET " + sBase.Replace("##", x.ToString()) + " HTTP/1.0\r\n\r\n"; 
+    var b=false;
+    while(!b){
+    try{
+      FiddlerObject.utilIssueRequest(s);
+      b=true;
+    }
+    catch(e){
+      var iT = Environment.TickCount + 10000;
+      FiddlerObject.StatusText = "Waiting 10 sec because we have too many requests outstanding...";
+      while (iT > Environment.TickCount){ Application.DoEvents(); }
+      } 
+    }
+  }
+}
+
+- Resend a request 
+    + select the sessions
+    + click 'r' or right click Replay > Reissue Requests.
+    
+    + resend a session from composer 
+    + triple click the content of a session in the scratchpad to select the entire session contents 
+    + click execute to reissue the requests 
+    
+- Search sequential pages for target string 
+    + add a rule to fiddler with global scope to create a new menu 
+public static ToolsAction("Find page containing search string") 
+function doGrab(){ 
+  var s = "GET /gallery/image1.htm HTTP/1.1\r\nHost: www.example.com\r\nX-My-Num: 1\r\n\r\n"; 
+  try{ 
+    FiddlerObject.utilIssueRequest(s); 
+  } 
+  catch(e){ 
+    MessageBox.Show("send failed" + e.ToString()); 
+  } 
+}
+
+    + add rule to OnBeforeResponse function as follows 
+if (oSession.oRequest.headers.Exists("X-My-Num")){ 
+  // This is a response to my Grab code... 
+  if (oSession.utilFindInResponse("targetstring", false) > -1){ 
+   // If the index of the target string is >-1, we found the search string...  
+   MessageBox.Show("Found target string!");
+  } 
+  else 
+  { 
+  //didn't find the target string.  increment the number. 
+  var n = int.parse(oSession.oRequest["X-My-Num"]); 
+  n++; 
+  var s = "GET /gallery/image" + n.ToString() + ".htm HTTP/1.1\r\nHost: http://www.example.com\r\nX-My-Num: "+ n.ToString() + "\r\n\r\n"; 
+  try{ 
+    // Make a recursive HTTP request for the next item.
+    FiddlerObject.utilIssueRequest(s); 
+  } 
+  catch(e){ 
+     MessageBox.Show("send failed" + e.ToString()); 
+  } 
+  } 
+}
+
+
+# Save and load traffic 
+- create a session archive zip (saz) traffic archive 
+File > Save > All sessions 
+
+- import and export traffic 
+Click File > Export Sessions.
+
+Click either All Sessions or Selected Sessions.
+
+Import to Default Formats
+
+To import traffic from HTTP Archive JSON, HTTP Archive XML
+
+- log session to local database 
+// Log the currently selected sessions in the list to a database.
+// Note: The DB must already exist and you must have permissions to write to it.
+public static ToolsAction("Log Selected Sessions") 
+function DoLogSessions(oSessions: Fiddler.Session[]){
+if (null == oSessions || oSessions.Length < 1){
+  MessageBox.Show("Please select some sessions first!");
+  return;
+}
+var strMDB = "C:\\log.mdb";
+var cnn = null;
+var sdr = null;
+var cmd = null;
+try
+{
+  cnn = new OleDbConnection("Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + strMDB);
+  cnn.Open();
+  cmd = new OleDbCommand();
+  cmd.Connection = cnn;
+
+  for (var x = 0; x < oSessions.Length; x++){
+    var strSQL = "INSERT into tblSessions ([ResponseCode],[URL]) Values (" + 
+    oSessions[x].responseCode + ", '" + oSessions[x].url + "')";
+    cmd.CommandText = strSQL;
+    cmd.ExecuteNonQuery();
+  }
+}
+catch (ex){
+  MessageBox.Show(ex);
+}
+finally
+{
+  if (cnn != null ){
+    cnn.Close();
+  }
+}
+}
+
+- list the new import at the top of your rules script as follows 
+import System.Data.OleDb;
+
+
+# Extend fiddler 
+- requirement 
+VS 2005+, .net v2 
+VS 20010, .net 3.5 
+
+- reference 
+http://docs.telerik.com/fiddler/Extend-Fiddler/ExtensionsForv2Andv4
+
+- Your extension may install the appropriately-targeted version based on the content of the InstalledVersion 
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Fiddler2
+
+- What about the RequiredVersion attribute?
+[assembly: Fiddler.RequiredVersion("2.1.0.1")]
+
+- Configure VS 
+    + Direct Fiddler to load extension assemblies
+    %Program Files%\Fiddler2\Scripts
+    
+    + make extension avaliable only for current user 
+    %USERPROFILE%\My Documents\Fiddler2\Scripts
+
+    + reference 
+    http://docs.telerik.com/fiddler/Extend-Fiddler/ExtendWithDotNet
+
+- Sample extensions 
+http://docs.telerik.com/fiddler/Extend-Fiddler/SampleExtensions
+
+- Fiddler support using .net assembly directly from script 
+http://docs.telerik.com/fiddler/Extend-Fiddler/UseDotNetInFiddlerScript
+
+
+# Knowledge base 
+## Fiddler script 
+- modify a request or response 
+use FiddlerScript to add rules to Fiddler's OnBeforeRequest or OnBeforeResponse function. 
+
+    + add request header 
+oSession.oRequest["NewHeaderName"] = "New header value";
+
+    + delete a response header 
+oSession.oResponse.headers.Remove("Set-Cookie");
+  
+    + change a request for one page to a different page on the same server 
+    if (oSession.PathAndQuery=="/version1.css") {
+        oSession.PathAndQuery="/version2.css";
+    }
+    
+    + point all requests for one server to the same port on a different server 
+    if (oSession.HostnameIs("www.bayden.com")) {
+        oSession.hostname="test.bayden.com";
+    }
+    
+    + point all requests from one port to a different server 
+if (oSession.host=="www.bayden.com:8080") {
+      oSession.host="test.bayden.com:9090";
+    }
+    
+    + point all requests for one server to a different server, including https tunnels 
+    // Redirect traffic, including HTTPS tunnels
+    if (oSession.HTTPMethodIs("CONNECT") && (oSession.PathAndQuery == "www.example.com:443")) { 
+        oSession.PathAndQuery = "beta.example.com:443"; 
+    }
+
+    if (oSession.HostnameIs("www.example.com")) oSession.hostname = "beta.example.com"; 
+    
+    + simulate the window hosts file by pointing one hostname to a different ip address 
+     // All requests for subdomain.example.com should be directed to the development server at 128.123.133.123
+    if (oSession.HostnameIs("subdomain.example.com")){
+    oSession.bypassGateway = true;                   // Prevent this request from going through an upstream proxy
+    oSession["x-overrideHost"] = "128.123.133.123";  // DNS name or IP address of target server
+    }
+    
+    + retarget requests for a single page to a different page potentially on a different server 
+if (oSession.url=="www.example.com/live.js") {
+      oSession.url = "dev.example.com/workinprogress.js";
+    }
+    
+    + prevent upload http cookie 
+    oSession.oRequest.headers.Remove("Cookie");
+    
+    + decompress and unchunk a http response updating headers if needed 
+    / Remove any compression or chunking from the response in order to make it easier to manipulate
+    oSession.utilDecodeResponse();
+    
+    + search and replace in html 
+      if (oSession.HostnameIs("www.bayden.com") && oSession.oResponse.headers.ExistsAndContains("Content-Type","text/html")){
+      oSession.utilDecodeResponse();
+      oSession.utilReplaceInResponse('<b>','<u>');
+    }
+    
+    + case insensitive search for response html 
+    if (oSession.oResponse.headers.ExistsAndContains("Content-Type", "text/html") && oSession.utilFindInResponse("searchfor", false)>-1){
+      oSession["ui-color"] = "red";
+    }
+    
+    + pretend your browser is the googlebot webcrawler 
+     oSession.oRequest["User-Agent"]="Googlebot/2.X (+http://www.googlebot.com/bot.html)";
+     
+    + request hebrew content 
+    oSession.oRequest["Accept-Language"]="he";
+    
+    + deny.css requests 
+    if (oSession.uriContains(".css")){
+        oSession["ui-color"]="orange"; 
+        oSession["ui-bold"]="true";
+        oSession.oRequest.FailSession(404, "Blocked", "Fiddler blocked CSS file");
+    }
+    
+    + simulate http basic authentication 
+    if ((oSession.HostnameIs("www.example.com")) && 
+     !oSession.oRequest.headers.Exists("Authorization")) 
+    {
+        // Prevent IE's "Friendly Errors Messages" from hiding the error message by making response body longer than 512 chars.
+        var oBody = "<html><body>[Fiddler] Authentication Required.<BR>".PadRight(512, ' ') + "</body></html>";
+        oSession.utilSetResponseBody(oBody); 
+        // Build up the headers
+        oSession.oResponse.headers.HTTPResponseCode = 401;
+        oSession.oResponse.headers.HTTPResponseStatus = "401 Auth Required";
+        oSession.oResponse["WWW-Authenticate"] = "Basic realm=\"Fiddler (just hit Ok)\"";
+        oResponse.headers.Add("Content-Type", "text/html");
+    }
+    
+    + respond to a request with a file loaded from the \Captures\Response folder 
+    if (oSession.PathAndQuery=="/version1.css") {
+      oSession["x-replywithfile"] ="version2.css";
+    }
+    
+- Performance testing 
+    + simulate modem updates, add to OnBeforeRequest function 
+ // Delay sends by 300ms per KB uploaded.
+    oSession["request-trickle-delay"] = "300";
+
+    + simualte modem download 
+     // Delay receives by 150ms per KB downloaded.
+    oSession["response-trickle-delay"] = "150";
+    
+    + flag content which isn't set to cache on the client 
+    if (!(oSession.oResponse.headers.Exists("Expires") 
+    || (oSession.oResponse.headers.ExistsAndContains("Cache-Control", "age")))
+    || (oSession.oResponse.headers.Exists("Vary"))){
+    {
+    oSession["ui-color"]="brown"; // Use C# color strings here.
+    oSession["ui-italic"]="true"; 
+    }
+    
+    + display in the custom column the number of milliseconds from the moment of the request until the last byte was received 
+    oSession["ui-customcolumn"] = oSession["X-TTLB"];
+    
+    + display the # of millisecond until the first byte was received from the server 
+    oSession["ui-customcolumn"] = "FB: " + oSession["X-TTFB"] + "; LB: " + oSession["X-TTLB"];
+    
+    + add a copyTimers context menu item to the session list 
+    
+    public static ContextAction("CopyTimers")
+    function CopyTimers(oSessions: Fiddler.Session[]){
+      if (null == oSessions){
+        MessageBox.Show("Please select sessions to copy timers for.", "Nothing to Do");
+        return;
+      }
+
+      var s: System.Text.StringBuilder = new System.Text.StringBuilder();
+
+      for (var x = 0; x < oSessions.Length; x++)  {
+        s.AppendFormat("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}\r\n",
+        oSessions[x].Timers.ClientConnected,
+        oSessions[x].Timers.ClientDoneRequest,
+        oSessions[x].Timers.ServerConnected,
+        oSessions[x].Timers.ServerGotRequest,
+        oSessions[x].Timers.ServerBeginResponse,
+        oSessions[x].Timers.ServerDoneResponse,
+        oSessions[x].Timers.ClientBeginResponse,
+        oSessions[x].Timers.ClientDoneResponse
+        );
+      }
+      Utilities.CopyToClipboard(s.ToString());
+      MessageBox.Show("Done.");
+    }
+- customize menus 
+    + add context menu item to open currently selected urls using firefox 
+    public static ContextAction("Open in Firefox")
+    function DoOpenInIE(oSessions: Fiddler.Session[]){ 
+      if (null == oSessions){
+        MessageBox.Show("Please choose at least 1 session."); return;
+      }
+
+      for (var x = 0; x < oSessions.Length; x++){
+        System.Diagnostics.Process.Start("firefox.exe", oSessions[x].url);
+      }
+    }
+    
+    + add submenu to the rules menu and create an option in it 
+    public static RulesOption("Non-Exclusive-Test", "User-Agent") 
+    var m_UANONRad: boolean = true; 
+    
+    + multiple exclusive radio options 
+    public static RulesOption("Spoof Netscape &3.0", "User-Agent", true) 
+    var m_NS3: boolean = false; 
+
+    public static RulesOption("Spoof IE &6.0", "User-Agent", true) 
+    var m_IE6: boolean = false; 
+
+    public static RulesOption("Spoof nothing", "User-Agent", true) 
+    var m_UANONE: boolean = true;
+    
+    + Add a tool menus topn that resets the script 
+    // Force a manual reload of the script file. Resets all
+    // RulesOption variables to their defaults.
+    public static ToolsAction("Reset Script")
+    function DoManualReload(){ 
+        FiddlerObject.ReloadScript();
+    }
+    
+    + Clears all WinINET/IE cookies and cache files 
+    public static ToolsAction("Reset IE"){
+      FiddlerObject.UI.actClearWinINETCache();
+      FiddlerObject.UI.actClearWinINETCookies(); 
+    }
+    
+- customize web sessions list 
+    + display custom column the time of the origin request 
+    oSession["ui-customcolumn"] += DateTime.Now.ToString("h:mm:ss.ffff ");
+    
+    + show any set-cookie headers in custom column in session list 
+    oSession["ui-customcolumn"] = oSession.oResponse["Set-Cookie"];
+    
+    + mark any requests which send cookies in red, and show the value in the custom column 
+    if (oSession.oRequest.headers.Exists("Cookie")) 
+    {
+        oSession["ui-color"]="red";
+        oSession["ui-customcolumn"] = oSession.oRequest["Cookie"];
+    }
+    else
+        oSession["ui-color"]="green";
+        
+    + hide request for the .gifs from the session list 
+    if (oSession.url.EndsWith(".gif")){
+        oSession["ui-hide"]="hiding image requests";  //String value not important
+    }
+    
+    + change session color 
+    oSession["ui-color"]="purple"; 
+    
+- pause web session 
+    + pause all http posts to allow hand-editing 
+    if (oSession.HTTPMethodIs("POST")){
+      oSession["x-breakrequest"]="breaking for POST";
+    }
+    
+    + pause with specify port 
+    if (oSession.HTTPMethodIs("POST") && (oSession.utilFindInRequest("thekeyword", true) > -1)){
+        oSession["x-breakrequest"] = "keyword";
+    }
+    
+    + pause a request for an xml file ao allow hand-editing 
+    if (oSession.url.toLowerCase().indexOf(".xml")>-1){
+     oSession["x-breakrequest"]="reason_XML"; 
+    }
+    
+- session alerts 
+    + play a sound when a file is missing 
+    if (oSession.responseCode == 404){
+        FiddlerObject.playSound("C:\\windows\\media\\ding.wav");
+        oSession["ui-strikeout"]="true"; 
+    }
+    
+    + display message in message box 
+    FiddlerObject.alert(oBodyString);
+    
+- add columns to web sessions list 
+    + fill custom column with session http method 
+    public static BindUIColumn("HTTPMethod")
+           function CalcMethodCol(oS: Session){
+                  if (null != oS.oRequest) return oS.oRequest.headers.HTTPMethod; else return String.Empty; 
+           }
+
+    + our overloads for BindUIColumn that allow you to set the width, display order, and whether the column should be sorted numerically
+    
+    BindUIColumn(string colName)
+
+    BindUIColumn(string colName, bool bSortColumnNumerically)
+
+    public BindUIColumn(string colName, int iColWidth)
+
+    public BindUIColumn(string colName, int iColWidth, int iDisplayOrder)
+    
+- fiddler user preference system 
+https://blogs.msdn.microsoft.com/fiddler/2010/05/03/fiddler-new-features-the-preferences-system/
+
+## Addons 
+- The SAZClipboard is a simple extension that allows you to open a .SAZ file outside of the main Fiddler UI.
+    
+
+## QuickExec reference 
+- http://docs.telerik.com/fiddler/KnowledgeBase/QuickExec
+?sometext, fiddler will highlight the session where url contain the text 
+>size, select session greater than size bytes
+<size 
+=status
+=method, select status or method equal to the given 
+@host, select sessions where there request host contains host, hit enter to set focus to the selected matches 
+bold, mark any future sessions in bold if the url contains the target string 
+bpafter, braek any session where the requestURL contains the specified string 
+bps, break any response where the status code matches 
+bpv or bpm, create a request for the specified HTTP method
+bpu, create a request breakpoint for URLs containing the specified string 
+cls or clear, clear the session list
+dump, dump all session to a zip archive in c:\
+g or go, resume all breakpointed sessions 
+help, show this page help 
+hide, hide fiddler in system tray 
+urlreplace, replace any string in urls with a different string 
+start, register as the system proxy 
+stop, unregister as the system proxy 
+show, restore fiddler from system tray, more useful when triggering rules from ExecAction.exe 
+select MIME, select any session where the response context-type header contains the specific string. select image, select html 
+
+    + add accept header column into the ui 
+cols add @request.Accept
+
+    
+
+## Fiddler sessionFlags 
+- Each Session object in Fiddler contains a collection of string flags, in the Session.oFlags[] collection. The flags control how the session is processed and displayed 
+
+these flags can be set by FiddlerScript or a IFiddlerExtension 
+
+- flag names are not case-sensitive 
+- flag values are always string 
+- oFlags["non-existent-flag"], the result will be null.
+-  oFlags collection is the "indexer" for the Session object, so oSession.oFlags["flagname"] can be written as:
+
+oSession["flagname"] or
+oSession["SESSION", "flagname"]
+
+- remove flag 
+Calling: oFlags.Remove("flagname") or
+Setting oSession["flagname"] = null
+
+- the value of most flags is not important 
+So oSession["ui-hide"]="no" does the same thing as oSession["ui-hide"] = "true" (hides the session).
+
+- call oFlags.Add("flagname"), this will throw an exception if the flag already exists. It's better to just set the value: oFlags["flagname"] = "value";
+
+- can create new flags that attach metadata to a given session. To avoid naming conflicts, it's recommended that you choose distinctive flagnames. For example: addon.acme.loggingFlag.
+
+- UI flags 
+ui-hide, hide session from session list 
+ui-color 
+ui-backcolor 
+ui-bold 
+ui-italic 
+ui-strikeout 
+ui-customcolumn 
+ui-comments 
+
+- breakpoint flags 
+ui-breakrequest, the session will pause before the request is issue 
+ui-breakresponse 
+
+- hot flags 
+x-overrideHost, provide HOST:PORT combination, this is not change the HOST header on the request 
+x-hostIP 
+x-overrideGateway, provide HOST:PORT which is used to proxy the request 
+
+- client flags 
+x-ProcessInfo
+x-clientIP, read only 
+x-clientport, read only 
+
+- socket reuse flags 
+x-serversocket, read-only, contain the reuse status of the server socket 
+x-securepipe, read only reuse status of server socket 
+
+- decryption and authentication flags 
+https-Client-Certificate, filename of the certifcate 
+x-no-decrypt 
+x-OverrideCertCN, string specifying the hostname that should appear in the CN field of this connect tunnel's fiddler generated certificate 
+x-SuppressProxySupportHeader, Prevent Fiddler from adding a "Proxy-Support: Session-Based-Authentication" header to HTTP/401 or HTTP/407 responses that request Negotiate or NTLM authentication. 
+
+- Performance flags 
+request-trickle delay Milliseconds to delay each outbound kilobyte of request data.
+response-trickle-delay illiseconds to delay each inbound kilobyte of response data.
+
+- AutoResponder flags 
+x-replywithfile, The value of this flag is the name of a file in the Captures/Responses folder or a uri containing a HTTP response to return to the client 
+x-repliedwithfile, read-only contains the name of the file specified in x-replywithfile
+
+- Drop sessions flags 
+log-drop-request-body, drop the request from the session list after send to minimized memory usage 
+log-drop-response-body 
+
+
+## Timeline view 
+- Time line view specification 
+The abbreviated URL at the left of each Transfer Bar is green if the request was a Conditional Request, or Black if the request was unconditional. The full URL is shown in the status bar on hover.
+
+The start of the transfer bar is drawn at the time (Timers.ClientBeginRequest) when the client sends the request to Fiddler.
+
+The end of the transfer bar is drawn at the time (Timers.ClientDoneResponse) when the response to the client is completed.
+
+The color of the bar is determined by the MIME type of the response; light-green for images, dark-green for JavaScript, purple for CSS, and blue otherwise.
+
+If the bar is "hatched" rather than smooth, this indicates that the HTTP response was buffered by Fiddler. For more information, see the "What is streaming?" section below.
+
+The vertical line indicates the time to first byte of the server's response (Timers.ServerBeginResponse).
+
+The green circle before the bar shows that a connection was reused; a red circle means that the connection was newly created.
+
+The top circle represents the client's connection to Fiddler; the bottom circle represents Fiddler's connection to the server.
+
+A red X after the bar indicates that the server sent a Connection: close header (or failed to send a Keep-Alive header for a HTTP/1.0 response), preventing subsequent reuse of the connection.
+
+The gray arrow icon indicates that the server's response was a redirect (302). The red ! icon indicates that the server returned an error code (4xx, 5xx).
+
+- streaming mode, Streaming mode ensures that HTTP responses are not buffered by Fiddler. Buffering alters the waterfall diagram, as you can see below, where none of the images begin to download until their containing page completes
+
+
+## Filters reference 
+- Navigate tot he filter tab in fiddler 
+- Hosts
+    + Zone filter dropdown at the top of the dialog allows you to show traffic only to your intranet. 
+    
+    + Host filter dropdown enables you to flog or exclude display of traffic to specified domain names 
+    
+    
+
+- Client process 
+    + process filter 
+    + hide traffic from service host will hide traffic from svchost.exe 
+    
+    fiddler can only determine the process name/PID owner of a request when the client app is running on the same computer as fiddler itself 
+    
+- breakpoints 
+    + enable you break requests or response that contain the specified attributes 
+    
+- request headers 
+    + add or remove http request headers and flag responses that contain certain headers 
+
+    + show only if url contains, command with case sensitive 
+    EXACT://example.com/q=Case+Sensitive+String 
+
+    + use regular expressions 
+    REGEX:(?insx).*\.(gif|png|jpg)$ #only show requests for img types
+     
+    + response status code 
+    + response type and size 
+    + response headers 
+    
+- Vary response header 
+    + Vary response header allows a cache to determine if a cached (still fresh) response may be returned for a subsequent request, based on whether or not the new request's headers match those that were sent when the the previously response was originally cached
+    
+    + The Vary field value indicates the set of request-header fields that fully determines, while the response is fresh, whether a cache is permitted to use the response to reply to a subsequent request without revalidation
+- WinINet caching problem, the WinINET caching engine (below Internet Explorer and other applications) does not cache outbound request headers. This limitation makes it impossible for WinINET to perform the request-header matching algorithm.
+
+- best practices, Never send Vary: Host. All responses implicitly vary by hostname, because the hostname is a part of the URI, and all requests vary by URI. Only send a Vary: Accept-Encoding header when you have compressed the content 
+ 
+
+## Headers references 
+- rfc 2616 list 
+http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+
+- wiki 
+http://en.wikipedia.org/wiki/List_of_HTTP_status_codes
+
+- rfc header definition 
+http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
+
+- IANA header registrations 
+http://www.iana.org/assignments/message-headers/message-header-index.html
+
+- Jukka Korpela's list of http headers 
+http://www.cs.tut.fi/~jkorpela/http.html
+
+- Additional information 
+    + Expires, 
+    + Cache-Control must-revalidate 
+    https://www.mnot.net/cache_docs/
+    + P3P, compact private statement 
+    + Set-Cookie, info on IE's privacy features 
+  
+  
+## The fiddler proxy 
+- as system proxy all http request from WinINet flow through fiddler before reaching the target website 
+IE <=> WinINet <=> Fiddler <=> Web Server 
+
+## AutoResponse rules 
+- matching rules 
+* matches
+http://www.example.com/Path1/query=example
+http://www.example.com/SomethingCompletelyDifferent
+EXAMPLE matches
+http://www.**example**.com/Path1/
+http://www.something.com/Path1/query=**Example**
+path1/ matches
+http://www.example.com/**Path1/**query=example
+http://www.example.com/returnUrl=**Path1/**OtherPlace
+query matches
+http://www.example.com/Path1/q=**Query**
+http://www.example.com/Path1/**query**=hello
+
+
+## Override 
+- The HOSTS... command on the Tools menu allows you to easily retarget requests from one host to another.
+
+- You may import the Windows Hosts file (%SYSTEMROOT%\System32\drivers\etc\hosts) using the link at the bottom of the dialog.
+
+
+## Run from command line with ExeAction 
+- ExecAction.exe is a command line executable which is suitable for calling from batch files or unit tests. It passes its command line into FiddlerScript's OnExecAction function for processing, just like Fiddler's QuickExec box. The ExecAction commands can be handled by FiddlerScript or FiddlerExtensions.
+
+ExecAction.exe is installed into the Fiddler directory inside your Program Files folder.
+
+- Execute result 
+ExecAction sets %ERRORLEVEL% to
+
+0 if successful
+1 if an incorrect (!= 1) number of arguments used
+2 if the Fiddler window could not be found.
+
+
+## HTTP References 
+- http response codes rfc2616 
+http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+
+http://en.wikipedia.org/wiki/List_of_HTTP_status_codes
+
+http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
+
+http://www.rfc-editor.org/rfc/rfc2616.txt
+
+- unicode and character sets 
+http://www.joelonsoftware.com/articles/Unicode.html
+- regular expression tutorial 
+http://www.regular-expressions.info/
+
+
+## Fiddler architecture info 
+- internal architecture
+- session state 
+    public enum SessionStates 
+    {
+      Created,                   // Object created but nothing's happening yet
+      ReadingRequest,            // Thread is reading the HTTP Request
+      AutoTamperRequestBefore,   // AutoTamperRequest pass 1 (Only used by IAutoTamper)
+      HandTamperRequest,         // User can tamper using Fiddler Inspectors
+      AutoTamperRequestAfter,    // AutoTamperRequest pass 2 (Only used by IAutoTamper)
+      SendingRequest,            // Thread is sending the Request to the server
+      ReadingResponse,           // Thread is reading the HTTP Response
+      AutoTamperResponseBefore,  // AutoTamperResponse pass 1 (Only used by IAutoTamper)
+      HandTamperResponse,        // User can tamper using Fiddler Inspectors
+      AutoTamperResponseAfter,   // AutoTamperResponse pass 2 (Only used by IAutoTamper)
+      SendingResponse,           // Sending response to client application
+      Done,                      // Session is for archival purposes only
+      Aborted                    // Session was aborted (client didn't want response, fatal error, etc)
+    };
+
+- fiddler application collects interesting objects and event handlers useful for building extensions 
+
+    public delegate void SimpleEventHandler();
+    public delegate void CalculateReportHandler(Session[] _arrSessions);
+
+    public class FiddlerApplication 
+    {
+      [CodeDescription("Fiddler's main form.")]
+      public static frmViewer UI;
+
+      public static Proxy oProxy;
+      public static AutoResponder oAutoResponder;
+      public static FiddlerExtensions oExtensions;
+      public static FiddlerScript scriptRules;
+
+      [CodeDescription("Fiddler's core proxy engine.")]
+      public static Proxy oProxy;
+
+      [CodeDescription("Fiddler's AutoResponder object.")]  REMOVED in v2.1.8
+      public static AutoResponder oAutoResponder;
+
+      [CodeDescription("Fiddler's loaded extensions.")]
+      public static FiddlerExtensions oExtensions;
+
+      [CodeDescription("FiddlerScript scripting engine.")]   Likely to be removed
+      public static FiddlerScript scriptRules;
+
+      [CodeDescription("Sync this event to be notified when Fiddler has completed startup.")]
+      public static event SimpleEventHandler FiddlerBoot;
+
+      [CodeDescription("Sync this event to be notified when Fiddler has attached as the system proxy.")]
+      public static event SimpleEventHandler FiddlerAttach;
+
+      [CodeDescription("Sync this event to be notified when Fiddler has detached as the system proxy.")]
+      public static event SimpleEventHandler FiddlerDetach;
+
+      [CodeDescription("Sync this event to be notified when Fiddler shuts down.")]
+      public static event SimpleEventHandler FiddlerShutdown;
+
+      [CodeDescription("Sync this event to capture the CalculateReport event, summarizing the selected sessions.")]
+      public static event CalculateReportHandler CalculateReport;
+    }
+
+- fiddler SessionFlags 
+    + Each Session object in Fiddler contains a collection of string flags, in the Session.oFlags[] collection. The flags control how the session is processed and displayed in Session List. 
+    
+    + SessionTimers, Fiddler keeps track of key events using the .Timers object on each session. You can learn more about what each SessionTimer means.
+    
+- https protocol support, By default, Fiddler2 accepts SSLv2 SSLv3 and TLSv1 from the client, and offers SSLv3 and TLSv1 to the server. The text in the response for the CONNECT tunnel shows what cipher the remote server chose, and shows information about the server's certificate.
+
+- Silent installation, FiddlerSetup.exe /S
+
+
+## Understand download initiator 
+-  One downside of debugging at the proxy layer, however, is the loss of context -- it can be very difficult to trace back to determine why a given HTTP request was issued.
+
+-  Fiddler includes a number of features to help you understand context. First, Fiddler attempts to map inbound requests back to the process that issued them.
+
+Fiddler includes a number of features to help you understand context. First, Fiddler attempts to map inbound requests back to the process that issued them.    
+ 
+Within Fiddler, you can display the Accept header in the Session list as a column
+ 
+    + To add this column every time Fiddler starts, click Rules > Customize Rules. Scroll to the static function Main() block , and add the following line within:
+    FiddlerObject.UI.lvSessions.AddBoundColumn("Accept", 50, "@request.Accept");
+ 
+    + Most Feature Control Keys, including this one, are simple flags stored in the registry that change the behavior of the Web Browser when set.
+
+Enable FEATURE_DOWNLOAD_INITIATOR_HTTP_HEADER
+<Error>
+<Code>NoSuchKey</Code>
+<Message>The specified key does not exist.</Message>
+<Key>fiddler/EnableDownloadInitiator.reg</Key>
+<RequestId>6B6ED273D64ACCD9</RequestId>
+<HostId>
+HoLSptloO2vHe2qy8w7yp4G7ws1zNZ4ndNcN9xY4QKeWPNJHpTW+lggliwT5FzNVt+yK+vv+kyU=
+</HostId>
+</Error>
+
+Disable FEATURE_DOWNLOAD_INITIATOR_HTTP_HEADER
+Windows Registry Editor Version 5.00
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Internet Explorer\MAIN\FeatureControl\FEATURE_DOWNLOAD_INITIATOR_HTTP_HEADER]
+
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\Internet Explorer\MAIN\FeatureControl\FEATURE_DOWNLOAD_INITIATOR_HTTP_HEADER]
+
+
+## Fiddler import and export formats 
+- http archive json (*.har)
+- htp archive xml 
+
+## VPAT 
+- fiddler web debugger 
+
+## Troubleshooting
+- fiddler automatic authentication feature doesn't work 
+You'll need to set DisableLoopbackCheck=1 as described here: http://support.microsoft.com/kb/926642
+
+- exceed the http max connection limitation 
+HTTP/403 errors. This is caused by WindowsXP's 10 connection limit. To reduce the incidence of this problem, ensure that "Reuse Connections to Servers" 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
