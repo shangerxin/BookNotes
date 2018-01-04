@@ -1,0 +1,194 @@
+Distributed spark streaming with PySpark=Alex Robbins;Note=Erxin
+
+# Introduction 
+- install pyspark 
+- sample code 
+from operator import add, sub
+from time import sleep
+from pyspark import SparkContext
+from pyspark.streaming import StreamingContext
+
+# Set up the Spark context and the streaming context
+sc = SparkContext(appName="PysparkNotebook")
+ssc = StreamingContext(sc, 1)
+
+# Input data
+rddQueue = []
+for i in range(5):
+    rddQueue += [ssc.sparkContext.parallelize([i, i+1])]
+
+inputStream = ssc.queueStream(rddQueue)
+
+inputStream.map(lambda x: "Input: " + str(x)).pprint()
+inputStream.reduce(add)\
+    .map(lambda x: "Output: " + str(x))\
+    .pprint()
+
+ssc.start()
+sleep(5)
+ssc.stop(stopSparkContext=True, stopGraceFully=True)
+
+- RDDs and DStream 
+Spark Streaming has a different view of data than Spark. In non-streaming Spark, all data is put into a Resilient Distributed Dataset, or RDD. That isn’t good enough for streaming. 
+
+- DStream introduces a data type known as the DStream(discretized stream), which is a sequence of RDDs 
+
+- Input, Kafka brokers, set up a list of RDDs and fed them into queueStream
+
+- Output, we've done some computation we need to get the data back somehow 
+
+- sample two 
+
+sc = SparkContext(appName="PysparkNotebook")
+ssc = StreamingContext(sc, 1)
+
+inputData = [
+    [1,2,3],
+    [0],
+    [4,4,4],
+    [0,0,0,25],
+    [1,-1,10],
+]
+
+rddQueue = []
+for datum in inputData:
+    rddQueue += [ssc.sparkContext.parallelize(datum)]
+
+inputStream = ssc.queueStream(rddQueue)
+inputStream.reduce(add).pprint()
+
+ssc.start()
+sleep(5)
+ssc.stop(stopSparkContext=True, stopGraceFully=True)
+
+- windows, spark batches the incoming data according to your batch interval, sometimes you want to remember things from the past 
+
+- the simplest windowing function is window, let you create a new DStream computed by applying the window parameters to the old DStream. you can use any of the DStream operations on the new stream 
+
+- sample data 
+sc = SparkContext(appName="ActiveUsers")
+ssc = StreamingContext(sc, 1)
+
+activeUsers = [
+    ["Alice", "Bob"],
+    ["Bob"],
+    ["Carlos", "Dan"],
+    ["Carlos", "Dan", "Erin"],
+    ["Carlos", "Frank"],
+]
+
+rddQueue = []
+for datum in activeUsers:
+    rddQueue += [ssc.sparkContext.parallelize(datum)]
+
+inputStream = ssc.queueStream(rddQueue)
+inputStream.window(5, 1)\
+    .map(lambda x: set([x]))\
+    .reduce(lambda x, y: x.union(y))\
+    .pprint()
+
+ssc.start()
+sleep(5)
+ssc.stop(stopSparkContext=True, stopGraceFully=True)
+
+- reduceByKeyAndWindow, will remove the unused data and add additional data 
+    + common use case for windowing is to calculate aggregates 
+    
+    + sample program 
+sc = SparkContext(appName="HighScores")
+ssc = StreamingContext(sc, 1)
+ssc.checkpoint("highscore-checkpoints")
+
+player_score_pairs = [
+    [("Alice", 100), ("Bob", 60)],
+    [("Bob", 60)],
+    [("Carlos", 90), ("Dan", 40)],
+    [("Carlos", 10), ("Dan", 20), ("Erin", 90)],
+    [("Carlos", 20), ("Frank", 200)],
+]
+
+rddQueue = []
+for datum in player_score_pairs:
+    # raw data turn into rdd 
+    rddQueue += [ssc.sparkContext.parallelize(datum)]
+
+inputStream = ssc.queueStream(rddQueue)
+inputStream.reduceByKeyAndWindow(add, sub, 3, 1)\
+    .pprint()
+
+ssc.start()
+sleep(5)
+ssc.stop(stopSparkContext=True, stopGraceFully=True)
+
+- streaming Machine learning in distributed context 
+
+    + K-means clustering is a way to group data points into k different, maximally similar, clusters. Streaming k-means clustering means that Spark can handle incoming data and update the clusters over time, without needing to recompute everything. 
+
+    + sample code 
+from pyspark.mllib.regression import LabeledPoint
+import random
+
+random.seed(1111)
+
+test_data = []
+train_data = []
+for i in range(10):
+    train_data += [[]]
+
+with open("temperature_data_small.txt") as t:
+    for l in t:
+        fields = l.split()
+        point = LabeledPoint(fields[22],
+                             [fields[7], fields[8], fields[11], fields[21]])
+        if random.random() >= 0.8:
+            test_data += [point]
+        else:
+            train_data[random.randrange(10)] += [point]
+// Input fields:
+//8. Relative humidity (dining room), in %. 
+//9. Relative humidity (room), in %. 
+//12. Rain, the proportion of the last 15 minutes where rain was detected (a value in range [0,1]). 
+//22. Outdoor temperature, in C. 
+//23. Outdoor relative humidity, in %.
+
+    + learner regression 
+    
+    + sample code 
+from pyspark.mllib.regression import StreamingLinearRegressionWithSGD
+
+sc = SparkContext(appName="HumidityPrediction")
+ssc = StreamingContext(sc, 2)
+
+training_data_stream = ssc.queueStream(
+    [ssc.sparkContext.parallelize(d) for d in train_data])
+test_data_stream = ssc.queueStream(
+    [test_data for d in train_data])\
+    .map(lambda lp: (lp.label, lp.features))
+
+model = StreamingLinearRegressionWithSGD(
+    numIterations=5,
+    stepSize=0.00005)
+model.setInitialWeights([1.0,1.0,1.0,1.0])
+
+model.trainOn(training_data_stream)
+
+predictions = model.predictOnValues(test_data_stream)\
+    .map(lambda x: (x[0], x[1], (x[0] - x[1])))
+
+predictions.map(lambda x:
+                "Actual: " + str(x[0])
+                + ", Predicted: " + str(x[1])
+                + ", Error: " + str(x[2])).pprint()
+predictions.map(lambda x: (x[2]**2, 1))\
+    .reduce(lambda x,y: (x[0] + y[0], x[1] + y[1]))\
+    .map(lambda x: "MSE: " + str(x[0]/x[1]))\
+    .pprint()
+
+ssc.start()
+for i in range(10):
+    sleep(2)
+    print(model.latestModel())
+ssc.stop(stopSparkContext=True, stopGraceFully=True)
+
+
+
