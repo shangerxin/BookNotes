@@ -204,7 +204,7 @@ generate c++ header
 
 
 # XPCOM changes in Gecko 2.0 
-- no more fronzen interface, all interfaces are subject to change 
+- no more frozen interface, all interfaces are subject to change 
 
 - component registration, start from Gecko 2.0 component registered using manifest file 
 
@@ -281,6 +281,16 @@ JavaScript global constructor 	JavaScript-global-constructor
 - xpcNativeWrapper changes, you can't disable XPCNativeWrappers from your manifest 
     
 if your add-on depends pon XBL bindings attached to content objects, the ability to call functions or get and set properties created by XBL binding, you will need to use XPCNativeWrapper property 
+
+    + XPCNativeWrapper is a way to wrap up an object so that it's safe to access from privileged code. It can be used in all Firefox versions
+    
+    + An XPCNativeWrapper limits access to the properties and methods of the object it wraps. those that are defined in IDL or defined by DOM Level 0 (though some DOM Level 0 properties and methods do not work on an XPCNativeWrapper). In particular, properties added to an object via JavaScript (including getters and setters) are not exposed by an XPCNativeWrapper for this object.
+    
+    + reference 
+    http://mdn.beonex.com/en/docs/XPCNativeWrapper.html#Explicit_vs._Implicit
+
+- other reference about javascript xpcom 
+http://mdn.beonex.com/en/Code_snippets/JS_XPCOM.html
     
     
 # firefox developer tools and developer edition 
@@ -810,9 +820,9 @@ A subsume B && B subsume A, a and b are same-origin
 ...
 
     + security principals 
-the sytem principals, pass all security check 
+the system principals, pass all security check 
 content principal, it is associate with some web content which defined by the origin 
-expanded principal, specified as an array of origins. it subsumes every content pricinpal it contains 
+expanded principal, specified as an array of origins. it subsumes every content principal it contains 
 null principal, fails all security checks and no privileges
 
     + security relationship 
@@ -989,6 +999,169 @@ expose as a set of XPCOM, nsIPrefService, nsIPrefBranch
 
 # Using COM from js-ctypes 
 - reference
+
+# Interface between privileged and non-privileged pages 
+- Sending data from unprivileged document to chrome 
+
+
+# Interaction between unprivileged document to chrome 
+- send data from web page to an extension is using the custom DOM events
+    + in your extensions's browser.xul overlay write code which listens for a custom DOM event. For example MyExtensionEvent 
+
+var myExtension = {  
+  myListener: function(evt) {  
+    alert("Received from web page: " +  
+          evt.target.getAttribute("attribute1") + "/" +   
+          evt.target.getAttribute("attribute2"));  
+  }  
+}  
+document.addEventListener("MyExtensionEvent", function(e) { myExtension.myListener(e); }, false, true); 
+
+//in the webpage 
+var element = document.createElement("MyExtensionDataElement");  
+element.setAttribute("attribute1", "foobar");  
+element.setAttribute("attribute2", "hello world");  
+document.documentElement.appendChild(element);  
+  
+var evt = document.createEvent("Events");  
+evt.initEvent("MyExtensionEvent", true, false); 
+element.dispatchEvent(evt);  
+
+    + for add in a sidebar which can not directly access the browser.xul overlay we could add listener to the top-level document 
+    
+var mainWindow = window.QueryInterface(Components.interfaces.nsIInterfaceRequestor)  
+              .getInterface(Components.interfaces.nsIWebNavigation)  
+              .QueryInterface(Components.interfaces.nsIDocShellTreeItem)  
+              .rootTreeItem  
+              .QueryInterface(Components.interfaces.nsIInterfaceRequestor)  
+              .getInterface(Components.interfaces.nsIDOMWindow);  
+mainWindow.document.addEventListener("MyExtensionEvent", function(e) { myExtension.myListener(e); }, false, true);  
+
+- send data from chrome to custom DOM element by 
+To "answer" the web page (e.g., return code), your extension can set an attribute or attach child elements on the event target element (<MyExtensionDataElement/> in this example).
+
+
+# Working with window in chrome code 
+- reference 
+http://mdn.beonex.com/en/Working_with_windows_in_chrome_code.html
+
+- open a new window in overlay 
+var win = window.open("chrome://myextension/content/about.xul", 
+                      "aboutMyExtension", "chrome,centerscreen"); 
+                      
+                     
+# working with windows in chrome code 
+- Technically speaking, it implements a number of interfaces, including nsIDOMJSWindow and nsIDOMWindow, but it also contains the user-defined properties for global variables and functions of the window. 
+
+- Content windows, When a XUL window contains a widget capable of displaying a page, such as <browser> or <iframe>, the document in that widget is, naturally, separate from the document of the chrome window itself. 
+
+- accessing content documents, Assume you have a document loaded in a <tabbrowser>, <browser>, or <iframe> element inside your document. You can use browser.contentDocument to access that document and browser.contentWindow to access the Window object of that document.
+
+- the content shortcut, In case of <browser type="content-primary" />, you can use the content shortcut property to access the Window object of the content document.
+
+- The window.opener property is very easy to use, but it's only useful when you're sure that your window was opened from one of a few well-known places. In more complicated cases you need to use the nsIWindowMediator interface
+
+var wm = Components.classes["@mozilla.org/appshell/window-mediator;1"]
+                   .getService(Components.interfaces.nsIWindowMediator);
+var browserWindow = wm.getMostRecentWindow("navigator:browser");
+// read values from |browserWindow|
+
+- Using nsIWindowWatcher when you don't have a window 
+
+    var watcher = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+                            .getService(Components.interfaces.nsIWindowWatcher);
+    return watcher.openWindow(parentWindow, url, windowName, features, array);
+
+
+- Using nsIWindowWatcher for passing an arbritrary JavaScript object
+
+// In the calling code
+var args = {
+  param1: true,
+  param2: 42
+};
+args.wrappedJSObject = args;
+var watcher = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+                            .getService(Components.interfaces.nsIWindowWatcher);
+watcher.openWindow(null, url, windowName, features, args);
+
+
+    + passing a arbitrary JavaScript object, This uses the wrappedJSObject trick. By passing args to openWindow xpconnect will automatically wrap it as a generic nsISupports. The opened window can then just get at the underlying JavaScript object using wrappedJSObject.
+
+// In the calling code
+var args = {
+  param1: true,
+  param2: 42
+};
+args.wrappedJSObject = args;
+var watcher = Components.classes["@mozilla.org/embedcomp/window-watcher;1"]
+                            .getService(Components.interfaces.nsIWindowWatcher);
+watcher.openWindow(null, url, windowName, features, args);
+
+// in the window code 
+var args = window.arguments[0].wrappedJSObject;
+- JavaScript code modules New in Firefox 3 is a simple method for creating shared global singleton objects load by 
+
+Components.utils.import 
+
+- using xpcom singleton 
+Components.classes["@domain.org/mycomponent;1"].getService();
+
+- using FUEL application object,  a simple method for sharing data between windows. The Application object supports a storage property which can be used to store data globally.
+
+Application.storage.set(keyname, data);
+
+var data = Application.storage.get(keyname, default);
+
+- Store data in preferences 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

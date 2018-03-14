@@ -257,6 +257,10 @@ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XUL/browser
 # Webdriver base API implementation location 
 d:\mozilla-source\mozilla-release\testing\marionette
 
+# Document for marionette
+https://firefox-source-docs.mozilla.org/testing/marionette/marionette/index.html
+
+
 # JavaScript compartment
 - spider monkey compartements 
 https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Compartments
@@ -363,6 +367,11 @@ https://intoli.com/blog/running-selenium-with-headless-firefox/
 
 - doc 
 https://developer.mozilla.org/en-US/Firefox/Headless_mode
+
+- add environment variable 
+MOZ_HEADLESS set to 1 or true 
+
+- add commandline argument -headless 
 
 
 # Firefox get scriptable top 
@@ -596,7 +605,291 @@ https://developer.mozilla.org/en-US/docs/Mozilla/IPDL/Tutorial
 - inter process communication protocol definition language 
 
 # Mozilla Framework Based on Templates (MFBT)
+- reference 
+https://developer.mozilla.org/en-US/docs/Mozilla/MFBT
+
 - the folder is mfbt/ in the source tree 
+- Functionality 
+    + types and type manipulation 
+    StandardInteger.h, implements <stdint.h> 
+    
+    Types.h, includes StandardInteger.h and further provides size_t 
+    
+    CheckedInt.h implement checked integers, behave like integer but safely check for integer overflow and divide by zero 
+    
+    FloatingPoint.h, provide various operations for examining and working upon double precision floating point values 
+    
+    + Core 
+    Types.h further provides macros to define imported and exported C symbols 
+    
+    Attributes.h implements various function and class attribute macros 
+    
+    Likely.h, provide MOZ_LIKELY and MOZ_UNLIKELY marcros to annotate conditions with their expected truthiness 
+    
+    - Util.h, implements various other bits of usefuly functionally. 
+    
+    - debugging 
+    Assertions.h 
+    GuardObjects.h 
+    
+    + Data structure 
+    LinkedList.h 
+    RangePtr.h 
+    RefPtr.h 
+    Scoped.h 
+    ThreadLocal.h 
+
+# JavaScript code module reference such as Services 
+https://developer.mozilla.org/en-US/docs/Mozilla/JavaScript_code_modules
+
+
+# ipdl tutorial which contain in mozilla source 
+- reference 
+https://developer.mozilla.org/en-US/docs/Mozilla/IPDL/Tutorial
+
+- introduction 
+All messages for multi-process plugins and tabs in Firefox are declared in the IPDL language.
+
+    + messages are sent between parent and a child end points, called actors. An IPDL protocol declares how actors communicate:
+    
+- parent/child actors 
+                Parent              Child 
+IPC tabs        chrome process      Content process 
+IPC plugins     content process     plugin process
+
+- The IPDL compiler generates several C++ headers from each IPDL protocol. This generated code manages the details of the underlying communication layer (sockets and pipes)
+
+    + example 
+async protocol PPlugin
+{
+//two message can be sent from the parent to the child 
+child:
+  Init(nsCString pluginPath);
+  Shutdown();
+
+//one method could be sent from the child to parent 
+parent:
+  Ready();
+};
+
+    + generated header content 
+class PPluginParent
+{
+public:
+  bool SendInit(const nsCString& pluginPath) {
+    // generated code to send an Init() message
+  }
+
+  bool SendShutdown() {
+    // generated code to send a Shutdown() message
+  }
+
+protected:
+  /**
+   * A subclass of PPluginParent must implement this method to handle the Ready() message.
+   */
+  bool RecvReady() = 0;
+};
+
+class PPluginChild
+{
+protected:
+  bool RecvInit(const nsCString& pluginPath) = 0;
+  bool RecvShutdown() = 0;
+
+public:
+  bool SendReady() {
+    // generated code to send a Ready() message
+  }
+};
+    + implement the parent 
+class PluginChild : public PPluginChild
+{
+protected:
+  void RecvInit(const nsCString& pluginPath) {
+    mPluginLibrary = PR_LoadLibrary(pluginPath.get());
+    SendReady();
+  }
+  void RecvShutdown() {
+    PR_UnloadLibrary(mPluginLibrary);
+  }
+
+private:
+  PRLibrary* mPluginLibrary;
+};
+
+- Because protocol messages are represented as C++ methods, it's easy to forget that they are in fact asynchronous messages: by default the C++ method will return immediately, before the message has been delivered.
+
+- each message type includes a "direction" which specifies whether the message can be sent from parent to child, from child to parent or both ways 
+
+child: from parent to child 
+parent: from child to parent 
+both: both way 
+
+    + example 
+// PDirection.ipdl
+async protocol PDirection
+{
+child:
+  Foo();  // can be sent from-parent-to-child
+parent:
+  Bar();  // can be sent from-child-to-parent
+both:
+  Baz();  // can be sent both ways
+};
+
+- parameters, Message declarations allow any number of parameters. Parameters specify data that are sent with the message. Their values are serialized by the sender and deserialized by the receiver
+
+- custom primitive types, When you need to send data of a type other than one built into IPDL, you can add a using declaration in an IPDL specification.
+using mozilla::plugins::NPRemoteEvent;
+
+sync protocol PPluginInstance
+{
+child:
+  HandleEvent(NPRemoteEvent);
+};
+
+- unions
+    + support declaring discriminated unions 
+using struct mozilla::void_t from "ipc/IPCMessageUtils.h";
+
+union Variant
+{
+  void_t;
+  bool;
+  int;
+  double;
+  nsCString;
+  PPluginScriptableObject;
+};
+
+    + will generated 
+struct Variant
+{
+  enum Type {
+    Tvoid_t, Tbool, Tint, Tdouble, TnsCString, TPPlugionScriptableObject
+  };
+  Type type();
+  void_t& get_void_t();
+  bool& get_bool();
+  int& get_int();
+  double& get_double();
+  nsCString& get_nsCString();
+  PPluginScriptableObject* get_PPluginScriptableObject();
+};
+
+- structs 
+- array 
+- synchronous and RPC messaging 
+But what if we wanted to wait until the message was handled, or get return values from a message?
+
+In IPDL, there are three different semantics:
+1.asynchronous semantics; the sender is not blocked.
+2.Wait until the receiver acknowledges that it received the message. We call this synchronous semantics, as the sender blocks until the receiver receives the message and sends back a reply. The message may have return values.
+3.rpc semantics are a variation on synchronous semantics, see below.
+
+protocol PPluginInstance
+{
+child:
+    sync Init() returns (bool windowless, bool ok);
+};
+
+    + the C++ method names for synchronous and RPC messages are different
+            sender              receiver 
+async/sync  SendMessageName     RecvMessageName 
+rpc         CallMessageName     AnswerMessageName 
+
+- message semantics strength, sync is stronger than async 
+sync protocol xx
+{
+}
+
+- "RPC" stands for "remote procedure call," and this third semantics models procedure call semantics. A quick summary of the difference between RPC and sync semantics is that RPC allows "re-entrant" message handlers
+
+    + example,  "CallMeCallYou()" RPC interface, and the parent offers a "CallYou()" RPC interface. The rpc qualifiers mean that if the parent calls "CallMeCallYou()" on the child actor, then the child actor, while servicing this call, is allowed to call back into the parent actor's "CallYou()" message.
+    
+rpc protocol Example {
+child:
+    rpc CallMeCallYou() returns (int rv);
+
+parent:
+    rpc CallYou() returns (int rv);
+};
+
+Please don't use RPC semantics. RPC semantics exists mainly to support remoting plugins (NPAPI), where we have no choice.
+
+Chrome to content calls (for IPC tabs) must only use async semantics
+
+- Message delivery order, Delivery is "in-order", that is, messages are delivered to the receiver in the order that they are sent, regardless of the messages' semantics
+
+- A sub-protocol is bound to a "manager" which tracks its lifetime and acts as a factory. A protocol hierarchy begins with a single top-level protocol from which all subprotocol actors are eventually created. In Mozilla there are two main top-level protocols: 
+
+PPluginModule for remote plugins 
+PContent for remote tabs.
+
+    + example extends the toplevel plugin protocol to manage plugin instances.
+include protocol PPluginInstance;
+
+rpc protocol PPlugin
+{
+    manages PPluginInstance;
+child:
+    rpc Init(nsCString pluginPath) returns (bool ok);
+    rpc PPluginInstance(nsCString type, nsCString[] args) returns (int rv);
+};
+
+// ----- file PPluginInstance.ipdl
+
+include protocol PPlugin;
+
+rpc protocol PPluginInstance
+{
+    manager PPlugin;
+child:
+    rpc __delete__();
+    SetSize(int width, int height);
+};
+    
+__delete__ is a built-in construct, and is the only IPDL message which does not require an overridden implementation 
+
+AllocPProtocol and DeallocPProtocol are a matched pair of functions. The typical implementation of these functions uses `new` and `delete
+
+    + sub protocol deletion
+// --- PExample.ipdl
+include protocol PSubExample;
+
+async protocol PExample
+{
+    manages PSubExample;
+
+parent:
+    PChild();
+};
+
+// --- PSubExample.ipdl
+include protocol PExample;
+
+async protocol PSubExample
+{
+    manager PExample;
+
+child:
+    __delete__();
+};
+
+//call 
+aPSubExampleParent->Send__delete__();
+
+//will trigger 
+PSubExampleParent::ActorDestroy(Deletion)
+/* Deletion is an enumerated value indicating
+   that the destruction was intentional */
+PExampleParent::DeallocPSubExample()1234
+PSubExampleChild::Recv__delete__()
+PSubExampleChild::ActorDestroy(Deletion)
+PExampleChild::DeallocPSubExample()
+
+- [not completed]
 
 
 
@@ -606,6 +899,34 @@ https://developer.mozilla.org/en-US/docs/Mozilla/IPDL/Tutorial
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 
 
