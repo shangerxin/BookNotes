@@ -1,0 +1,728 @@
+Executable and Linkable Format;Note=Erxin
+
+# Reference 
+- wiki 
+https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+
+- ELF, executable and linkable format 
+
+ application binary interface (ABI) of the Unix operating system version named System V Release 4 
+ 
+- File layout, ELF file is made up of one ELF header, followed by file data. The data can include
+    + program header table 
+    + section header table 
+    + data referred to by entries in the program header 
+    
+- The segments contain information that is needed for run time execution of the file. Any byte can only be owned by one section or null only 
+
+00000000 7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 |.ELF............|
+
+00000010 02 00 3e 00 01 00 00 00 c5 48 40 00 00 00 00 00 |..>......H@.....|
+
+Example hexdump of ELF file header[3]
+
+the header defines whether to use 32 or 64 bit addresses. 
+
+    + ELF header 
+offset  size    field     
+0x00    4       e_ident[EI_MAG0]    0x7f followed by ELF (45 4c 46) in ascii, magic number 
+0x04    1       e_ident[EI_CLASS]
+...
+
+
+- Program header, tells the system how to create a process image. The layout is slightly different in 32-bit ELF vs 64-bit ELF, because the p_flags are in a different structure location for alignment reasons. 
+
+    + Program header 
+0x00    4       p_type      identify the type of segment 
+0x04(x64) 4     p_flags     segment-dependent flags 
+0x04            p_offset    offset of the segment in the file image 
+0x08(x64)
+
+- Section header 
+0x00    4       sh_name     offset to a string in the .shstrtab section 
+...
+
+- Tools
+Readelf, is a unix binary untility that displays information about one or more ELF files 
+elfutils, provides alternative tools to GNU binutils 
+elfdump, a command for viewing ELF information 
+objdump, provides a wide range of information about ELF files and other object formats 
+the unix file utility can display some information about ELF files 
+
+- Applications 
+Android uses ELF .so (shared object[16]) libraries for the Java Native Interface
+*nix 
+playstation 
+
+
+- specifications 
+http://www.sco.com/developers/devspecs/gabi41.pdf
+http://www.sco.com/developers/gabi/latest/contents.html
+http://refspecs.linuxbase.org/elf/elf.pdf
+
+- 86open was a project to form consenues on a common binary file format for unix and unix-like os 
+
+The format eventually chosen was ELF, specifically the Linux implementation of ELF, after it had turned out to be a de facto standard
+
+- FatELF universal binaries for Linux 
+
+- Further reading 
+http://www.iecc.com/linker/
+http://people.redhat.com/drepper/dsohowto.pdf
+https://web.archive.org/web/20070224140341/http://www-128.ibm.com/developerworks/power/library/pa-spec12/
+
+
+# Static Shared Dynamic and Loadable Linux Libraries 
+- library benefits 
+component reuse 
+version management 
+component specialization 
+
+- linux library types 
+static library (.a), object code which is linked with. becomes part of app 
+dynamic linked, shared object, (.so), can be used in two ways. dynamic link in runtime The libraries must be available during compile/link phase,  dynamically load/unload and linked during execution 
+
+- naming conventions 
+
+Libraries are typically named with the prefix "lib". This is true for all the C standard libraries.
+
+When linking, the command line reference to the library will not contain the library prefix or suffix.
+
+$ gcc file.c -lm -lpthread
+
+linking are the math library ("m") and the thread library ("pthread"). They are found in /usr/lib/libm.a and /usr/lib/libpthread.a.
+
+- Static libraries, (.a), The Linux/Unix ".a" library is conceptually the same as the Visual C++ static ".lib" libraries.
+
+    + generate a static library 
+    
+Compile:
+$ cc -Wall -c ctest1.c ctest2.c 
+
+options -Wall, include warnings 
+
+Create library "libctest.a": 
+$ ar -cvq libctest.a ctest1.o ctest2.o
+
+list files in library
+$ ar -t libctest.a 
+
+linking with the library:
+$ cc -o executable-name prog.c libctest.a
+$ cc -o executable-name prog.c -L/path/to/library-directory -lctest
+
+- Dynamically linked "Shared Object" libraries (.so)
+create object code 
+create library 
+optional, create default version using a symbolic link 
+
+    $ gcc -Wall -fPIC -c *.c
+    $ gcc -shared -Wl,-soname,libctest.so.1 -o libctest.so.1.0   *.o
+    $ mv libctest.so.1.0 /opt/lib
+    $ ln -sf /opt/lib/libctest.so.1.0 /opt/lib/libctest.so.1
+    $ ln -sf /opt/lib/libctest.so.1.0 /opt/lib/libctest.so
+
+This creates the library libctest.so.1.0 and symbolic links to it.
+
+compiler options:
+include warning -Wall 
+Compiler directive to output position independent code, required by shared libraries  -fPIC 
+Produce a shared object, -shared 
+Pass options to linker, -Wl 
+Output of operation, -o 
+
+The link to /opt/lib/libctest.so allows the naming convention for the compile flag -lctest to work.
+The link to /opt/lib/libctest.so.1 allows the run time binding to work. See dependency below.
+
+- Compile main program and link with shared object library 
+$ gcc -Wall -I/path/to/include-files -L/path/to/libraries prog.c -lctest -o prog
+
+use 
+
+$ gcc -Wall -L/opt/lib prog.c -lctest -o prog
+
+- List dependencies, The shared library dependencies of the executable can be listed with the command: ldd name-of-executable
+
+$ ldd libname-of-lib.so
+
+
+    + The fix is to resolve dependencies of the last two libraries when linking the library libname-of-lib.so
+    
+Add the unresolved library path in /etc/ld.so.conf.d/name-of-lib-x86_64.conf and/or /etc/ld.so.conf.d/name-of-lib-i686.conf 
+
+Reload the library cache (/etc/ld.so.cache) with the command: sudo ldconfig 
+
+Add library and path explicitly to the compiler/linker command: -lname-of-lib -L/path/to/lib 
+
+Add the library path to the environment variable to fix run-time dependency: 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/lib
+
+- Man pages 
+gcc - GNU C compiler
+ld - The GNU Linker
+ldd - List library dependencies
+ldconfig - configure dynamic linker run time bindings (update cache /etc/ld.so.cache)
+
+- Libray path 
+
+Add library directories to be included during dynamic linking to the file /etc/ld.so.conf
+$ /etc/ld.so.conf
+
+Add specified directory to library cache: (as root) 
+$ ldconfig -n /opt/lib 
+
+Specify the environment variable LD_LIBRARY_PATH to point to the directory paths containing the shared object library.
+(Linux/Solaris: LD_LIBRARY_PATH, SGI: LD_LIBRARYN32_PATH, AIX: LIBPATH, Mac OS X: DYLD_LIBRARY_PATH, HP-UX: SHLIB_PATH)
+Example (bash shell): export LD_LIBRARY_PATH=/opt/lib:$LD_LIBRARY_PATH or add to your ~/.bashrc
+
+
+- Library info, list object files in archive library 
+$ ar tf /usr/lib/x86_64-linux-gnu/libjpeg.a
+
+- nm: list symbols: object files, archive library and shared library
+$ nm /usr/lib/x86_64-linux-gnu/libjpeg.a
+$ nm -D libctest.so.1.0 
+
+
+
+Symbol Type	Description
+A	The symbol's value is absolute, and will not be changed by further linking.
+B	Un-initialized data section
+D	Initialized data section
+T	Normal code section
+U	Undefined symbol used but not defined. Dependency on another library.
+W	Doubly defined symbol. If found, allow definition in another library to resolve dependency.
+
+- readelf: list symbols in shared library
+$ readelf -s /usr/lib64/libjpeg.so
+
+- Library versions 
+
+The library version can be specified when the shared object library is created. If the library is expected to be updated, then a library version should be specified. 
+
+The version of the library is included in the symbol name so the linker knows which version to link with.
+
+look at the symbol version use 
+$ nm csub1.o
+00000000 T ctest1
+
+Specify the version script to use at compile time with the flag: --version-script=your-version-script-file 
+
+Some symbols may also get version strings from assembler code which appears in glibc headers files. Look at include/libc-symbols.h.
+$ nm /lib/libc.so.6 |more 
+00000000 A GCC_3.0
+00000000 A GLIBC_2.0
+00000000 A GLIBC_2.1
+00000000 A GLIBC_2.1.1
+00000000 A GLIBC_2.1.2
+00000000 A GLIBC_2.1.3
+00000000 A GLIBC_2.2
+00000000 A GLIBC_2.2.1
+00000000 A GLIBC_2.2.2
+00000000 A GLIBC_2.2.3
+00000000 A GLIBC_2.2.4
+
+- Dynamic loading and un-loading of shared libraries using libdl, Useful for creating a "plug-in" architecture.
+
+|#ifdef __cplusplus
+|extern "C"{
+|#endif 
+|
+|
+|void ctest1(int *)
+|void ctest2(int *)
+|
+|#ifdef __cplusplus
+|}
+|#endif
+
+Use the notation extern "C" so the libraries can be used with C and C++. This statement prevents the C++ from name mangling and thus creating "unresolved symbols" when linking
+
+$ gcc -rdynamic -o progdl progdl.c -ldl
+
+dlopen() - gain access to an executable object file
+dclose() - close a dlopen object
+dlsym() - obtain the address of a symbol from a dlopen object
+dlvsym() - Programming interface to dynamic linking loader.
+dlerror() - get diagnostic information
+
+- C++ calss objects and dynamic loading 
+
+dynamic loading of c++ classes. load and have access to the entire object and all of its member functions. Do this by passing a "C" class factory function which instantiates the class.
+
+//class ".h" file 
+class Abc{
+    ...
+};
+
+//class factory "C" functions
+typedef Abc* create_t; 
+typedef void destroy_t(Abc*);
+
+
+//class ".cpp" file 
+Abc::Abc()
+{
+    ...
+}
+
+extern "C"
+{
+    //these two "C" functions manage the creation and destruction of the class Abc
+    Abc* create()
+    {
+        return new Abc();
+    }
+
+    void destroy(Abc* p)
+    {
+        delete p; //can use a base class or derived class pointer here 
+    }
+}
+
+//use the functions 
+//load the symbols 
+create_t* create_abc = (create_t*) dlsym(lib_handle, "create");
+destroy_t* destroy_abc = (destroy_t*) dlsym(lib_handle, "destroy");
+
+- Comparison to the Microsoft DLL
+The Visual C++ .NET IDE wizard will create a DLL framework through the GUI, and generates a ".def" file. This "module definition file" lists the functions to be exported. When exporting C++ functions, the C++ mangled names are used. Using the Visual C++ compiler to generate a ".map" file will allow you to discover the C++ mangled name to use in the ".def" file. The "SECTIONS" label in the ".def" file will define the portions which are "shared". 
+
+Suggest to create dll with microsoft IDE 
+
+Windows C++ equivalent functions to libdl are the following functions:
+::LoadLibrary() - dlopen()
+::GetProcAddress() - dlsym()
+::FreeLibrary() - dlclose()
+
+Microsoft Visual C++ .NET compilers do not allow the linking control that the GNU linker "ld" allows (i.e. --whole-archive, -no-whole-archive). All symbols need to be resolved by the VC++ compiler for both the loadable library and the application executable individually a
+
+On MS/Windows you can use shared memory or a memory mapped file so that the main executable and DLL library can share a pointer to an address they both will use.
+
+- Cross platform (Linux and MS/Windows) C++ code snippet
+
+#ifndef USE_PRECOMPILED_HEADERS
+#ifdef WIN32
+#include <direct.h>
+#include <windows.h>
+#else
+#include <sys/types.h>
+#include <dlfcn.h>
+#endif
+#include <iostream>
+#endif
+    using namespace std;
+#ifdef WIN32
+    HINSTANCE lib_handle;
+#else
+    void *lib_handle;
+#endif
+    // Where retType is the pointer to a return type of the function
+    // This return type can be int, float, double, etc or a struct or class.
+ 
+    typedef retType* func_t; 
+ 
+    // load the library -------------------------------------------------
+#ifdef WIN32
+    string nameOfLibToLoad("C:\opt\lib\libctest.dll");
+    lib_handle = LoadLibrary(TEXT(nameOfLibToLoad.c_str()));
+    if (!lib_handle) {
+        cerr << "Cannot load library: " << TEXT(nameOfDllToLoad.c_str()) << endl;
+    }
+#else
+    string nameOfLibToLoad("/opt/lib/libctest.so");
+    lib_handle = dlopen(nameOfLibToLoad.c_str(), RTLD_LAZY);
+    if (!lib_handle) {
+        cerr << "Cannot load library: " << dlerror() << endl;
+    }
+#endif
+ 
+...
+...
+...
+ 
+    // load the symbols -------------------------------------------------
+#ifdef WIN32
+    func_t* fn_handle = (func_t*) GetProcAddress(lib_handle, "superfunctionx");
+    if (!fn_handle) {
+        cerr << "Cannot load symbol superfunctionx: " << GetLastError() << endl;
+    }
+#else
+    // reset errors
+    dlerror();
+ 
+    // load the symbols (handle to function "superfunctionx")
+    func_t* fn_handle= (func_t*) dlsym(lib_handle, "superfunctionx");
+    const char* dlsym_error = dlerror();
+    if (dlsym_error) {
+        cerr << "Cannot load symbol superfunctionx: " << dlsym_error << endl;
+    }
+#endif
+ 
+...
+...
+...
+ 
+    // unload the library -----------------------------------------------
+#ifdef WIN32
+    FreeLibrary(lib_handle);
+#else
+    dlclose(lib_handle);
+#endif
+
+- Tools 
+ar, create modify and extract from archives 
+ranlib, generate index to archive 
+nm, list symbols from object files 
+ld, linker 
+ldconfig, configure dynamic linker runtime bindings 
+ldd, print shared library dependencies 
+gcc/g++, GNU project
+man page to: ld.so - a.out dynamic linker/loader 
+
+
+# Component Object Model 
+- reference 
+https://en.wikipedia.org/wiki/Component_Object_Model
+
+- It is used to enable inter-process communication object
+- COM is the basis for several other Microsoft technologies and frameworks, including OLE, OLE Automation, Browser Helper Object, ActiveX, COM+, DCOM, the Windows shell, DirectX, UMDF and Windows Runtime
+- QueryInterface method. The preferred method of "inheritance" within COM is the creation of sub-objects to which method "calls" are delegated.
+- Unlike C++, COM provides a stable application binary interface (ABI) that does not change between compiler releases
+
+- history, interprocess communication in Windows was Dynamic Data Exchange (DDE), first introduced in 1987
+
+These provided the foundation of many of the ideas behind COM. Object Linking and Embedding (OLE), Microsoft's first object-based framework, was built on top of DDE and designed specifically for compound documents.
+
+- Related technologies 
+    + COM+ 
+Windows as an alternative to other enterprise-level operating systems, Microsoft introduced a technology called Microsoft Transaction Server (MTS) on Windows NT 4. With Windows 2000, that significant extension to COM was incorporated into the operating system (as opposed to the series of external tools provided by MTS) and renamed COM+. At the same time, Microsoft de-emphasized DCOM as a separate entity. Components that made use of COM+ services were handled more directly by the added layer of COM+,
+
+An advantage of COM+ was that it could be run in "component farms". Instances of a component, if coded properly, could be pooled and reused by new calls to its initializing routine without unloading it from memory.
+
+COM+ also introduced a subscriber/publisher event mechanism called COM+ Events, and provided a new way of leveraging MSMQ (inter-application asynchronous messaging) with components called Queued Components
+
+COM+ events extend the COM+ programming model to support late-bound, look up the bound at the runtime 
+
+    + .NET, Microsoft .NET provides means both to provide component technology, and to interact with COM+ (via COM-interop-assemblies); 
+    
+    + A COM object may be used in .NET by implementing a Runtime Callable Wrapper (RCW).[4] NET objects that conform to certain interface restrictions may be used in COM objects by calling a COM callable wrapper (CCW).[5]
+    
+    + COM Interop WCF, it allows objects to be transparently marshalled by value across process or machine boundaries 
+    
+- window runtime, WinRT. The API definitions are, however, stored in ".winmd" files, which are encoded in ECMA 335 metadata format, the same CLI metadata format that .NET uses with a few modifications. It introduce less overhead than P/Invoke 
+
+- Security , COM and ActiveX are run as native code on the user's machine, with no sandboxing 
+
+The transparent support for out-of-process COM servers still promotes software safety in terms of process isolation. 
+
+- Technical details, COM programmers build their software using COM-aware components. Different component types are identified by class IDs (CLSIDs), which are Globally Unique Identifiers (GUIDs). Each COM component exposes its functionality through one or more interfaces. The interfaces distinguished from each other using interface IDs (IIDs), which are GUIDs too. 
+
+COM interfaces have bindings in several languages, such as C, C++, Visual Basic, Delphi, Python[7][8] and several of the scripting languages implemented on the Windows platform.
+
+    + interfaces, All COM components implement the IUnknown (custom) interface, which exposes methods for reference counting and type conversion (casting). A custom IUnknown interface consists of a pointer to a virtual method table that contains a list of pointers to the functions that implement the functions declared in the interface, in the same order that they are declared in the interface. 
+
+    COM also supports dispatch interfaces inheriting from IDispatch. Dispatch interfaces support late binding for OLE Automation. This allows dispatch interfaces to be natively accessed from a wider range of programming languages than custom interfaces.
+
+    + classes, A COM class ("coclass") is a concrete implementation of one or more interfaces, and closely resembles classes in object-oriented programming languages.
+    
+    + interface definition language and type libraries represent COM types. These types are described using Microsoft Interface Definition Language (MSIDL/IDL). IDL files define object-oriented classes, interfaces, structures, enumerations and other user-defined types in a language independent manner. 
+
+    IDL files are compiled by the MIDL compiler. For C/C++, the MIDL compiler generates a compiler-independent header file containing struct definitions to match the vtbls of the declared interfaces and a C file containing declarations of the interface GUIDs.
+
+    C++ source code for a proxy module can also be generated by the MIDL compiler. This proxy contains method stubs for converting COM calls into remote procedure calls to enable DCOM for out-of-process communication.
+
+    + COM as an object framework,  Each COM type is designated its own GUID for identification at runtime. In order for information on COM types to be accessible at both compile time and runtime, COM uses type libraries. 
+
+    // in an IDL 
+    coclass SomeClass{
+        [default] interface ISomeInterface;
+    };
+
+    equivalent to defining the following C++ class:
+    
+    class SomeClass: public ISomeInterface {
+        ...
+    };
+    ISomeInterface is a C++ pure virtual class
+    
+    In C++, COM objects are instantiated with the CoCreateInstance function that takes the class ID (CLSID) and interface ID (IID) as arguments. Instantiation of SomeClass
+    
+    ISomeInterface* interface_ptr = NULL;
+    HRESULT hr = CoCreateInstance(CLSID_SomeClass, NULL, CLSCTX_ALL,
+                                  IID_ISomeInterface, (void**)&interface_ptr);
+    
+    + Reference counting, The reference counts are controlled by the clients through the AddRef and Release methods in the mandatory IUnknown interface that all COM objects implement. COM objects are then responsible for freeing their own memory when the reference count drops to zero. 
+    
+    Guidelines to call AddRef and Release on COM objects 
+    Functions and methods that return interface references shall increment the reference count of the return object before returning 
+    Release must be called on an interface pointer before the pointer is overwritten or goes output scope 
+    If a copy is made on an interface reference pointer, AddRef should be called on that pointer 
+    AddRef and Release must be called on the specific interface which is being referenced since an object may implement per-interface reference counts 
+    
+    Not all reference count calls are sent to remote objects over the wire; a proxy keeps only one reference on the remote object and maintains its own local reference count. To simplify COM development, Microsoft introduced ATL (Active Template Library) for C++ developers. 
+    
+    Other libraries and languages that are COM-aware include the Microsoft Foundation Classes, the VC Compiler COM Support,[9] VBScript, Visual Basic, ECMAScript (JavaScript) and Borland Delphi
+
+- Programming, COM implementations are responsible for entering and leaving the COM environment, instantiating and reference-counting COM objects, querying objects for supported interfaces, as well as handling errors. The Microsoft Visual C++ compiler supports extensions to the C++ language referred to as C++ Attributes.[10] These extensions are designed to simplify COM development and remove much of the plumbing code required to implement COM servers in C++.[11]
+
+- Registry usage, In Windows, COM classes, interfaces and type libraries are listed by GUIDs in the registry, under HKEY_CLASSES_ROOT\CLSID for classes and HKEY_CLASSES_ROOT\Interface for interfaces. 
+
+Registration-Free COM (RegFree COM) is a technology introduced with Windows XP that allows Component Object Model (COM) components to store activation metadata and CLSID (Class ID) for the component without using the registry.
+the metadata and CLSIDs of the classes implemented in the component are declared in an assembly manifest (described using XML), stored either as a resource in the executable or as a separate file installed with the component.[12] This allows multiple versions of the same component to be installed in different directories, described by their own manifests, as well as XCOPY deployment.
+
+This technique has limited support for EXE COM servers[14] and cannot be used for system-wide components such as MDAC, MSXML, DirectX or Internet Explorer.
+
+- Manually instantiated COM objects, COM objects can also be created manually, given the path of the DLL file and GUID of the object. This does not require the DLL or GUID to be registered in the system registry, and does not make use of manifest files.
+
+A COM DLL exports a function named DllGetClassObject. Calling DllGetClassObject with the desired GUID and IID_IClassFactory provides an instance of a factory object.
+
+- Process and network transparency, COM objects can be transparently instantiated and referenced from within the same process (in-process), across process boundaries (out-of-process), or remotely over the network (DCOM). marshalling then transfer 
+
+- Threading, In COM, threading is addressed through a concept known as apartments.[18] An individual COM object lives in exactly one apartment, which might either be single-threaded or multi-threaded. There are three types of apartments in COM: Single-Threaded Apartment (STA), Multi-Threaded Apartment (MTA), and Thread Neutral Apartment (NA)
+
+All threads accessing COM objects similarly live in one apartment. The choice of apartment for COM objects and threads are determined at run-time, and cannot be changed.
+
+Apartment type              Description 
+Single-Threaded             method calls from threads outside of the apartment are marshalled and automatically queued by the system. No concurrency issue 
+
+Multi-Threaded Apartment    The COM run-time provides no synchronization, and multiple threads are allowed to call COM objects simultaneously. COM objects therefore need to perform their own synchronization to prevent simultaneous access from multiple threads from causing a race condition. Calls to an MTA object from a thread in an STA also marshalled 
+
+Dynamic determined apartment(Both)   the server auto-selects STA or MTA at object creation to match the apartment type of the calling thread. Avoid marshaling overhead when MTA servers are accessed by a STA thread 
+
+Thread Neutral Apartment, A special apartment without any assigned threads. When a STA or MTA thread calls a NA object in the same process, then the calling thread temporarily leaves its apartment and executes code directly in the NA without any thread switching.[22] Therefore, one can think of NA as an optimization for efficient interapartment method calls.
+
+Threads and objects which belong to the same apartment follow the same thread access rules. Method calls which are made inside the same apartment are therefore performed directly without any assistance from COM. Method calls made across apartments are achieved via marshalling. This requires the use of proxies and stubs.
+
+- Criticisms 
+    + Message pumping, When an STA is initialized it creates a hidden window that is used for inter-apartment and inter-process message routing. This window must have its message queue regularly "pumped". This construct is known as a "message pump".
+    
+    + Reference counting, Reference counting within COM may cause problems if two or more objects are circularly referenced.
+    
+    Reference cycles are typically broken using either out-of-band termination or split identities. In the out-of-band termination technique, an object exposes a method which, when called, forces it to drop its references to other objects, thereby breaking the cycle. In the split identity technique, a single implementation exposes two separate COM objects (also known as identities). This creates a weak reference between the COM objects, preventing a reference cycle.
+    
+    + DLL Hell, Registration-free COM capability attempts to work around this problem. 
+    
+    
+# What is a dll 
+- reference 
+https://support.microsoft.com/en-us/help/815065/what-is-a-dll
+
+- Summary 
+a high-level comparison of DLLs to the Microsoft .NET Framework assemblies.
+
+- what is dll, library contain code and data can be reused 
+Comdlg32 DLL performs common dialog box related functions. Therefore, each program can use the functionality that is contained in this DLL to implement an Open dialog box.
+
+some of the files that are implemented as DLLs in Windows operating systems: 
+ActiveX Controls (.ocx) files
+An example of an ActiveX control is a calendar control that lets you select a date from a calendar.
+
+Control Panel (.cpl) files
+An example of a .cpl file is an item that is located in Control Panel. Each item is a specialized DLL.
+
+Device driver (.drv) files
+An example of a device driver is a printer driver that controls the printing to a printer.
+
+- DLL troubleshooting tools 
+Dependency Walker
+
+DLL Universal Problem Solver, The DLL Universal Problem Solver (DUPS) tool is used to audit, compare, document, and display DLL information. 
+Dlister.exe 
+Dcomp.exe 
+Dtxt2DB.exe 
+DlgDtxt2DB.exe 
+
+- DLL help database, The DLL Help database helps you locate specific versions of DLLs that are installed by Microsoft software products.
+
+- DLL development 
+
+    + types of dll 
+    The two methods of linking are load-time dynamic linking and run-time dynamic linking.
+    Load-time dynamic linking
+    
+    To use load-time dynamic linking, provide a header (.h) file and an import library (.lib) file when you compile and link the application.
+    
+    
+    + run-time dynamic linking, an application calls either the LoadLibrary function or the LoadLibraryEx function to load the DLL at run time
+    
+    GetProcAddress function to obtain the address of the exported DLL function that you want to call. 
+     
+    run-time dynamic linking don't required import library file 
+    
+    application criteria to use load-time dynamic linking 
+    startup performance 
+    ease of use 
+    application logic 
+    
+- dll entry point, When you create a DLL, you can optionally specify an entry point function. The entry point function is called when processes or threads attach themselves to the DLL or detached themselves from the DLL. You can use the entry point function to initialize data structures or to destroy data structures as required by the DLL. Additionally
+
+if the application is multithreaded, you can use thread local storage (TLS) to allocate memory that is private to each thread in the entry point function. 
+
+BOOL APIENTRY DllMain(
+HANDLE hModule,// Handle to DLL module
+DWORD ul_reason_for_call,// Reason for calling function
+LPVOID lpReserved ) // Reserved
+{
+switch ( ul_reason_for_call )
+{
+case DLL_PROCESS_ATTACHED:
+// A process is loading the DLL.
+break;
+case DLL_THREAD_ATTACHED:
+// A process is creating a new thread.
+break;
+case DLL_THREAD_DETACH:
+// A thread exits normally.
+break;
+case DLL_PROCESS_DETACH:
+// A process unloads the DLL.
+break;
+}
+return TRUE;
+}
+
+- exporting doll functions 
+
+to use a function keyword you must declare each function that you want to export with 
+__declspec(dllexport)
+
+declare each function that you want to import with the following keyword:
+__declspec(dllimport)
+    
+Module definition file could also be used to declare exported dll functions 
+
+In the module definition file, you declare the LIBRARY statement and the EXPORTS statement for the DLL. The following code is an example of a definition file.
+// SampleDLL.def
+//
+LIBRARY "sampleDLL"
+
+EXPORTS
+  HelloWorld
+
+- Steps to create a dll 
+    + create a Win32 Dynamic-Link Library project type or the MFC AppWizard (dll) project type.
+// SampleDLL.cpp
+//
+
+#include "stdafx.h"
+#define EXPORTING_DLL
+#include "sampleDLL.h"
+
+BOOL APIENTRY DllMain( HANDLE hModule, 
+                       DWORD  ul_reason_for_call, 
+                       LPVOID lpReserved
+ )
+{
+    return TRUE;
+}
+
+void HelloWorld()
+{
+MessageBox( NULL, TEXT("Hello World"), TEXT("In a DLL"), MB_OK);
+}
+
+
+// File: SampleDLL.h
+//
+#ifndef INDLL_H
+#define INDLL_H
+
+#ifdef EXPORTING_DLL
+extern __declspec(dllexport) void HelloWorld() ;
+#else
+extern __declspec(dllimport) void HelloWorld() ;
+#endif
+
+#endif
+The following code is an example of a Win32 Application project that calls the exported DLL function in the SampleDLL DLL.
+// SampleApp.cpp 
+//
+
+#include "stdafx.h"
+#include "sampleDLL.h"
+
+int APIENTRY WinMain(HINSTANCE hInstance,
+                     HINSTANCE hPrevInstance,
+                     LPSTR     lpCmdLine,
+                     int       nCmdShow)
+{ 
+HelloWorld();
+return 0;
+}
+
+In load-time dynamic linking, you must link the SampleDLL.lib import library that is created when you build the SampleDLL project.
+
+In run-time dynamic linking, you use code that is similar to the following code to call the SampleDLL.dll exported DLL function.
+...
+typedef VOID (*DLLPROC) (LPTSTR);
+...
+HINSTANCE hinstDLL;
+DLLPROC HelloWorld;
+BOOL fFreeDLL;
+
+hinstDLL = LoadLibrary("sampleDLL.dll");
+if (hinstDLL != NULL)
+{
+    HelloWorld = (DLLPROC) GetProcAddress(hinstDLL, "HelloWorld");
+    if (HelloWorld != NULL)
+        (HelloWorld);
+
+    fFreeDLL = FreeLibrary(hinstDLL);
+}
+
+    + dll search sequences 
+The application folder
+The current folder
+The Windows system folder
+
+Note The GetSystemDirectory function returns the path of the Windows system folder.
+
+The Windows folder
+Note The GetWindowsDirectory function returns the path of the Windows folder.
+
+- The .net framework assembly 
+
+An assembly is a logical unit of functionality that runs under the control of the .NET common language runtime (CLR). An assembly physically exists as a .dll file or as an .exe file. However, internally an assembly is very different from a Microsoft Win32 DLL.
+
+An assembly file contains an assembly manifest, type metadata, Microsoft intermediate language (MSIL) code, and other resources. 
+
+Assembly name
+Version information
+Culture information
+Strong name information
+The assembly list of files
+Type reference information
+Referenced and dependent assembly information
+
+- By default, when you create an assembly, the assembly is private to the application. To create a shared assembly requires that you assign a strong name to the assembly and then publish the assembly in the global assembly cache.
+
+- assembly features compare to win32 dll     
+self-describing 
+versioning 
+side-by-side deployment 
+self-containment and isolation 
+execution 
+language independent
+
+- reference 
+http://msdn2.microsoft.com/en-us/library/ms811694.aspx, dll conflicts 
+http://msdn2.microsoft.com/en-us/library/ms811700.aspx, side by side component sharing     
+http://msdn2.microsoft.com/en-us/library/ms685090.aspx, runtime dynamic linking 
+http://msdn2.microsoft.com/en-us/library/ms686749.aspx, thread local storage     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
