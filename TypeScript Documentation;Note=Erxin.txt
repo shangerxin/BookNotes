@@ -2750,7 +2750,7 @@ Do use the types number, string, and boolean. which implemented in typescript
     
     A general rule of thumb is that values always conflict with other values of the same name unless they are declared as namespaces, types will conflict if they are declared with a type alias declaration (type s = string), and namespaces never conflict.
 
-    //adding members to an interface with another interface/classes delclaration 
+    //adding members to an interface with another interface/classes declaration 
     interface Foo {
       x: number;
     }
@@ -2987,6 +2987,580 @@ typings install bluebird --source npm --save
 cat typings/index.d.ts
 
 
+# TypeScript 2.7
+- const-named properties on types including ECMAScript symbols 
+// Lib
+export const SERIALIZE = Symbol("serialize-method-key");
+
+export interface Serializable {
+    [SERIALIZE](obj: {}): string;
+}
+
+    + using the exported const property 
+// consumer
+
+import { SERIALIZE, Serializable } from "lib";
+
+class JSONSerializableItem implements Serializable {
+    [SERIALIZE](obj: {}) {
+        return JSON.stringify(obj);
+    }
+}
+
+- unique symbol
+To enable treating symbols as unique literals a new type unique symbol is available. unique symbol is a subtype of symbol
+
+ in order to reference a specific unique symbol, you’ll have to use the typeof operator. 
+ 
+// Works
+declare const Foo: unique symbol;
+
+// Works - refers to a unique symbol, but its identity is tied to 'Foo'.
+let Baz: typeof Foo = Foo;
+
+// Also works.
+class C {
+    static readonly StaticSymbol: unique symbol = Symbol();
+}
+
+two unique symbol types are assignable or comparable to each other.
+
+- TypeScript 2.7 introduces a new flag called --strictPropertyInitialization
+
+checks to ensure that each instance property of a class gets initialized in the constructor body
+
+- Definite Assignment Assertions
+The definite assignment assertion is a feature that allows a ! to be placed after instance property and variable declarations to relay to TypeScript that a variable is indeed assigned for all intents and purposes
+
+// Notice the '!'
+let x!: number;
+initialize();
+
+// No error!
+console.log(x + x);
+
+function initialize() {
+    x = 10;
+}
+
+- Fixed Length Tuples
+interface NumStrTuple extends Array<number | string> {
+    0: number;
+    1: string;
+    length: 2; // using the numeric literal type '2'
+}
+
+only enforce a minimum length you can use a similar declaration that does not explicitly define a length property, falling back to number.
+
+- Improved type inference for object literals, normalize the object literal types such that all properties are present in each constituent of the union type.
+
+declare function f<T>(...items: T[]): T;
+// let obj: { a: number, b: number } |
+//     { a: string, b?: undefined } |
+//     { a?: undefined, b?: undefined }
+let obj = f({ a: 1, b: 2 }, { a: "abc" }, {});
+obj.a;  // string | number | undefined
+obj.b;  // number | undefined
+
+- Improved handling of structurally identical classes and instanceof expressions
+
+- Type guards inferred from in operator. n is a string literal or string literal type and x is a union type, the “true” branch narrows to types which have an optional or required property n, and the “false” branch narrows to types which have an optional or missing property n
+
+interface A { a: number };
+interface B { b: string };
+
+function foo(x: A | B) {
+if ("a" in x) {
+    return x.a;
+}
+return x.b;
+
+- Support for import d from "cjs" form CommonJS modules with --esModuleInterop
+    + CommonJS/AMD/UMD modules were treated in the same way as ES6 module 
+    + TypeScript treats a namespace import (i.e. import * as foo from "foo") for a CommonJS/AMD/UMD module as equivalent to const foo = require("foo").
+    
+    + A namespace import (i.e. import * as foo from "foo") is now correctly flagged as uncallabale
+
+- numeric separators using _ 
+
+const milion = 1_000_000;
+const phone = 555_734_2231;
+const bytes = 0xFF_0C_00_FF;
+
+- cleaner output in --watch mode 
+- support --pretty output
+
+
+# TypeScript 2.8 
+- conditional types, which add the ability to express non-uniform type mappings.
+
+T extends U ? X : Y
+
+    + example
+type TypeName<T> =
+    T extends string ? "string" :
+    T extends number ? "number" :
+    T extends boolean ? "boolean" :
+    T extends undefined ? "undefined" :
+    T extends Function ? "function" :
+    "object";
+
+type T0 = TypeName<string>;  // "string"
+type T1 = TypeName<"a">;  // "string"
+type T2 = TypeName<true>;  // "boolean"
+type T3 = TypeName<() => void>;  // "function"
+type T4 = TypeName<string[]>;  // "object"
+
+- each type variable introduced by an infer (more later) declaration within U collect a set of candidate types by inferring from T to U (using the same inference algorithm as type inference for generic functions). For a given infer type variable V, if any candidates were inferred from co-variant positions, the type inferred for V is a union of those candidates. Otherwise, if any candidates were inferred from contra-variant positions, the type inferred for V is an intersection of those candidates. Otherwise, the type inferred for V is never.
+
+- distributive conditional types, Conditional types in which the checked type is a naked type parameter are called distributive conditional types
+
+T extends U ? X : Y with the type argument A | B | C for T is resolved as (A extends U ? X : Y) | (B extends U ? X : Y) | (C extends U ? X : Y)
+
+
+type FunctionPropertyNames<T> = { [K in keyof T]: T[K] extends Function ? K : never }[keyof T];
+type FunctionProperties<T> = Pick<T, FunctionPropertyNames<T>>;
+
+type NonFunctionPropertyNames<T> = { [K in keyof T]: T[K] extends Function ? never : K }[keyof T];
+type NonFunctionProperties<T> = Pick<T, NonFunctionPropertyNames<T>>;
+
+interface Part {
+    id: number;
+    name: string;
+    subparts: Part[];
+    updatePart(newName: string): void;
+}
+
+type T40 = FunctionPropertyNames<Part>;  // "updatePart"
+type T41 = NonFunctionPropertyNames<Part>;  // "id" | "name" | "subparts"
+type T42 = FunctionProperties<Part>;  // { updatePart(newName: string): void }
+type T43 = NonFunctionProperties<Part>;  // { id: number, name: string, subparts: Part[] }
+
+- type inference in conditional types. Within the extends clause of a conditional type, it is now possible to have infer declarations that introduce a type variable to be inferred. 
+
+    + extracts the return type of a function type
+    
+type ReturnType<T> = T extends (...args: any[]) => infer R ? R : any;
+
+    + demonstrates how multiple candidates for the same type variable in co-variant positions causes a union type to be inferred 
+    
+type Foo<T> = T extends { a: infer U, b: infer U } ? U : never;
+type T10 = Foo<{ a: string, b: string }>;  // string
+type T11 = Foo<{ a: string, b: number }>;  // string | number
+
+    + It is not possible to use infer declarations in constraint clauses for regular type parameters
+
+type ReturnType<T extends (...args: any[]) => infer R> = R;  // Error, not support
+
+- predefined conditional types 
+predefined conditional types to lib.d.ts:
+
+Exclude<T, U> – Exclude from T those types that are assignable to U.
+Extract<T, U> – Extract from T those types that are assignable to U.
+NonNullable<T> – Exclude null and undefined from T.
+ReturnType<T> – Obtain the return type of a function type.
+InstanceType<T> – Obtain the instance type of a constructor function type
+
+- Improved control over mapped type modifiers. a readonly or ? property modifier in a mapped type can now be prefixed with either + or - to indicate that the modifier should be added or removed.
+
+    + example 
+type MutableRequired<T> = { -readonly [P in keyof T]-?: T[P] };  // Remove readonly and ?
+type ReadonlyPartial<T> = { +readonly [P in keyof T]+?: T[P] };  // Add readonly and ?
+
+    + lib.d.ts now has a new Required<T> type. This type strips ? modifiers from all properties of T, thus making all properties required
+type Required<T> = { [P in keyof T]-?: T[P] };
+
+    + --strictNullChecks mode also removed undefined from that property 
+    
+- per-file JSX factories, per-file configurable JSX factory name using @jsx dom pragma. JSX factory can be configured for a compilation using --jsxFactory (default is React.createElement).
+
+    + per-file-basis by adding a comment to the beginning of the file 
+/** @jsx dom */
+import { dom } from "./renderer"
+<h></h>
+
+    + generate 
+var renderer_1 = require("./renderer");
+renderer_1.dom("h", null);
+
+    
+- locally scoped JSX namespaces 
+    + Combined with the per-file @jsx pragma, each file can have a different JSX factory.
+
+    + --emitDeclarationOnly allows for only generating declaration files; .js/.jsx 
+
+
+# TypeScript 2.9 
+- support number and symbol named properties with keyof and mapped types 
+    + If your functions are only able to handle string named property keys, use Extract<keyof T, string> in the declaration:
+
+function useKey<T, K extends Extract<keyof T, string>>(o: T, k: K) {
+  var name: string = k;  // OK
+}
+
+    + If your functions are open to handling all property keys, then the changes should be done down-stream
+function useKey<T, K extends keyof T>(o: T, k: K) {
+  var name: string | number | symbol = k;
+}
+
+    + Otherwise use --keyofStringsOnly compiler option
+
+- generic type arguments in JSX elements. allw passing type arguments to generic components 
+
+class GenericComponent<P> extends React.Component<P> {
+    internalProp: P;
+}
+
+type Props = { a: number; b: string; };
+
+const x = <GenericComponent<Props> a={10} b="hi"/>; // OK
+
+const y = <GenericComponent<Props> a={10} b={20} />; // Error
+
+- Generic type arguments in generic tagged templates
+declare function styledComponent<Props>(strs: TemplateStringsArray): Component<Props>;
+
+interface MyProps {
+  name: string;
+  age: number;
+}
+
+styledComponent<MyProps> `
+  font-size: 1.5em;
+  text-align: center;
+  color: palevioletred;
+`;
+
+declare function tag<T>(strs: TemplateStringsArray, ...args: T[]): T;
+
+// inference fails because 'number' and 'string' are both candidates that conflict
+let a = tag<string | number> `${100} ${"hello"}`;
+
+- import types, Using import("mod") in a type annotation allows for reaching in a module and accessing its exported declaration without importing it.
+
+// module.d.ts
+
+export declare class Pet {
+   name: string;
+}
+
+// global-script.ts
+
+function adopt(p: import("./module").Pet) {
+    console.log(`Adopting ${p.name}...`);
+}
+
+also works in JSDoc comments to refer to types from other modules in .js:
+// a.js
+
+/**
+ * @param p { import("./module").Pet }
+ */
+function walk(p) {
+    console.log(`Walking ${p.name}...`);
+}
+
+- support for import.meta, The type of import.meta is the global ImportMeta type which is defined in lib.es5.d.ts. This interface is extremely limited. Adding well-known properties for Node or browsers requires interface merging and possibly a global augmentation depending on the context
+
+assuming that __dirname is always available 
+
+// node.d.ts
+interface ImportMeta {
+    __dirname: string;
+}
+
+- New --resolveJsonModule allows for importing, extracting types from and generating .json files
+// settings.json
+
+{
+    "repo": "TypeScript",
+    "dry": false,
+    "debug": false
+}
+
+// a.ts
+
+import settings from "./settings.json";
+
+settings.debug === true;  // OK
+settings.dry === 2;  // Error: Operator '===' cannot be applied boolean and number
+
+
+# TypeScript 3.0 
+- project references, allow TypeScript projects to depend on other TypeScript projects - specifically, allowing tsconfig.json files to reference other tsconfig.json files. 
+
+- reset parameters with tuple types 
+    + equal declare 
+declare function foo(...args: [number, string, boolean]): void;
+
+declare function foo(args_0: number, args_1: string, args_2: boolean): void;
+
+- generic reset parameters. This enables higher-order capturing and spreading of partial parameter lists
+
+declare function bind<T, U extends any[], V>(f: (x: T, ...args: U) => V, x: T): (...args: U) => V;
+declare function f3(x: number, y: string, z: boolean): void;
+
+const f2 = bind(f3, 42);  // (y: string, z: boolean) => void
+const f1 = bind(f2, "hello");  // (z: boolean) => void
+const f0 = bind(f1, true);  // () => void
+
+- optional elements in tuple types, Tuple types now permit a ? postfix on element types to indicate that the element is optional
+
+- In --strictNullChecks mode, a ? modifier automatically includes undefined in the element type
+
+the type of the length property in the tuple type [number, string?, boolean?] is 1 | 2 | 3
+
+- reset elements in tuple types, [number, ...string[]] means tuples with a number element followed by any number of string elements
+
+function tuple<T extends any[]>(...args: T): T {
+    return args;
+}
+
+const numbers: number[] = getArrayOfNumbers();
+
+- new unknown top type. TypeScript 3.0 introduces a new top type unknown. unknown is the type-safe counterpart of any. Anything is assignable to unknown, but unknown isn’t assignable to anything but itself and any without a type assertion or a control flow based narrowing. 
+
+// In an intersection everything absorbs unknown
+
+type T00 = unknown & null;  // null
+type T01 = unknown & undefined;  // undefined
+type T02 = unknown & null & undefined;  // null & undefined (which becomes never)
+type T03 = unknown & string;  // string
+type T04 = unknown & string[];  // string[]
+type T05 = unknown & unknown;  // unknown
+type T06 = unknown & any;  // any
+
+// In a union an unknown absorbs everything
+
+type T10 = unknown | null;  // unknown
+type T11 = unknown | undefined;  // unknown
+type T12 = unknown | null | undefined;  // unknown
+type T13 = unknown | string;  // unknown
+type T14 = unknown | string[];  // unknown
+type T15 = unknown | unknown;  // unknown
+type T16 = unknown | any;  // any
+
+// Type variable and unknown in union and intersection
+
+type T20<T> = T & {};  // T & {}
+type T21<T> = T | {};  // T | {}
+type T22<T> = T & unknown;  // T
+type T23<T> = T | unknown;  // unknown
+
+// unknown in conditional types
+
+type T30<T> = unknown extends T ? true : false;  // Deferred
+type T31<T> = T extends unknown ? true : false;  // Deferred (so it distributes)
+type T32<T> = never extends T ? true : false;  // true
+type T33<T> = T extends never ? true : false;  // Deferred
+
+// keyof unknown
+
+type T40 = keyof any;  // string | number | symbol
+type T41 = keyof unknown;  // never
+
+// No property accesses, element accesses, or function calls
+
+function f11(x: unknown) {
+    x.foo;  // Error
+    x[5];  // Error
+    x();  // Error
+    new x();  // Error
+}
+
+// typeof, instanceof, and user defined type predicates
+
+declare function isFunction(x: unknown): x is Function;
+
+// Type parameter 'T extends unknown' not related to object
+
+function f23<T extends unknown>(x: T) {
+    let y: object = x;  // Error
+}
+
+// Anything but primitive assignable to { [x: string]: unknown }
+
+function f24(x: { [x: string]: unknown }) {
+    x = {};
+    x = { a: 5 };
+    x = [1, 2, 3];
+    x = 123;  // Error
+}
+
+// Functions with unknown return type don't need return expressions
+
+function f27(): unknown {
+}
+
+// Rest type cannot be created from unknown
+
+function f28(x: unknown) {
+    let { ...a } = x;  // Error
+}
+
+- support for defaultProps in JSX, TypeScript 2.9 and earlier didn’t leverage React defaultProps declarations inside JSX components. Users would often have to declare properties optional and use non-null assertions inside of render
+
+export interface Props {
+    name: string;
+}
+
+export class Greet extends React.Component<Props> {
+    render() {
+        const { name } = this.props;
+        return <div>Hello ${name.toUpperCase()}!</div>;
+    }
+    static defaultProps = { name: "world"};
+}
+
+// Type-checks! No type assertions needed!
+let el = <Greet />
+
+- Caveats, Use static defaultProps: Pick<Props, "name">; as an explicit type annotation instead, or do not add a type annotation as done in the example above.
+
+function Greet({ name = "world" }: Props) {
+    return <div>Hello ${name.toUpperCase()}!</div>;
+}
+
+- /// <reference lib="..." /> reference directives,  allowing a file to explicitly include an existing built-in lib file.
+
+same fashion as the "lib" compiler option in tsconfig.json (e.g. use lib="es2015" and not lib="lib.es2015.d.ts", etc.).
+
+
+# TypeScript 3.1 
+- In TypeScript 3.1, mapped object types[1] over tuples and arrays now produce new tuples/arrays, rather than creating a new type where members like push(), pop(), and length are converted.
+
+- MapToPromise takes a type T, and when that type is a tuple like Coordinate, only the numeric properties are converted. 
+
+type MapToPromise<T> = { [K in keyof T]: Promise<T[K]> };
+
+type Coordinate = [number, number]
+
+type PromiseCoordinate = MapToPromise<Coordinate>; // [Promise<number>, Promise<number>]
+
+- properties declarations on functions, const-declared functons, simply by assigning to properties on these functions in the same scope. This allows us to write canonical JavaScript code without resorting to namespace hacks. For example:
+
+function readImage(path: string, callback: (err: any, image: Image) => void) {
+    // ...
+}
+
+readImage.sync = (path: string) => {
+    const contents = fs.readFileSync(path);
+    return decodeImageSync(contents);
+}
+
+- ECMAScript exports are often a better way of providing this functionality, this new support allows code written in this style to “just work”. propTypes on React stateless 
+
+export const FooComponent => ({ name }) => (
+    <div>Hello! I am {name}</div>
+);
+
+FooComponent.defaultProps = {
+    name: "(anonymous)",
+};
+
+- Version selection with typesVersions, Node module resolution in TypeScript 3.1, when TypeScript cracks open a package.json file to figure out which files it needs to read, it first looks at a new field called typesVersions. A package.json with a typesVersions field might look like this
+
+{
+  "name": "package-name",
+  "version": "1.0",
+  "types": "./index.d.ts",
+  "typesVersions": {
+    ">=3.1": { "*": ["ts3.1/*"] }
+  }
+}
+
+    + typesVersions can support multiple fields where each field name is specified by the range 
+
+{
+  "name": "package-name",
+  "version": "1.0",
+  "types": "./index.d.ts",
+  "typesVersions": {
+    ">=3.2": { "*": ["ts3.2/*"] },
+    ">=3.1": { "*": ["ts3.1/*"] }
+  }
+}
+
+
+# TypeScript 3.2 
+- strictBindCallApply, --strictBindCallApply compiler option (in the --strict family of options) with which the bind, call, and apply methods on function objects are strongly typed and strictly checked
+
+function foo(a: number, b: string): string {
+    return a + b;
+}
+
+let a = foo.apply(undefined, [10]);              // error: too few argumnts
+let b = foo.apply(undefined, [10, 20]);          // error: 2nd argument is a number
+let c = foo.apply(undefined, [10, "hello", 30]); // error: too many arguments
+let d = foo.apply(undefined, [10, "hello"]);     // okay! returns a string
+
+    + caveats, When using these methods on a generic function, type parameters will be substituted with the empty object type ({}), and when used on a function with overloads, only the last overload will ever be modeled.
+
+- Generic spread expressions in object literals. allow generic spread expressions which now produce intersection types, similar to the Object.assign function and JSX literals. For example:
+
+function taggedObject<T, U extends string>(obj: T, tag: U) {
+    return { ...obj, tag };  // T & { tag: U }
+}
+
+let x = taggedObject({ x: 10, y: 20 }, "point");  // { x: number, y: number } & { tag: "point" }
+
+    + Non-generic spread expressions continue to be processed as before
+    
+- Generic object rest variables and parameters. TypeScript 3.2 also allows destructuring a rest binding from a generic variable. This is achieved by using the predefined Pick and Exclude helper types
+
+function excludeTag<T extends { tag: string }>(obj: T) {
+    let { tag, ...rest } = obj;
+    return rest;  // Pick<T, Exclude<keyof T, "tag">>
+}
+
+const taggedPoint = { x: 10, y: 20, tag: "point" };
+const point = excludeTag(taggedPoint);  // { x: number, y: number }
+
+- BigInt are part of an upcoming proposal in ECMAScript that allow us to model theoretically arbitrarily large integers. 
+
+calling the BigInt() function or by writing out a BigInt literal by adding an n to the end of any integer
+
+let foo: bigint = BigInt(100); // the BigInt function
+let bar: bigint = 100n;        // a BigInt literal
+
+declare let foo: number;
+declare let bar: bigint;
+
+foo = bar; // error: Type 'bigint' is not assignable to type 'number'.
+bar = foo; // error: Type 'number' is not assignable to type 'bigint'.
+
+You’ll have to explicitly convert values to BigInts.
+
+- Non-unit types as union discriminants. TypeScript 3.2 makes narrowing easier by relaxing rules for what it considers a discriminant property
+
+type Result<T> =
+    | { error: Error; data: null }
+    | { error: null; data: T };
+
+function unwrap<T>(result: Result<T>) {
+    if (result.error) {
+        // Here 'error' is non-null
+        throw result.error;
+    }
+
+    // Now 'data' is non-null
+    return result.data;
+}
+
+- tsconfig.json inheritance via Node.js packages
+TypeScript 3.2 now resolves tsconfig.jsons from node_modules. When using a bare path for the "extends" field in tsconfig.json, TypeScript will dive into node_modules packages for us.
+
+{
+    "extends": "@my-team/tsconfig-base",
+    "include": ["./**/*"]
+    "compilerOptions": {
+        // Override certain options on a project-by-project basis.
+        "strictBindCallApply": false,
+    }
+}
+
+- The new --showConfig flag
+tsc, the TypeScript compiler, supports a new flag called --showConfig. When running tsc --showConfig, TypeScript will calculate the effective tsconfig.json
 
 
 
@@ -3000,6 +3574,11 @@ cat typings/index.d.ts
 
 
 
+
+
+
+
+ 
 
 
 

@@ -126,13 +126,347 @@ y {6};         // also OK
     
 
 # Modularity 
--     
+- The first and most important step is to distinguish between the interface to a part and its implementation. 
+
+double sqrt(double);     // the square root function takes a double and returns a double
+
+class Vector 
+{
+public:
+     Vector(int s);     
+     double& operator[](int i);     
+     int size();
+private:     
+    double* elem; // elem points to an array of sz doubles     
+    int sz;
+};
     
+- separate compilation, C++ supports a notion of separate compilation where user code sees only declarations of the types and functions used.
+
+- old way, if you #include header.h in 101 translation units, the text of header.h will be processed by the compiler 101 times
     
+- express the Vector and sqrt_sum() example from §3.2 using modules
+// file Vector.cpp:
+
+module;  // this compilation will define a module
+
+// ... here we put stuff that Vector might need for its implementation ...
+
+export module Vector;  // defining the module called "Vector"export 
+
+class Vector {
+public:     
+    Vector(int s);     
+    double& operator[](int i);     
+    int size();
+private:     
+    double* elem;     // elem points to an array of sz doubles     
+    int sz;
+};
+
+Vector::Vector(int s)     
+    :elem{new double[s]}, sz{s}    // initialize members
+{
+}
+
+double& Vector::operator[](int i)
+{     
+    return elem[i];
+}
+
+int Vector::size()
+{
+    return sz;
+}
+
+export int size(const Vector& v) 
+{ return v.size(); }
+
     
+- The way we use this module is to import it where we need it. 
+// file user.cpp:
+import Vector;         // get Vector's interface
+
+#include <cmath>       // get the standard-library math function interface including sqrt()
+double sqrt_sum(Vector& v)
+{     
+    double sum = 0;
+    for (int i=0; i!=v.size(); ++i)  
+        sum+=std::sqrt(v[i]);        // sum of square roots     
+    return sum;
+}
     
+- difference between header and module 
+    + module is compiled once 
+    + two modules can be imported in either order 
+    + if you import something into a module, users of your module do not implicitly gain access to what you imported. import is not transitive 
+
+- namespace 
+namespace My_code 
+{    
+
+    class complex {         // ...    };
+
+    complex sqrt(complex);
+    // ...    
+    int main();
+}
+
+int My_code::main()
+{    
+    complex z {1,2};    
+    auto z2 = sqrt(z);    
+    std::cout << '{' << z2.real() << ',' << z2.imag() << "}\n";    
+    // ...
+}
+
+int main()
+{    
+    return My_code::main();
+}
+
+bring the name into a scope with a using-declaration:
+
+using std::swap;        // use the standard-library swap     // ...     
+swap(x,y);              // std::swap()     
+other::swap(x,y);       // some other swap()
+
+- error handling 
+
+double& Vector::operator[](int i)
+{     
+    if (i<0 || size()<=i)           
+        throw out_of_range{"Vector::operator[]"};     
+    return elem[i];
+}
+
+// ...     
+try{ 
+    // exceptions here are handled by the handler defined below          v[v.size()] = 7; 
     
+    // try to access beyond the end of v     
+} 
+catch (out_of_range& err) {   
+    // oops: out_of_range error          
+    // ... handle range error ...          
+    cerr << err.what() << '\n';
+    throw;   // rethrow
+}
+
+A function that should never throw an exception can be declared noexcept. 
+
+- invariants, If operator new can’t find memory to allocate, it throws a std::bad_alloc.
+
+- error handling alternative
+    + throwing an exception 
+    error is rare 
+    cannot be handle by the caller 
+    no suitable return path for errors 
+    The error has to be transmitted up a call chain to an “ultimate caller.” 
+    The recovery from errors depends on the results of several function calls
     
+    + return a value indicate failure 
+    failure is normal and expected 
+    an immediate caller can handle the failure 
+    
+    + terminate the program 
+    cannot recover 
+    
+- contracts, The standard library offers the debug macro, assert(), to assert that a condition must hold at run time. 
+
+assert(p!=nullptr);  // p must not be the nullptr
+
+- static assertions, perform simple checks on most properties that are known at compile time
+
+static_assert(4<=sizeof(int), "integers are too small");  // check integer size
+
+- function arguments and return values 
+
+concerns are:
+Is an object copied or shared?
+If an object is shared, is it mutable?
+Is an object moved, leaving an “empty object” behind (§5.2.2)?
+
+The default behavior for both argument passing and value return is “copy”
+
+- argument passing 
+void test(vector<int> v, vector<int>& rv)       
+// v is passed by value; rv is passed by reference
+{     
+    v[1] = 99;     // modify v (a local variable)     
+    rv[2] = 66;    // modify whatever rv refers to
+}
+
+    + move, we give Matrix a move constructor (§5.2.2) and very cheaply move the Matrix out of operator+()
+
+- returning large objects by returning a pointer to it is common in older code and a major source of hard-to-find errors. 
+
+- deduce return type 
+auto mul(int i, double d) { return i*d; }       // here, "auto" means "deduce the return type"
+
+- structured binding
+struct Entry 
+{     
+    string name;
+    int value;
+};
+
+Entry read_entry(istream& is)     // naive read function (for a better version, see §10.5)
+{     
+    string s;
+    int i;     
+    is >> s >> i;     
+    return {s,i};
+}
+
+//we can decorate auto with const and &. For example:
+auto [n,v] = read_entry(is);
+cout << "{ " << n << "," << v << " }\n";
+
+- Avoid non-inline function definitions in headers; 
+- Don’t put a using-directive in a header file;
+- Don’t overuse return-type deduction;
+
+
+# Class 
+- three important kinds of classes 
+    + concrete classes 
+    + abstract classes 
+    + classes in class hierarchies 
+    
+- concrete types, just like built-in types, Similarly, a vector and a string are much like built-in arrays
+
+- classical user-defined arithmetic type
+
+class complex 
+{
+ double re, im; // representation: two doubles
+ public:     
+ complex(double r, double i) :re{r}, im{i} {}    // construct complex from two scalars     
+ complex(double r) :re{r}, im{0} {}              // construct complex from one scalar     
+ complex() :re{0}, im{0} {}                      // default complex: {0,0}     
+ 
+ double real() const { return re; }     
+ void real(double d) { re=d; }     
+ double imag() const { return im; }     
+ void imag(double d) { im=d; }     
+ 
+ complex& operator+=(complex z)
+ {         
+    re+=z.re;         // add to re and im         
+    im+=z.im;
+    return *this;     // and return the result
+ }
+
+ complex& operator−=(complex z)     
+ {         
+ 
+    re−=z.re;         
+    im−=z.im;         
+    return *this;     
+ }
+  
+ }     
+ complex& operator*=(complex);   
+ // defined out-of-class somewhere     
+ 
+ complex& operator/=(complex);    
+ // defined out-of-class somewhere
+}
+
+
+but a non-const member function can only be invoked for non-const objects. 
+
+c!=b means operator!=(c,b) and 1/a means operator/(complex{1},a)
+- destructor, Plain delete deletes an individual object, delete[] deletes an array.
+
+- initializing containers 
+
+class Vector 
+{
+public:     
+    Vector(std::initializer_list<double>);     
+    // initialize with a list of doubles     
+    // ...     void push_back(double);                    
+    // add element at end, increasing the size by one     
+    // ...
+};
+
+{1,2,3,4}, the compiler will create an object of type initializer_list to give to the program
+
+Vector v1 = {1,2,3,4,5};              // v1 has 5 elements
+
+- convert 
+const_cast for “casting away const.”
+
+A static_cast does not check the value it is converting
+
+reinterpret_cast for treating an object as simply a sequence of bytes
+
+
+- abstract types 
+
+class Container {
+public:     
+    virtual double& operator[](int) = 0;     // pure virtual function     
+    virtual int size() const = 0;            // const member function (§4.2.1)     
+    virtual ~Container() {}                  // destructor (§4.2.2)
+};
+
+- A class that provides the interface to a variety of other classes is often called a polymorphic type
+
+
+- inherit 
+class Vector_container : public Container {
+   int size() const override { return v.size(); }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     
     
     
