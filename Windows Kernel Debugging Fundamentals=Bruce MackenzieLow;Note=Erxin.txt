@@ -1,0 +1,224 @@
+Windows Kernel Debugging Fundamentals=Bruce MackenzieLow;Note=Erxin
+
+# introduction to windows crashs and hangs 
+- introduction 
+    + why learn windows kernel debugging 
+    + debugging crashes verses hangs 
+    + common culprits 
+    + how memory dumps are created 
+    + types of memory dumps 
+    + configuring memory dump settings 
+    + dedicated dump file 
+    + restrictions and gotchas 
+    
+- kernel debugging skills 
+    + driver developers 
+    debugging your own code 
+    debugging someone else's code 
+    
+    + IP professionals 
+    minimize downtime 
+    identify suspect driver 
+    
+- crash dump analysis, interpreting the contents of RAM to determine why a system is failed. 
+
+    + MS tool for help generate system failure in a variety of ways 
+    NotMyFault
+    
+- windows crashes and hangs 
+    + crashses are unexpected, unhandled exceptions that occur in kernel mode 
+    
+    + the state of operating system becomes questionable 
+    
+    + the operating system stops to avoid corrupting data 
+    
+    + also known as the blue screen of death (BSOD) stops and bugchecks 
+    
+    + the contents of RAM is saved in a file called memory.dmp 
+    
+- windows system hangs 
+    + hangs occur when processors or peripheral devices unresponsive and freezed 
+    
+    + software induced hangs include 
+    depleted system resources(memory pool)
+    runaway high priority compute-bound threads 
+    synchronization mechanisms (deallocks & spinlocks)
+    
+    
+    + hardware originated hangs include 
+    faulty devices causing false interrupts 
+    failing processors 
+    corrupted RAM 
+    
+    + memory dump must be manually forced generated on a hung system 
+    
+- common culprits for crashes 
+    + the big reasons are old antivirus software. it is not fully tested on the new OS 
+    
+    + new drivers 
+    Storport(over 50 hotfixes in windows 2003), https://docs.microsoft.com/en-us/windows-hardware/drivers/storage/storport-driver
+    
+    MPIO(over a dozen hotfixes in windows 2008)
+    
+    + incompatible drivers 
+    old Storport driver with a new miniport driver 
+    
+    + too many filter drivers 
+    antivirus deduplication, disk quota, mirroring 
+    
+    + memory corruption 
+    + hardware failures 
+    + operating system bugs 
+- Common culprits for hangs 
+    + depleted system resources (memory pool). limited resource cause system to hang 
+    
+    + broken applications with deadlocks or spinlock hangs. 
+    
+    + high priority compute-bound(runaway) applications 
+    
+    + old antivirus software 
+    
+    + new drivers 
+    
+    + incompatible drivers 
+    
+    + broken hardware
+    
+- determining driver dependencies 
+    + use dependency walker(depends.exe)
+    http://www.dependencywalker.com 
+    
+    + opening a driver QL2300.SYS. will display the dependency 
+    
+- How memory dumps are created 
+    + crash or hang, content of RAM is writen to Pagefile.sys* 
+    
+    on reboot the pagefiles.sys* -> memory.dmp 
+    
+    analyze crash with windbg 
+    
+    + In window 2008/vista later, a dedicated dump files can be used instead of the page file on any local disk. This is specified using the DedicatedDumpfile registry value 
+    
+- types of memory dumps 
+    + small dump: a small(64k) mini-dump containing minimal debugging information(stop code, parameters, stack, drivers)
+    
+    help for checking the reason
+    
+    + kernel dump, medium size dump containing kernel data structures, drivers and current process & thread information. 
+    
+    + complete dump, large memory dump containning complete contents of memory. can take considerabletime to dump memory. consume long time to write and large disk space
+    
+    + automatic dump, new to window server 2012 and window 8. same as kernel memory dump, but uses a smaller page file when system managed page fiels are used 
+    
+    http://blogs.technet.com/b/askcore/archive/2012/09/12/windows-8-and-windows-server-2012-automatic-memory-dump.aspx
+    
+    see microsoft kb 254649 for further details 
+    
+- configuring memory dumps 
+    + use control panel | system applet | Advanced 
+    under startup and recovery|settings 
+    
+    + configure dump type(see microsoft kb 254649)
+    small, kernel, complete or automatic 
+    
+    + select dump file location(see microsoft kb 886429 for details)
+    default%systemroot%memory.dmp 
+    
+    + select overwrite any existing dump file 
+    
+    + select options such as send alert and auto restart 
+    
+    + for further details see microsoft kb 307973 
+    how to configure system failure and recovery options in windows 
+    https://support.microsoft.com/en-us/help/307973/how-to-configure-system-failure-and-recovery-options-in-windows
+    
+    + open control panel 
+    open system | Advanced system setting |startup and recovery 
+    
+    we could configure the system recovery strategy
+    
+- dedicated dump file 
+    + new feature available with window server 2008 earlier. a page file has to be exist on the disk to catch the dump file
+    
+    this is an issue for lower hardware disk. 2008 later we could configure the page file to be saved to different location and support put pagefile could be saved on different disk 
+    
+    + dedicated dump file can be located on any local disk 
+    
+    + new registry value: DedicatedDumpFile & DumpFileSize 
+    for further details see Microsoft KB 969028 
+    how to generate kernel or a complete memory dump in windows server 2008 r2 
+    
+- restrictions and gotchas 
+    + sufficient free disk space for memory.dmp 
+    + pagefile.sys located on boot partition(pre-windows 2008)
+    
+    + pagefile.sys sufficiently size for type of memory dump 
+    
+    + automatic server recovery(ASR) may prevent memory dump from being written(disable in BIOS). See Microsoft KB 244139 for details 
+    
+    the solution is temporary disable the watch dog feature 
+    
+    + additional reasons why a dump file is not created(microsoft kb 130536)
+    
+    + gotachas 
+    kernel memory dump files may not be generated on windows server 2008 and windows vista computers when system meory is larger than the size of the page file(microsoft kb 949052)
+    
+    new registry value: IgnorePagefileSize 
+    
+    dedicated dump files are unexpectlly truncated to 4gb on a computer that is running windows server 2008 or vista and that has more than 4gb of physical memory (microsoft kb 950858)
+    
+    new registry value: DedicatedDumpfile & DumpfileSize 
+    
+    enables windows 7 or windows 2008 r2-based computer to create a memory dump file without a page file(microsoft kb 2716542)
+    
+    windows 7 does not save memory dump if less than 25gb of free disk space. 
+    new registry value AlwaysKeepMemoryDump 
+    
+    windows doesnot create a memory dump file when a stop error occurs in windows 8 or windows server 2012(microsoft kb 2853466)
+    
+    existing memory dump file is removed if you turn off the "overwrite any existing fiel" option in windows 8 and windows server 2012(microsoft kb 2851299)
+    
+    windows error reporting reports a crash when you shut down a computer that is running windows rt, windows 8 or windows server 2012(microsoft kb 2800185)
+    
+    memory dump file is generated very slowly on a hyper-v virtual machine that uses dynamic memory when the maximum RAM setting is over 4gb in windows server 2008r2 (microsoft kb 2587660)
+    
+    remember to use http://support.microsoft.com 
+    
+- summary 
+different reasons for crash 
+only crashes automatically generate a memory dump 
+memory dump must be forced on a hung system 
+
+different types of memory dumps 
+small, kernel, complete and automatic 
+dedicated dump file can be used instaed of a page file 
+
+configure dump file options in the system applet 
+
+variety of hotfixes for problems capturing memory dumps 
+    
+# Getting started with the windows debugger 
+- 
+    
+    
+# Getting help in windows debugger 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

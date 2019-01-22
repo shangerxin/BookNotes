@@ -114,24 +114,634 @@ system virtual address space, singleton where kernel or device driver live
 
 # System architecture 
 - overview 
+    + classic window system architecture 
+    + virtualization based security overview 
+    + subsystems 
+    linux subsystem 
+    + new system processes 
+    + summary 
+- CPU architectures 
+    + originally x86 and x64 
+    intel or AMD 
+    
+    + IA64(Itanium)
+    appeared in windows 2000 and later dropped 
+    
+    + ARM 
+    e.g. windows mobile 10 
+    
+    + ARM64 
+    no shipping devices at this time 
+
+- system architecture 
+    + user mode 
+    user processes. any operation directly reference hardware need to invoke the kernel function by subsystems dlls. these subsystem dlls mostly called ntdll.dll which implement native windows API. it will drive the kernel execute the relative functions 
+    
+    system process  -> subsystem -> ntdll.dll 
+                    -> ntdll.dll
+    
+    service process -> subsystem dlls -> ntdll.dll
+    
+    environment processes -> ntdll.dll
+    
+    + kernel mode 
+                                                    user mode
+    ----------------------------------------------
+    Win32k.Sys | executive                          kernel mode 
+               | device drivers  | kernel 
+    ----------------------------------------------
+    Hardware Abstraction Layer(HAL) HAL Extensions
+    -------------------------------------------------    
+    Hyper-V Hypervisor (Kernel Mode hypervisor context, which could be called super kernel mode)
+    
+    in all versions of HAL is replaceable. start from window 10 MS allowed third party to implement a HAL 
+    
+    Win32k.Sys implement the graphic subsystem in window. so CreateWindow will call Win32k.Sys which is not in kernel 
+    + example 
+    user mode process call CreateFile -> NTDLL.DLL -dispatch to kernel, jump to relative API->Executive NTCreateFile() which is implement in the I/O manager -> device driver -> HAL 
+
+- Kernel Trust 
+    + the kernel is considered a trusted component 
+    Omnipotent 
+    
+    + can the kernel trust all parts within it? 
+    third party drivers may have flaws 
+    malicious drivers may be injected into the system 
+    
+    + how can the kernel protect itself? 
+    kernel patch protection ("PatchGuard")
+    
+    + what about device drivers? some higher level trust within enter virtualization based security 
+    
+- virtualization based security 
+    + virtual trust levels 
+    VTL 0 is "normal" world 
+    VTL 1 is "secure" world 
+    
+    VTL 1 is securer than VTL 0 
+    
+    VTL 0       | VTL 1 
+    User mode   | isolated user mode 
+    Kernel Mode | Secure Kernel 
+    A               A
+    |               |
+    V               V
+    Hyper-V Hypervisor 
+    SLAT Hardware I/O MMU 
+    
+    + requires hardware support 
+    intel VT-x or AMD-V 
+    second level address translation (SLAT)
+    I/O MMU, allow hide some API. to prevent normal use DMA(directly memory access) to modify the memory 
+    
+    + enabled by default on windows 10, enterprise version 1607 and server 2016 
+    
+- VBS features 
+    + credential guard 
+    save credentials in a trustlet (Lsaiso.exe) instead of Lsass.Exe 
+    
+    Lsaiso.exe which is run in user mode process. administrator level process can get the hash from the process. use that hash on another machine. 
+    
+    now Lasiso.exe is run in VTL 1. normal administrator cannot access it even the normal kernel 
+    
+    + device guard 
+    only allow trusted apps to execute 
+    protected by VBS. normal kernel cannot access these kinds of processes 
+    
+    + secure drivers with the secure driver framework(SDF)
+    3rd party drivers running in the secure kernel. the new. parters of MS can run these kinds of drivers in VTL1 kernel(secure kernel)
+
+- new system processes 
+    + secure kernel
+    represents VTL 1 kernel 
+    analogous to the system process of VTL 0 
+    not a full kernel which of the memory management thread scheduling etc is actually done by the VTL0 kernel 
+    
+    + memory compression(version 1607 and later)
+        * which is called minimal process unrelated to VBS 
+    
+        * contains compressed memory in its user mode address space 
+    
+        * not shown in task manager(by design)
+    
+        * currently not used in window server 2016 
+    
+- demo 
+    + use task manager with secure system 
+    Secure System process could be check from task manager 
+    
+    + use the local kernel debugger 
+    $ !process <id>
+    to check the process information for the secure system process 
+    
+    in window process id could be reused 
+    
+    Peb, is user mode process memory information 
+    
+    + memory compression. it is contained in the System process. When the system process will consume cpu and memory. After RS1. the process hidden from the task manager 
+    
+    we could find the memory compression process from process manager 
+    
+    + use the kernel debugger we could check  it by 
+    $ !process 0 0 memcompression.exe 
+    the executable name is a sudo pseudo 
+    
+    we could not check the thread call stack 
+    
+    $ .process /P /r process_address;lm 
+    try to show the modules 
+    
+- subsystems 
+    + originally, windows supported windows, os/2 and POSIX subsystems 
+    
+    you could recompile unix executable in os/2 os/4 or POSIX to let it execute on windows 
+    
+    OS/2 and POSIX support has now been dropped 
+    
+    window subsystem for linux (WSL)
+        beta version in windows 10 version 1607/1703 
+        it let directly run linux executable on windows 
+        use pico processes which is a new feature of window 
+        real ubuntu running under the covers 
+        
+    + WSL architecture 
+    bash.exe -> LXSS manager <---> /bin/bash (linux instance pico process)
+                |user mode
+    |----------------------------------------------------------------
+                |kernel mode 
+                V 
+                LXCore /LXSS 
+                |
+                V 
+                Executive & Kernel 
+                
+    the driver Pico provider in kernel and translate the linux operation to window call 
+    
+    take ELF binary from linux to window 
+        
+- demo WSL 
+    + install it from turn windows features on or off 
+    + enable the linux subsystem and run bash directly from run 
+    + after run bash it will install ubuntu on the system 
+    + give user name and password 
+    + bash on window is available in start menu 
+    + there will be two bash process in the process list. bash.exe is the initial process created for bash 
+    
+    init process is another pico process for linux. there will be no additional information in the process monitor 
+    
+    cohost.exe is controled by the init process 
+    
+- Win32K.Sys segregation. This is Windows Manager 
+    + control GDI operation 
+    historically moved to the kernel in NT 4 
+    to make it perform bettern 
+    client process and csrss process 
+    
+    how ever Win32K.sys become a security hole. Windows 10 splits it up 
+        + Win32Min.sys 
+        + Win32KBase.sys 
+        + Win32KFull.sys 
+        
+    Win32k.sys loads modules based on actual device. Full desktop load Win32KBase and win32KFull 
+    
+    some Iot device only load Win32KBase only 
+    
+    + make the system liter 
+    
+- Console management 
+    + console management changed from the windows 7 days 
+    
+    CSRSS is no longer involved 
+    
+    ConHost.Exe is spawned by the console process directly 
+        + actual workhorse is ConhostV2.Dll
+    Console functionality provided by the Console Driver (ConDrv.sys)
+    
+- demo 
+    + cmd.exe spawn the conhost.exe 
+    
+- Summary 
+    + system architecture 
+    + visualization based security 
+    + new system processes 
+    + subsystems 
+        
+        
+# Processes and Jobs 
+- overview 
+    + review: processes 
+    + protected processes 
+    + uwp processes 
+    + minimal and pico processes 
+    
+- review processes 
+    + management and containment object such as 
+    private address space 
+    private handle table to kernel objects 
+    private working set 
+    access token 
+    threads
+    priority class(win32)
+    
+    + windows api basic creation function 
+    CreateProcess() with several parameters such as create process as a user 
+    
+    + kernel mode process 
+    Executive process (EPROCESS), processes are managed by this process. This structure hold all the information to manage all the process 
+    Kernel Process(KPROCESS), this process below the executable eprocess 
+        * first member of EPROCESS and Pcb, process control broker is of type k process 
+        * also manage the process scheduling 
+        * hold information pertinent to the lower level kernel below the executive 
+        
+    All processes objects are linked from PsActiveProcessHead
+    
+    + user mode 
+    Process Environment Block (PEB)
+    
+- Protected processes 
+    + windows vista introduced protected processes 
+    most for DRM protection 
+    
+    + protected process 
+    can be opened for limited access only, can not read, write the process memory 
+    
+    even by admin level processes 
+    
+    + can only load protected-signed DLLs and must be signed 
+    
+    + examples 
+    Audiodg.exe(Audio Device Graph)
+    Mfpmp.exe(Media Foundation Protected Media Path)
+    Werfaultsecure.exe, in case a protected process terminated 
+    
+- Protected processes light 
+    + PPL was introduced in window 8.1 
+    extends the protected process model from vista 
+    
+    + several levels of protection supported 
+    to let third party anit-mailware executables are eligible 
+    
+    + most system processes are PPL protected 
+    smmss.exe, csrss.exe, services.exe ... 
+    
+    these process cannot be access admin level 
+    
+    + protection type stored as part of EPROCESS. They are not kernel component 
+    
+    these protection only protected for user model process. Administrator can inject a driver into kernel and the driver can access any protected process 
+    
+- PPL signers, Protected/PPL process access masks 
+    + protected and PPL processes can be opened with the following access masks(OpenProcess API)
+    
+    PROCESS_QUERY(SET)_LIMITED_INFORMATION
+    PROCESS_TERMINATE 
+    PROCESS_SUSPEND_RESUME 
+    
+    some PPL process deny PROCESS_TERMINATE
+    
+    + singer levels for PPL. More greater than more powerful 
+    Signer          Level       Description 
+    WinSystem       7           system and minimal processes 
+    WinTcb          6           Critical windows components. PROCESS_TERMINATE is denied 
+    Windows         5           Important windows components handling sensitive data 
+    Antimalware     3           Antimalware service processes, including 3rd party. PROCESS_TERMINATE is denied 
+    CodeGen         2           .net native code generation 
+    Authenticode    1           Hosting DRM content 
+    None            0           Not valide 
+    
+    + valid protection values 
+    internal protection process level symbol | proctection type | signer 
+    PS_PROTECTED_SYSTEM(0x72)                  protected         WinSystem
+    PS_PROTECTED_WINTCB(0x62)                  protected         WinTcb 
+    PS_PROTECTED-WINTCB_LIGHT(0x61)            protected light   WinTcb 
+    PS_PROTECTED_WINDOWS(0x52)                 protected         Windows 
+    PS_PROTECTED_WINDOWS_LIGHT(0x51)           protected light   Windows 
+    PS_PROTECTED_LSA_LIGHT(0x41)               protected light   Lsa 
+    PS_PROTECTED_ANTIMALWARE_LIGHT(0x31)       protected light   Anti-malware 
+    PS_PROTECTED_AUTHENTICODE(0x21)            protected         Authenticode 
+    PS_PROTECTED_AUTHENTICODE_LIGHT(0x11)      protected light   Authenticode
+    PS_PROTECTED_NONE(0)                       None              None 
+    
+- Demo protected processes 
+    + open process explorer and select the column protection will display the protect information for the processes. use the windbg kernel debug to execute these command 
+    
+    
+    $ !process 0 0 csrss.exe 
+    $ dt nt!_eprocess <address> Protection 
+    
+    kd> .process /P /r <address>; lm 
+    
+- Process and thread attributes 
+    + before windows vista 
+    the CreateProcess and similar functions had no extensibility points except one 
+    
+    this is not enough 
+    
+    + windows vista added process and thread attribute lists. It required CreateProcess, CreateThread accept arguments 
+    Opaque list of attributes managed with a API 
+        InitializeProcThreadAttributeList 
+        UpdateProcThreadAttribute 
+        DeleteProcThreadAttributeList 
+    
+    All these attributes are saved in STARTUPINFOEX structure which is a extension version of STARTUPINFO
+    + Attached to process creation as a member of STARTUPINFOEX. As thread attributes pass to create remote thread ex to any type of thread in local or remote process 
+    STARTUPINFOEX, 
+    + example process attributes 
+        * handle list to be inherited by the child process 
+        * processor group affinity relative to processing 
+        * mitigation policies in the security module 
+        * preferred NUMA node 
+        * parent process to inherit other attribute from 
+        * set child protection level 
+        * AppContainer security capabilities which is created for UWP process 
+        
+- UWP processes 
+    + previous known as metro, store, modern ...(apps)
+    + they are running on top of windows runtime. based on COM. easy to install from window store. 
+    + declare capabilities, the app must declare the features required for the system 
+    + their is a manifest xml contain the declare 
+    + execute in an AppContainer. doesn't allow damage the system 
+    + resources managed by the process state manager (PSM)
+    suspend/resume 
+    termination
+    
+    UWP allow to run on any device of window 
+    
+    + Creating UWP processes. Plain CreateProcess cannot create UWP process 
+        * Plain CreateProcess cannot create UWP processes 
+        * must add an undocumented process attribute 
+        providing the full UWP package name 
+        
+        * other documented APIs exists for UWP process creation 
+        * APIs for working with packages exist as well 
+        Enumeration, query etc. 
+    
+- Demo UWP processes 
+    + how to recognize UWP process 
+    using process explorer and add Package Name column. If it is not empty then it means the process is a UWP process 
+    
+    in cyan color means the process active. The gray means it is suspended 
+    
+    + Only use the UWP process command can not create by the command line in the procexp. It is due the the normal command line doesn't handle the full package names provided by the command line 
+    
+    + security tab display the capabilities of the process 
+    
+    + use the job tab to check the job relative a UWP process. UWP process is always contained in a job 
+    
+- Demo metro manager 
+    + create a project to list all the package of the machine 
+    + use PackageManager which provied by the window runtime to get the right package 
+    + use the ActivateApplication to launch the metro process 
+- Jobs, minimal and pico processes 
+    + new to window 10 
+    brainchild of a research project within Microsoft called "Brawbridge", minimal process
+    
+    + No normal user process address space 
+    no ntdll.dll or subsystem dlls 
+    no peb or tebs 
+    
+    + no way to create such a process from user mode 
+    + address space created and used by kernel threads 
+        * example memory compression process 
+        
+    + Pico Processes, is minimal processes with a supporting driver 
+        * called a pico provider 
+    + pico provider must be registered at boot time 
+    a single pico provider can be active on a system 
+    
+    + pico provider intercepts all opertions normally requiring kernel handling 
+    system calls 
+    exception dispatching etc 
+    the are all through pico provider 
+    
+    + currently used for the windows subsystem for linux implementation. It is used to translate the linux system call to window system call 
+    
+    + summary process types 
+    NT process                     Minimal Process      Pico Process
+    Process Environment Block(PEB)
+    Thread Environment Block(TEB)
+    
+    Shared User Data 
+    NTDLL.DLL 
+    |                                     |                 |
+    system call                     system call       system call
+    |                                     |                 |
+    V                                     V                 V
+    -----------------------------------------------------------------
+                                                      |Pico provider|
+    Executive & Kernel 
+    
+    check details for window for linux subsystem works from the MS blog 
+    
+    + WSL pico provider 
+    initial loaded pico provider is Lxss.sys 
+        * must be signed by Microsoft - signer is windows 
+        * loads before any 3rd party boot load drivers 
+        * registers itself with PsRegisterPicoProvider 
+    the "real" Pico provider loaded a bit later is LxCore.sys 
+        * dispatch tables transferred to this driver 
+        pico process and thread creation, thread context manipulation, system call, exception 
+- Summary 
+    + processes 
+    + protected processes 
+    + UWP process 
+    + minimal and pico processes 
 
 
+# Jobs and Silos 
+- Overview 
+jobs 
+containers 
+silos 
+summary 
 
+- Jobs 
+    + job is a kernel object that manages a set of one or more processes 
+    + a job imposes limits on its processes 
+    + provides accounting information 
+    cpu execution time 
+    memory consumption 
+    etc. 
+    + can associate an I/O completion port with a job 
+    + process inside a job that creates a child process. The child process is automatically add to the job unless adding CREATE_BREAKWAY_FROM_JOB flag is used with CreateProcess and the job is allowed breaking out of it which is not default
+    
+    + jobs limits examples. a job can control all of these properties 
+    Maimum processes active in a job 
+    
+    CPU, per job and per process CPU time processor affinity. CPU rate control(window 10)
+    
+    memory, minimal and maximum working set. process commit maximum 
+    
+    network maximum bandwidth 
+    
+    UI user and GDI handles limitation 
+    
+    clipboard access control 
+    
+    + Jobs API 
+    CreateJobObject, OpenJobObject to creata job object or open a named job object 
+    
+    AssignProcessToJobObject, add a process to a job 
+    
+    SetInformationJobObject(QueryInformationJobObject), set various limits on the job(query job information)
+    
+    TerminateJobObject, terminated all processes belong to the job 
+    
+- Nested jobs 
+    + prior to window 8 
+    a process could be assigned to a single job only 
+    
+    + windows 8+
+    a process can be part of more than one job
+    
+    a job hierarchy is created 
+    
+    limits in child jobs can be more restrictive than its parents' jobs limits, but not vice versa
+    
+    + nested jobs example 
+    job1{
+        job3{
+            process2 
+        }
+        job2{
+            process1
+        }
+    }
+    
+- Demo: jobs
+    + check job information with Task Manager, add the column job id 
+    
+    we could also add color to indicate a process in a job in process explorer. The id will be added soon 
+    
+    + using the kernel debugger to check the job hierarchy
+    lkd>!process 0 1 calculator.exe 
+    we could check the calculator process 
+    
+    we could click the job pointer from the detail information. 
+    
+    lkd> dt nt!_ejob <address> 
+    we could find all the members of the job 
+    
+    lkd>!job <address> 2 
+    
+    undocument command 
+    lkd>!joblist 
+    will show all the jobs on the system 
+    
+- Demo CPU rate control 
+    + CpuLimit, limit cpu rate control 
+    int main(int argc, argv[]){
+        HANDLE hp = OpenProcess(PROCESS_SET_QUOTA|PROCESS_TERMINATE, FALSE, atoi(argv[1);
+        
+        if(!hp){
+            print("error");
+        }
+        
+        HANDLE hj = CreateJobObject(nullptr, nullptr);
+        AssignProcessToJobObject(hj, hp);
+        
+        JOBOBJECT_CPU_RATE_CONTROL_INFORMATION info;
+        info.ControlFlags = JOBOBJECT_CPU_RATE_CONTROL_ENABLE|
+                            JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP;
+        info.CpuRate = atoi(argv[2) * 100;
+        SetInformationJobObject(hj, JobObjectCpuRateControlInformation, &info, sizeof(info));
+        
+        //when a process is added to a job. it will add reference to the job and although we close the handle, the process and job will not go away 
+        CloseHandle(hp);
+        CloseHandle(hj);
+        
+        return 0;
+    }
+    
+    double call the executable will create a hierarchy jobs 
+    
+    + use CPU stress tool to simulate the cpu rate 
+    
+- Containers 
+    + virtual machine with containers 
+    the classic isolation boundary is a virtual machine 
+    
+    VM resource consumption can be limiting to the number of VMs that can be deployed on a single host 
+    
+    a lightweight isolation boundary would be beneficial 
+        with some loss of security 
+    this is the role of a container 
+        primary example is docker 
+    
+    containers are isolated instances of processes executing on the same physical or virtual machine. make the containers feels completely run on different machine 
+    
+    + containers 
+    containerized application should be as isolated as possible. 
+        isolated file system 
+        isolated registry 
+        isolated object namespace isolation, such as the mutex names could be same in different containers 
+        
+    windows 10 RS1 + achieves this with Silos. 
+        required deep changes within executive components 
+        
+    Silos are "super jobs", a silo is created by calling SetInformationJobObject with an undocumented job information class. Transform normal job to a Silo 
 
+- (Server) Silos 
+Silos provide the isolation of containers on a single physical or virtual machine 
 
+Server Silos are are worker container for a single machine. 
+    provide object manager namespace based on the job ID 
+    
+    file system virtualization/redirection 
+    
+    process id namespace isolation. 
+    
+    registry virtualization 
+    
+    + server silo architecture. host os 
+    
+Container Manager                                           
+    {Host compute service}
+    {Host Network service}
+    {other services}
+Container 1 
+    {Base window image WIM
+        {Silo}
+        
+        {Host SMSS} {Services}
+        {Host NTDLL}
+    }
+|   |
+V   V
+{Executive & kernel
+    {{{Host FS, spliced to many}}}  {Host registry}
+    Wcifs.sys                          A
+    Ntfs.sys                           |
+    VReg-------------------------------+
+    Configuration Manager -------------+
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
+we could use window container or linux container on Window 10 with docker 
+- Demo silos 
+    + install docker 
+    we could switch to linux container or window container 
+    
+    /> docker run hello-world 
+    this will run docker hello world package. which just display docker in the command line 
+    /> docker run hello-world powershell get-process 
+    will list the processes run under the container 
+    
+    parallel run a task 
+    /> docker run -d hello-world powershell sleep 300 
+    
+    + run winObject to list all the current window object from the system like mutex, silos etc 
+    
+    using the kernel debugger to list all the silos 
+    lkd> !silo -? 
+    will list the helps. this is an undocumented command 
+    
+    this system treat the host as the default silo 
+    
+- Summary 
+Jobs 
+Containers 
+Silos 
+    
 
 
 
