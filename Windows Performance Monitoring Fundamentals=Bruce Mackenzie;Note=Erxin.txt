@@ -254,7 +254,7 @@ Terabyte(TB)                                          ~1 trillion bytes
     
     check if there is handle count leak 
     
-- porcess memory statistics 
+- process memory statistics 
 working set, application loaded into process working set. portion of memory per process can grow as additional demand. one of the key process memory metrics 
 
 page faults, requested data is not working set 
@@ -499,6 +499,7 @@ color coded alerts distinguish between normal, warning and critical
 - performance analysis 
 big time saver for analyzing perfom data 
 http://pal.codeplex.com
+https://github.com/clinthuffman/PAL
 
 current version 2.7.4
 
@@ -573,17 +574,237 @@ description
     drivers 
     
 - windows performance toolkit WPT 
-XPerf still avaliable for backward compatibility, powerful tool but not user friendly 
+WPA, windows performance analyzer 
+WPR, windows performance recorder 
+XPerf, still available for backward compatibility 
+
+XPerf still available for backward compatibility, powerful tool but not user friendly 
 
     + window performance recorder 
-    collect event trace data from operation system 
+    collect event trace data from operation system. produce .ETL trace log file 
+    |
+    V
+    windows performance analyzer. reads ETL trace data and generates graphs and tables 
+    
+    + keep in mind 
+    perfmon and PAL should be used initially to identify general performance bottlenecks (less invasive)
+    
+    WPT(WPA&WPR) only runs on windows 2008 R2/Windows 7 later 
+    
+    For earlier version we could use XPerf and WPA together 
+    
+    + install 
+    Download the Assessment & deployment (ADK) for windows 8.1 update 
+    http://www.microsoft.com/en-US/download/details.aspx?id=39982 
+    
+    install from software development kit(SDK) for windows 8.1 
+    http://msdn.microsoft.com/en-US/windows/desktop/bg162891 
+    
+    windows performance toolkit technical reference 
+    http://msdn.microsoft.com/en-us/library/windows/hardware/hh162945.aspx 
+    
+    .net framework 4 is automatically installed for the ADK setup 
+    
+    supported on widnows server 2008 R2/Windows 7 and later 
+    
+    WPA version is 6.3.9600.16384(Help about) 
+    
+    search and install Window performance toolkit 
+    
 - windows performance recorder  WPR 
+    + new GUI to collect event traces wprui.exe 
+    
+    + system wide collection 
+    
+    + default kernel providers or additional profiles 
+    
+    + performance scenario(general, boot time, ...)
+    
+    + Logging mode(memory or file)
+    
+    + simplified CLI to script traces - wpr.exe 
+    
+    one button does it all. 
+    
+    xperf is a CLI too which required lots of parameters. 
+    
+    Performance scenario could let us select data like Reboot Cycle. Click start will trigger the system rebooting. 
+    
+    use the save button to save the trace data. use WPR.exe for scripting to collect performance data. 
+    
+    wpr -profiledetails to list providers 
+    
+    + WPR gotchas 
+    previous window 8/2012 required to DisablePagingExecutive set on x64 
+    
+    event traces consume lots of disk space. 500MB in 3mins 
+    
+    not useful for collecting data if server hangs. use Xperf with a circular log file 
 - windows performance analyzer WPA 
+    + open the *.etl file 
+    
+    + expand the graph will get more detail information 
+    
+    + support drag and drop graph into the right panel 
+    
+    + activity graph to display low level system metrics 
+    
 - graphing low level system metrics 
+    + many different types of graphs and sub-graphs 
+    + all depends on what trace data was collected 
+    + examine system activity by graphing 
+    IO durations 
+    registry access 
+    DPC usage by driver 
+    memory pool allocations 
+    operating system functions 
+    
+    + system activities 
+    {system activity }
 
+    + computation activity graphs 
+    
+    + storage activity graphs 
+    
+    + memory activity graphs 
+    
+    + system power activity graphs 
+    
+    + drilling down on device I/O(determine I/O duration for each IRP!)
+    
+    DPC usage by driver module, deferred procedure call 
+    
+    stack walking data, will display which function is executing in the system 
+    
+- online helps 
+WPA quick start guide 
 
+- wrapping things up 
+measuring low level system metrics windows 
+
+windows performance toolkit consiting of the 
+    + WPA 
+    + WPR 
+    
+collect windows event trace data with WPR 
+
+leverage WPA for analyzing trace data drilling down into low level system metrics 
+    
+    
 # Best practices for windows performance monitoring 
+- overview 
+best practices for performance monitoring 
 
+key CPU metrics and thresholds 
+
+key memory 
+
+key disk 
+
+key network 
+
+    + best practices 
+    start with task manager and resource monitor to get a general overview of performance 
+    
+    run predefined perfmon system reports 
+        * system diagnostics 
+        * system performance 
+        
+    + collect baseline over 24 hour period 
+    + use PAL to analyze the data with the appropriate threshold file 
+    + only use WPT to drill deeper if necessary 
+
+- use the predefined system metrics to record the performance by perfmon 
+- key CPU metrics and threshold per cpu 
+performance counter         warning level       critical level 
+processor time              50%                 80% 
+privileged time             20%                 30%
+    system overhead, when process scheduled 
+interrupt time              10%                 20% 
+DPC time                    10%                 20% 
+context switches            2500/sec/CPU       5000/sec/CPU      
+    process switch executing threads 
+processor queue length      2 ready/CPU        10 ready/CPU 
+    waiting ready thread 
+
+- CPU remedies 
+    + use hyper-threading when possible and appropriate. bio setting to make logic cpu number double to the physical cpus 
+    
+    + additional processor if sockets are available 
+    
+    + upgrade processors to higher speeds & more core 
+    
+    + sufficient RAM is available to avoid paging swapping CPU overhead 
+    
+- Open PAL. quick system overview 
+- Key memory metrics, thresholds 
+performance counter                 warning level           critical level 
+available mbytes                    <10% of RAM              <5% 
+free system page table entries      <20,000 PTEs             <8000 PTEs
+    mapping virtual table entry to physical
+pool nonpaged bytes                 >60% used                >80% used 
+pool paged bytes                    >60% used                >80% used 
+paging file\% usage                 >70% used                >90% used 
+process handle count                >100 handles/hr         
+    references of objects created 100 a hour 
+process thread count                >100 threads/hr 
+    reference of threads count 
+private bytes                       > 100 MB/hr 
+    increase private byte 100 mb a hour 
+working set                         > 100 MB/hr     
+
+- Memory remedies 
+configure page files 
+https://support.microsoft.com/en-us/kb/2860880 
+
+pool allocation failures 
+    + server\pool paged failures 
+    server\pool nonpaged failures 
+    
+paged pool maximum (x86/32-bit architecture)
+
+memory is cheap 
+
+- key disk metrics, threads 
+Performance counter                     Warning level       Critical level 
+LogicalDisk\Avg. Disk sec/Transfer      15ms                25ms    
+LogicalDisk\Avg. Disk sec/Read          15ms                25ms 
+LogicalDisk\Avg. Disk sec/Write         15ms                25ms 
+LogicalDisk\% Free Space                < 10% 
+LogicalDisk\Avg. Disk Queue Length      > 2 
+Process\IO Data Operations/sec          > 1000
+
+- Disk remedies 
+    + load balance I/O arcross multiple spindles (disks)
+    + user faster disk drives 
+    
+    rotational speed    average latency     IOPS    64KB block random  Large block
+    7200HDD             4ms             40            3.5mb/s           50mb/s
+    Solid State         .1ms           Over 100,000  200mb/s            500mb/s
+    
+- key network metrics 
+network interface\% network utilization (30% warning, 50% critical)
+
+network interface\output queue length (>1 packet waiting warning, >2 critical)
+
+- network remedies 
+    + use additional network adapters 
+    
+    + use windows server 2012 or later 
+    nic teaming 
+    smb multichannel 
+    smb direct (RDMA capable NICs)
+    
+    + increase TCP window size 
+    + use TCP chimney offload 
+    + enable RSS (receive-side scaling)
+    
+- wrapping things up 
+best practices for monitoring windows performance using the right tool for the job 
+
+key performance metrics and their thresholds 
+
+remedies for performance bottlenecks 
 
 
 # Shutdown event tracker 

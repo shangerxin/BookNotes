@@ -1150,12 +1150,653 @@ CC -Vacb            15  O   13  ...   the number is the wait order
 use !running --it command to display the information for the spinlock owner thread
 
 - analyzing spinlock hangs, when you suspect the hang is caused 
+    + suspect spinlock then using 
+    $ !qlocks 
+    to display any kernel spinlock owners 
+    
+    + using 
+    $ !running -it 
+    looking for threads and cpu trying to acquire spinlocks 
+    check the method call KeAcquireSpinLock()
+    
+    will display the call stacks and at the bottom of the stacks the second number is the thread address
+    
+    + use 
+    $ !thread <address>
+    to exame stack trace leading up to spinlock requests 
+    
+    + the key is to determine which driver is responsible for acquiring spinlocks 
 
+    
 # Exploring Windows Virtual Memory 
+- Module topics 
+    + What is virtual memory? why it's important 
+    + consumer of virtual memory 
+        * user address space 
+        * system address space 
+        * !vm debugger command 
+    + window virtual address space layouts 
+        * x86(32 bit)
+        * x64 
+        * !memusage debugger command 
+        
+    + window memory pools to check the memory contents 
+    $ !pool 
+    $ !poolused 
+    
+    + displaying memory contents from virtual memory 
+    
+- virtual memory 
+    + fundamental concept for OS, large memory address space size and independent of physical RAM 
+    
+    + not all process & thread data resides in physical memory all the time 
+    
+    + windows uses pagefile.sys for swapped out data 
+    OS&User programs -mapped-> virtual memory -loaded-> physical memory RAM -swapped-> Pagefile.sys(Disk)
+    
+- Consumers of virtual memory divided into several sections 
+    + private address space, major consumer, user processes live 
+    
+    where user processes live 
+    
+    1 per process 
+    
+    contains code and data 
+    
+    process threads share the same address space 
+    
+    + session address space. used to collectively by processes that are part of single user logon sessions. such ass winlogon process
+    1 per user logon 
+    
+    contains session-wide code and data 
+    
+    part of system address space 
+    
+    + system address space 
+    operating system code 
+    
+    device drivers 
+    
+    data structures 
+    
+    memory pools 
+    
+    + analyze a dump by using !vm to display the virtual memory information 
+    
+    physical memory(RAM)
+    
+    page file usage 
+    
+    available memory 
+    
+    modified pages 
+    
+    non-paged pool 
+    
+    paged pool 
+    
+    system committed memory 
+    
+    process private bytes 
+    
+    + demo check !vm command 
+    kd> !vm 
+    if any of the IO pages, modified pages, etc go to 0, that maybe need to concern 
+    
+- window virtual address space layouts 
+    + x86 layout 
+    1 bit can have 2 values (0 or 1)
+    
+    32 bits = 2^32 = 4 billion addressable locations 
+    
+    first 2 billion addresses are for user-mode code 
+    
+    next 2 billion address are for the widnows os 
+    
+    000000000       process address space (2gb)
+                    user application code 
+                    global variables 
+                    user stacks 
+                    dll code 
+                    
+    7FFFFFFFF       system address space  (2gb)    
+                    kernel operating system 
+                    drivers 
+                    hal 
+                    session space 
+                    process page tables 
+                    system cache 
+                    non-paged pool 
+    FFFFFFFFF
+    
+    + x64 layout 
+    AMD and intel only imple
+    + !memusage command to check the memory usage for virtua memory 
+    
+    will read from the pnf database 
+    
+- Windows memory pools 
+    + non-paged memory pool 
+    system memory buffers always resident in RAM. drivers live in. This will avoid access memory without any page fault 
+    
+    up to 128GB(or 75% of physical memory ) for x64 
+    
+    up to 2GB(or 75% of physical memory) for x86 
+    
+    system function ExAllocatePoolWithTag used to allocate pool 
+        * specify NonPaged pool type as 1st argument 
+        * specify size in bytes as 2nd argument
+        * specify device driver ID tag as 3rd argument
+        
+    system function ExFreePoolWithTag used to deallocate pool 
+    
+    improperly allocating & deallocating buffers can cause pool corruption, override begin or end of memory pool will cause pool corruption. STOP C2 or STOP C5 
+    
+    + paged memory pool, allowed system to page out to disk. the device driver have to request a specific lower interrupt level to let the page to be back in 
+    
+    system memory buffers can be paged to disk 
+    
+    up to 128GB for x64 
+    
+    up to 2GB for x86 
+    
+    + WinDbg pool commands 
+    !pool <address>, display information about pool allocation 
+    
+    !poolused, display paged & non-paged memory use by driver tag 
+    
+    !vm displays paged & non-paged pool usage and maximum limits 
+    kd> !vm 
+    
+    
+- display the content of virtual memory. use the d command to display memory from a dump 
 
+    + hexadecimal, binary, octal and decimal notation 
+    
+    + byte 8 bits 00-FF
+    
+    + word 16bits 0000-FFFF
+    
+    + double word  32bits 
+    
+    + quad-word 
+    
+    + ascii representation - Abcd...
+    
+    + d command display the contents of memory location or rage 
+    
+    many variants 
+    
+    db  display byte 
+    dw  display word 
+    dd  display double word 
+    dq  display quad word 
+    dc  display ascii characters 
+
+    kd> dc 
+    
+    db, dw may reverse display the content compare to dd/dq as lower address is displayed first 
+    
+    
 # Windows Drivers and Interrupts 
+- Module topics 
+    + what is a driver? 
+device drivers 
+filter drivers 
+WinDbg driver commands (lm and !lmi) for help examine the drivers 
 
+    + I/O request packets (IRP)
+    I/O request flow 
+    WinDbg I/O commands (!irp, !irpfind, !devobj, !drvobj, !devstack, !object)
+    to check the i/o queue 
+    
+    + interrupts request level (IRQL)
+    !irql, !idt, !pcr 
+    
+    display irql from memory dumps
+    
+    + deferred procedure calls(DPC)
+    !dpcs, !timer 
+    
+    how to use dpc to reduce IRQL to improve the performance 
+    
+- what is a driver? 
+driver is a set of routines to process an I/O request. drivers operate in kernel model could cause system to crash 
+
+works in conjunction with the window I/O manager 
+
+numerous types of device drivers 
+    + video drivers 
+    + network drivers 
+    + storage drivers 
+    + sound drivers 
+    + print drivers, is operate in user mode which will not cause the system to crash 
+    + bus drivers 
+    + file system drivers 
+    + plug and play drivers 
+    
+- filter drivers 
+filter drivers are used to augment device drivers 
+
+logically layered above or below device drivers 
+
+    + anti-virus drivers 
+    + file screening 
+    + disk quotas 
+    + deduplication 
+    + disk mirroring 
+    
+    + for example process 
+    I/O write request -> filter driver -> check disk quota -> device driver perform write operation 
+    
+- windbg driver commands 
+    + lm list loaded modules (drivers)
+    
+    numerous variants 
+    
+    > lm t n
+    list moduels with time stamps and driver/module names 
+    
+    > lmvm <modulename> 
+    detailed driver/module information 
+    
+    > !lmi <modulename> 
+    displays detailed driver/module information 
+    
+    kd> lmvm hal 
+    
+- I/O request packets (IRP)
+Thread calls ReadFile() application 
+ReadFile            |
+        Call NtReadFile()       Kernel32.dll 
+                    |
+NtReadFile      SYSENTER<--+    Ntdll.dll  lead to a system trap
+                    |      |
+                    V      |            User mode 
+---------------------------|----------------
+                           |            Kernel mode 
+KiSystemService Call NtReadFile()<-+ Ntoskrml.exe
+                                   |
+NtReadFile      Invoke driver -----+ Ntoskrnl.exe
+                              <--------+
+                                       |
+                Initiate I/O operation-+ drivers.sys 
+
+    + during this process a data structure IRP is used by the I/O manager & device drivers 
+    
+    + contains information needed to process an I/O request 
+    
+    + threads initiate the I/O requests 
+    
+    + I/O manager allocates an IRP from the IRP nonpaged look-aside list 
+    
+    + IRPs are linked to the thread data structure
+    
+    + IRP is dispatched to corresponding driver 
+    
+    Thread -request I/O-> I/O manager -allocate IRP-> IRP function -> Driver 
+    IRP list                                            |
+     A                                                  |
+     |                                                  |
+     +--------------------------------------------------+
+        IRP linked to thread 
+     
+    + WinDbg I/O commands 
+    !thread, reveals any outstanding IRPs for the thread 
+    !irp, displays detailed information about a IRP 
+    !irpfind, displays information about all IRPs currently allocated 
+    !devobj, display detailed information about a driver object 
+    !drvobj, display detailed information about a driver object 
+    !devstack, displays the device stack associated with a device object 
+    !object, displays information about a system object 
+    
+    
+    !drvobj \FileSystem\Ntfs 
+    the address display by the thread 
+    
+    !devobj <address> 
+    
+    !object <address> 
+    
+    
+    check the first line of each command to get the column title. use the !thread to get the thread information and it will contain the IRP list  
+    
+    !irp <irp_list_address> 
+    the address could be found from the !thread command 
+    
+- Interrupt request levels(IRQL). Window is an interrupts driven operation system 
+
+    + devices interrupt at a particular interrupt request level 
+    dictate the system flow and control of the system 
+    
+    + higher IRQLs will preempt lower IRQLs 
+    
+    + each processor maintains an interrupt dispatch table(IDT). 
+    
+    + interrupts map to a particular Interrupt Service Routine(ISR) in the IDT
+    
+    + ISR will request a Deferred Procedure Call(DPC) to perform the work 
+
+    keyboard -interrupt -> keyboard interrupt -> keyboard interrupt service 
+                            dispatch table          routine 
+                                                    IRQLx 
+                                                ISR will perform the initial work on the request I/O 
+                                                including raising the IRQL level to synchronize its effort. it will request a DPC providing the address of the driver's DPC routine  
+    + interrupt request levels 
+    x86 has 32 IRQLs and x64 has 16 IRQLs 
+    
+    highest IRQLs are reserved for hardware interrupts. such as system clock and device drivers 
+    
+    software IRQLs occurred at IRQL2 and below such as DPCs and asynchronous procedure calls 
+    
+    normal thread activity occurs at IRQL 0 
+    
+        * diagram for x86 IRQLs 
+        31  High 
+        30  Power Fail 
+        29  inter-processor interrupt 
+        28  clock 
+        27  profile/synch 
+        26  device n 
+        ...
+        3   device 1 
+        2   DPC/dispatch 
+        1   APC 
+        0   Passive 
+        
+        * x64 IRQLs 
+        15  High/Profile 
+        14  Power/IPI 
+        13  clock 
+        12  Synch 
+        11  Device n 
+        ...
+        3   Device 1 
+        2   DPC/dispatch 
+        1   APC 
+        0   Passive 
+        
+    + windbg interrupt commands 
+    !idt, display the interrupt dispatch table listing the ISRs 
+    
+    !irql, display the IRQL just prior to the bugcheck 
+    
+    !pcr, displays the processor status including the current IRQL 
+    
+        * demo 
+        load the dump file 
+        
+        kd> !idt 
+        all the routines will be listed 
+        
+        kd> !irql 
+        will list the processor's IRQL information 
+        
+        kd> !pcr 
+        will display IRQL control region 
+        
+- Deferred procedure calls (DPC)
+    + DPC performs most of the work involved with a device interrupt 
+    
+    this will block all the activity below the IRQL level. driver will typically defer any work can be done at lower IRQL 
+    
+    + created by the device driver's interrupt service routine(ISR)
+    
+    + also created by system components to perform a system task. system can request a DPC task 
+    
+    + DPCs are dispatched at IRQL 2
+    
+    only the level below and equal to 2 are used for software such as DPC or APC 
+    
+    + different DPC priority levels (support different low, medium, high). high priority will be insert into the head of the processor's DPC queue. low will be insert at the end 
+    
+    + each processor has its own DPC queue for DPCs 
+    
+    + starts executing at the kernel function specified in the DPC object 
+        
+    the kernel function typically be the device driver's DPC routine for the I/O function that was request by the user application 
+    
+        * graph 
+    Interrupt Service Routine execute a particular IRQL associate with the device that cause the interrupt. after the time critical part of the ISR executed. the DPC will execute at lower IRQL to avoid blocking any other device 
+    IRQL x 
+    . 
+    . 
+    . 
+    Request DPC -----------------> DPC object.  the created DPC object will be 
+                                   Dispatched 
+                                   ...
+                                   DPC function -> Processor Control Region 
+                                                   Append to the DPC queue
+                                                   When the object reaches the
+                                                   front of the queue 
+                                                   |
+                                                   |
+                                                   V 
+                                                   Driver DPC function 
+                                                   When the DPC object get
+                                                   to the front of the queue
+                                                   it will first reduce the IRQL 
+                                                   to 2 and then perform the 
+                                                   remain works 
+                                                   IRQL 2 
+                                                   . 
+                                                   . 
+    + windbg command for helping exame the DPC 
+    !dpcs, displays the DPC queues for a specified processor 
+    
+    !pcr, displays the processor control region including DPC queues 
+    
+    !timer, displays system timers and the DPC or thread to run 
+    
+        * demo 
+        kd> !dpcs 
+        will show all the dpcs of a processor 
+        
+        kd> !pcr 
+        
+        kd> !timer 
+        will display the timers which depends on the system 
+        
+- Summary 
+drivers are used to process an I/O request 
+
+device drivers and filter drivers 
+
+IRPs describe the I/O requests 
+
+IRQLs control device interrupts 
+
+drivers defer most work for DPCs 
+
+variety of Windbg commands to display drivers, IRPs, IRQLs and DPCs 
+        
+     
 # Forcing Windows Memory Dumps 
+- force memory dump on a hung or locked up system for helping debugging 
+- module topics 
+    + why do windows servers hang? 
+    + forcing a memory dump with NotMyFault 
+    + forcing a memory dump with a keyboard 
+    + forcing a memory dump with a non-maskable interrupt 
+
+- why do windows servers hang? 
+    + not enough memory resources 
+    available physical memory 
+    paged and non-aged pools 
+    
+    + kernel-mode deadlocks 
+    
+    + driver spinlock hangs 
+    
+    + runaway high priority compute-bound thread 
+    
+    + interrupting device drivers caused by faulty devices 
+    
+    
+MEMORY DUMP MUST BE MANUALLY FORCED for hang system 
+
+- ways to force a memory dump 
+    + run kernel-mode code that is designed to crash a system (NotMyFault)
+    
+    system must be minimally functional 
+    
+    + special keyboard control & function. keystroke used to crash a system 
+    
+    results in a stop 0xe2 bugcheck 
+    
+    + hyper-v manager connected session to a virtual machine with keystroke 
+    
+    + generating a non-maskable interrupt (NMI)
+    result in a stop 0x80 bugcheck 
+    
+- demo generate dump with NotMyFault
+    + free tool 
+    http://download.sysinternals.com/files/NotMyFault.zip 
+    
+    system internal tools 
+    
+    + documented in microsoft article (KB969028)
+    http://support.microsoft.com/kb/969028 
+    
+    + graphical user interface(GUI)
+    
+    + command line interface 
+    $ notmyfault.exe /crash 
+    
+    + system must be minimally functional 
+    in order to execute the notmyfault.exe tool 
+    
+
+    + the tool can 
+    crash with high IRL fault 
+    hang with IRP 
+    simulate memory leak etc. 
+    
+    + CLI 
+    useful for scripting an automated memory dump 
+    
+    use on windows server core installation types 
+    $ notmyfault [/crash][/bugcheck <code>]
+    /crash,  crashes the system with a high IRQL fault 
+    /bugcheck code, crashes the system with specified stop code e.g. notmyfault /bugcheck 0xe2
+
+    + check the dump which is generated NotMyFault
+    
+    $ !analyze -v 
+    
+    check the information and which instruction cause the crash 
+    
+    use !thread to check which thread is executing 
+    $ !thread 
+    
+    $ !irp <address>
+    will display the driver 
+    
+    $ !drvobj <driver object path> 
+    will display the \Driver\MYFAULT 
+    
+    $ k 
+    will display the call stack 
+    
+    $ u <start address> <end address> 
+    
+    rbx out of bounds cause the crash 
+    
+- Forcing a crash with a PS/2 keyboard
+
+    + allows you to force a system memory dump from a PS/2 keyboard 
+    
+    + performed on the system console, not remotely via Remote Desktop 
+    
+    + Works with virtual machines if connected through Hyper-V manager 
+    
+    + uses a special keystroke combination 
+    Right-Ctrl + Scroll Lock(twice)
+    
+    + required setup registry value CrashOnCtrlScroll 
+    HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\i8042prt\Parameters
+    CrashOnCtrlScroll REG_DWORD value of 0x01 
+
+    required to reboot to make it take effect 
+    + Results in a stop 0xe2 bugcheck (MANUALLY_INITIATED_CRASH)
+    
+    + Additional documentation in microsoft MSDN 
+    http://msdn.microsoft.com/en-us/library/ff545499.aspx 
+    
+    
+- Forcing a Crash with a USB keyboard 
+    + the only difference compare to PS/2 is a different registry key 
+    HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\kbdhid\Parameters
+    CrashOnCtrlScroll REG_DWORD value of 0x01 
+    
+    + demo 
+    make system hang with NotMyFault 
+    
+    press the keystroke to generate the dump 
+    
+    check dump with the previous process 
+    
+    we can she NotMyFault just jmp to same address to make the system hang 
+    
+- Non-Maskable interrupts (NMI)
+hardware/BIOS induced memory dump 
+
+H/W or virtual NMI switch 
+
+some of the BIOS support or provide switch 
+
+    + dell, IBM, HP provide different mechanisms 
+    
+    + allows you to force a memory dump by generating NMI 
+    http://support.microsoft.com/kb/927069 
+    
+    + create new registry value NMICrashDump 
+    HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl
+    NMICrashDump    REG_DWORD value of 0x01 
+    
+    + windows server 2012 & window 8 do not require NMICrashDump enabled from registry 
+    http://support.microsoft.com/kb/2750146
+
+    + results in a stop 0x80 bugcheck (NMI_HARDWARE_FAILURE) but sometimes this means real hardware failure 
+
+    + Example document for HP Proliant servers 
+    http://h20195.www2.hp.com/V2/GetDocument.aspx?docname=4AA4-7853ENW&cc=us&lc=en
+
+- summary 
+system hangs require manually intervention to force a memory dump 
+
+NotMyFault is a tool used to force a memory dump 
+
+console keyboard with special keystroke combinations can be used to force a memory dump 
+
+hardware or virtual NMI buttons can be used to force a memory dump 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
