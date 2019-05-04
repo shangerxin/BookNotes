@@ -2260,8 +2260,133 @@ the last 12 bits is the offset of the page in physical memory
         * functions to use AllocateUserPhysicalPages, VirtualAlloc with specific flags (MEM_PHYSICAL and MEM_RESERVE), MapUserPhysicalPages 
         
         64 bit system could map memory to 8tb 
-
+        
+        Window SDK contain the example 
+        
+        these functions are also support call these functions but it is not useful. 
+        
+        These memory will never be paged out also in x64 bit system 
+        
 - x64 Virtual Address Translation 
+47                                                                          0
+Page map L4 | directory pointer | Page table | Page Entry | Byte within Page 
+9bits           9bits              9bits         9bits      12bits 
+A            A  |                 A |          A  |         RAM
+|[   ]-------+  |                 | |          |  |         A    |
+|               V                 | |          |  V         |    |
+|             [      ]------------+ V          | [   ]------+    V 
+|                                 [    ]-------+              [  byte ]  
+CR3                                                           [  page ]
+
+
+Page map level 4, CR3 is guaranty in the physical memory 
+
+These page mapping will be done by CPU 
+
+- Page Faults 
+    + Valid PTE/PDE results in the CPU accessing data in physical memory 
+    + If PTE/PDE is invalid, the CPU throws a page fault exception. CPU don't know how to handle the page fault 
+    
+    Expects the OS to handle it and instruct it to retry the memory access 
+    
+    + Windows has to get the data from disk, fix the required PTE/PDE and let the CPU try again. If it is an access violation window will never tell CPU to try 
+    
+    + Page fault types 
+        * hard page fault, requires disk access 
+        * soft page fault, does not require disk access 
+        Example, a needed shared DLL is simply directed to the process by pointing PTE to it. so no direct disk access as the dll is already loaded into the physical memory 
+        
+    + Some reasons for faults 
+    Reason for fault                          Result 
+    accessing a page not in RAM but in        allocate a physical page 
+    a page or mapped file 
+            
+    accessing a page that is in the           move the page to the working set
+    modified or standby page list 
+    
+    accessing a page that is not committed    access violation 
+    
+    accessing a page from user mode that can  access violation 
+    only be accessed from kernel mode 
+    
+    writing to a page that is read only       access violation 
+    
+    accessing a demand zero page              add a zeroed page to WS
+    
+    writing to a guard page                   guard page violation
+    
+    writing to a copy-on-write page           make a process private page copy
+    
+    executing code in page marked no-execute  access violation 
+    (if hardware supports it)
+    
+WS, working set 
+
+    + Invalid PTEs, invalid page table entry 
+    The CPU throws a page fault exception when the Valid bit(bit 0) in a PTE is clear 
+    
+    Windows uses the other PTE bits to indicate where the required page can be found 
+    
+    Example: a page that resides in a page file(x86 w/o PAE). 
+    
+    If the Valid bit is 0, which means the peace of the memory is saved in a page file, window is free to use the other bits in any way sees fit. The page 
+    window possible have 16 page files. The page file index is used to reference, the offset is the where to locate the memory from the page file. 
+    
+                          +-------Transition
+                          |   +---Prototype 
+                          |   |
+                          V   V                                     Valid 
+Page file offset        | U | P | Protection    | Page file index | 0 
+31                     12 11 10  9             5 4                  0        
+
+- Summary 
+    + memory is managed by page sized chunks 
+    + page can be committed, reserved or free 
+    reserved will be saved for committed later 
+    
+    + page sharing is used whenever possible 
+    + virtual addresses are translated to physical address by the CPU 
+    helped by the memory manager when page faults are involved 
+    
+
+# Memory management (Part 2)
+
+# Memory Management (Part 3)
+
+# Interrupts 
+
+# Exceptions 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
