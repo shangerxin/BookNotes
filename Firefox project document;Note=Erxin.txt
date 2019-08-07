@@ -432,7 +432,7 @@ https://developer.mozilla.org/en-US/Firefox/Headless_mode
 - add environment variable 
 MOZ_HEADLESS set to 1 or true 
 
-- add commandline argument -headless 
+- add command line argument -headless 
 
 
 # Firefox get scriptable top 
@@ -2131,6 +2131,250 @@ https://michlstechblog.info/blog/firefox-enable-logging/
 '--enable-updater',
 '--enable-xul',
 '--enable-zipwriter',
+
+
+# Previous versions list 
+https://ftp.mozilla.org/pub/firefox/releases/
+
+
+# XPCOM language bindings 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Language_Bindings
+
+
+# Creating XPCOM components 
+https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Creating_components
+
+
+# XPIDL, Interface Description Language used to specify XPCOM interface classes
+- reference 
+https://developer.mozilla.org/en-US/docs/Archive/Mozilla/XPIDL
+
+
+# XPCOM overview 
+- Gecko, similar to Microsoft COM, XPCOM is designed to be used principally at the application level. The most important use of XPCOM is within Gecko, an open source, standards compliant, embeddable web browser and toolkit for creating web browsers and other applications.
+
+- HTTP, FTP, and others, which are bundled together and linked into a single library. This library is the networking module, also known as "necko."
+
+- interface-based programming is often referred to as programming by contract.
+
+- The nsISupports Base Interface, When this happens, interfaces may never be released and will leak memory. The system of reference counting is, like many things in XPCOM, a contract between clients and implementations.
+
+- Reference XPCOM types, https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Guide/Creating_components/An_Overview_of_XPCOM#XPCOM_Types
+
+- example implement an XPCOM 
+class Sample: public nsISupports
+{
+  private:
+    nsrefcnt mRefCnt;
+  public:
+    Sample();
+    virtual ~Sample();
+
+    NS_IMETHOD QueryInterface(const nsIID &aIID, void **aResult);
+    NS_IMETHOD_(nsrefcnt) AddRef(void);
+    NS_IMETHOD_(nsrefcnt) Release(void);
+}; 
+ 
+// initialize the reference count to 0
+Sample::Sample() : mRefCnt(0)
+{ 
+}
+Sample::~Sample()
+{
+}
+
+// typical, generic implementation of QI
+NS_IMETHODIMP Sample::QueryInterface(const nsIID &aIID,
+                                  void **aResult)
+{
+  if (!aResult) {
+    return NS_ERROR_NULL_POINTER;
+  }
+  *aResult = NULL;
+  if (aIID.Equals(kISupportsIID)) {
+    *aResult = (void *) this;
+  }
+  if (!*aResult) {
+    return NS_ERROR_NO_INTERFACE;
+  }
+  // add a reference
+  AddRef();
+  return NS_OK;
+}
+
+NS_IMETHODIMP_(nsrefcnt) Sample::AddRef()  
+{
+  return ++mRefCnt;
+}
+
+NS_IMETHODIMP_(nsrefcnt) Sample::Release()
+{
+  if (--mRefCnt == 0) {
+    delete this;
+    return 0;
+  }
+  // optional: return the reference count
+  return mRefCnt;
+}
+
+
+- Instead of leveraging C++ RTTI, XPCOM uses the special QueryInterface method that casts the object to the right interface if that interface is supported.
+
+- XPCOM identifier class, The nsIID class is actually a typedef for the nsID class. The other typedefs of nsID, CID and IID, refer to specific implementations of a concrete class
+
+The nsID class provides methods like Equals for comparing identifiers 
+
+#define SAMPLE_CID \ 
+{ 0x777f7150, 0x4a2b, 0x4301, \ 
+{ 0xad, 0x10, 0x5e, 0xab, 0x25, 0xb3, 0x22, 0xaa}}
+
+static NS_DEFINE_CID(kWebShellCID, NS_WEB_SHELL_CID);
+
+- Contract ID, A contract ID is a human readable string used to access a component. A CID or a contract ID may be used to get a component. LDAP operation component 
+
+"@mozilla.org/network/ldap-operation;1"
+{domain}/module/component;version
+
+- The factory design pattern can be used to encapsulate object construction. 
+int New_SomeInterface(SomeInterface** ret)
+{
+  // create the object
+  SomeClass* out = new SomeClass();
+  if (!out) return -1;
+
+  // init the object
+  if (out->Init() == FALSE)
+  {
+    delete out;
+    return -1;
+  }
+
+  // cast to the interface
+  *ret = static_cast<SomeInterface*>(out);
+  return 0; 
+}
+
+    + better way to implement singleton 
+    + group manage objects lifetime 
+    + Another benefit of using the nsISupports interface is that you can support other interfaces as they are introduced
+
+- XPIDL and type libraries,  interface definition language (IDL). 
+
+    + can not have two methods with same name 
+
+workaround: 
+void FooWithInt(in int x);
+void FooWithString(in string x);
+void FooWithURI(in nsIURI x);
+
+    +  generate type libraries, or typelibs, which are files with the extension .xpt. The type library is a binary representation of an interface or interfaces. 
+
+    + XPConnect is the layer of XPCOM that provides access to XPCOM components from other languages 
+    
+    + tool that generates these files is called the xpidl compiler.
+    
+    + XPCOM service, single instance of XPCOM object 
+
+    + XPCOM types 
+NS_IMETHOD method, declaration return type, XPCOM method declarations should use this  
+NS_IMETHODIMP, implementation should use 
+NS_IMETHODIMP_(type), implementation with return type 
+NS_IMPORT, forces the method to be resolved internally by shared library 
+NS_EXPORT, forces exported 
+
+    + reference counting 
+NS_ADDREF 
+NS_IF_ADDREF 
+NS_RELEASE 
+NS_IF_RELEASE 
+
+    + status codes 
+NS_FAILED 
+NS_SUCCESSED 
+
+    + variable mappings 
+nsrefcnt 
+nsresult 
+nsnull 
+
+    + common XPCOM error codes 
+NS_ERROR_NOT_INITIALIZED,	Returned when an instance is not initialized.
+NS_ERROR_ALREADY_INITIALIZED,	Returned when an instance is already initialized.
+NS_ERROR_NOT_IMPLEMENTED,	Returned by an unimplemented method.
+NS_ERROR_NO_INTERFACE,	Returned when a given interface is not supported.
+NS_ERROR_NULL_POINTER,	Returned when a valid pointer is found to be nsnull.
+NS_ERROR_FAILURE,	Returned when a method fails. Generic error case.
+NS_ERROR_UNEXPECTED,	Returned when an unexpected error occurs.
+NS_ERROR_OUT_OF_MEMORY,	Returned when a memory allocation fails.
+NS_ERROR_FACTORY_NOT_REGISTERED,	Returned when a requested class is not registered.
+
+    + managing cookies from cpp 
+nsCOMPtr<nsIServiceManager> servMan;
+nsresult rv = NS_GetServiceManager(getter_AddRefs(servMan));
+if (NS_FAILED(rv))
+  return -1;
+
+nsCOMPtr<nsICookieManager> cookieManager;
+rv = servMan->GetServiceByContractID("@mozilla.org/cookiemanager",
+                                     NS_GET_IID(nsICookieManager),
+                                     getter_AddRefs(cookieManager));
+
+if (NS_FAILED(rv))
+  return -1;
+
+PRUint32 len;
+deletedCookies->GetLength(&len);
+
+for (int c=0; c<len; c++)
+    cookieManager->Remove(deletedCookies[c].host,
+                          deletedCookies[c].name,
+                          deletedCookies[c].path,
+                          PR_FALSE);
+
+- The previous code uses the special nsCOMPtr function do_QueryInterface that lets you QueryInterface without having to worry about reference counting
+- There are two service getters on the nsIServiceManager interface: one that takes a CID and another interface that takes a Contract ID. Here we'll use the latter. The first parameter to the GetServiceByContractID
+
+the variable catman holds the nsICategoryManager interface pointer, which you can use to add the component as a startup observer by calling a method on the nsICategoryManager.
+
+char* previous = nsnull;
+rv = catman->AddCategoryEntry("xpcom-startup",
+                              "WebLock",
+                              WebLock_ContractID,
+                              PR_TRUE,  // persist category
+                              PR_TRUE,  // replace existing
+                              &previous);
+if (previous)
+  nsMemory::Free(previous); // free the memory the replaced value might have used
+  
+rv = catman->DeleteCategoryEntry("xpcom-startup",
+                                 "WebLock",
+                                  PR_TRUE);  // persist
+                                  
+    + common XPCOM notification 
+    xpcom-startup 
+    xpcom-shutdown 
+    xpcom-autoregistration 
+    
+- using XPCOM utilities, to make things easier 
+    
+    
+# the Gecko networking libraries, see http://www.mozilla.org/projects/netlib/. Necko
+- reference 
+https://developer.mozilla.org/zh-CN/docs/Mozilla/Projects/Necko
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
