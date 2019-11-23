@@ -4,3 +4,189 @@ Docker on Windows=Elton;Note=Erxin
 - Environment 
 DOcker for windows 17.06+ 
 Windows 10 or window server 2016+
+
+- Container doesn't add any overhead to the memory and compute requirements of app. You can run a brand new .NET Core app in one container and a 10-year old ASP.NET 2.0 WebForms app in another container on the same server.
+
+- windows licensing, VMs running Windows. Windows is licensed at the host level, not the container level. If you have 100 Windows containers running on one server, you only need a license for the server. 
+
+- On Windows Server, you can also run containers in Hyper-V mode to get increased isolation.
+
+- the docker service and docker command line 
+
+- Docker Universal Control Plane (UCP) 
+
+- configure the Docker API to be remotely accessible and configure your Docker CLI to connect to a remote service. 
+
+- You describe all these steps in a simple script called a Dockerfile
+
+- This cluster is called a swarm, and you don't need to install anything extra to run 
+
+- In production, you should ideally use Windows Server 2016 Core, the installation with no UI. Docker EE running as a Windows service.
+
+
+Docker playground at https://dockr.ly/play-with-docker. 
+
+$ docker container run dockeronwindows/ch01-whale
+
+- docker as a service 
+ps> Install-Module -Name DockerMsftProvider -Repository PSGallery -Force
+ps> Install-Package -Name docker -ProviderName DockerMsftProvider
+ps> Restart-Computer -Force
+
+- The image has a script that secures the Docker service with TLS certificates. You can read more details on Stefan's blog at https://stefanscherer.github.io.
+
+
+Docker service so that communication with the client is secured using TLS.
+
+$ipAddress = '<vm-ip-address>'mkdir -p C:\certs\clientdocker container run --rm ` --env SERVER_NAME=$(hostname) ` --env IP_ADDRESSES=127.0.0.1,$vm-ip-address ` --volume 'C:\ProgramData\docker:C:\ProgramData\docker' ` --volume 'C:\certs\client:C:\Users\ContainerAdministrator\.docker' ` stefanscherer/dockertls-windowsRestart-Service docker
+
+On the client machine, you can set environment variables to point the Docker client to use a remote Docker service. 
+$ipAddress = '<vm-ip-address>'
+$env:DOCKER_HOST='tcp://$($ipAddress):2376'
+$env:DOCKER_TLS_VERIFY='1'
+$env:DOCKER_CERT_PATH='C:\certs\client'
+
+- docker in an azure vm 
+- GitHub repository at https://github.com/sixeyed/docker-on-windows. 
+
+ version 17.06 of Docker
+
+- doing one thing with a task container. The image is based on Microsoft Nano Server and is set up to run a simple PowerShell script 
+
+ps> docker container ls --all 
+
+with Docker installed can run that script without having to install the engine.
+
+- connecting t an interactive container 
+> docker container run --interactive --tty dockeronwindows/ch02-powershell-env `    powershell
+
+The --interactive option runs an interactive container, and the --tty flag attaches a dummy terminal connection to the container.
+
+- keeping a process running in a background container 
+
+It's a container that behaves like a Windows Service. In Docker terminology, it's called a detached container, and it's the Docker service that keeps it running in the background.
+
+- build a docker image 
+    + dockerfile, source code for an image 
+FROM microsoft/nanoserver
+COPY scripts/print-env-details.ps1 c:\\print-env.ps1
+CMD ["powershell.exe", "c:\\print-env.ps1"]
+
+The default registry is a free public service called Docker Hub. Microsoft has made the Nano Server image available on Docker Hub
+
+    + build docker image from a dockerfile 
+    ps > docker image build --tag dockeronwindows/ch02-powershell-env .
+
+
+    Each instruction in the Dockerfile is executed as a separate step that produces a new image layer, and the final image will be the combined stack of all the layers.
+
+- packaging your own applications 
+    + docker file 
+FROM microsoft/dotnet:1.1-sdk-nanoserver
+
+WORKDIR /src
+COPY src/ .
+
+RUN dotnet restore; dotnet build
+CMD ["dotnet", "run"]
+
+    + The Dockerfile uses Microsoft's .NET Core image from Docker Hub as the base image. 
+    + WORKDIR specifies the current working directory. 
+    + RUN executes a command inside an intermediate container and saves the state of the container after the command completes, creating a new image layer
+    
+    + A simple build script that compiles the application and builds the Docker image looks like this:
+ps> dotnet restore src; dotnet publish src
+ps> docker image build --file Dockerfile.slim --tag dockeronwindows/ch02-dotnet-helloworld:slim .
+
+- compiling with multi-stage builds, multiple FROM instructions in your Dockerfile, where each FROM instruction starts a new stage in the build.  final stage is used for the completed image.
+
+//# build stage
+FROM microsoft/dotnet:1.1-sdk-nanoserver AS builder
+WORKDIR /src
+COPY src/ .
+RUN dotnet restore; dotnet publish
+
+//# final image stage
+FROM microsoft/dotnet:1.1-runtime-nanoserver
+WORKDIR /dotnetapp
+COPY --from=builder /src/bin/Debug/netcoreapp1.1/publish .
+CMD ["dotnet", "HelloWorld.NetCore.dll"]
+
+    + The second stage uses the runtime .NET Core image, which doesn't have the SDK installed. In that stage I copy the published output from the previous stage, specifying --from=builder
+
+- using the main dockerfile instructions 
+- Dockerfile for a simple static website - it uses Internet Information Services (IIS) and serves an HTML 
+
+# escape=`
+FROM microsoft/iis
+SHELL ["powershell"]
+
+ARG ENV_NAME=DEV
+
+EXPOSE 80
+
+COPY template.html C:\template.html
+
+RUN (Get-Content -Raw -Path C:\template.html) ` 
+    -replace '{hostname}', [Environment]::MachineName ` 
+    -replace '{environment}', [Environment]::GetEnvironmentVariable('ENV_NAME') ` | Set-Content -Path C:\inetpub\wwwroot\index.html
+
+
+    + ARG specifies a build argument to use in the image with a default value
+    + EXPOSE will make a port available in the image
+    + run the static web server 
+    ps> docker container run --detach --publish 80 dockeronwindows/ch02-static-website
+
+That's a virtual IP address assigned by Docker, which I can use on the host to communicate with the container. I can browse to that IP address and see the response from IIS running inside the container
+
+- understanding temprary containers and image state. This is an important concept - when you build a Docker image, the instructions execute inside temporary containers. The containers are removed, but the state they write is persisted in the final image 
+
+- working with data in docker images and containers 
+
+- data in layers and the virtual C drive 
+    + Each container has its own writable layer on top of all the read-only layers
+
+//# escape=`
+FROM dockeronwindows/ch02-fs-1
+RUN echo 'from image 2' > c:\data\file2.txt
+
+    + Many options in Docker commands have short and long forms. 
+
+- sharing data between containers with volumes 
+    + In the Windows base images, there is only a C drive available, so volumes need to be created on the C drive.
+
+    + create two volumes 
+    //# escape=`FROM microsoft/nanoserver
+    VOLUME C:\app\config
+    VOLUME C:\app\logs
+    ENTRYPOINT powershell
+
+    + Because volumes are separate from the container, they can be shared with other containers even if the source container isn't running
+
+    ps> docker container run --name source dockeronwindows/ch02-volumes "echo 'start' > c:\app\logs\log-1.txt"
+    
+    create a new file in the shared volumes with a task container 
+
+    + read a file from a shared volumes 
+    ps> docker container run -it --volumes-from source dockeronwindows/ch02-volumes
+
+    ps> docker container run -it --volumes-from source:ro dockeronwindows/ch02-volumes
+
+- sharing data between container and host with volumes 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
