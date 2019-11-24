@@ -174,6 +174,74 @@ RUN echo 'from image 2' > c:\data\file2.txt
 
 - sharing data between container and host with volumes 
 
+    + use container inspect commnad to extract volume information
+    ps> docker container inspect --format '{{ json .Mounts }}' source | ConvertFrom-Json
+
+    Instead, you can mount a volume from a specific location on the host when you create a container.
+
+- mounting volumes from host directories 
+    + linux 
+    docker allowed mount folder with files. it will be auto merged 
+    docker allowed mount a single file 
+    
+    + window 
+    can only mount whole directories 
+
+- using volumes for configuration and state 
+- packaging a traditonal asp.net web app as a docker image 
+    + write a docker file for nerddinner 
+    + before move to docker 
+    install windows on a clean server 
+    run all windows updates 
+    install iis 
+    install .net 
+    set up asp.net 
+    copy the web app into c drive 
+    create an application pool in iis 
+    create the website in iis using the application pool 
+    delete default website 
+
+    + create docker file 
+    FROM microsoft/aspnet:windowsservercore-10.0.14393.1198
+    SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
+
+    WORKDIR C:\nerd-dinner
+
+    RUN Remove-Website -Name 'Default Web Site'; `    New-Website -Name 'nerd-dinner' -Port 80 -PhysicalPath 'c:\nerd-dinner' -ApplicationPool '.NET v4.5'
+
+    RUN & c:\windows\system32\inetsrv\appcmd.exe unlock config /section:system.webServer/handlers
+
+    COPY --from=builder C:\out\NerdDinner\_PublishedWebsites\NerdDinner C:\nerd-dinner
+
+    But in the containerized app, there will be only one website running - another website would be in another container, so we already have isolation, and each container can use the default application pool 
+
+
+# Developing dockerized .net and .net core applications 
+
+- host existing .net app in docker, need to use the Windows Server Core base image.
+- configuring iis for docker-friendly logging 
+    +  first need to configure IIS so it writes all log entries from any site to a single file
+
+    + cmdlet in the Dockerfile for the dockeronwindows/ch03-iis-log-watcher image
+
+    + use multiple commands at startup 
+CMD Start-Service W3SVC; `     Invoke-WebRequest http://localhost -UseBasicParsing | Out-Null; `     netsh http flush logbuffer | Out-Null; `     Get-Content -path 'c:\iislog\W3SVC\u_extend1.log' -Tail 1 -Wait   
+
+        * start iise W3SVC
+        * make a http get request to the localhost 
+        * lfush the http log buffer 
+        * read the content of the log file 
+docker container run -d -P --name log-watcher dockeronwindows/ch03-iis-log-watcher
+
+- promoting environment variables 
+//docker file 
+ENV A01_KEY A01 value
+
+ps> docker container run -d -P --name iis-env dockeronwindows/ch03-iis-environment-variables
+
+
+
+
 
 
 
