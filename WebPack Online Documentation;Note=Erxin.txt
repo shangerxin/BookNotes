@@ -1,0 +1,950 @@
+WebPack Online Documentation;Note=Erxin
+
+# Guides 
+- Setup 
+\> npm init -y 
+\> npm install webpack --save-dev 
+\> npm install webpack-cli --save-dev 
+
+- Create a bundle 
+    + init node module 
+    + edit package.json 
+    add private to true 
+    remove main entry 
+    
+- using configuration file 
+\> npx webpack --config webpack.config.js 
+
+- using npm script fields in package.json
+{
+    "scripts"{
+        "test":"...",
+        "build":"webpack"
+    }
+}
+
+\>npm run build 
+
+- asset management 
+    + setup 
+    dist/index.html 
+    <script src="bundle.js"></script> 
+    
+    + loading css 
+    \> npm install --save-dev style-loader css-loader 
+    
+    webpack.config.js 
+    module: {
+        rules: [
+            {
+                test: /\.css$/,
+                use: [
+                    'style-loader',
+                    'css-loader'
+                ]
+            }
+        ]
+    }
+    
+    add style.css into the project structure 
+    /src 
+        |-style.css 
+        |-index.js
+        
+    src/index.js 
+    import './style.css'
+    
+    function(){}
+    ...
+    
+    \> npm run build 
+    the <style> tag is dynamically created by JavaScript and insert into index.html 
+    
+    + loading image 
+    \> npm install --save-dev file-loader 
+    
+    webpack.config.js 
+    {
+        module:{
+            rules:[
+                {
+                    test:/\.(png|svg|jpg|gif)$/,
+                    use:[
+                        'file-loader'
+                    ]
+                }
+            ]
+        }
+    }
+    
+    /src 
+        |-style.css 
+        |-index.js
+        |-icon.png 
+        
+        
+    src/index.js 
+    import iconPath from './icon.png';
+    
+    ...
+    imgElem.src = iconPath;
+    
+    src/style.css 
+    .p {
+        background: url('./icon.png');
+    }
+    
+    \> npm run build 
+    
+    + all the other loaders are similar 
+    
+- output management 
+    + generate output based on entry names 
+    const path = require('path');
+
+    module.exports = {
+    entry: {
+      app: './src/index.js',
+      print: './src/print.js'
+    },
+    output: {
+      filename: '[name].bundle.js',
+      path: path.resolve(__dirname, 'dist')
+    }
+    };
+
+    + HtmlWebpackPlugin simplifies creation of HTML files to serve your webpack bundles. This is especially useful for webpack bundles that include a hash in the filename which changes every compilation.
+    
+    + clean /dist folder, clean-webpack-plugin 
+    + export output manifest file weith WebpackManifestPlugin 
+    
+- Development 
+    + development mode 
+    + source map 
+    + automatic compile 
+    watch mode,  watch" all files within your dependency graph for changes. don't have to run the full build manually.
+    webpack-dev-server, a simple web server and the ability to use live reloading
+    webpack-dev-middleware, webpack-dev-middleware is a wrapper that will emit files processed by webpack to a server
+    
+    package.json 
+    {
+        "scripts":{
+            "watch":"webpack --watch"
+        }
+    }
+    
+    adjust text editor, "safe write" feature that can potentially interfere with recompilation
+    
+- Code splitting three general approaches 
+    1. entry points, manually 
+    
+module.exports = {
+  mode: 'development',
+  entry: {
+    index: './src/index.js',
+    another: './src/another-module.js'
+  },
+  output: {
+    filename: '[name].bundle.js',
+    path: path.resolve(__dirname, 'dist')
+  }
+};
+    
+    2. prevent duplication using SplitChunksPlugin, allows us extract common dependencies into an existing entry chunk or an new chunk 
+    
+    const path = require('path');
+
+    module.exports = {
+        mode: 'development',
+        entry: {
+            index: './src/index.js',
+            another: './src/another-module.js'
+        },
+        output: {
+            filename: '[name].bundle.js',
+            path: path.resolve(__dirname, 'dist')
+        },
+        optimization: {
+          splitChunks: {
+            chunks: 'all'
+          }
+        }
+    };    
+    
+    
+    3. Dynamic imports via inline function calls with modules, se the import() syntax that conforms to the ECMAScript proposal for dynamic imports.
+    async function getComponent() {
+        const element = document.createElement('div');
+        const { default: _ } = await import(/* webpackChunkName: "lodash" */ 'lodash');
+        
+        element.innerHTML = _.join(['Hello', 'webpack'], ' ');
+        
+        return element;
+    }
+
+    getComponent().then(component => {
+        document.body.appendChild(component);
+    });
+    
+    + other plugins and loaders 
+    
+    mini-css-extract-plugin, Useful for splitting CSS out from the main application.
+    bundle-loader, Used to split code and lazy load the resulting bundles.
+    promise-loader, Similar to the bundle-loader but uses promises.
+
+    + support bundle visualizations, web-pack-chart etc.
+    
+- Caching 
+    + output file name with [contenthash], the field will be dynamically changed 
+    
+  const path = require('path');
+  const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+  const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+  module.exports = {
+    entry: './src/index.js',
+    plugins: [
+      new CleanWebpackPlugin(),
+      new HtmlWebpackPlugin({
+         title: 'Caching'
+      })
+    ],
+    output: {
+      filename: '[name].[contenthash].js',
+      path: path.resolve(__dirname, 'dist')
+    },
+    optimization: {
+      moduleIds: 'hashed',
+      runtimeChunk: 'single',
+      splitChunks: {
+        cacheGroups: {
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all'
+          }
+        }
+      }
+    }
+  };    
+  
+    + extract boilerplate, using the optimization.runtimeChunk option. Set it to single to create a single runtime bundle for all chunks
+    
+    + This is because each module.id is incremented based on resolving order by default
+
+- Authoring libraries   
+    + externalize library, which means the library will be ready on the client environment 
+  const path = require('path');
+
+  module.exports = {
+    entry: './src/index.js',
+    output: {
+      path: path.resolve(__dirname, 'dist'),
+      filename: 'webpack-numbers.js'
+    }
+    },
+    externals: {
+      lodash: {
+        commonjs: 'lodash',
+        commonjs2: 'lodash',
+        amd: 'lodash',
+        root: '_'
+      }
+    }
+  };
+  
+    + we can also expose library from output 
+    webpack.config.js
+        output: {
+            path: path.resolve(__dirname, 'dist'),
+                filename: 'webpack-numbers.js',
+                library: 'webpackNumbers'
+        },
+        
+    package.json 
+    {
+        "main": "dist/webpack-numbers.js"
+    }
+    
+    or add into the module field of the package.json 
+    
+- environment variable,  environment option --env allows you to pass in as many environment variable. It is different from OS environment variable 
+\> webpack --env.NODE_ENV=local --env.production --progress
+
+reference the variable from webpack.config.json 
+console.log('NODE_ENV: ', env.NODE_ENV); // 'local'
+
+- Build performance, TODO 
+- Content security policies, TODO 
+- Development Vagrant, TODO 
+- Scaffolding, webpack-cli TODO
+- Tree shaking in JavaScript context for dead-object elimination, TODO 
+- Production, best practice for build web app, TODO 
+- Lazy loading TODO 
+- Shimming, can be useful is when you want to polyfill browser functionality to support more users. 
+- TypeScript
+    + setup 
+    \> npm install --save-dev typescript ts-loader
+    
+    + add tsconfig.json into project 
+    
+    + modify webpack.config.js 
+    
+const path = require('path');
+
+module.exports = {
+  entry: './src/index.ts',
+  module: {
+    rules: [
+      {
+        test: /\.tsx?$/,
+        use: 'ts-loader',
+        exclude: /node_modules/
+      }
+    ]
+  },
+  resolve: {
+    extensions: [ '.tsx', '.ts', '.js' ]
+  },
+  output: {
+    filename: 'bundle.js',
+    path: path.resolve(__dirname, 'dist')
+  }
+};
+
+    + add source map support 
+    tsconfig.json 
+    {
+        "compilerOptions": {
+            "outDir": "./dist/",
+            "sourceMap": true,
+            "noImplicitAny": true,
+            "module": "commonjs",
+            "target": "es5",
+            "jsx": "react",
+            "allowJs": true
+        }
+    }
+    
+    webpack.config.js 
+    const path = require('path');
+
+    module.exports = {
+        devtool: 'inline-source-map'
+    }
+    
+    + install third-party node/typescript library. it's important to install the typing definition too. 
+    
+    \> npm install --save-dev @types/lodash
+
+    + import other assets, non-code assets with TypeScript, we need to defer the type for these imports. This requires a custom.d.ts file which signifies custom definitions for TypeScript in our project.
+    
+    custom.d.ts 
+    declare module "*.svg" {
+      const content: any;
+      export default content;
+    }
+    
+    we declare a new module for SVGs by specifying any import that ends in .svg and defining the module's content as any
+    
+- Progressive web application, offline support, Service worker 
+Google library to support offline 
+https://github.com/GoogleChrome/workbox
+- Public path, specify base path for all the assets within your application 
+    
+every file emmitted to output.path can be referenced from output.publicPath 
+    
+switch asset files from normal host to CND, we have two solutions 
+    + Environment variable based 
+    import webpack from 'webpack';
+
+    // Try the environment variable, otherwise use root
+    const ASSET_PATH = process.env.ASSET_PATH || '/';
+
+    export default {
+      output: {
+        publicPath: ASSET_PATH
+      },
+
+      plugins: [
+        // This makes it possible for us to safely use env vars on our code
+        new webpack.DefinePlugin({
+          'process.env.ASSET_PATH': JSON.stringify(ASSET_PATH)
+        })
+      ]
+    };
+
+    + publicPath on the fly. webpack exposes a global variable called __webpack_public_path__ that allows you to do that
+
+//entry.js 
+import './public-path';
+import './app';
+
+- Advanced entry, multiple file types per entry 
+    + output home.js and home.css from our application files for the home page and account.js and account.css for account page.
+    
+    using MiniCssExtractPlugin, This plugin extracts CSS into separate files. It creates a CSS file per JS file which contains CSS. It supports On-Demand-Loading of CSS and SourceMaps.
+    
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+module.exports = {
+  mode: process.env.NODE_ENV,
+  entry: {
+    home: ['./home.js', './home.scss'],
+    account: ['./account.js', './account.scss']
+  },
+  output: {
+    filename: '[name].js',
+  },
+  module: {
+    rules: [
+      {
+        test: /\.scss$/,
+        use: [
+          // fallback to style-loader in development
+          process.env.NODE_ENV !== 'production' ? 'style-loader' : MiniCssExtractPlugin.loader,
+          'css-loader',
+          'sass-loader'
+        ]
+      }
+    ]
+  },
+  plugins: [
+    new MiniCssExtractPlugin({
+      filename: '[name].css'
+    }),
+  ]
+};
+    
+    
+# Concepts 
+- webpack is a static module builder for modern JS applications. we can use any node library in webpack.config.js 
+
+- Entry, which module webpack should use to begin building out its internal dependency graph
+
+module.exports = {
+  entry: './path/to/my/entry/file.js'
+};
+
+    + single entry 
+    + object syntax 
+    module.exports = {
+      entry: {
+        app: './src/app.js',
+        adminApp: './src/adminApp.js'
+      }
+    };
+    
+    + multi pages application
+    module.exports = {
+      entry: {
+        pageOne: './src/pageOne/index.js',
+        pageTwo: './src/pageTwo/index.js',
+        pageThree: './src/pageThree/index.js'
+      }
+    };
+    
+    + dynamic entries
+    
+    function return object with key, value pairs
+    entry: ()=> []
+    
+    entry: async ()=> new Promise((res)=> res([]))
+    
+    + naming, If a string or array of strings is passed, the chunk is named main. If an object is passed, each key is the name of a chunk, and the value describes the entry point for the chunk.
+        
+    + context, string, the base directory for resolving entry points, absolute path 
+
+- Output, where to emit the bundles, filename 
+module.exports = {
+  entry: {
+    app: './src/app.js',
+    search: './src/search.js'
+  },
+  output: {
+    filename: '[name].js',
+    path: __dirname + '/dist'
+  }
+};
+
+    + substitutions to ensure each file has a unique name 
+    + using cdn 
+    module.exports = {
+      //...
+      output: {
+        path: '/home/proj/cdn/assets/[hash]',
+        publicPath: 'https://cdn.example.com/assets/[hash]/'
+      }
+    };
+    
+    using runtime publicPath by the __webpack_public_path__ variable in the entry point file
+
+- Loaders, Loaders allow webpack to process other types of files and convert them into valid modules that can be consumed by your application and added to the dependency graph. The use property indicate which load should be used 
+
+const path = require('path');
+
+module.exports = {
+  output: {
+    filename: 'my-first-webpack.bundle.js'
+  },
+  module: {
+    rules: [
+      { test: /\.txt$/, use: 'raw-loader' }
+    ]
+  }
+};
+
+    + allow you to pre-process files as you import or “load” them. 
+    + using loaders in two ways, loaders are executed from right to left, from bottom to top. 
+        * Configuration 
+        
+        module.exports = {
+          module: {
+            rules: [
+              {
+                test: /\.css$/,
+                use: [
+                  // style-loader
+                  { loader: 'style-loader' },
+                  // css-loader
+                  {
+                    loader: 'css-loader',
+                    options: {
+                      modules: true
+                    }
+                  },
+                  // sass-loader
+                  { loader: 'sass-loader' }
+                ]
+              }
+            ]
+          }
+        }
+    
+        * Inline specify loaders in an import statement, or any equivalent "importing" method
+        
+        import Styles from 'style-loader!css-loader?modules!./styles.css';
+        
+        override loaders in the configuration from inline 
+        import Styles from '!style-loader!css-loader?modules!./styles.css';
+        import Styles from '!!style-loader!css-loader?modules!./styles.css';
+        import Styles from '-!style-loader!css-loader?modules!./styles.css';
+        
+        ! disable normal loaders 
+        !! disable all loaders 
+        -! disable pre and loaders except postLoaders 
+        
+        + CLI, with shell 
+        
+        webpack --module-bind jade-loader --module-bind 'css=style-loader!css-loader'
+    
+    
+- Plugins, leveraged to perform a wider range of tasks like bundle optimization, asset management and injection of environment variables.
+
+const HtmlWebpackPlugin = require('html-webpack-plugin'); //installed via npm
+const webpack = require('webpack'); //to access built-in plugins 
+
+module.exports = {
+  plugins: [
+    new HtmlWebpackPlugin({template: './src/index.html'})
+  ]
+};
+
+    + plugin is a JavaScript object that has an apply method. It is called by webpack compiler giving access to the entire compilation lifecycle 
+    
+const pluginName = 'ConsoleLogOnBuildWebpackPlugin';
+
+class ConsoleLogOnBuildWebpackPlugin {
+  apply(compiler) {
+    compiler.hooks.run.tap(pluginName, compilation => {
+      console.log('The webpack build process is starting!!!');
+    });
+  }
+}
+
+- Mode, mode parameter to either development, production or none, you can enable webpack's built-in optimizations. Default value is production
+
+module.exports = {
+  mode: 'production'
+};
+
+- Browser Compatibility, ES5-compliant (IE8 and below are not supported). webpack needs Promise for import() and require.ensure(). 
+
+- CLI 
+
+- Configuration 
+    + multiple targets 
+const path = require('path');
+const serverConfig = {
+  target: 'node',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'lib.node.js'
+  }
+  //…
+};
+
+const clientConfig = {
+  target: 'web', // <=== can be omitted as default is 'web'
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'lib.js'
+  }
+  //…
+};
+
+module.exports = [ serverConfig, clientConfig ];
+    
+    + manifest, three main types of code, extract manifest into json file, https://github.com/danethurber/webpack-manifest-plugin
+    
+    source code 
+    third-party library 
+    webpack runtime 
+    
+- Modules 
+ES2015 import 
+CommonJS, require() 
+AMD, define and require 
+@import statement inside of a css/sass/less file 
+an image url url(...) or html <img src=...> file 
+
+    + module types 
+    CoffeeScript 
+    TypeScript 
+    ESNext(Babel)
+    Sass 
+    Less 
+    Stylus 
+    
+    + Module resolution, using enhanced-resolve, https://github.com/webpack/enhanced-resolve
+    
+    absolute path 
+    relative path, the directory of the resource file where the import or require is taken to be the context directory 
+    
+    module paths, webpack search all resolve.modules, it can be replaced by creating a resolve.alias
+    
+    resolve.extensions will tells the resolver which extensions are acceptable 
+    
+    The field resolve.mainFields package.json configuration option are looked up in order
+
+- Hot module replacement 
+    1. applications asks the HMR to check for updates 
+    2. runtime asynchronously downloads and notify the application 
+    3. the application asks the runtime to apply the updates 
+    4. the runtime synchronously apply the updates 
+    
+    + updates contains two parts 
+        * manifest 
+        * updated chunks 
+        
+    + API reference 
+    https://webpack.js.org/api/hot-module-replacement/
+
+- Migrate from older version to newer ones 
+
+
+# Configuration 
+- using different config file with 
+\> webpack --config config.json 
+
+- configuration types 
+    + exporting single configuration object 
+    + exporting a function 
+webpack.config.js 
+module.exports = function(env, argv){
+    return {
+        mode:...,
+        plugins:[....]
+    }
+};
+    + export a promise which resolve a config object 
+    + export multiple configuration for multiple library target etc. 
+    module.exports = [config0, config1];
+    
+- entry 
+    + context, base directory, absolute path for resolving entry points and loaders 
+module.exports = {
+  //...
+  context: path.resolve(__dirname, 'app')
+};
+
+    + entry types, string, [string], object, function which return the previous types 
+    
+    If a string or array of strings is passed, the chunk is named main
+    
+- model, development, production, none, have several default optmization settings. Also automatic set variable 
+    + development
+process.env.NODE_ENV on DefinePlugin to value development . Enables NamedChunksPlugin and NamedModulesPlugin 
+
+    + production
+Sets process.env.NODE_ENV on DefinePlugin to value production . Enables FlagDependencyUsagePlugin , FlagIncludedChunksPlugin , ModuleConcatenationPlugin , NoEmitOnErrorsPlugin , OccurrenceOrderPlugin , SideEffectsFlagPlugin and TerserPlugin .
+
+- Output
+    + output.auxiliaryComment When used in tandem with output.library and output.libraryTarget, this option allows users to insert comments within the export wrapper.
+
+module.exports = {
+  //...
+  output: {
+    library: 'someLibName',
+    libraryTarget: 'umd',
+    filename: 'someLibName.js',
+    auxiliaryComment: 'Test Comment'
+  }
+};
+
+    + output.chunkFilename,  determines the name of non-entry chunk files
+    + output.chunkLoadTimeout
+    + output.crossOriginLoading 
+    + output.jsonpScriptType, Allows customization of type attribute of script tags that webpack injects into the DOM t
+    + output.devtoolFallbackMode 
+    + output.devtoolLineToLine 
+    + output.devtoolModuleFilename 
+    + output.devtoolNamespace 
+    + output.filename, substitutions [name], [id] chunk id, [hash], [chunkhash], [contenthash], also support using function return file name. support using 'dir/[name]/bundle.js to create folder. [query] the module query, the string following the filename, [function] the function return filename 
+    
+    The lengths of [hash] and [chunkhash] can be specified using [hash:16]
+    
+    module.exports = {
+        output: {
+            filename: (chunkData) => {
+                return chunkData.chunk.name === 'main' ? '[name].js':'[name]/[name].js';
+            }
+        }
+    }
+    output files for on-demand-loaded chunks. For these files the output.chunkFilename option is used.
+    
+    + output.globalObject, window, this 
+    + output.hashDigest 
+    + output.hashDigestLength 
+    + output.hashSalt 
+    + output.hotUpdateChunkFilename 
+    + output.hotUpdateFunction 
+    + output.hotUpdateMainFailename 
+    + output.josnpFunction 
+    + output.library 
+    + output.libraryExport 
+    + output.libraryTarget 
+    + expose a variable 
+    + expose via object assignment 
+    + module definition systems 
+    + other targets 
+    + output.path, The output directory as an absolute path
+    + output.pathinfo 
+    + output.public path 
+    + output.sourceMapFilename 
+    + output.sourcePrefix 
+    + output.strctModuleException
+    + output.umdNamedDefine 
+    + output.futureEmitAssets 
+
+- module, determine how the different types of modules within a project will be treated
+    + module.noParse, Prevent webpack from parsing any files matching the given regular expressions. ignored files should not calls import, require, define 
+    
+    + module.rules, array of rules are matched to request when module are created. they can apply loaders to the module, or modify the parser 
+    
+        * Rule conditions 
+        two kinds of inputs of a rule, a resource, a issue which is a absolute path of the file request a resource the location of import statement. 
+        
+        rule properties test, include, exclude and resource are matched with the resource
+        
+        rule property issuer is matched with the issuer file. 
+        
+        using multiple conditions means all condition must match 
+        
+        * Rule results 
+        two output values of a rule, loaders, parser options should be used to create parser for the module 
+        
+        the properties affect the loaders: loader, options, use
+        
+        enforce property affect the loader category, it's a normal, pre or post loader 
+        
+        parser affect the parser options 
+        
+        * nested Rules, under the properties rules and oneOf
+        
+        * Rule properties 
+        Rule.enforce, 'pre'|'post'
+        Rule.exclude 
+        Rule.include 
+        Rule.issuer 
+        Rule.loader 
+        Rule.use 
+        Rule.oneOf, only the first match 
+        Rule.options/Rule.query 
+        Rule.parser, all applied parser options are merged 
+        Rule.resource, a condition match with the resource 
+        Rule.resourceQuery, a condition matched with the resource query 
+        Rule.rules, an arrary of rules that also used when the Rule matches 
+        Rule.sideEffects, tree shaking 
+        Rule.test 
+        Rule.type, 'javascript/auto' | 'javascript/dynamic' | 'javascript/esm' | 'json' | 'webassembly/experimental'. prevent default import behaviors 
+        
+        Rule.use, can be an array of UseEntry which are applied to modules. Each entry specifies a loader to be used.  will be applied from right to left 
+        
+module.exports = {
+  //...
+  module: {
+    rules: [
+      {
+        //...
+        use: [
+          'style-loader',
+          {
+            loader: 'css-loader',
+            options: {
+              importLoaders: 1
+            }
+          },
+          {
+            loader: 'less-loader',
+            options: {
+              noIeCompat: true
+            }
+          }
+        ]
+      }
+    ]
+  }
+};
+        can also be a function which return the array of loaders with parameter info 
+        use: function(info){}
+        info.compiler 
+        info.issuer 
+        info.realResource 
+        info.resource 
+        
+        Rule.resolve, Resolving can be configured on module level.
+        Rule.Condition, can be one of these, a string, a RegExp, a function return boolean, an array of conditions, an object all properties must match 
+        {test:condition}, {include:condition, {exclude:condition}, {and|or|not:[condition}
+        
+        UseEntry, an object must have loader property, can have an options, A UseEntry can also be a function which receives the object argument describing the module being loaded
+        module.exports = {
+            module: {
+                rules: [
+                    UseEntry,
+                    UseEntry,
+                    ...,
+                    {
+                        loader:'loader',
+                        options:{
+                            ...
+                        }
+                    },
+                    (info) => ({
+                        loader: 'svgo-loader',
+                        options: {
+                          plugins: [{
+                            cleanupIDs: { prefix: basename(info.resource) }
+                          }]
+                    }
+                  })
+                ]
+            }
+        }
+    + module Contexts 
+    module.exports = {
+        module : {
+            exprContextCritical: true,
+            exprContextRecursive: true,
+            exprContextRegExp: false,
+            exprContextRequest: '.',
+            unknownContextCritical: true,
+            unknownContextRecursive: true,
+            unknownContextRegExp: false,
+            unknownContextRequest: '.',
+            wrappedContextCritical: false,
+            wrappedContextRecursive: true,
+            wrappedContextRegExp: /.*/,
+            strictExportPresence: false // since webpack 2.3.0
+        }
+    }
+        
+- resolve,  change how modules are resolved. 
+module.exports = {
+  //...
+  resolve: {
+    // configuration options
+  }
+};
+    + resolve.alias, Create aliases to import or require certain modules more easily. object 
+    + resolve.aliasFields, a field, such as browser, to be parsed according to this specification.
+    + resolve.cacheWithContext, If unsafe cache is enabled, includes request.context in the cache key.
+    + resolve.descriptionFiles, [string] The JSON files to use for descriptions.
+    + resolve.enforceExtension 
+    + resolve.enforceModuleExtension 
+    + resolve.extensions, [string] control resolve these extensions in order.
+module.exports = {
+  //...
+  resolve: {
+    extensions: ['.wasm', '.mjs', '.js', '.json']
+  }
+};
+    
+    + resolve.mainFields, will determine which fields in its package.json are checked. 
+    + resolve.mainFiles, The filename to be used while resolving directories.
+module.exports = {
+  //...
+  resolve: {
+    mainFiles: ['index']
+  }
+};
+    
+    + resolve.modules, [string], Tell webpack what directories should be searched when resolving modules.
+    + resolve.unsafeCache, true to cache all 
+    + resolve.plugins, A list of additional resolve plugins should be applied 
+module.exports = {
+  //...
+  resolve: {
+    plugins: [
+      new DirectoryNamedWebpackPlugin()
+    ]
+  }
+};
+    
+    + resolve.symlinks 
+    + resolve.cachePredicate, A function which decides whether a request should be cached or not.
+    + resolveLoader
+    module.exports = {
+      //...
+      resolveLoader: {
+        moduleExtensions: ['-loader']
+      }
+    };
+    + resolveLoader.moduleExtensions, automatic add loader extension 
+- optimization
+- plugins, The plugins option is used to customize the webpack build process in a variety of ways. 
+- DevServer 
+- DevTool 
+- Target, string|function(compiler),  compile for multiple environments or targets. T
+- Watch and WatchOptions 
+- Externals, The externals configuration option provides a way of excluding dependencies from the output bundles. 
+- Performance 
+- Node, These options configure whether to polyfill or mock certain Node.js globals and modules. 
+- Stats 
+- Other options 
+
+
+# Plugins 
+
+
+# Loaders 
+
+
+# Migrate 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
