@@ -239,22 +239,127 @@ ENV A01_KEY A01 value
 
 ps> docker container run -d -P --name iis-env dockeronwindows/ch03-iis-environment-variables
 
+- health check application in docker 
+
+The HEALTHCHECK instruction in the Dockerfile is very simple. You can configure the interval between checks and the number of checks
+
+HEALTHCHECK --interval=5s `
+ CMD powershell -command `
+    try { `
+     $response = iwr http://localhost/diagnostics -UseBasicParsing; `
+     if ($response.StatusCode -eq 200) { return 0} `
+     else {return 1}; `
+    } catch { return 1 }
+    
+return 0 means ok, 1 means error 
+
+    + use the health check 
+ps> docker container run -d -P --name healthcheck dockeronwindows/ch03-iis-healthcheck
+
+- separating dependencies
+    + SQL Server LocalDB on the same host where the app is running. LocalDB is an MSI-based installation
+
+    + creating docker image for sql server database 
+    install sql server 
+    configure sql server 
+    run dll scripts to create the database schema 
+    run dml scripts to populate static data 
+
+# escape=`
+FROM sixeyed/msbuild:netfx-4.5.2-ssdt AS builder
+WORKDIR C:\src\NerdDinner.Database
+COPY src\NerdDinner.Database .
+RUN msbuild NerdDinner.Database.sqlproj `    /p:SQLDBExtensionsRefPath="C:\Microsoft.Data.Tools.Msbuild.10.0.61026\lib\net40" `    /p:SqlServerRedistPath="C:\Microsoft.Data.Tools.Msbuild.10.0.61026\lib\net40"
+
+you can ensure your data files are stored in a RAID array on your server.
+
+packaging the Dacpac file into the image so I have everything I need to create or upgrade the database when the container starts.
+
+you can run the container with a volume mounted from the host, mapping the expected SQL Server data directory from a host directory so your files live outside of the container
+
+- running database in containers 
+ps> docker container run -d -p 1433:1433 ` --name nerd-dinner-db ` -v C:\databases\nd:C:\data ` dockeronwindows/ch03-nerd-dinner-db
+
+connect the database outside of the host with SQL SERVER Management Studio 
+
+- kibana, data analyze tool 
+
+- runing a message queue in docker 
+The Env class in the web project is a helper class that fetches values for known configuration items
+
+- starting a multi-container solution 
+docker container run -d -p 4222 ` --name message-queue ` nats:nanoserver; 
+
+docker container run -d -p 1433 ` --name nerd-dinner-db ` -v C:\databases\nd:C:\data ` dockeronwindows/ch03-nerd-dinner-db;
+
+docker container run -d -p 80 ` --name nerd-dinner-homepage ` dockeronwindows/ch03-nerd-dinner-homepage;
+
+docker container run -d ` --name nerd-dinner-save-handler ` dockeronwindows/ch05-nerd-dinner-save-handler;
+
+docker container run -d -p 80 ` --name nerd-dinner-web ` --env-file api-keys.env ` dockeronwindows/ch05-nerd-dinner-web;
+
+- using elasticsearch with docker,  Elasticsearch is a full search document data store which works well as a reporting database, along with the companion product Kibana which provides a user friendly web front end.
+
+There is a NuGet package for Elasticsearch called NEST, which is an API client for reading and writing data
+- adding analytics withh kibana 
+
+ docker container run -d -p 9200 ` --name elasticsearch ` sixeyed/elasticsearch:nanoserverdocker container run -d -p 5601 ` --name kibana ` sixeyed/kibana:nanoserver;
+ 
+ docker container run -d ` --name nerd-dinner-index-handler ` dockeronwindows/ch05-nerd-dinner-index-handler;
+- using hybrid .net framework and .net core solutions in docker 
+
+nats, Elasticsearch, and Kibana
+
+NATS.io is a simple, secure and high performance open source messaging system for cloud native applications, IoT messaging, and microservices architectures.
+
+https://nats.io/
 
 
+# Organizing Distributed Solutions with Docker Compose
+- compose file is a yaml file 
 
+web -> database 
+|
+V 
+message queue -> message handler 
 
+Compose files are conventionally called docker-compose.yml
 
+- capturing service definitions 
+Compose files are conventionally called docker-compose.ym
 
+docker network create and docker volume create.
 
+- definitiong infrastructure service 
+elasticsearch:  
+    image: sixeyed/elasticsearch:nanoserver  
+    environment:     
+        - ES_JAVA_OPTS=-Xms512m -Xmx512m  
+    volumes:    
+        - es-data:C:\data  
+    networks:   
+        - nd-net
 
+message-queue, the name of the service 
+image, full name of the image to start containers from 
+networks, list of the networks to connect containers 
 
+- managing app with docker compose 
 
+Docker CLI. The docker-compose command uses some of the same command names and arguments for the functionality it supports—which is a subset of the functionality of the full Docker CLI
 
+- running compose file 
+ps > docker-compose up -d
 
+up command is used to start application 
 
+- you can't have the same host port mapped to multiple container ports. On a Docker swarm where you have multiple hosts, you can scale services with published ports
 
+Docker Compose compares the state of the running application with the configuration in the Compose file 
 
+- other compose commands 
+up, down. stop, start 
 
+- You need to have access to the Docker Compose file in order to run any compose commands. This is one of the biggest drawbacks of using Docker Compose on a single host to run your applications.
 
-
-
+the laternative is deploy the compose file as a stack to a docker swarm 
