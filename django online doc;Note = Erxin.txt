@@ -5,11 +5,359 @@
 - install latest offical versin 
 $ pip install django
 
+
+# tutorial 
+- sqlite backend 
+    + substring matching are done case-insensitively 
+    fitler(name__contains="aa") will match a name of Aabb 
+    
+    + none ascii matches are performed case sensitive match, iexact filter will as same as exact filter 
+    
+    beware of can-insenstive or substring filtering 
+- check version 
+$ python -m django --version 
+
+- create project 
+$ django-admin startproject <project> 
+/
+    manage.py
+    mysite/
+        __init__.py
+        settings.py
+        urls.py
+        asgi.py
+        wsgi.py
+        
+
+manage.py, command line utility 
+mysite/urls.py, table of contents of your site 
+mysite/asgi.py, entry point of asgi compatible server 
+mysite/wsgi.py, entry point of wsgi compatible server 
+__init__.py, package indicator 
+
+- run dev server 
+$ python manage.py runserver [port]
+
+the server is automatic reload changed python code 
+
+- create app 
+$ python manage.py startup app <app>
+
+/
+    __init__.py
+    admin.py
+    apps.py
+    migrations/
+        __init__.py
+    models.py
+    tests.py
+    views.py
+    urls.py 
+
+a web project may contain several apps
+
+    + view, similar to MVC controller 
+from django.http import HttpResponse
+
+def index(request, default_arg=v):
+    return HttpResponse("Hello, world. You're at the polls index.")
+    
+    + add urls.py 
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path('', views.index, name='index'),
+]
+
+- include app urls.py into web project 
+//mysite/urls 
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path('polls/', include('polls.urls')),
+    path('admin/', admin.site.urls),
+]
+
+using the include() method, Django encounters include(), it chops off whatever part of the URL matched up to that point and sends the remaining string to the included URLconf for further processing
+
+path() accept four arguments, route, view, kwargs and name 
+route, Patterns don’t search GET and POST parameters, or the domain name
+view, view function with a httpRequest object as first argument and captured values from the route as keyword arguments 
+kwargs, passed in dictionary 
+name, naming your URL lets you refer to it unambiguously from elsewhere in Django 
+
+- database setup 
+    + select database engine 
+    mysite/settings.py 
+    
+    ENGINE – Either 'django.db.backends.sqlite3', 'django.db.backends.postgresql', 'django.db.backends.mysql', or 'django.db.backends.oracle' etc. 
+    
+    NAME – The name of your database. If you’re using SQLite, the database will be a file on your computer;
+    
+    + add models 
+from django.db import models
+
+class Question(models.Model):
+    question_text = models.CharField(max_length=200)
+    pub_date = models.DateTimeField('date published')
+
+class Choice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    choice_text = models.CharField(max_length=200)
+    votes = models.IntegerField(default=0)
+    
+always add __str__ method to model, the django admin app will also use it 
+    
+    + add apps if the model is contained in a different app from a project 
+    
+To include the app in our project, we need to add a reference to its configuration class in the INSTALLED_APPS setting. The PollsConfig class is in the polls/apps.py file
+
+mysite/settings.py 
+
+INSTALLED_APPS = [
+    'xxx.apps.xxxconfig',
+]
+    
+    + create database 
+    
+$ python manage.py migrate 
+
+$ python manage.py makemigrations <appname>
+
+By running makemigrations, you’re telling Django that you’ve made some changes to your models
+
+    + sqlmigrate take migration names and return their SQL 
+$ python manage.py sqlmigrate <appname> <generated-migrate-name>
+
+By convention, Django appends "_id" to the foreign key field name
+
+    + Migrations are very powerful and let you change your models over time, as you develop your project, without the need to delete your database or tables and make new ones 
+    
+$ python manage.py makemigrations 
+to create migrations for those changes
+
+$ python manage.py migrate 
+to apply those changes to the database.
+
+- playing with the API 
+$ python manage.py shell 
+
+>>> from polls.models import Choice, Question  # Import the model classes we just wrote.
+
+# No questions are in the system yet.
+>>> Question.objects.all()
+
+- view, each web page in django is a view, can be a function, class 
+    + reference 
+    https://docs.djangoproject.com/en/3.0/topics/http/urls/
+    
+        * example 
+        urlpatterns = [path('articles/<int:year>/<int:month>/<slug:slug>/', views.article_detail, {extra_view_option_key:value})]
+        
+        /articles/2003/03/building-a-django-site/, iews.article_detail(request, year=2003, month=3, slug="building-a-django-site"
+        
+        ROOT_URLCONF, path to the full import path to URLconf file 
+        
+        relative view get arguments, httpRequest, if no named grouped in URL pattern then pass position arguments 
+        
+        at last the keyword arguments 
+    
+        * path converters by default:
+    
+        str, any non-emptys tring, exclude '/'
+        int, zero or any positive integer as an int 
+        slug, any slug string consisting of ASCII letters or numbers. 
+        uuid, matches a formatted UUID
+        path, any non-empty string, including the '/'
+    
+        * custom path converters, converter is a class that includes 
+        regex 
+        to_python(self, value) method, handle converting the matched string to type 
+        to_url(self, value), handle converting type to string 
+        class FourDigitYearConverter:
+            regex = '[0-9]{4}'
+
+            def to_python(self, value):
+                return int(value)
+
+            def to_url(self, value):
+                return '%04d' % value
+                
+        //use the converter 
+        from django.urls import path, register_converter
+        from . import converters, views
+
+        register_converter(converters.FourDigitYearConverter, 'yyyy')
+
+        urlpatterns = [
+            path('articles/2003/', views.special_case_2003),
+            path('articles/<yyyy:year>/', views.year_archive),
+            ...
+        ]
+    
+        * use re_path() to map with regex expression 
+        re_path(r'^articles/(?P<year>[0-9]{4})/(?P<month>[0-9]{2})/(?P<slug>[\w-]+)/$', views.article_detail),
+        
+        * nested arguments, Regular expressions allow nested arguments, and Django will resolve them and pass them to the view. While reversing django will ignore any nested arguments 
+        
+        re_path(r'^comments/(?:page-(?P<page_number>\d+)/)?$', comments),  # good
+        
+        (?:...) means non-capture argument, the nested page_number will be passed to view 
+        
+        since to reverse the view we need to pass the piece of URL instead of the page number.
+
+        As a rule of thumb, only capture the values the view needs to work with and use non-capturing arguments when the regular expression needs an argument but the view ignores it.
+        
+        *  URLconf doesn’t look at the request method. In other words, all request methods – POST, GET, HEAD, etc. – will be routed to the same function for the same URL
+        
+        * error handling with 
+        hadnler400 django.conf.urls.handler400
+        https://docs.djangoproject.com/en/3.0/ref/urls/#django.conf.urls.handler400
+        
+        * static(),  URL pattern for serving files in debug mode
+        
+        urlpatterns = [...] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+        
+        * including other URLconf
+        path('community/', include('aggregator.urls'))
+         
+        it chops off whatever part of the URL matched up to that point and sends the remaining string to the included URLconf for further processing
+        
+        another use case of URL patterns by using a list of path() instances. For example, consider this URLconf
+        
+        from django.urls import include, path
+        from . import views
+
+        urlpatterns = [
+            path('<page_slug>-<page_id>/', include([
+                path('history/', views.history),
+                path('edit/', views.edit),
+                path('discuss/', views.discuss),
+                path('permissions/', views.permissions),
+            ])),
+        ]
+        
+        avoid <page_slug>-<page_id> is written repeatedly 
+        
+        the included URL views will received parent captured parameters 
+        
+        * reverse resolution of URLs, to get final URLs after django generate it for any resources 
+        
+        in django we can do by URL mapper which support obtain from both direction 
+        
+        user/browser  URL  <== URLconf ==> resource identification
+        
+        in template using url template tag 
+        in python code use reverse() function 
+        
+        example:
+        
+        //urlconf 
+        ...
+        path('articles/<int:year>/', views.year_archive, name='news-year-archive'),
+        ...
+        
+        //template 
+        a href="{% url 'news-year-archive' yearvar %}">{{ yearvar }} Archive</a>
+        
+        //python code, for example in a view 
+        def foo(request):
+            ...
+            return HttpResponseRedirect(reverse('news-year-archive', args=(year,)))
+        
+        * naming URL patterns 
+        
+        Putting a prefix on your URL names, perhaps derived from the application name 
+        
+        reverse() matches the number of arguments and the names of the keyword arguments
+        
+        * URL namespaces 
+        application namespace, every instance of a single application will have the same application namespace 
+        
+        instance namespace 
+        unique across your entire project. this is used to specify a default instance of an application 
+        
+        namespace URL are specified using ':', '<namespace>:url_segment'
+        
+        support nested URL namespace 
+        
+        * reverse search process 
+        
+        the current application can be specified with the current_app argument to the reverse() function.
+        
+        default application 
+        
+        last deployed instance of the application 
+        
+        name not match then perform lookup 
+        
+        * URL namespaces and included URLconfs
+
+        url_pattern_instances_pair = (<list of path instances>, application_name)
+        
+        path('polls/', include('polls.urls' | url_pattern_instances_pair )),
+        
+        will give application namespace polls 
+        
+    + view is response to return a HttpResponse or raise a Http404 
+    
+    return HttpResponseNotFound(reason) from view 
+    
+    Django provides an Http404 exception. If you raise Http404 at any point in a view function
+    
+    raise Http404(reason) from view 
+    
+        * specify customizing error views in URLconf
+        
+        handler404 = '...'
+        handler500 = '...'
+        
+        full example 
+        
+        from django.core.exceptions import PermissionDenied
+        from django.http import HttpResponse
+        from django.test import SimpleTestCase, override_settings
+        from django.urls import path
+
+        def response_error_handler(request, exception=None):
+            return HttpResponse('Error handler content', status=403)
+
+        def permission_denied_view(request):
+            raise PermissionDenied
+
+        urlpatterns = [
+            path('403/', permission_denied_view),
+        ]
+
+        handler403 = response_error_handler
+
+        # ROOT_URLCONF must specify the module that contains handler403 = ...
+        @override_settings(ROOT_URLCONF=__name__)
+        class CustomErrorHandlerTests(SimpleTestCase):
+
+            def test_handler_renders_template_response(self):
+                response = self.client.get('/403/')
+                # Make assertions on the response here. For example:
+                self.assertContains(response, 'Error handler content', status_code=403)
+            
+- view decorators 
+
 - verify 
 import django 
 
 print(django.get_version())
 
+- django admin 
+
+Site managers use the system to add news stories, events, sports scores, etc
+
+    + create super user for admin 
+    $ python manage.py createsuperuser
+    
+    + navigate to http://127.0.0.1:8000/admin/. You should see the admin’s login screen
 - get latest development version 
 $ git clone https://github.com/django/django.git 
 
@@ -143,7 +491,6 @@ https://docs.djangoproject.com/en/2.2/howto/static-files/
 syndication framework to create RSS and Atom, https://docs.djangoproject.com/en/2.2/ref/contrib/syndication/
 
 cache framework, 
-
 
 
 
