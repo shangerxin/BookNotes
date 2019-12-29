@@ -342,13 +342,305 @@ $ python manage.py shell
                 response = self.client.get('/403/')
                 # Make assertions on the response here. For example:
                 self.assertContains(response, 'Error handler content', status_code=403)
+                
+    + template engines to be used with Django 
+    
+    django template load from tempaltes subdirectory by default 
+    
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'APP_DIRS': True,
+    },
+]
+
+    + put the following code in that template 
+{% if latest_question_list %}
+    <ul>
+    {% for question in latest_question_list %}
+        <li><a href="/polls/{{ question.id }}/">{{ question.question_text }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No polls are available.</p>
+{% endif %}
+    
+    reference:
+    https://docs.djangoproject.com/en/3.0/topics/templates/
+    
+    + load template in view 
+from django.http import HttpResponse
+from django.template import loader
+from .models import Question
+
+def index(request):
+    latest_question_list = Question.objects.order_by('-pub_date')[:5]
+    template = loader.get_template('polls/index.html')
+    context = {
+        'latest_question_list': latest_question_list,
+    }
+    return HttpResponse(template.render(context, request))
+    
+    + using shortcut render function to void create template object 
+    from django.shortcuts import render
+    
+    from .models import Question
+
+
+    def index(request):
+        latest_question_list = Question.objects.order_by('-pub_date')[:5]
+        context = {'latest_question_list': latest_question_list}
+        return render(request, 'polls/template.html', context)
+        
+    + raise 404 
+    raise Http404("Question does not exist")
+    
+    + shortcut get object or return 404
+    from django.shortcuts import get_object_or_404, render
+
+    ...
+    question = get_object_or_404(Question, pk=question_id)
+    return render(request, 'polls/detail.html', {'question': question})
+    
+    There’s also a get_list_or_404() function, which works just as get_object_or_404() – except using filter() instead of get().
+    
+    + namespace url template 
+    //url config in module polls 
+    path('<int:question_id>/', views.detail, name='detail'),
+    
+    <li><a href="{% url 'polls:detail' question.id %}">{{ question.question_text }}</a></li>
+    
+    + request.POST is a dictionary-like object that lets you access submitted data by key name
+    
+- write minimal form 
             
-- view decorators 
+- django provide different kinds of views 
+from django.views import generic
+
+from .models import Choice, Question
+
+
+class IndexView(generic.ListView):
+    template_name = 'polls/index.html'
+    context_object_name = 'latest_question_list'
+
+    def get_queryset(self):
+        """Return the last five published questions."""
+        return Question.objects.order_by('-pub_date')[:5]
+- run test 
+    + test model 
+import datetime
+
+from django.test import TestCase
+from django.utils import timezone
+
+from .models import Question
+
+
+class QuestionModelTests(TestCase):
+
+    def test_was_published_recently_with_future_question(self):
+        """
+        was_published_recently() returns False for questions whose pub_date
+        is in the future.
+        """
+        time = timezone.now() + datetime.timedelta(days=30)
+        future_question = Question(pub_date=time)
+        self.assertIs(future_question.was_published_recently(), False)
+
+    + test view. the django test client
+    setup test environment in the shell 
+    $ python mange.py shell 
+    
+    >>> from django.test.utils import setup_test_environment
+    >>> setup_test_environment()
+    
+    Django provides a test Client to simulate a user interacting with the code at the view level. We can use it in tests.py or even in the shell.
+    
+    >>> from django.test import Client
+    >>> # create an instance of the client for our use
+    >>> client = Client()
+    
+    >>> # get a response from '/'
+    >>> response = client.get('/')
+    Not Found: /
+    >>> # we should expect a 404 from that address; if you instead see an
+    >>> # "Invalid HTTP_HOST header" error and a 400 response, you probably
+    >>> # omitted the setup_test_environment() call described earlier.
+    >>> response.status_code
+    404
+    >>> # on the other hand we should expect to find something at '/polls/'
+    >>> # we'll use 'reverse()' rather than a hardcoded URL
+    >>> from django.urls import reverse
+    >>> response = client.get(reverse('polls:index'))
+    >>> response.status_code
+    200
+    >>> response.content
+    b'\n    <ul>\n    \n        <li><a href="/polls/1/">What&#x27;s up?</a></li>\n    \n    </ul>\n\n'
+    >>> response.context['latest_question_list']
+    <QuerySet [<Question: What's up?>]>
+    
+    + write test for our views 
+    def create_question(question_text, days):
+        """
+        Create a question with the given `question_text` and published the
+        given number of `days` offset to now (negative for questions published
+        in the past, positive for questions that have yet to be published).
+        """
+        time = timezone.now() + datetime.timedelta(days=days)
+        return Question.objects.create(question_text=question_text, pub_date=time)
+
+
+    class QuestionIndexViewTests(TestCase):
+        def test_no_questions(self):
+            """
+            If no questions exist, an appropriate message is displayed.
+            """
+            response = self.client.get(reverse('polls:index'))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "No polls are available.")
+            self.assertQuerysetEqual(response.context['latest_question_list'], [])
+
+        def test_past_question(self):
+            """
+            Questions with a pub_date in the past are displayed on the
+            index page.
+            """
+            create_question(question_text="Past question.", days=-30)
+            response = self.client.get(reverse('polls:index'))
+            self.assertQuerysetEqual(
+                response.context['latest_question_list'],
+                ['<Question: Past question.>']
+            )
+
+        def test_future_question(self):
+            """
+            Questions with a pub_date in the future aren't displayed on
+            the index page.
+            """
+            create_question(question_text="Future question.", days=30)
+            response = self.client.get(reverse('polls:index'))
+            self.assertContains(response, "No polls are available.")
+            self.assertQuerysetEqual(response.context['latest_question_list'], [])
+
+        def test_future_question_and_past_question(self):
+            """
+            Even if both past and future questions exist, only past questions
+            are displayed.
+            """
+            create_question(question_text="Past question.", days=-30)
+            create_question(question_text="Future question.", days=30)
+            response = self.client.get(reverse('polls:index'))
+            self.assertQuerysetEqual(
+                response.context['latest_question_list'],
+                ['<Question: Past question.>']
+            )
+
+        def test_two_past_questions(self):
+            """
+            The questions index page may display multiple questions.
+            """
+            create_question(question_text="Past question 1.", days=-30)
+            create_question(question_text="Past question 2.", days=-5)
+            response = self.client.get(reverse('polls:index'))
+            self.assertQuerysetEqual(
+                response.context['latest_question_list'],
+                ['<Question: Past question 2.>', '<Question: Past question 1.>']
+            )
+
+$ python manage.py test [app_name]
+
+    + liver server test case 
+        
+    from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+    from selenium.webdriver.firefox.webdriver import WebDriver
+
+    class MySeleniumTests(StaticLiveServerTestCase):
+        fixtures = ['user-data.json']
+
+        @classmethod
+        def setUpClass(cls):
+            super().setUpClass()
+            cls.selenium = WebDriver()
+            cls.selenium.implicitly_wait(10)
+
+        @classmethod
+        def tearDownClass(cls):
+            cls.selenium.quit()
+            super().tearDownClass()
+
+        def test_login(self):
+            self.selenium.get('%s%s' % (self.live_server_url, '/login/'))
+            username_input = self.selenium.find_element_by_name("username")
+            username_input.send_keys('myuser')
+            password_input = self.selenium.find_element_by_name("password")
+            password_input.send_keys('secret')
+            self.selenium.find_element_by_xpath('//input[@value="Log in"]').click()
+            
+    + The databases flag also controls which databases the TransactionTestCase.fixtures are loaded into
+
+- handle static files. django.contrib.staticfiles is for: it collects static files from each of your applications (and any other places you specify) into a single location that can easily be served in production.
+
+example to handle static file 
+create style.css 
+
+add template to use reference the file 
+{% load static %}
+
+<link rel="stylesheet" type="text/css" href="{% static 'polls/style.css' %}">
+
+
+The {% static %} template tag generates the absolute URL of static files.
+
+- customize the admin form. By registering the Question model with admin.site.register(Question), Django was able to construct a default form representation. 
+
+    + splite the form into fieldsets 
+    
+from django.contrib import admin
+
+from .models import Question
+
+
+class QuestionAdmin(admin.ModelAdmin):
+    fieldsets = [
+        (None,               {'fields': ['question_text']}),
+        ('Date information', {'fields': ['pub_date']}),
+    ]
+
+admin.site.register(Question, QuestionAdmin)
+
+    + customize project's templates 
+    
+    Open your settings file (mysite/settings.py, remember) and add a DIRS option in the TEMPLATES setting
+    
+    + any django default template can be override inside django template directory 
+     
+    + all the sub apps are registered inside the INSTALLED_APPS
+    
+- Create reusable apps 
+    + Create a file django-polls/README.rst with the following contents
+    + add resource.rst 
+    + add LICENSE file 
+    + create setup.cfg and setup.py files which detail how to build and install the app. 
+    + Only Python modules and packages are included in the package by default. To include additional files, we’ll need to create a MANIFEST.in file
+    + create tar and instal with pip 
+    + publish 
+    
+- test 
+    + TransactionTestCase and TestCase are identical except for the manner in which the database is reset to a known state and the ability for test code to test the effects of commit and rollback
+    + liver server test 
 
 - verify 
 import django 
 
 print(django.get_version())
+
+- django have a test tool for helping integrate project with selenium
+
+liveServerTestCase 
+
+reference 
+https://docs.djangoproject.com/en/3.0/topics/testing/tools/#django.test.LiveServerTestCase
 
 - django admin 
 
@@ -358,6 +650,7 @@ Site managers use the system to add news stories, events, sports scores, etc
     $ python manage.py createsuperuser
     
     + navigate to http://127.0.0.1:8000/admin/. You should see the admin’s login screen
+    
 - get latest development version 
 $ git clone https://github.com/django/django.git 
 
@@ -493,7 +786,8 @@ syndication framework to create RSS and Atom, https://docs.djangoproject.com/en/
 cache framework, 
 
 
-
+# Testing tools 
+- 
 
 
 

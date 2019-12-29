@@ -1,0 +1,199 @@
+Django 2 Web Development Cookbook Third Edition=Jake Kronia;Note=Erxin
+
+# Introduction 
+- Packt.com
+
+# Getting start with django 2.1 
+- virtual env 
+$ pip install Pillow 
+$ pip install mysqlclient 
+$ pip install virtualenv 
+
+    + active virtual env 
+    + install packages 
+    + create directory 
+    /
+    media, for project uploads 
+    site_static, for static files 
+    tmp, for upload procedure 
+    templates, for templates 
+    scss, for sass 
+    css, for generated minified css 
+    img,for styling 
+    js 
+    
+    + example 
+myproject_env/
+├── bin/
+├── commands/
+├── db_backups/
+├── include/
+├── lib/
+└── project/
+    └── django-myproject/
+    ├── externals/
+    │   ├── apps/
+    │   └── libs/
+    ├── locale/
+    ├── media/
+    ├── myapp1/
+    ├── myapp2/
+    ├── myproject/
+    │   ├── config/
+    │   │   ├── __init__.py
+    │   │   ├── base.py
+    │   │   ├── dev.py
+    │   │   ├── prod.py
+    │   │   ├── staging.py
+    │   │   └── test.py
+    │   ├── tmp/
+    │   ├── __init__.py
+    │   ├── settings.py
+    │   ├── settings.py.example
+    │   ├── urls.py
+    │   └── wsgi.py
+    ├── requirements/
+    │   ├── dev.txt
+    │   ├── prod.txt
+    │   ├── staging.txt
+    │   └── test.txt
+    ├── site_static/
+    │   └── site/
+    │       ├── css/
+    │       ├── img/
+    │       └── js/
+    ├── static/
+    ├── templates/
+    │   ├── admin/
+    │   ├── myapp1/
+    │   │   └── includes/
+    │   └── myapp2/
+    │       └── includes/
+    ├── utils/
+    │   ├── __init__.py
+    │   └── misc.py
+    ├── README.md
+    ├── fabfile.py 
+    └── manage.py*
+
+- work with docker 
+    + create configure files 
+    requirements.txt 
+    Dockerfile 
+    docker-compose.yml 
+    
+    + The requirements.txt, which lives under the config subdirectory, is much the same as if using a virtual environment
+// config/requirements.txt
+Pillow~=5.2.0
+mysqlclient~=1.3.0
+Django~=2.1.0
+    
+    + dockerfile 
+# Dockerfile
+FROM python:3
+RUN apt-get update && apt-get install -y --no-install-recommends mysql-client libmysqlclient-dev
+WORKDIR /usr/src/app
+ADD config/requirements.txt ./
+RUN pip3 install --upgrade pip; pip3 install -r requirements.txt
+RUN django-admin startproject myproject .; 
+mv ./myproject ./origproject
+
+    + docker-compose.yml puts together the Django application container with other services
+# docker-compose.yml
+version: '3'
+services:
+  db:
+  image: 'mysql:5.7'
+  app:    build: .
+  command: python3 manage.py runserver 0.0.0.0:8000
+  volumes:
+    - './project:/usr/src/app/myproject'
+    - './media:/usr/src/app/media'
+    - './static:/usr/src/app/static'
+    - './templates:/usr/src/app/templates'
+    - './apps/external:/usr/src/app/external'
+    - './apps/myapp1:/usr/src/app/myapp1'
+    - './apps/myapp2:/usr/src/app/myapp2'
+  ports:
+      - '8000:8000'
+  links:
+    - db
+
+    + $ docker-compose build 
+
+
+# Configure settings for development, testing, staging and production environment 
+- myproject directory config python module 
+__init__.py 
+base.py 
+dev.py 
+test.py 
+staging.py 
+prod.py 
+
+pull all your shared settings in config/base.py 
+
+import the base setting and add additional items in the others 
+
+
+# Respecting the import order of python module 
+- suggested 
+system modules 
+
+third parties 
+
+django modules 
+
+current-app modules 
+
+
+# Creating app configuration 
+- use the startup command 
+$ django-admin.py startapp magazine
+$ docker-compose run app django-admin.py startapp magazine
+
+# magazine/apps.py
+from django.apps import AppConfig
+from django.utils.translation import ugettext_lazy as _
+
+class MagazineAppConfig(AppConfig):
+    name = "magazine"
+    verbose_name = _("Magazine")
+    def ready(self):
+        from . import signals
+
+
+# Module mixins 
+- Django model inheritance supports three types of inheritance: abstract base classes, multi-table inheritance, and proxy models. Model mixins are abstract model classes, in that we define them by using an abstract Meta class
+
+- the mixinsa are used to abstract common functions from classes. It provide a place to add reusable function definitons 
+
+
+# Create multilingual character field 
+- example 
+from django.conf import settings
+from django.db import models
+from django.utils.translation import get_language
+
+class MultilingualField(models.Field):
+    SUPPORTED_FIELD_TYPES = [models.CharField, models.TextField]
+    ...
+    
+class MultilingualCharField(models.CharField, MultilingualField):
+    pass
+
+
+class MultilingualTextField(models.TextField, MultilingualField):
+    pass
+    
+set multiple languages in the settings for your project 
+# settings.py or config/base.py
+LANGUAGE_CODE = "en-us"
+
+LANGUAGES = (
+    ("en-us", "US English"),
+    ("en-gb", "British English"),
+    ("de", "Deutsch"),
+    ("fr", "Français"),
+    ("lt", "Lietuvių kalba"),
+)
