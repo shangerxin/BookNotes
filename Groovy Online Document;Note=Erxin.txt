@@ -306,7 +306,681 @@ Groovy creates maps that are actually instances of java.util.LinkedHashMap.
 
 
 # Operators 
-- arithmetic 
+- arithmetic, similar to python 
+- unary operators 
++3, -4, support ++x, x--
+
+- logic operators 
+&& 
+||
+!
+
+- ternary operator to replace if else expression 
+if (string!=null && string.length()>0) {
+    result = 'Found'
+} else {
+    result = 'Not found'
+}
+
+equal to 
+result = (string!=null && string.length()>0) ? 'Found' : 'Not found'
+
+- elvis operator 
+displayName = user.name ? user.name : 'Anonymous'   
+displayName = user.name ?: 'Anonymous'    
+
+- object operators 
+
+def person = Person.find { it.id == 123 }    
+def name = person?.name                      
+assert name == null 
+
+null-safe operator prevents from a NullPointerException  
+
+- direct field access operator 
+class User {
+    public final String name                 
+    User(String name) { this.name = name}
+    String getName() { "Name: $name" }       
+}
+def user = new User('Bob')
+assert user.name == 'Name: Bob'  
+
+- method pointer, (.&) call be used to store a reference to a method in a variable
+def str = 'example of method reference'            
+def fun = str.&toUpperCase                         
+def upper = fun()                                  
+assert upper == str.toUpperCase()    
+
+    + First of all, the type of such a method pointer is a groovy.lang.Closure, so it can be used in any place a closure would be used.
+
+    + for example to create strategy pattern
+def transform(List elements, Closure action) {                    
+    def result = []
+    elements.each {
+        result << action(it)
+    }
+    result
+}
+String describe(Person p) {                                       
+    "$p.name is $p.age"
+}
+def action = this.&describe                                       
+def list = [
+    new Person(name: 'Bob',   age: 42),
+    new Person(name: 'Julia', age: 35)]                           
+assert transform(list, action) == ['Bob is 42', 'Julia is 35'] 
+
+    + Method pointers are bound by the receiver and a method name. Arguments are resolved at runtime
+
+def doSomething(String str) { str.toUpperCase() }    
+def doSomething(Integer x) { 2*x }                   
+def reference = this.&doSomething                    
+assert reference('foo') == 'FOO'                     
+assert reference(123)   == 246                       
+
+- regular expression operators 
+
+    + The pattern operator (~) provides a simple way to create a java.util.regex.Pattern instance, ~ is follow a string expression 
+def p = ~/foo/
+assert p instanceof Pattern
+    
+p = ~'foo'                                                        
+p = ~"foo"                                                        
+p = ~$/dollar/slashy $ string/$                                   
+p = ~"${pattern}"  
+
+- find operator, find operator =~ to build a java.util.regex.Matcher instance. 	=~ creates a matcher against the text variable, using the pattern on the right hand side
+
+def text = "some text to match"
+def m = text =~ /match/                                           
+assert m instanceof Matcher         
+
+//equivalent to calling if(!m.find()                                   
+if (!m) {                          
+    throw new RuntimeException("Oops, text not found!")
+}
+
+- match operator, The match operator (==~) it return a boolean 
+
+m = text ==~ /match/                                              
+assert m instanceof Boolean  
+                                     
+equivalent to calling if (text ==~ /match/)
+if (m) {                                                          
+    throw new RuntimeException("Should not reach that point!")
+}
+
+- other operators 
+
+    + Spread operator,  invoke an action on all items of an aggregate object. It is equivalent to calling the action on each item and collecting the result into a list
+
+class Car {
+    String make
+    String model
+}
+def cars = [
+       new Car(make: 'Peugeot', model: '508'),
+       new Car(make: 'Renault', model: 'Clio')]       
+def makes = cars*.make                                
+assert makes == ['Peugeot', 'Renault']  
+
+    The spread operator is null-safe, meaning that if an element of the collection is null, it will return null instead of throwing a NullPointerException
+
+    can be used on any class which implements the Iterable interface
+
+class Component {
+    Long id
+    String name
+}
+class CompositeObject implements Iterable<Component> {
+    def components = [
+        new Component(id: 1, name: 'Foo'),
+        new Component(id: 2, name: 'Bar')]
+
+    @Override
+    Iterator<Component> iterator() {
+        components.iterator()
+    }
+}
+def composite = new CompositeObject()
+assert composite*.id == [1,2]
+assert composite*.name == ['Foo','Bar']
+
+    + Spreading method arguments
+
+int function(int x, int y, int z) {
+    x*y+z
+}
+
+def args = [4,5,6]
+
+assert function(*args) == 26
+
+    + Spread list elements
+def items = [4,5]                      
+def list = [1,2,3,*items,6]            
+assert list == [1,2,3,4,5,6]  
+
+    + Spread map elements
+def m1 = [c:3, d:4]                   
+def map = [a:1, b:2, *:m1]            
+assert map == [a:1, b:2, c:3, d:4] 
+
+def m1 = [c:3, d:4]                   
+def map = [a:1, b:2, *:m1, d: 8]      
+assert map == [a:1, b:2, c:3, d:8] 
+//d is redefined to 8
+
+    + Range operator, provides a notation (..) to create ranges of objects
+def range = 0..5                                    
+assert (0..5).collect() == [0, 1, 2, 3, 4, 5]       
+assert (0..<5).collect() == [0, 1, 2, 3, 4]         
+assert (0..5) instanceof List                       
+assert (0..5).size() == 6  
+
+assert ('a'..'d').collect() == ['a','b','c','d']
+
+    + Spaceship operator, delegates to the compareTo
+assert (1 <=> 1) == 0
+assert (1 <=> 2) == -1
+assert (2 <=> 1) == 1
+assert ('a' <=> 'z') == -1
+
+    + Subscript operator, The subscript operator is a short hand notation for getAt or putAt
+def list = [0,1,2,3,4]
+assert list[2] == 2                         
+list[2] = 4                                 
+assert list[0..2] == [0,1,4]                
+list[0..2] = [6,6,6]                        
+assert list == [6,6,6,3,4]  
+
+//a custom implementation of getAt/putAt is a convenient way for destructuring objects
+class User {
+    Long id
+    String name
+    def getAt(int i) {                                             
+        switch (i) {
+            case 0: return id
+            case 1: return name
+        }
+        throw new IllegalArgumentException("No such element $i")
+    }
+    void putAt(int i, def value) {                                 
+        switch (i) {
+            case 0: id = value; return
+            case 1: name = value; return
+        }
+        throw new IllegalArgumentException("No such element $i")
+    }
+}
+def user = new User(id: 1, name: 'Alex')                           
+assert user[0] == 1                                                
+assert user[1] == 'Alex'                                           
+user[1] = 'Bob'                                                    
+assert user.name == 'Bob' 
+
+    + Membership operator
+def list = ['Grace','Rob','Emmy']
+assert ('Emmy' in list)   
+
+    + Identity operator
+
+In Groovy, using == to test equality is different from using the same operator in Java.
+
+compare reference equality, you should use is
+
+def list1 = ['Groovy 1.8','Groovy 2.0','Groovy 2.3']        
+def list2 = ['Groovy 1.8','Groovy 2.0','Groovy 2.3']        
+assert list1 == list2                                       
+assert !list1.is(list2) 
+
+    + Coercion operator, The coercion operator (as) is a variant of casting
+Integer x = 123
+String s = x as String  
+
+//Custom conversion rules may be implemented thanks to the asType method
+class Identifiable {
+    String name
+}
+class User {
+    Long id
+    String name
+    def asType(Class target) {                                              
+        if (target == Identifiable) {
+            return new Identifiable(name: name)
+        }
+        throw new ClassCastException("User cannot be coerced into $target")
+    }
+}
+def u = new User(name: 'Xavier')                                            
+def p = u as Identifiable                                                   
+assert p instanceof Identifiable                                            
+assert !(p instanceof User)        
+    
+    + Diamond operator. no use in groovy 
+indicate that generic types should be inferred from the declaration
+    
+List<String> strings = new LinkedList<>()
+    
+In dynamic Groovy, this is totally unused.  In statically type checked Groovy, it is also optional since the Groovy type checker performs type inference whether this operator is present or not
+    
+    + call operator, The call operator () is used to call a method named call implicitly.
+class MyCallable {
+    int call(int x) {           
+        2*x
+    }
+}
+
+def mc = new MyCallable()
+assert mc.call(2) == 4          
+assert mc(2) == 4  
+    
+- operator overloading 
+
+class Bucket {
+    int size
+
+    Bucket(int size) { this.size = size }
+
+    Bucket plus(Bucket other) {                     
+        return new Bucket(this.size + other.size)
+    }
+}
+
+def b1 = new Bucket(4)
+def b2 = new Bucket(11)
+assert (b1 + b2).size == 15
+
+    + supported
+
+Operator	Method	Operator	Method
++           a.plus(b)   a[b]    a.getAt(b)
+-           a.minus(b)  a[b] = c    a.putAt(b, c)
+*           a.multiply(b)   a in b  b.isCase(a)
+/           a.div(b)    <<  a.leftShift(b)
+%           a.mod(b)    >>  a.rightShift(b)
+**          a.power(b)  >>> a.rightShiftUnsigned(b)
+|           a.or(b)     ++  a.next()    
+&           a.and(b)    --          a.previous()
+^           a.xor(b)    +a  a.positive()
+as          a.asType(b) -a  a.negative()
+a()         a.call()    ~a  a.bitwiseNegate()
+
+
+# Program structure 
+- package names 
+
+// defining a package named com.yoursite
+package com.yoursite
+
+class Foo in the com.yoursite.com package you will need to use the fully qualified name com.yoursite.com.Foo
+
+- imports, import statement to resolve class references
+// importing the class MarkupBuilder
+import groovy.xml.MarkupBuilder
+
+// using the imported class to create an object
+def xml = new MarkupBuilder()
+
+assert xml != null
+
+- Default imports, below imports are added by groovy for you
+import java.lang.*
+import java.util.*
+import java.io.*
+import java.net.*
+import groovy.lang.*
+import groovy.util.*
+import java.math.BigInteger
+import java.math.BigDecimal
+
+- Simple import
+// importing the class MarkupBuilder
+import groovy.xml.MarkupBuilder
+
+// using the imported class to create an object
+def xml = new MarkupBuilder()
+
+assert xml != null
+
+- import all classes from a package using *
+import groovy.xml.MarkupBuilder
+import groovy.xml.StreamingMarkupBuilder
+
+def markupBuilder = new MarkupBuilder()
+
+assert markupBuilder != null
+
+assert new StreamingMarkupBuilder() != null
+
+- static import,  reference imported classes as if they were static methods, Static imports with the as keyword provide an elegant solution to namespace problems
+
+import static Boolean.FALSE as F
+
+assert !FALSE //use directly, without Boolean prefix!
+
+- Static star import
+- Import aliasing with keyword as 
+- Scripts versus classes
+    + Main.groovy, public static void main vs script 
+class Main {                                    
+    static void main(String... args) {          
+        println 'Groovy world!'                 
+    }
+}
+
+    + A script can be considered as a class without needing to declare it. a script is always compiled to a class 
+    The Groovy compiler will compile the class for you, with the body of the script copied into a run method.
+    
+- methods 
+int fib(int n) {
+    n < 2 ? 1 : fib(n-1) + fib(n-2)
+}
+assert fib(10)==89
+
+The generated script class will carry all methods into the script class, and assemble all script bodies into the run method
+
+- variables 
+int x = 1
+int y = 2
+assert x+y == 3
+
+it is a local variable. It will be declared in the run method
+ 
+if the variable is undeclared, it goes into the script binding. The binding is visible from the methods
+
+want a variable to become a field of the class without going into the Binding, you can use the @Field annotation
+
+
+# Object orientation 
+- primitive types 
+boolean
+char
+short
+int
+long
+float
+double
+
+- class, Classes and class members can have the same modifiers (public, protected, private, static, etc)
+
+    + Classes or methods with no visibility modifier are automatically public
+
+    + Fields with no visibility modifier are turned into properties automatically
+
+    + Classes do not need to have the same base name as their source file definitions
+
+    + One source file may contain one or more classes 
+    
+class Person {                       
+
+    String name                      
+    Integer age
+
+    def increaseAge(Integer years) { 
+        this.age += years
+    }
+}
+
+    + Classes are instantiated by calling their constructors, using the new keyword
+    
+def p = new Person()
+
+- Inner classes are defined within another classes. The enclosing class can use the inner class as usual
+class Outer2 {
+    private String privateStr = 'some string'
+
+    def startThread() {
+       new Thread(new Inner2()).start()
+    }
+
+    class Inner2 implements Runnable {
+        void run() {
+            println "${privateStr}."
+        }
+    }
+}
+
+- anonymous inner class 
+class Outer3 {
+    private String privateStr = 'some string'
+
+    def startThread() {
+        new Thread(new Runnable() {      
+            void run() {
+                println "${privateStr}."
+            }
+        }).start()                       
+    }
+}
+
+ the new Inner2() was replaced by new Runnable() along with all its implementation
+ 
+- abstract class 
+abstract class Abstract {         
+    String name
+
+    abstract def abstractMethod() 
+
+    def concreteMethod() {
+        println 'concrete'
+    }
+}
+
+- interface 
+interface Greeter {                                         
+    void greet(String name)                                 
+}
+
+class SystemGreeter implements Greeter {                    
+    void greet(String name) {                               
+        println "Hello $name"
+    }
+}
+
+- constructors 
+    + positional parameters are used in a similar to how you would use Java
+    
+class PersonConstructor {
+    String name
+    Integer age
+
+    PersonConstructor(name, age) {          
+        this.name = name
+        this.age = age
+    }
+}
+
+    + named parameters, If no (or a no-arg) constructor is declared, it is possible to create objects by passing parameters in the form of a map
+
+class PersonWOConstructor {                                  
+    String name
+    Integer age
+}
+
+def person4 = new PersonWOConstructor()                      
+def person5 = new PersonWOConstructor(name: 'Marie') 
+def person7 = new PersonWOConstructor(name: 'Marie', age: 2)
+
+When the first argument is a Map, Groovy combines all named parameters into a Map (regardless of ordering) and supplies the map as the first parameter
+
+- methods 
+    + definition, A method is defined with a return type or with the def keyword. If no return statement is provided, the value evaluated in the last line executed will be returned. 
+
+def someMethod() { 'method called' }                           
+String anotherMethod() { 'another method called' }             
+def thirdMethod(param1) { "$param1 passed" }                   
+static String fourthMethod(String param1) { "$param1 passed" } 
+
+    + named parameters
+def foo(Map args) { "${args.name}: ${args.age}" }
+foo(name: 'Marie', age: 1)
+
+    + mixing named and positional parameters
+def foo(Map args, Integer number) { "${args.name}: ${args.age}, and the number is ${number}" }
+foo(name: 'Marie', age: 1, 23)  
+foo(23, name: 'Marie', age: 1)  
+
+    + default arguments
+def foo(String par1, Integer par2 = 1) { [name: par1, age: par2] }
+assert foo('Marie').age == 1
+
+    + varargs, Groovy supports methods with a variable number of arguments
+def foo(Object... args) { args.length }
+assert foo() == 0
+assert foo(1) == 1
+assert foo(1, 2) == 2
+
+    + method selection algorithm 
+    + exception delcaration, Groovy automatically allows you to treat checked exceptions like unchecked exceptions. 
+def badRead() throws FileNotFoundException {
+    new File('doesNotExist.txt').text
+}
+
+shouldFail(FileNotFoundException) {
+    badRead()
+}
+
+- fields and properties 
+    + fields 
+class Data {
+    private int id                                  
+    protected String description                    
+    public static final boolean DEBUG = false       
+}
+
+    + properties, A property is an externally visible feature of a class. 
+class Person {
+    String name                             
+    int age                                 
+}
+
+creates a backing private String name field, a getName and a setName method
+creates a backing private int age field, a getAge and a setAge method
+
+declared final, no setter is generated
+class Person {
+    final String name                   
+    final int age                       
+    Person(String name, int age) {
+        this.name = name                
+        this.age = age                  
+    }
+}
+
+class Person {
+    String name
+    int age
+}
+def p = new Person()
+assert p.properties.keySet().containsAll(['name','age'])
+
+    + Groovy will recognize properties even if there is no backing field provided there are getters or setters that follow the Java Beans specification
+class PseudoProperties {
+    // a pseudo property "name"
+    void setName(String name) {}
+    String getName() {}
+
+    // a pseudo read-only property "age"
+    int getAge() { 42 }
+
+    // a pseudo write-only property "groovy"
+    void setGroovy(boolean groovy) {  }
+}
+def p = new PseudoProperties()
+p.name = 'Foo'                      
+assert p.age == 42                  
+p.groovy = true 
+
+- annotation, ce. Annotations are declared in a very similar way to interfaces, using the @interface keyword
+
+@interface SomeAnnotation {}
+
+An annotation may define members in the form of methods without bodies and an optional default value
+
+@interface SomeAnnotation {
+    String value()                          
+}
+@interface SomeAnnotation {
+    String value() default 'something'      
+}
+@interface SomeAnnotation {
+    int step()                              
+}
+@interface SomeAnnotation {
+    Class appliesTo()                       
+}
+@interface SomeAnnotation {}
+@interface SomeAnnotations {
+    SomeAnnotation[] value()                
+}
+enum DayOfWeek { mon, tue, wed, thu, fri, sat, sun }
+@interface Scheduled {
+    DayOfWeek dayOfWeek()                   
+}
+
+@SomeAnnotation                 
+void someMethod() {
+    // ...
+}
+
+@SomeAnnotation                 
+class SomeClass {}
+
+@SomeAnnotation String var 
+
+    + use target specification for annotation 
+import java.lang.annotation.ElementType
+import java.lang.annotation.Target
+
+@Target([ElementType.METHOD, ElementType.TYPE])     
+@interface SomeAnnotation {}  
+
+    + annotation member values 
+@interface Page {
+    String value()
+    int statusCode() default 200
+}
+
+@Page(value='/home')                    
+void home() {
+    // ...
+}
+
+@Page('/users')                         
+void userList() {
+    // ...
+}
+
+@Page(value='error',statusCode=404)     
+void notFound() {
+    // ...
+}
+
+- retention policy,  The retention policy of an annotation is set using the Retention annotation
+
+import java.lang.annotation.Retention
+import java.lang.annotation.RetentionPolicy
+
+@Retention(RetentionPolicy.SOURCE)                   
+@interface SomeAnnotation {}  
+
+the @Retention annotation annotates the @SomeAnnotation annotation
+so @SomeAnnotation will have a SOURCE retention
+
+
+
+
+
+
+
+# Meta programming 
+-reference 
+http://docs.groovy-lang.org/latest/html/documentation/core-metaprogramming.html#xform-Field
+
+
+
 
 
 
