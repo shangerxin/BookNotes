@@ -1,0 +1,537 @@
+Jenkins Document;Note=Erxin
+
+# Reference 
+https://jenkins.io/doc/
+
+# Guide Tour
+- download and run 
+http://mirrors.jenkins.io/war-stable/latest/jenkins.war
+
+Run java -jar jenkins.war --httpPort=8080.
+
+Browse to http://localhost:8080
+
+- Jenkins Pipeline is typically written into a text file (called a Jenkinsfile) which in turn is checked into a project’s source control repository.
+
+https://jenkins.io/doc/book/pipeline/jenkinsfile/
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building..'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing..'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying....'
+            }
+        }
+    }
+}
+
+- pipeline made of multiple steps 
+    + "step" like a single command which performs a single action. When a step succeeds it moves onto the next step. 
+
+    + all the steps in the Pipeline have successfully completed, the Pipeline is considered to have successfully executed
+
+        * linux use sh to execute shell 
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                sh 'echo "Hello World"'
+                sh '''
+                    echo "Multiline shell steps works too"
+                    ls -lah
+                '''
+            }
+        }
+    }
+}
+
+        * window use bat to execute shell 
+pipeline {
+    agent any
+    stages {
+        stage('Build') {
+            steps {
+                bat 'set'
+            }
+        }
+    }
+}
+
+    + timeout and retries and more 
+pipeline {
+    agent any
+    stages {
+        stage('Deploy') {
+            steps {
+                retry(3) {
+                    sh './flakey-deploy.sh'
+                }
+
+                timeout(time: 3, unit: 'MINUTES') {
+                    sh './health-check.sh'
+                }
+            }
+        }
+    }
+}
+
+The "Deploy" stage retries the flakey-deploy.sh script 3 times, and then waits for up to 3 minutes for the health-check.sh script to execute. If the health check script does not complete in 3 minutes, the Pipeline will be marked as having failed in the "Deploy" stage.
+
+- finishing up pipeline with post section 
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent any
+    stages {
+        stage('Test') {
+            steps {
+                sh 'echo "Fail!"; exit 1'
+            }
+        }
+    }
+    post {
+        always {
+            echo 'This will always run'
+        }
+        success {
+            echo 'This will run only if successful'
+        }
+        failure {
+            echo 'This will run only if failed'
+        }
+        unstable {
+            echo 'This will run only if the run was marked as unstable'
+        }
+        changed {
+            echo 'This will run only if the state of the Pipeline has changed'
+            echo 'For example, if the Pipeline was previously failing but is now successful'
+        }
+    }
+}
+
+- define execution environment, This approach allows you to use practically any tool which can be packaged in a Docker container.
+
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent {
+        docker { image 'node:7-alpine' }
+    }
+    stages {
+        stage('Test') {
+            steps {
+                sh 'node --version'
+            }
+        }
+    }
+}
+
+Pipeline executes, Jenkins will automatically start the specified container and execute the defined steps within it:
+
+- environment variables 
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent {
+        label '!windows'
+    }
+
+    environment {
+        DISABLE_AUTH = 'true'
+        DB_ENGINE    = 'sqlite'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo "Database engine is ${DB_ENGINE}"
+                echo "DISABLE_AUTH is ${DISABLE_AUTH}"
+                sh 'printenv'
+            }
+        }
+    }
+}
+
+- cleaning up and notifications 
+pipeline {
+    agent any
+    stages {
+        stage('No-op') {
+            steps {
+                sh 'ls'
+            }
+        }
+    }
+    post {
+        always {
+            echo 'One way or another, I have finished'
+            deleteDir() /* clean up our workspace */
+        }
+        success {
+            echo 'I succeeeded!'
+        }
+        unstable {
+            echo 'I am unstable :/'
+        }
+        failure {
+            echo 'I failed :('
+        }
+        changed {
+            echo 'Things were different before...'
+        }
+    }
+}
+
+post {
+    failure {
+        mail to: 'team@example.com',
+             subject: "Failed Pipeline: ${currentBuild.fullDisplayName}",
+             body: "Something is wrong with ${env.BUILD_URL}"
+    }
+}
+
+also support hipchat and slack message 
+
+- deployment 
+pipeline {
+    agent any
+    options {
+        skipStagesAfterUnstable()
+    }
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying'
+            }
+        }
+    }
+}
+
+stage('Deploy - Staging') {
+    steps {
+        sh './deploy staging'
+        sh './run-smoke-tests'
+    }
+}
+stage('Deploy - Production') {
+    steps {
+        sh './deploy production'
+    }
+}
+
+    + ask for human input with input step 
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent any
+    stages {
+        /* "Build" and "Test" stages omitted */
+
+        stage('Deploy - Staging') {
+            steps {
+                sh './deploy staging'
+                sh './run-smoke-tests'
+            }
+        }
+
+        stage('Sanity check') {
+            steps {
+                input "Does the staging environment look ok?"
+            }
+        }
+
+        stage('Deploy - Production') {
+            steps {
+                sh './deploy production'
+            }
+        }
+    }
+}
+
+- add test stage for jenkinsfile
+        stage('Deliver for development') {
+            when {
+                branch 'development'
+            }
+            steps {
+                sh './jenkins/scripts/deliver-for-development.sh'
+                input message: 'Finished using the web site? (Click "Proceed" to continue)'
+                sh './jenkins/scripts/kill.sh'
+            }
+        }
+        stage('Deploy for production') {
+            when {
+                branch 'production'
+            }
+            steps {
+                sh './jenkins/scripts/deploy-for-production.sh'
+                input message: 'Finished using the web site? (Click "Proceed" to continue)'
+                sh './jenkins/scripts/kill.sh'
+            }
+        }
+
+
+# Install jenkins in docker 
+- docker image 
+
+use is the jenkinsci/blueocean image (from the Docker Hub repository)
+
+A new jenkinsci/blueocean image is published each time a new release of Blue Ocean is published
+
+Jenkins Docker images you can use (accessible through jenkins/jenkins on Docker Hub)
+- install docker 
++ create a bridge network in docker using docker network 
+$ docker network create jenkins
+
+- Create the following volumes to share the Docker client TLS certificates needed to connect to the Docker daemon and persist the Jenkins data 
+
+$ docker volume create jenkins-docker-certs
+$ docker volume create jenkins-data
+
+- download and run the docker:dind docker image using the following docker container run command 
+
+$ docker container run \
+  --name jenkins-docker \ 
+  --rm \ 
+  --detach \ 
+  --privileged \ 
+  --network jenkins \ 
+  --network-alias docker \ 
+  --env DOCKER_TLS_CERTDIR=/certs \ 
+  --volume jenkins-docker-certs:/certs/client \ 
+  --volume jenkins-data:/var/jenkins_home \ 
+  --publish 2376:2376 \ 
+  docker:dind 
+ 
+--env Maps the /certs/client directory inside the container to a Docker volume named jenkins-docker-certs as created above.
+
+Maps the /var/jenkins_home directory inside the container to the Docker volume named jenkins-data as created above.
+
+    
+- Download the jenkinsci/blueocean image and run it as a container in Docker
+docker container run \
+  --name jenkins-blueocean \ 
+  --rm \ 
+  --detach \ 
+  --network jenkins \ 
+  --env DOCKER_HOST=tcp://docker:2376 \ 
+  --env DOCKER_CERT_PATH=/certs/client \
+  --env DOCKER_TLS_VERIFY=1 \
+  --publish 8080:8080 \ 
+  --publish 50000:50000 \ 
+  --volume jenkins-data:/var/jenkins_home \ 
+  --volume jenkins-docker-certs:/certs/client:ro \ 
+  jenkinsci/blueocean 
+  
+- on window 
+$ docker network create jenkins
+$ docker volume create jenkins-docker-certs
+$ docker volume create jenkins-data
+  
+download docker:dind docker image using docker container run command 
+
+$ docker container run --name jenkins-docker --rm --detach ^
+  --privileged --network jenkins --network-alias docker ^
+  --env DOCKER_TLS_CERTDIR=/certs ^
+  --volume jenkins-docker-certs:/certs/client ^
+  --volume jenkins-data:/var/jenkins_home ^
+  docker:dind
+
+download blue ocean image jenkinsci/blueocean 
+docker container run --name jenkins-blueocean --rm --detach ^
+  --network jenkins --env DOCKER_HOST=tcp://docker:2376 ^
+  --env DOCKER_CERT_PATH=/certs/client --env DOCKER_TLS_VERIFY=1 ^
+  --volume jenkins-data:/var/jenkins_home ^
+  --volume jenkins-docker-certs:/certs/client:ro ^
+  --publish 8080:8080 --publish 50000:50000 jenkinsci/blueocean
+  
+accessing jenkins/blue ocean docker container 
+$ docker container exec -it jenkins-blueocean bash 
+
+accessing the jenkins console log through docker logs 
+$ docker container logs <docker-container-name>
+$ docker container logs jenkins-blueocean
+
+
+# WAR file
+- WAR file
+The Web application ARchive (WAR) file version of Jenkins can be installed on any operating system or platform that supports Java.
+
+Download the latest stable Jenkins WAR file to an appropriate directory on your machine.
+
+Open up a terminal/command prompt window to the download directory.
+
+Run the command java -jar jenkins.war.
+
+Browse to http://localhost:8080 and wait until the Unlock Jenkins page appears.
+
+Continue on with the Post-installation setup wizard below.
+
+
+# Pipeline
+Jenkins pipeline is a suite of plugins which supports implementing and integrating continuous delivery pipelines into jenkins
+
+- A continuous delivery (CD) pipeline is an automated expression of your process for getting software from version control right through to your users and customers. 
+
+The definition of a Jenkins Pipeline is written into a text file (called a Jenkinsfile) which in turn can be committed to a project’s source control repository. pipeline as code, a part of the application to be version and reviewed like any other code 
+
+- create a jenkinsfile and committing it to source control provides a number of immediate benefits 
+
+automatically creates a pipeline build process for all branches and pull requests 
+code review/itegration on the pipeline 
+audit trail fro the pipeline 
+single source of truth for the pipeline which can be viewed and edited by mutliple members of the project 
+
+- jenkinsfile pipeline can be written in two syntax 
+    + declarative 
+    provides richer syntactical features over Scripted Pipeline syntax
+    
+    + scripted 
+    
+- why pipeline 
+code 
+durable 
+pausable 
+versatile 
+extensible 
+
+- concepts 
+pipeline, a user-defined model of a CD, defines your entire build process, typically includes stages for building an application, testing it and then delivering it 
+
+node is a machine to executing a pipeline 
+
+stage, a block defines a conceptually distinct subset of tasks performed through the entire pipeline 
+
+step, a single task fundamentally, a step tells jenkins what to do at a particular point in time. It can execute a shell use the sh step, bat for windows 
+
+    + declarative pipeline fundamentals 
+    
+pipeline {
+    agent any 
+    stages {
+        stage('Build') { 
+            steps {
+                // 
+            }
+        }
+        stage('Test') { 
+            steps {
+                // 
+            }
+        }
+        stage('Deploy') { 
+            steps {
+                // 
+            }
+        }
+    }
+}
+
+    + scripted pipeline fundamentals 
+    
+    Schedules the steps contained within the block to run by adding an item to the Jenkins queue. As soon as an executor is free on a node, the steps will run
+    
+    Creates a workspace (a directory specific to that particular Pipeline) where work can be done on files checked out from source control
+    
+node {  
+    stage('Build') { 
+        // 
+    }
+    stage('Test') { 
+        // 
+    }
+    stage('Deploy') { 
+        // 
+    }
+}
+
+blocks in a Scripted Pipeline provides clearer visualization of each `stage’s subset of tasks/steps in the Jenkins UI.
+
+- pipeline example 
+pipeline { 
+    agent any 
+    options {
+        skipStagesAfterUnstable()
+    }
+    stages {
+        stage('Build') { 
+            steps { 
+                sh 'make' 
+            }
+        }
+        stage('Test'){
+            steps {
+                sh 'make check'
+                junit 'reports/**/*.xml' 
+            }
+        }
+        stage('Deploy') {
+            steps {
+                sh 'make publish'
+            }
+        }
+    }
+}
+
+agent is Declarative Pipeline-specific syntax that instructs Jenkins to allocate an executor (on a node) and workspace for the entire Pipeline.
+
+https://plugins.jenkins.io/workflow-durable-task-step
+
+https://plugins.jenkins.io/pipeline-stage-view
+
+
+## Getting started with pipeline 
+    
+
+
+# Blue Ocean 
+Blue Ocean is a new project that rethinks the user experience of Jenkins. Designed from the ground up for Jenkins Pipeline and compatible with Freestyle jobs
+
+- sophisticated visualization of CD pipelines 
+- pipeline editor 
+- personalization UI 
+- pinpoint precision 
+- native integration for branch and pull requests 
+
+- Jenkins is installed on most platforms, the Blue Ocean plugin and all its other dependent plugins (which form the Blue Ocean "suite of plugins") are not installed by default. blueocean is part of docker jenkins image https://hub.docker.com/
+
+- Alternatively, you can access Blue Ocean directly by appending /blue to the end of your Jenkins server’s URL - e.g. https://jenkins-server-url/blue.
+
+
+# Using Credentials 
+- credentials stored in jenkins 
+Secret text - a token such as an API token (e.g. a GitHub personal access token),
+
+Username and password - which could be handled as separate components or as a colon separated string in the format username:password (read more about this in Handling credentials),
+
+Secret file - which is essentially secret content in a file,
+
+SSH Username with private key - an SSH public/private key pair,
+
+Certificate - a PKCS#12 certificate file and optional password, or
+
+Docker Host Certificate Authentication credentials.
+
+- adding new global credentials 
+
+System, click the Global credentials (unrestricted) link to access this default domain.
+
