@@ -969,11 +969,199 @@ import java.lang.annotation.RetentionPolicy
 the @Retention annotation annotates the @SomeAnnotation annotation
 so @SomeAnnotation will have a SOURCE retention
 
+    + reference retension policy 
+    https://docs.oracle.com/javase/8/docs/api/index.html?java/lang/annotation/RetentionPolicy.html
+    
+    CLASS, RUNTIME, SOURCE 
+    
+    used to control the annotation to be visible at compile time or runtime 
+    
+- closure annotation parameters
+class Tasks {
+    Set result = []
+    void alwaysExecuted() {
+        result << 1
+    }
+    @OnlyIf({ jdk>=6 })
+    void supportedOnlyInJDK6() {
+        result << 'JDK 6'
+    }
+    @OnlyIf({ jdk>=7 && windows })
+    void requiresJDK7AndWindows() {
+        result << 'JDK 7 Windows'
+    }
+}
+
+you only have to declare the value as a Class
+@Retention(RetentionPolicy.RUNTIME)
+@interface OnlyIf {
+    Class value()                    
+}
 
 
+runner to use that information 
+class Runner {
+    static <T> T run(Class<T> taskClass) {
+        def tasks = taskClass.newInstance()                                         
+        def params = [jdk:6, windows: false]                                        
+        tasks.class.declaredMethods.each { m ->                                     
+            if (Modifier.isPublic(m.modifiers) && m.parameterTypes.length == 0) {   
+                def onlyIf = m.getAnnotation(OnlyIf)                                
+                if (onlyIf) {
+                    Closure cl = onlyIf.value().newInstance(tasks,tasks)            
+                    cl.delegate = params                                            
+                    if (cl()) {                                                     
+                        m.invoke(tasks)                                             
+                    }
+                } else {
+                    m.invoke(tasks)                                                 
+                }
+            }
+        }
+        tasks                                                                       
+    }
+}
 
+- meta-annotations, Meta-annotations, also known as annotation aliases are annotations that are replaced at compile time by other annotations
 
+Given the multiplication of annotations that you could add to the same class, a meta-annotation could help by reducing the two annotations with a single one
 
+@Service
+@Transactional
+class MyTransactionalService {}
+
+//equal to 
+@TransactionalService                           
+class MyTransactionalService {}
+
+//defined by 
+import groovy.transform.AnnotationCollector
+
+//meta annotation 
+@Service                                        
+@Transactional                                  
+@AnnotationCollector                            
+@interface TransactionalService {
+}
+
+- meta-annotation, Groovy supports both precompiled and source form meta-annotations. It only support in groovy 
+
+- meta-annotation parameters 
+@Timeout(after=3600)
+@Dangerous(type='explosive')
+
+//define meta 
+@Timeout(after=3600)
+@Dangerous(type='explosive')
+@AnnotationCollector
+public @interface Explosive {}
+
+//add parameter
+@Explosive(after=0)                 
+class Bomb {}
+
+- handling duplicate annotations, AnnotationCollectorMode enum value
+- custom annotation processors 
+
+@AnnotationCollector(processor = "org.codehaus.groovy.transform.CompileDynamicProcessor")
+public @interface CompileDynamic {
+}
+
+// custom processor has to extend AnnotationCollectorTransform
+@CompileStatic                                                                  
+class CompileDynamicProcessor extends AnnotationCollectorTransform {            
+    private static final ClassNode CS_NODE = ClassHelper.make(CompileStatic)    
+    private static final ClassNode TC_NODE = ClassHelper.make(TypeCheckingMode) 
+
+    List<AnnotationNode> visit(AnnotationNode collector,                        
+                               AnnotationNode aliasAnnotationUsage,             
+                               AnnotatedNode aliasAnnotated,                    
+                               SourceUnit source) {                             
+        def node = new AnnotationNode(CS_NODE)                                  
+        def enumRef = new PropertyExpression(
+            new ClassExpression(TC_NODE), "SKIP")                               
+        node.addMember("value", enumRef)                                        
+        Collections.singletonList(node)                                         
+    }
+}
+
+- traits a structural construct of the language which allows 
+    + composition behaviors 
+    + runtime implementation of interfaces 
+    + behavior overriding 
+    + compatibility with static type checking/compilation 
+    
+trait FlyingAbility {      
+    abstract String name()                          
+    String fly() { "I'm flying!" }     
+    private String greetingMessage() {}
+    def whoAmI() { this }
+    
+    String titleProperty  //property 
+    private int countField = 0 //private field 
+}
+
+class Bird implements FlyingAbility {
+    String name() { 'Bob' }   
+}          
+def b = new Bird()                              
+assert b.fly() == "I'm flying!"    
+
+used like a normal interface using the implements keyword:
+
+this represents the implementing instance. 
+
+- interfaces, Traits may implement interfaces
+
+interface Named {                                       
+    String name()
+}
+trait Greetable implements Named {                      
+    String greeting() { "Hello, ${name()}!" }
+    //define property 
+    String name 
+    
+    //fields 
+     private int count = 0  
+}
+
+- composition of behaviors 
+trait FlyingAbility {                           
+        String fly() { "I'm flying!" }          
+}
+trait SpeakingAbility {
+    String speak() { "I'm speaking!" }
+}
+
+class Duck implements FlyingAbility, SpeakingAbility {}
+
+- override default methods 
+class Duck implements FlyingAbility, SpeakingAbility {
+    String quack() { "Quack!" }                         
+    String speak() { quack() }                          
+}
+
+- extending traits 
+
+trait Named {
+    String name                                     
+}
+trait Polite extends Named {                        
+    String introduce() { "Hello, I am $name" }      
+}
+
+class Person implements Polite {}
+def p = new Person(name: 'Alice')                   
+assert p.introduce() == 'Hello, I am Alice'   
+
+    + multiple inheritance
+trait WithId {                                      
+    Long id
+}
+trait WithName {                                    
+    String name
+}
+trait Identified implements WithId, WithName {}  
 
 # Meta programming 
 -reference 
