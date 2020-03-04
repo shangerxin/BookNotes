@@ -1,0 +1,938 @@
+Getting Started with Web Components=Prateek;Note=Erxin
+
+
+# Web Component specification
+- parts 
+custom element, make sure that the browser understands how to use this HTML tag
+shadow dom, encapsulate 
+template 
+
+- custom elements 
+class HelloWorld extends HTMLElement {
+  constructor() {
+    // very important
+    // needed in every constructor
+    // which extends another class
+    super();
+
+    // do magic here
+    this.innerText = 'Hello World';
+  }
+}
+
+customElements.define('hello-world', HelloWorld);
+
+//use in html 
+<hello-world><hello-world>
+
+- shadow dom, shadow root can only be accessed by a shadow host attached to the DOM. 
+// get the reference to the div
+let shadowRootEl = document.querySelector('.entry');
+
+// mark it as a shadow root
+let shadowRoot = shadowRootEl.attachShadow({mode: 'open'});
+
+// create a random span tag
+// that can be appended to the shadow root
+let childEl = document.createElement('span');
+childEl.innerText = "Hello shadow DOM";
+
+// append the span tag to shadow root
+shadowRoot.appendChild(childEl);
+
+- make the custom element itself the shadow host by using the following code
+let shadowRoot = this.attachShadow({mode: 'open'});
+
+- template, template specification provides a way to hold HTML on the browser without actually rendering it on the page
+<template id="my-template">
+ <div class="red-border">
+ <p>Hello Templates</p>
+ <p>This is a small template</p>
+ </div>
+</template>
+
+clone it and put it inside any DOM
+
+// Get the reference to the template
+let templateReference = document.querySelector('#my-template');
+
+// Get the content node
+let templateContent = templateReference.content;
+
+// clone the template content
+// and append it to the target div
+document.querySelector('#target')
+    .appendChild(templateContent.cloneNode(true));
+
+- mix shadow dom with template 
+// Get the reference to the template
+let templateReference = document.querySelector('#my-template');
+
+// Get the content node
+let templateContent = templateReference.content;
+
+// Get the reference to target DOM
+let targetDOM = document.querySelector('#target');
+
+// add a shadow root to the target reference DOM
+let targetShadowRoot = targetDOM.attachShadow({mode: 'open'});
+
+// clone the template content
+// and append it to the target div
+targetShadowRoot.appendChild(templateContent.cloneNode(true));
+
+
+
+# Module loader API
+- support export and import in JS 
+// calc.js
+
+export function add(x, y) {
+  return x + y;
+}
+
+export function subtract(x, y) {
+  return x - y;
+}
+
+<script type="module" >
+  import AddNumberWithNewName from './addNumber.js';
+  new AddNumberWithNewName();
+</script>
+
+- custom element using imports 
+//revampedParagraph.js
+
+export default class RevampedParagraph extends HTMLElement {
+  constructor() {
+    super();
+
+    // template ref and content
+    let templateReference = document.querySelector('#revamped-paragraph-template');
+    let template = templateReference.content;
+
+    // adding html from template
+    this.append(template.cloneNode(true));
+  }
+}
+
+
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <title>Revamped Paragraph</title>
+
+    <!--
+      Notice how we use type="module"
+    -->
+    <script type="module">
+    
+      // imports object from the module 
+      // and names it as RevampedParagraph
+      // You can name it anything you want
+      // since it is a default export
+      import RevampedParagraph from './revampedParagraph.js';
+
+      // We are now defining the custom element 
+      customElements.define('revamped-paragraph', RevampedParagraph);
+    </script>
+
+  </head>
+  <body>
+
+    <revamped-paragraph></revamped-paragraph>
+
+    <!--
+      Template for
+      Revamped Paragraph
+    -->
+    <template id="revamped-paragraph-template">
+      <h1>Revamped Paragraph</h1>
+      <p>This is the default paragraph inside
+      the revamped-paragraph element</p>
+    </template>
+
+  </body>
+</html>
+
+//student.json 
+[
+  {
+    "name": "Robert De Niro",
+    "lastScore": 75
+  },
+  {
+    "name": "Jack Nicholson",
+    "lastScore": 87
+  },
+  {
+    "name": "Marlon Brando",
+    "lastScore": 81
+  },
+  {
+    "name": "Tom Hanks",
+    "lastScore": 62
+  },
+  {
+    "name": "Leonardo DiCaprio",
+    "lastScore": 92
+  }
+]
+
+// StudentAttendanceTable.js
+
+export default class StudentAttendanceTable extends HTMLElement {
+  constructor() {
+    super();
+
+    // we simply called another method
+    // inside the class
+    this.render();
+  }
+
+  render() {
+    // let put our loading text first
+    this.innerText = this.getLoadingText();
+
+    // let's start our fetch call
+    this.getStudentList();
+  }
+
+  getStudentList() {
+    // lets use fetch api
+    // https://developer.mozilla.org/en-US/docs/Web
+    // /API/Fetch_API/Using_Fetch
+    fetch('./student.json')
+    .then(response => {
+
+      // converts response to json
+      return response.json();
+
+    })
+    .then(jsonData => {
+      this.generateTable(jsonData);
+    })
+    .catch(e => {
+
+      // lets set the error message for
+      // the user
+      this.innerText = this.getErrorText();
+
+      // lets print out the error
+      // message for the devs
+      console.log(e);
+    });
+
+  }
+
+  generateTable(names) {
+    // lets loop through names
+    // with the help of map
+    let rows = names.map((data, index) => {
+      return this.getTableRow(index, data.name);
+    });
+
+    // creating the table
+    let table = document.createElement('table');
+    table.innerHTML = rows.join('');
+
+    // setting the table as html for this component
+    this.appendHTMLToShadowDOM(table);
+  }
+
+  getTableRow(index, name) {
+    let tableRow = `<tr>
+        <td>${index + 1}</td>
+        <td>${name}</td>
+        <td>
+          <input type="checkbox" name="${index}-attendance"/>
+        </td>
+      </tr>`;
+
+    return tableRow;
+  }
+
+  appendHTMLToShadowDOM(html) {
+    // clearing out old html
+    this.innerHTML = '';
+    
+    let shadowRoot = this.attachShadow({mode: 'open'});
+
+    // add a text node
+    shadowRoot.append(html);
+  }
+
+  getLoadingText() {
+    return `loading..`;
+  }
+
+  getErrorText() {
+    return `unable to retrieve student list.`;
+  }
+}
+
+
+//InformationBanner.js
+
+export default class InformationBanner extends HTMLElement {
+  constructor() {
+    super();
+
+    // we simply called another method
+    // inside the class
+    this.render();
+  }
+
+  render() {
+
+    // Get the reference to the template
+    let templateReference = document.querySelector('#information-banner-template');
+
+    // Get the content node
+    let templateContent = templateReference.content;
+
+    let shadowRoot = this.attachShadow({mode: 'open'});
+
+    // add the template text to the shadow root
+    shadowRoot.append(templateContent.cloneNode(true));
+  }
+}
+
+//information-banner-template looks 
+<template id="information-banner-template">
+  <div>
+    <a href="tel:1234567890">Call: 1234567890</a>
+    <div>
+      <p>Just Some Random Street</p>
+      <p>Town</p>
+      <p>State - 123456</p>
+    </div>
+  </div>
+</template>
+
+//final index page
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <title>Student Page</title>
+
+    <!--
+      Notice how we use type="module"
+    -->
+    <script type="module">
+
+      // importing the first custom element
+      import StudentAttendanceTable from './StudentAttendanceTable.js';
+
+      // importing the second custom element
+      import InformationBanner from './InformationBanner.js';
+
+      // importing the third custom element
+      import TimeSlot from './TimeSlot.js';
+
+      customElements.define('student-attendance-table', 
+      StudentAttendanceTable);
+      customElements.define('information-banner', InformationBanner);
+      customElements.define('time-slot', TimeSlot);
+    </script>
+
+  </head>
+  <body>
+
+    <time-slot></time-slot>
+    <student-attendance-table></student-attendance-table>
+    <information-banner></information-banner>
+
+    <template id="information-banner-template">
+      <div>
+        <a href="tel:1234567890">Call: 1234567890</a>
+        <div>
+          <p>Just Some Random Street</p>
+          <p>Town</p>
+          <p>State - 123456</p>
+        </div>
+      </div>
+    </template>
+
+    <template id="time-slot-template">
+      <div>
+        <div>
+          <input type="radio" name="timeslot" value="slot1" checked> 
+           9:00 AM - 11:00 AM
+        </div>
+        <div>
+          <input type="radio" name="timeslot" value="slot2"> 11:00 AM - 
+          1:00 PM
+        </div>
+        <div>
+          <input type="radio" name="timeslot" value="slot3"> 1:00 PM - 
+         3:00 PM
+        </div>
+      </div>
+    </template>
+
+  </body>
+</html>
+
+
+# Web components life cycle callback methods 
+- how to create a Web Component using vanilla JavaScript and HTML5
+- Life cycle events are events that are triggered inside a web component when it reaches a certain stage of execution. These stages reflect the overall process of creating a web component and can be controlled with the help of life cycle callback methods. 
+
+- Type of life cycle callbacks 
+connectedCallback(), This interface/callback gets invoked every time a copy of a Web Component gets added to the DOM.
+disconnectedCallback(), performed after the component is removed from the DOM.
+adoptedCallback(), This callback gets triggered when the Web Component is moved from one parent to another.
+attributeChangedCallback()
+
+- example
+// CustomButton.js
+
+export default class CustomButton extends HTMLElement {
+  constructor() {
+    super();
+
+    // Initializing an initial state
+    this.timesClicked = 0;
+
+    let template = `
+      <button>Click Me</button>
+      <span>${this.getTimesClicked()}</span>
+    `;
+
+    this.innerHTML = template;
+  }
+
+  connectedCallback() {
+
+    // adding event handler to the button
+    this.querySelector('button')
+      .addEventListener('click', (e) => {
+        this.handleClick(e);
+      });
+  }
+
+  handleClick() {
+    // updating the state
+    this.timesClicked++;
+
+    this.querySelector('span')
+      .innerText = this.getTimesClicked();
+  }
+
+  getTimesClicked() {
+    return `Times Clicked: ${this.timesClicked}`;
+  }
+}
+
+<script type="module">
+
+  /// importing the first custom element
+  import CustomButton from './CustomButton.js';
+
+  customElements.define('custom-button', CustomButton);
+</script>
+
+- observe attribute changed for web component. Web Component use the attributes provided, we will first ask it to observe certain attributes
+// MyName.js
+
+export default class MyName extends HTMLElement {
+  constructor() {
+    super();
+
+   this.innerText = 'Hello, my name is NO NAME';
+  }
+
+  static get observedAttributes() {
+    return ['fullname'];
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name == 'fullname') {
+      this.innerText = 'Hello, my name is ' + newValue;
+    }
+  }
+}
+
+Once we have started observing these attributes, we can then use the attributeChangedCallback() to make necessary changes to custom elements as per the requirement.
+
+attributeChangedCallback(name, oldValue, newValue) {
+  if (name == 'fullname') {
+    this.innerText = 'Hello, my name is ' + newValue;
+  }
+}
+
+
+
+# Universal Web Components 
+- Styling web components, in order to get back our CSS, we will need to add it as the part of the template, making it look like this:
+// CompanyHeader.js
+
+export default class CompanyHeader extends HTMLElement {
+  constructor() {
+
+    // We are not even going to touch this.
+    super();
+
+    // Lets provide a default icon
+    this.icon = 'newicon.jpeg';
+
+    // lets create our shadow root
+    this.shadowObj = this.attachShadow({mode: 'open'});
+
+    // Then lets render the template
+    this.render();
+  }
+
+  render() {
+
+    this.shadowObj.innerHTML = this.getTemplate();
+  }
+
+  // Lets get icon and page-name from attributes
+  static get observedAttributes() {
+    return ['icon', 'page-name'];
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name == 'icon') {
+      this.icon = newValue;
+    }
+
+    if (name == 'page-name') {
+      this.pageName = newValue;
+    }
+
+    // Lets re-render after getting the new attributes
+    this.render();
+  }
+
+  getTemplate() {
+    return `
+    <style>
+      :host {
+        background: #68afe8;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        width: 400px;
+        margin: 0 auto;
+      }
+      :host(.login-failure) {
+        background: #f35353;
+      }
+      :host(.login-success) {
+        background: #499c19;
+      }
+      input {
+        margin-top: 5px;
+        padding: 10px;
+        height: 30px;
+        font-size: 15px;
+        border: none;
+        border-radius: 5px;
+      }
+      button {
+        margin-top: 15px;
+        padding: 10px;
+        font-size: 15px;
+        border: none;
+        height: 50px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+    </style>
+    <a href="/">
+    <img class="icon" src="${this.icon}" />
+    </a>
+    <h1 class="heading">${this.pageName}</h1>
+    <div>
+    <a class="header-links" href="/home.html">Home</a>
+    <a class="header-links" href="/aboutus.html">About Us</a>
+    </div>
+    `;
+  }
+}
+
+we do not have a selector associated with the shadow root itself, which acts as a container for the HTML. So, we can have CSS attached to this shadow root with the help of the :host selector.
+ 
+using the :host selector as a way to add CSS to the shadow root of our Web Component
+- accessibility for web components, add alt text for the component for helping display message to the user when the component is not render successful
+<header-image alt="Blue Clouds"  src="clouds-sky-header.jpg"></header-image>  
+
+- glod standard checklist,  Gold Standard Checklist is a working draft (see https://github.com/webcomponents/gold-standard/wiki
+event binding through, connectedCallback() and disconnectedCallback()
+exposing an event callback for other components 
+responsive design, automatic fit for different screen size 
+
+
+
+# Reusable web component 
+- example of login component 
+<custom-header
+  logo-url="icon.png"
+  logo-alt-text="Company X logo"
+  company-name-text="Company X"
+  is-logged-in="user23411"
+  help-link="/help.html"
+  help-link-text="Help and Support"
+  contact-us-link="/contact.html"
+  contact-us-alt-text="Contact Us"
+  background-color="#000000"
+  text-color="#ffffff"
+  is-sticky="true">
+</custom-header>
+
+-  let's add the CSS for larger screens, say tablet and desktop
+@media screen and (min-width: 650px) {
+  .profile-info__container {
+    flex-direction: row;
+    text-align: left;
+  }
+  .profile-info__picture {
+    width: 100px;
+    height: 100px;
+    margin: 10px;
+  }
+}
+
+- publish component to npm 
+- extending web components with slots 
+//add slot into the template of the custom class 
+
+getTemplate() {
+  return `
+    <a href="/">
+      <img class="icon" src="${this.getAttribute('icon')}" />
+    </a>
+    <h1 class="heading">${this.getAttribute('page-name')}</h1>
+    <div>
+      <slot name="other-links"></slot>
+    </div>
+  `;
+}
+
+//use the component and add slot item  
+<company-header icon="icon.png" page-name="My Page">
+    <ul slot="other-links" class="header-links__container">
+      <li>
+        <a class="header-links" href="/home.html">Home</a>
+      </li>
+      <li>
+        <a class="header-links" href="/aboutus.html">About Us</a>
+      </li>
+    </ul>
+</company-header>
+
+
+# Managing states and props 
+- using field in the custom clas 
+class Foo{
+    constructor(){
+        this._state = xx;
+    }
+    
+    connectedCallback(){
+        this._state = new_value;
+    }
+}
+
+- property can be accessible after get the web component from the document 
+set students (value) {
+  this._list = value;
+  this.renderList();
+}
+
+get students (){
+  return this._list;
+}
+
+document.querySelector('student-list').students;
+
+- we can also assign values into the web components from attributes 
+
+
+
+# event handling in web component 
+- add event handler 
+connectedCallback() {
+
+  // what should happen when the button is clicked
+  this.shadowObj.querySelector('.js-button')
+    .addEventListener("click", (e) => {
+      this.handleClick(e);
+    });
+}
+
+handleClick() {
+  this._num++;
+  this.shadowObj.querySelector('.custom-clicker_num').innerHTML 
+        = this.getTimesClicked();
+}
+
+- let the user know the value when the button is clicked by using custom event 
+
+handleClick() {
+  this._num++;
+  this.shadowObj.querySelector('.custom-clicker__num').innerHTML 
+        = this.getTimesClicked();
+
+  this.dispatchEvent(new CustomEvent('change', {
+    detail: {
+      num: this._num,
+    },
+    bubbles: true,
+  }));
+}
+
+//reference the dispatched custom event by attribute or JS 
+<custom-clicker onchange="handleChange(event.detail)"></custom-clicker>
+
+<script type="text/javascript">
+  function handleChange(e) {
+    console.log(e);
+  }
+</script>
+
+//reference by addEventListener
+<custom-clicker></custom-clicker>
+
+<script type="text/javascript">
+  document.querySelector('custom-clicker').addEventListener('change', (e) => {
+    console.log(e.detail);
+  });
+</script>
+
+
+# Single page application 
+- pre request,  Node.js website (https://nodejs.org/en/) or, if you want, you can use Homebrew (https://brew.sh/ ) to install it.
+
+- a little bit of SCSS. It is mostly CSS, but if you get confused, feel free to take a look at the SCSS documentation
+
+- start project
+$ npm webpack.dev server
+
+- app component 
+<html>
+  <head>
+    <title>My App</title>
+  </head>
+  <body>
+    <my-app></my-app>
+    <script src="bundle.js"></script>
+  </body>
+</html>
+
+constructor() {
+
+  // We are not even going to touch this.
+  super();
+
+  // lets create our shadow root
+  this.shadowObj = this.attachShadow({mode: 'open'});
+
+  this.registerOtherComponents();
+  this.render();
+}
+
+registerOtherComponents() {
+  if (typeof customElements.get('search-bar') === 'undefined') {
+    customElements.define('search-bar', SearchBar);
+  }
+
+  if (typeof customElements.get('gif-cover') === 'undefined') {
+    customElements.define('gif-cover', GifCover);
+  }
+}
+
+- implement routing by listen event in the component and dispatch custom event. The dispatched custom event will be captured from the parent component and do the replace next operation to 
+
+handleClick(index) {
+  this.dispatchEvent(new CustomEvent('custom-header-clicked', {
+    detail: {
+      data: index + 1,
+    },
+    bubbles: true,
+  }));
+}
+
+parent component trying to listen to the custom-header-clicked event.
+
+connectedCallback() {
+  this.shadowObj.querySelector('custom-header')
+    .addEventListener('custom-header-clicked', (e) => {
+      let newShownSection = e.detail.data;
+      if(newShownSection !== this.shownSection) {
+        this.shownSection = newShownSection;
+        this.reRenderAppSection();
+      }
+    })
+}
+
+- enable gogole analytic, Go to https://analytics.google.com/, then click on the admin button and create a new property
+
+you can simply go to the following URL and see how users are visiting your site: https://analytics.google.com.
+
+
+
+# Using Polymer build web component 
+- referece Polymer project at the following URL: https://Polymer-library.Polymer-project.org/.
+
+https://lit-element.polymer-project.org/
+
+ Web Components and Polymer is that Polymer comes with its own data system. That means you can make various computations and manipulations to the component based on this data.
+
+- attribute and properties in polymer, data-binding. If you would like to know more about data-binding in Polymer, you can visit the following link: https://Polymer-library.Polymer-project.org/3.0/docs/devguide/data-binding.
+
+
+
+# Stencil 
+- Stencil is a compiler for Web Components. It uses TypeScript and JSX to create Web Components
+https://www.typescriptlang.org/.
+https://reactjs.org/docs/introducing-jsx.html.
+
+
+
+# Integrating web components with a web framework 
+- react 
+import React, { Component } from 'react';
+
+export default class MainBody extends Component {
+  render() {
+    return (
+      <div>
+        <p>This is the main body</p>
+      </div>
+    );
+  }
+}
+
+import React from 'react';
+import logo from './logo.svg';
+import './App.css';
+import MainBody from './main-body/main-body.js';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <img src={logo} className="App-logo" alt="logo" />
+        <p>
+          Edit <code>src/App.js</code> and save to reload.
+        </p>
+        <a
+          className="App-link"
+          href="https://reactjs.org"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Learn React
+        </a>
+        <MainBody />
+      </header>
+    </div>
+  );
+}
+
+export default App;
+
+//MainBody component 
+import React, { Component } from 'react';
+import HeaderImage from '../web-components/header-image/header-image.js';
+
+export default class MainBody extends Component {
+
+  constructor() {
+    super();
+    this.state = {
+      src: 'https://www.freewebheaders.com/wordpress/wp-content/gallery/clouds-sky/clouds-sky-header-2069-1024x300.jpg',
+      altText: 'Blue Clouds'
+    }
+  }
+
+  componentDidMount() {
+    customElements.define('header-image', HeaderImage);
+  }
+
+  render() {
+    return (
+      <div>
+        <p>This is the main body</p>
+        <header-image alttext={this.state.altText}
+          src={this.state.src}>
+        </header-image>
+      </div>
+    );
+  }
+}
+- angular 
+...
+import { NgModule, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+...
+...
+
+@NgModule({
+  ...
+  ...
+  schemas: [
+   CUSTOM_ELEMENTS_SCHEMA
+  ]
+})
+
+import { Component, OnInit } from '@angular/core';
+...
+import HeaderImage from '../web-components/header-image/header-image.js';
+
+@Component({
+  selector: 'app-main-body',
+  templateUrl: './main-body.component.html',
+  styleUrls: ['./main-body.component.css']
+})
+export class MainBodyComponent implements OnInit {
+    src: string ;
+    altText: string;
+
+    constructor() {
+        this.src = 'https://www.freewebheaders.com/wordpress/wp-content/gallery/clouds-sky/clouds-sky-header-2069-1024x300.jpg';
+        this.altText = 'Blue Clouds';
+    }
+
+    ngOnInit() {
+        customElements.define('header-image', HeaderImage);
+    }
+}
+
+//template of main-body.component.html
+<p>
+  main-body works!
+</p>
+<header-image attr.src={{src}} attr.alttext="{{alttext}}"></header-image>
+
+Now that we know how a Vanilla Web Component can be used in Angular projects
+
+- integrate with vue 
+Vue.component('main-body', {
+  props: ['src', 'alt'],
+  template: `
+    <p>This is the main body</p>
+    `,
+})
+
+//main body component 
+import HeaderImage from '../web-components/header-image/header-image.js';
+
+Vue.component('main-body', {
+  props: ['src', 'alt'],
+  template: `
+    <p>This is the main body</p>
+    <header-image src="{{src}}" alttext="{{alt}}"></header-image>
+    `,
+  created: function() {
+    customElements.define('header-image', HeaderImage);
+  }
+})
+
+
+
+
+
