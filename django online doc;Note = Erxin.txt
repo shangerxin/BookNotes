@@ -152,6 +152,7 @@ $ python manage.py shell
 
 - view, each web page in django is a view, can be a function, class 
     + reference 
+    URL dispatcher
     https://docs.djangoproject.com/en/3.0/topics/http/urls/
     
         * example 
@@ -167,7 +168,7 @@ $ python manage.py shell
     
         * path converters by default:
     
-        str, any non-emptys tring, exclude '/'
+        str, any non-emptys string, exclude '/'
         int, zero or any positive integer as an int 
         slug, any slug string consisting of ASCII letters or numbers. 
         uuid, matches a formatted UUID
@@ -214,7 +215,7 @@ $ python manage.py shell
         *  URLconf doesn’t look at the request method. In other words, all request methods – POST, GET, HEAD, etc. – will be routed to the same function for the same URL
         
         * error handling with 
-        hadnler400 django.conf.urls.handler400
+        handler400 django.conf.urls.handler400
         https://docs.djangoproject.com/en/3.0/ref/urls/#django.conf.urls.handler400
         
         * static(),  URL pattern for serving files in debug mode
@@ -302,7 +303,7 @@ $ python manage.py shell
         
         will give application namespace polls 
         
-    + view is response to return a HttpResponse or raise a Http404 
+    + A view function, or view for short, is a Python function that takes a Web request and returns a Web response. The response can be a web page, a redirect or  Http404 
     
     return HttpResponseNotFound(reason) from view 
     
@@ -345,7 +346,7 @@ $ python manage.py shell
                 
     + template engines to be used with Django 
     
-    django template load from tempaltes subdirectory by default 
+    django template load from templates subdirectory by default 
     
 TEMPLATES = [
     {
@@ -413,6 +414,8 @@ def index(request):
     + request.POST is a dictionary-like object that lets you access submitted data by key name
     
 - write minimal form 
+
+TODO:
             
 - django provide different kinds of views 
 from django.views import generic
@@ -790,17 +793,514 @@ cache framework,
 - 
 
 
+# Writing views 
+- reference 
+https://docs.djangoproject.com/en/3.0/topics/http/views/
+
+- A view function, or view for short, is a Python function that takes a Web request and returns a Web response.
+
+- the convention is to put views in a file called views.py placed in your project or application directory 
+
+
+from django.http import HttpResponse
+import datetime
+
+def current_datetime(request):
+    now = datetime.datetime.now()
+    html = "<html><body>It is now %s.</body></html>" % now
+    return HttpResponse(html)
+
+- Django includes a TIME_ZONE setting that defaults to America/Chicago
+- return errors
+https://docs.djangoproject.com/en/3.0/ref/request-response/#ref-httpresponse-subclasses
+
+from django.http import HttpResponse, HttpResponseNotFound
+
+def my_view(request):
+    # ...
+    if foo:
+        return HttpResponseNotFound('<h1>Page not found</h1>')
+    else:
+        return HttpResponse('<h1>Page was found</h1>')
+
+- Django provides an Http404 exception. If you raise Http404 at any point in a view function, Django will catch it and return the standard error page for your application, along with an HTTP error code 404.
+
+from django.http import Http404
+from django.shortcuts import render
+from polls.models import Poll
+
+def detail(request, poll_id):
+    try:
+        p = Poll.objects.get(pk=poll_id)
+    except Poll.DoesNotExist:
+        raise Http404("Poll does not exist")
+    return render(request, 'polls/detail.html', {'poll': p})
+    
+   
+
+
 # Using different testing frameworks 
-
-
 
 # django 
 - reference 
 https://docs.djangoproject.com/en/3.0/topics/testing/tools/#django.test.LiveServerTestCase
 
 
+# Python dependency injection 
+- reference 
+https://github.com/google/pinject
 
+another popular library 
+https://github.com/alecthomas/injector
 
+- implicit class bindings 
+>>> import pinject 
+>>> class OuterClass(object):
+...     def __init__(self, inner_class):
+...         self.inner_class = inner_class
+...
+>>> class InnerClass(object):
+...     def __init__(self):
+...         self.forty_two = 42
+...
+>>> obj_graph = pinject.new_object_graph()
+>>> outer_class = obj_graph.provide(OuterClass)
+>>> print outer_class.inner_class.forty_two
+42
+>>>
 
+require classes are named CamelCase, your args are named in lower_with_underscores. Pinject transforms class names to injectable arg names by lowercasing words and connecting them with underscores. It will also ignore any leading underscore on the class name 
 
+Class name	Arg name
+Foo	        foo
+FooBar	    foo_bar
+_Foo	    foo
+_FooBar	    foo_bar
 
+- new_object_graph(modules=None, class=[SomeClass]) by default looks in all imported modules
+
+The modules arg specifies in which (python) modules to look for classes; this defaults to ALL_IMPORTED_MODULES
+The classes arg specifies a exact list of classes; this defaults to None
+
+- auto copying args to fields 
+
+    + @copy_args_to_internal_fields prepends an underscore, field named _foo 
+    
+>>> class ClassWithTediousInitializer(object):
+...     @pinject.copy_args_to_internal_fields
+...     def __init__(self, foo, bar, baz, quux):
+...         pass
+...
+>>> cwti = ClassWithTediousInitializer('a-foo', 'a-bar', 'a-baz', 'a-quux')
+>>> print cwti._foo
+'a-foo'
+
+    + @copy_args_to_public_fields copies the arg named as-is, i.e., it copies an arg named foo to a field named foo
+
+- binding specs, it is any python class that inherits from BindingSpec
+
+Its configure() method can create explicit bindings to classes or instances, as well as requiring bindings without creating them.
+
+Its dependencies() method can return depended-on binding specs.
+
+It can have provider methods, for which explicit bindings are created.
+
+Binding specs should generally live in files named binding_specs.py, where each file is named in the plural even if there is exactly one binding spec in it. 
+
+>>> class SomeClass(object):
+...     def __init__(self, long_name):
+...         self.long_name = long_name
+...
+>>> class SomeReallyLongClassName(object):
+...     def __init__(self):
+...         self.foo = 'foo'
+...
+>>> class MyBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('long_name', to_class=SomeReallyLongClassName)
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[MyBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.long_name.foo
+'foo'
+>>>
+
+Using to_class binds to a class. When the binding is used, Pinject injects an instance of the class.
+
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class MyBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='a-foo')
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[MyBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.foo
+'a-foo'
+
+Using to_instance binds to an instance of some object.
+
+- The configure() method of a binding spec also may take a function require() as an arg and use that function to require that a binding be present without actually defining that binding. 
+
+>>> class MainBindingSpec(pinject.BindingSpec):
+...     def configure(self, require):
+...         require('foo')
+...
+>>> class RealFooBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='a-real-foo')
+...
+>>> class StubFooBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='a-stub-foo')
+...
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> obj_graph = pinject.new_object_graph(
+...     binding_specs=[MainBindingSpec(), RealFooBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.foo
+'a-real-foo'
+
+- Binding specs can declare dependencies.
+>>> class ClassOne(object):
+...    def __init__(self, foo):
+...        self.foo = foo
+....
+>>> class BindingSpecOne(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='foo-')
+...
+>>> class ClassTwo(object):
+...     def __init__(self, class_one, bar):
+...         self.foobar = class_one.foo + bar
+...
+>>> class BindingSpecTwo(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('bar', to_instance='-bar')
+...     def dependencies(self):
+...         return [BindingSpecOne()]
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[BindingSpecTwo()])
+>>> class_two = obj_graph.provide(ClassTwo)
+>>> print class_two.foobar
+'foo--bar'
+
+The default implementation of __eq__() in BindingSpec says that two binding specs are equal if they are of exactly the same python type. You will need to override __eq__() (as well as __hash__()) if your binding spec is parameterized
+
+- provider methods,  start with provide_, and it assumes that the methods are providers for whatever the rest of their method names
+
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def provide_foo(self):
+...         return 'some-complex-foo'
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.foo
+'some-complex-foo'
+>>>
+
+- binding precedence, explicit binding take precedence over implicit bindings 
+
+Explicit bindings are the bindings that come from binding specs.
+
+Implicit bindings are the bindings created for classes in the modules and classes args passed to new_object_graph().
+
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class Foo(object):
+...     pass
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='foo-instance')
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.foo
+'foo-instance'
+>>>
+
+- safety, disable implicit binding 
+
+    + new_object_graph() uses implicit bindings by default. If you worry that you may accidentally inject a class or use a provider function unintentionally, then you can make new_object_graph() ignore implicit bindings
+    
+    only_use_explicit_bindings=True.
+    
+    + If you want to promote an implicit binding to be an explicit binding, you can annotate the corresponding class with @inject(). The @inject() decorator lets you create explicit bindings without needing to create binding specs
+
+- Pinject's default scope is SINGLETON. If you have a multi-threaded program, it's likely that some or all of the things that Pinject provides from singleton scope will be used in multiple threads. So, it's important that you ensure that such classes are thread-safe.
+
+Similarly, it's important that your custom scope classes are thread-safe.
+
+>>> class ExplicitlyBoundClass(object):
+...     @pinject.inject()
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class ImplicitlyBoundClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_instance='explicit-foo')
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()],
+...     only_use_explicit_bindings=True)
+>>> # obj_graph.provide(ImplicitlyBoundClass)  # would raise a NonExplicitlyBoundClassError
+>>> some_class = obj_graph.provide(ExplicitlyBoundClass)
+>>> print some_class.foo
+'explicit-foo'
+
+- Pinject annotations let you have different objects injected for the same arg name.
+
+    + On the arg side, an annotation tells Pinject only to inject using a binding whose binding key includes the annotation object.
+    
+    + On the binding side, an annotation changes the binding so that the key of the binding includes the annotation object.
+    
+>>> class SomeClass(object):
+...     @pinject.annotate_arg('foo', 'annot')
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', annotated_with='annot', to_instance='foo-with-annot')
+...         bind('foo', annotated_with=12345, to_instance='12345-foo')
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> some_class = obj_graph.provide(SomeClass)
+>>> print some_class.foo
+'foo-with-annot'
+>>>
+
+annotated_with arg to specify the annotation object. The decorator's first param, arg_name
+
+    + requiring a binding in the spec 
+>>> class MainBindingSpec(pinject.BindingSpec):
+...     def configure(self, require):
+...         require('foo', annotated_with='annot')
+
+- scopes, a single instance of bound-to class or instance is return by provider by default. Pinject will keep the singleton pattern 
+
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def provide_foo(self):
+...         return object()
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> some_class_1 = obj_graph.provide(SomeClass)
+>>> some_class_2 = obj_graph.provide(SomeClass)
+>>> print some_class_1.foo is some_class_2.foo
+True
+>>>
+
+    + A scope controls memoization (i.e., caching). A scope can choose to cache never,
+
+    + Singleton scope (SINGLETON) is the default and always caches. Prototype scope (PROTOTYPE) is the other built-in option and does no caching whatsoever
+    
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     @pinject.provides(in_scope=pinject.PROTOTYPE)
+...     def provide_foo(self):
+...         return object()
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> some_class_1 = obj_graph.provide(SomeClass)
+>>> some_class_2 = obj_graph.provide(SomeClass)
+>>> print some_class_1.foo is some_class_2.foo
+False
+>>>
+
+    + Memoization of class bindings works at the class level, not at the binding key level. Two fieds of a same class will get the same instance 
+
+- provider bindings, need to inject the ability to create instances on demand
+
+>>> class Foo(object):
+...   def __init__(self):
+...     self.forty_two = 42
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def configure(self, bind):
+...         bind('foo', to_class=Foo, in_scope=pinject.PROTOTYPE)
+...
+>>> class NeedsProvider(object):
+...     def __init__(self, provide_foo):
+...         self.provide_foo = provide_foo
+...
+>>> obj_graph = pinject.new_object_graph(binding_specs=[SomeBindingSpec()])
+>>> needs_provider = obj_graph.provide(NeedsProvider)
+>>> print needs_provider.provide_foo() is needs_provider.provide_foo()
+False
+>>> print needs_provider.provide_foo().forty_two
+42
+>>>
+
+    + provider bindings, which let you inject args named provide_something with provider functions
+    
+    + provider methods, which are methods of binding specs that provide instances of some arg name.
+
+- partial injection 
+    + tell provider which args will be pass directly when call the provider function in Pinject
+    
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     @pinject.inject(['widget_polisher'])
+...     def provide_widget(self, color, widget_polisher):
+...         return some_function_of(widget_polisher, color)
+...     def provide_something_needing_widgets(self, colors, provide_widget):
+...         return SomethingNeedingWidgets(
+...             [provide_widget(color) for color in colors])
+...
+>>>
+
+ there is a method called provide_widget() and an arg of provide_something_needing_widgets() called provide_widget, these are not exactly the same! The latter is a dependency-injected wrapper around the former.
+
+>>> class Widget(object):
+...     @pinject.inject(['widget_polisher'])
+...     def __init__(self, color, widget_polisher):
+...         pass  # normally something involving color and widget_polisher
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     def provide_something_needing_widgets(self, colors, provide_widget):
+...         return SomethingNeedingWidgets(
+...             [provide_widget(color) for color in colors])
+...
+>>>
+
+    + The @inject() decorator also takes an all_except arg. You can use this, instead of the (first positional) arg_names instead of use the first arg of inject method to specify which args are not automatic injected. 
+    
+>>> class Widget(object):
+...     # equivalent to @pinject.inject(['widget_polisher']):
+...     @pinject.inject(all_except=['color'])
+...     def __init__(self, color, widget_polisher):
+...         pass  # normally something involving color and widget_polisher
+...
+>>>
+    
+- custom scopes is any class that implements the Scope interface. it is used when some objects need to be reused which lifetime is less than the entire lifetime of your program 
+
+class Scope(object):
+    def provide(self, binding_key, default_provider_fn):
+        raise NotImplementedError()
+
+>>> class MyScope(pinject.Scope):
+...     def __init__(self):
+...         self._cache = {}
+...     def provide(self, binding_key, default_provider_fn):
+...         if binding_key not in self._cache:
+...             self._cache[binding_key] = default_provider_fn()
+...         return self._cache[binding_key]
+...     def clear(self):
+...         self._cache = {}
+...
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     @pinject.provides(in_scope='my custom scope')
+...     def provide_foo(self):
+...         return object()
+...
+>>> my_scope = MyScope()
+>>> obj_graph = pinject.new_object_graph(
+...     binding_specs=[SomeBindingSpec()],
+...     id_to_scope={'my custom scope': my_scope})
+>>> some_class_1 = obj_graph.provide(SomeClass)
+>>> some_class_2 = obj_graph.provide(SomeClass)
+>>> my_scope.clear()
+>>> some_class_3 = obj_graph.provide(SomeClass)
+>>> print some_class_1.foo is some_class_2.foo
+True
+>>> print some_class_2.foo is some_class_3.foo
+False
+>>>
+
+The binding_key passed to provide() will be an object implementing __eq__() and __hash__(), default_provider_fn is a zero-arg function 
+
+Scopes almost always have other methods that control clearing the scope's cache.
+
+    + thread safe scope 
+>>> class MyScope(pinject.Scope):
+...     def __init__(self):
+...         self._cache = {}
+...         self._rlock = threading.RLock()
+...     def provide(self, binding_key, default_provider_fn):
+...         with self._rlock:
+...             if binding_key not in self._cache:
+...                 self._cache[binding_key] = default_provider_fn()
+...             return self._cache[binding_key]
+...     def clear(self):
+...         with self._rlock:
+...             self._cache = {}
+>>>
+
+- scope accessibility, Pinject lets you pass a validation function as the is_scope_usable_from_scope arg to new_object_graph(). This function takes two scope identifiers and returns True if an object in the first scope can be injected into an object of the second scope.
+
+>>> class RequestScope(pinject.Scope):
+...     def start_request(self):
+...         self._cache = {}
+...     def provide(self, binding_key, default_provider_fn):
+...         if binding_key not in self._cache:
+...             self._cache[binding_key] = default_provider_fn()
+...         return self._cache[binding_key]
+...
+>>> class SomeClass(object):
+...     def __init__(self, foo):
+...         self.foo = foo
+...
+>>> class SomeBindingSpec(pinject.BindingSpec):
+...     @pinject.provides(in_scope=pinject.SINGLETON)
+...     def provide_foo(bar):
+...         return 'foo-' + bar
+...     @pinject.provides(in_scope='request scope')
+...     def provide_bar():
+...         return '-bar'
+...
+>>> def is_usable(scope_id_inner, scope_id_outer):
+...     return not (scope_id_inner == 'request scope' and
+...                 scope_id_outer == scoping.SINGLETON)
+...
+>>> my_request_scope = RequestScope()
+>>> obj_graph = pinject.new_object_graph(
+...     binding_specs=[SomeBindingSpec()],
+...     id_to_scope={'request scope': my_request_scope},
+...     is_scope_usable_from_scope=is_usable)
+>>> my_request_scope.start_request()
+>>> # obj_graph.provide(SomeClass)  # would raise a BadDependencyScopeError
+>>>
+
+- changing naming conventions 
+
+- miscellaneous, pass use_short_stack_traces=False to new_object_graph() to help debugging the dependency injection problem 
+
+- summary 
+Pinject uses code and decorators to configure injection, not a separate config file.
+Bindings are keyed by arg name, (not class type, since Python is dynamically typed).
+Pinject automatically creates bindings to some_class arg names for SomeClass classes.
+You can ask Pinject only to create bindings from binding specs and classes whose __init__() is marked with @inject().
+A binding spec is a class that creates explicit bindings.
+A binding spec can bind arg names to classes or to instances.
+A binding spec can bind arg names foo to provider methods provide_foo().
+Binding specs can depend on (i.e., include) other binding specs.
+You can annotate args and bindings to distinguish among args/bindings for the same arg name.
+Pinject has two built-in scopes: "singleton" (always memoized; the default) and "prototype" (never memoized).
+You can define custom scopes, and you can configure which scopes are accessible from which other scopes.
+Pinject doesn't allow injecting None by default, but you can turn off that check.
