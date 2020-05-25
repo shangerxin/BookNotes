@@ -31,7 +31,7 @@ Observables only run when they know someone’s listening in to the data they’
     ​observer.next(counter);
 ​    let​ interv = setInterval(() => {
         ​counter++;
-    ​observer.next(counter);
+        ​observer.next(counter);
     ​}, 100);
 ​   return​ ​function​ unsubscribe() { clearInterval(interv); };
 });
@@ -95,27 +95,416 @@ aSubscription.unsubscribe();
 
     + The delay operator is passed an integer argument and delays all events coming through the observable chain by that many milliseconds
 
+​ 	​of​(1,2,3)
+​ 	.pipe(
+​ 	  delay(1000)
+​ 	)
+​ 	.subscribe(console.log);
 
-
-
-
-
-
+    + example using pip 
+    ​import​ { interval } ​from​ ​'rxjs'​;
+​ 	​import​ { take, map, delay} ​from​ ​'rxjs/operators'​;
+​ 	
+​ 	interval(1000)
+​ 	  .pipe(
+​ 	    take(5),
+​ 	    map(val => val * 5),
+​ 	    delay(500)
+​ 	  )
+​ 	  .subscribe(console.log);
 
 
 # Manipulating Streams 
+- map 
+​ 	​let​ keyUp$ = fromEvent(textbox, ​'keyup'​)
+​ 	.pipe(
+​ 	  map(event => event.target.value),
+​ 	  map(wordString => wordString.split(​/​​\s​​+/​)),
+​ 	  map(wordArray => wordArray.map(pigLatinify))
+​ 	)
+​ 	.subscribe(translated => console.log(translated));
+- flatten like Promise.all 
+​ 	Promise.all([
+​ 	  fetch(​'/endpoint/productA'​),
+​ 	  fetch(​'/endpoint/productB'​),
+​ 	  fetch(​'/endpoint/productC'​)
+​ 	])
+​ 	.then(arrayOfProducts => displayProducts(arrayOfProducts));
+
+    + flatMap , Since flatMapping combines multiple observables into a single stream, the operator is called mergeMap.
+    
+​ 	​let​ results = [
+​ 	  { data: [1,2,3]},
+​ 	  { error: ​'Something went wrong'​},
+​ 	  { data: [7,5,7]},
+​ 	  { data: [1,3,1]},
+​ 	];
+​ 	
+​ 	​let​ dataPoints = flatMap(results, result => {
+​ 	  ​if​ (result.data) {
+​ 	    ​return​ result.data;
+​ 	  }
+​ 	  ​return​ [];
+​ 	});
+    
+- mergeMap, If mergeMap’s function returns an observable, mergeMap subscribes to it, so the programmer only needs to be concerned about the business logic.
+- from constructor, The inner observable here uses the from constructor, which takes any unwrappable value (arrays, promises, other observables), unwraps that value, and passes each resulting item along as a separate event.
+
+​ 	mergeMap(wordString =>
+​ 	  ​// Inner observable​
+​ 	  ​from​(wordString.split(​/​​\s​​+/​))
+​ 	  .pipe(
+​ 	    map(pigLatinify),
+​ 	    reduce((bigString, newWord) => bigString + ​' '​ + newWord, ​''​)
+​ 	  )
+​ 	)
+
+- reduce, A simple reduce to sum all of the numbers in an observable stream looks
+​ 	​from​([1,2,3])
+​ 	.pipe(
+​ 	  reduce((accumulator, val) => accumulator + val, 0)
+​ 	)
+​ 	.subscribe(console.log); ​// Logs `6` once
+
+- filter, picky about what values are allowed 
+- tap, doesn't manipulate the stream but allows a developer to tap into the stream and debug it 
+​ 	interval(1000)
+​ 	.pipe(
+​ 	  tap(val => {
+​ 	    console.log(​'inside tap'​, val);
+​ 	    ​// This return doesn't change the final value​
+​ 	    ​return​ val * 100;
+​ 	  })
+​ 	)
+​ 	.subscribe(val => console.log(​'inside subscribe'​, val));
+
+- typeahead, let’s tackle a different problem: typeahead.  A typeahead system is one where, as the user types, the UI suggests possible options. 
 
 
 # Managing Asynchronous Events 
+- making ajax requests 
+​ ​import​ { ajax } ​from​ ​'rxjs/ajax'​;​ ​ ajax(​'/api/managingAsync/ajaxExample'​)​ .subscribe(console.log);
 
+- handling errors 
+​ 	.subscribe(
+​ 	  ​function​ next(val) { ​/* A new value has arrived */​ },
+​ 	  ​function​ error(err) { ​/* An error occured */​ },
+​ 	  ​function​ done() { ​/* The observable is done */​ }
+​ 	);
+
+- promises vs observables with ajax. a promise represents a single value delivered over time where an observable represents multiple values.
+
+    + work with promise based systems 
+    
+    the constructor fromPromise and operator toPromise.  The constructor takes a promise and emits whatever the promise resolves to
+    
+​ 	​function​ fetchObservable(endpoint) {
+​ 	  ​let​ requestP = fetch(endpoint)
+​ 	  .then(res => res.json());
+​ 	  ​return​ fromPromise(requestP);
+​ 	}
+​ 	
+​ 	fetchObservable(​'/user'​)
+​ 	.subscribe(console.log);
+
+​ 	​let​ helloP = ​of​(​'Hello world!'​)
+​ 	.toPromise();
+​ 	
+​ 	helloP.then(console.log);
+
+- loading with progress bar 
+​ 	​let​ requests = [];
+​ 	​for​ (​let​ x = 0; x < 10; x++) {
+​ 	  ​for​ (​let​ y = 0; y < 10; y++) {
+​ 	    ​let​ endpoint =
+​ 	      ​`http://localhost:3000/api/managingAsync/assets/coverpart-​${x}​-​${y}​.png`​;
+​ 	    ​let​ request$ = ajax({
+​ 	      url: endpoint,
+​ 	      responseType: ​'blob'​
+​ 	    })
+​ 	    .pipe(
+​ 	      map(res => ({
+​ 	        blob: res.response,
+​ 	        x,
+​ 	        y
+​ 	      }))
+​ 	    );
+​ 	    requests.push(request$);
+​ 	  }
+​ 	}
+
+    + scan is an impatient reduce.  Instead of politely waiting for the orignal stream to complete, scan blurts out the latest result on every event.
+    
+​ 	​import​ { merge } ​from​ ​'rxjs'​;
+​ 	​import​ { scan } ​from​ ​'rxjs/operators'​;
+​ 	
+​ 	merge(...arrayOfRequests)
+​ 	.pipe(
+​ 	  scan((prev) => prev + (100 / arrayOfRequests.length), 0)
+​ 	)
+​ 	.subscribe(percentDone => {
+​ 	  progressBar.style.width = percentDone + ​'%'​;
+​ 	  progressBar.innerText = Math.round(percentDone) + ​'%'​;
+​ 	});
+
+    scan’s function also takes two values—the current internal state and the latest item to be passed down the stream. 
+    
 
 # Advanced Async 
+- preventing race conditions with switchMap 
+typically manifests itself like so:
+
+user types a
+get/render response for a
+user types ab
+user types abc
+get/render response for abc
+get/render response for ab
+
+
+​ 	fromEvent(searchBar, ​'keyup'​)
+​ 	.pipe(
+​ 	  pluck(​'target'​, ​'value'​),
+​ 	  switchMap(query => ajax(endpoint + searchVal))
+​ 	)
+​ 	.subscribe(results => updatePage(results));
+
+
+it’s switchMap—an operator that’s been stealing notes from mergeMap.  switchMap works the same way as mergeMap: for every item, it runs the inner observable, waiting for it to complete before sending the results downstream.  There’s one big exception: if a new value arrives before the inner observable initiated by the previous value completes, switchMap unsubscribes from the observable request (therefore cancelling it) and fires off a new one.  This means that you can implement custom unsubscribe logic for your own observables
+
+- debouncing events, There comes a time when several events fire in a row, and we don’t want to do something on every event, but rather, when the events stop firing for a specified period.
+
+​ 	​let​ logPause = () => console.log(​'There was a pause in the typing'​);
+​ 	​// This won't work, it will log on every keystroke​
+​ 	​// input.addEventListener('keydown', logPause);​
+​ 	​// Instead, we debounce logPause​
+​ 	​let​ logPauseDebounced = debounce(logPause);
+​ 	input.addEventListener(​'keydown'​, logPauseDebounced);
+
+A default of 333 ms usually works when waiting for a user to stop typing.
+
+​ 	fromEvent(searchBar, ​'keyup'​)
+​ 	.pipe(
+​ 	  pluck(​'target'​, ​'value'​),
+​ 	  debounceTime(333),
+​ 	  switchMap(query => ajax(endpoint + searchVal))
+​ 	)
+​ 	.subscribe(results => updatePage(results));
+
+- throttling events, The throttle operator acts as a time-based filter.  After it allows a value through, it won’t allow a new value, until a preset amount of time has passed.
+
+​ 	cpuStatusWebsocket$
+​ 	.pipe(throttle(500))
+​ 	.subscribe(cpuVal => {
+​ 	  cpuPercentElement.innerText = cpuVal;
+​ 	});
+- tap operator, a transparently perform actions or side-effects, such as logging, learnrxjs.io/learn-rxjs/operators/utility/do
+
+tap(nextOrObserver: function, error: function, complete: function): Observable
+
+​ 	fromEvent<any>(searchBar, ​'keyup'​)
+​ 	.pipe(
+​ 	  map(event => event.target.value),
+​ 	  filter(query => query.length > 3),
+​ 	  distinctUntilChanged(),
+​ 	  debounceTime(333),
+​ 	  tap(() => loadingEl.style.display = ​'block'​),
+​ 	  switchMap(query => ajax(endpoint + query)),
+
+- Building a stock ticker. reduce or scan operators.  In this case, we want to use scan, because it emits a new value for every event on the stream, whereas reduce waits for the stream to complete.  This stream never ends, so we use scan.
+
+​ 	.pipe(
+​ 	  scan((accumulatedData, nextItem) => {
+​ 	    accumulatedData.push(nextItem);
+​ 	    ​if​ (accumulatedData.length > 10) {
+​ 	      ​// Remove the frontmost (i.e. oldest) item​
+​ 	      accumulatedData.shift();
+​ 	    }
+​ 	    ​return​ accumulatedData;
+​ 	  }, []), ​// Remember, the second parameter to `scan` is the initial state​
+​ 	  map(newDataSet => {
+​ 	    ​let​ intermediary = newDataSet.reduce((prev, datum) => {
+​ 	      datum.forEach(d => {
+​ 	        ​if​ (!prev[d.label]) {
+​ 	          prev[d.label] = []
+​ 	        }
+​ 	        prev[d.label].push(d.price);
+​ 	      })
+​ 	      ​return​ prev;
+​ 	    }, {});
+​ 	    ​return​ Object.keys(intermediary).map(key => {
+​ 	      ​// convert into something chart.js can read​
+​ 	      ​return​ {
+​ 	        label: key,
+​ 	        data: intermediary[key],
+​ 	        fill: ​false​,
+​ 	        backgroundColor: colorMap[key],
+​ 	        borderColor: colorMap[key]
+​ 	      }
+​ 	    });
+​ 	  })
+​ 	)
 
 
 # Multiplexing Observables 
+- each new subscription to an obserable runs the root creation function 
+
+​ 	​let​ myObs$ = ​new​ Observable(o => {
+​ 	  console.log(​'Creation Function'​);
+​ 	  setInterval(() => o.next(​'hello'​, Math.random()), 1000);
+​ 	});
+​ 	
+​ 	myObs$.subscribe(x => console.log(​'streamA'​, x));
+​ 	
+​ 	setTimeout(() => {
+​ 	  myObs$.subscribe(x => console.log(​'streamB'​, x));
+​ 	}, 500);
+
+create function will be logged twice. The advantage of this is each stream of the obserable is isolated 
+
+- hot stream is a single instance can be subscribe mutiple times without call the creation function 
+
+​ 	​import​ { Observable } ​from​ ​'rxjs'​;
+​ 	​import​ { share } ​from​ ​'rxjs/operators'​;
+​ 	
+​ 	​let​ myObs$ = ​new​ Observable(o => {
+​ 	  console.log(​'Creation Function'​);
+​ 	  setInterval(() => o.next(​'hello '​ + Math.random()), 1000);
+​ 	})
+​ 	  .pipe(
+​ 	    share()
+​ 	  );
+​ 	
+​ 	myObs$.subscribe(x => console.log(​'streamA'​, x));
+​ 	
+​ 	setTimeout(() => {
+​ 	  myObs$.subscribe(x => console.log(​'streamB'​, x));
+​ 	}, 500);
+
+- public, connect operators is used to add support manually trigger start the stream. It is add addditional capatiblity to share operator to prevent miss notification from an subscriber
+
+​ 	​// A multicasted observable you can pass to all of our components​
+​ 	​let​ users$ = ajax(​'/user'​)
+​ 	.pipe(publish());
+​ 	
+​ 	​// Once all of our components are subscribed​. then the message start to dispatch
+​ 	user$.connect();
+
+- multicasting with the subject class, a Subject acts much like a regular observable, but each subscription is hooked into the same source
+
+​ 	​let​ mySubject = ​new​ Subject();
+​ 	
+​ 	mySubject.subscribe(val => console.log(​'Subscription 1:'​, val));
+​ 	mySubject.subscribe(val => console.log(​'Subscription 2:'​, val));
+​ 	
+​ 	mySubject.next(42);
+
+    + observer can be directly pass into a subscribe call 
+    
+​ 	​let​ mySubject = ​new​ Subject();
+​ 	
+​ 	mySubject.subscribe(val => console.log(val));
+​ 	
+​ 	​let​ myObservable = interval(1000);
+​ 	
+​ 	​// Multicast myObservable's data through mySubject​
+​ 	myObservable.subscribe(mySubject);    
+
+    + async subscribe 
+    
+    AJAX problem is an AsyncSubject, a specialized Subject that keeps track of the source observable and waits for it to complete.  Then, and only then, does it pass on the resulting value to all subscribers. 
+
+​ 	​let​ user$ = ajax(​'/user'​);
+​ 	​let​ asyncSub = ​new​ AsyncSubject();
+​ 	user$.subscribe(asyncSub);
+​ 	
+​ 	asyncSub.subscribe(val => console.log(​'sub 1:'​, val.response));
+​ 	
+​ 	​// If the request completes before the subscription,​
+​ 	​//    the subscription will still be called with the result​
+​ 	setTimeout(() => {
+​ 	  asyncSub.subscribe(val => console.log(​'sub 2:'​, val.response));
+​ 	}, 3000);
+
+- The filter method expects to take a function that checks the latest value in the stream and returns true or false.  filter only passes on a value if the function returns true.
+
+​ 	merge(
+​ 	  fromEvent(loginBtn, ​'click'​),
+​ 	  fromEvent<any>(loginInput, ​'keypress'​)
+​ 	  .pipe(
+​ 	    ​// Ignore all keys except for enter​
+​ 	    filter(e => e.keyCode === 13)
+​ 	  )
+​ 	)
+​ 	.pipe(
+​ 	  map(() => loginInput.value),
+​ 	  filter(Boolean),
+​ 	  tap(showLoadingSpinner)
+​ 	)
+​ 	.subscribe(authenticateUser);
+
+- Previously, you used combineLatest whenever you needed to combine the most recent value from multiple streams.  combineLatest comes with a catch, though—it emits a new value when any of the streams emits a value
+
+example code to send message when UI button clicked 
+
+​ 	merge(
+​ 	  fromEvent<any>(sendBtn, ​'click'​),
+​ 	  fromEvent<any>(msgBox, ​'keypress'​)
+​ 	  .pipe(
+​ 	    ​// Only emit event when enter key is pressed​
+​ 	    filter(e => e.keyCode === 13)
+​ 	  )
+​ 	)
+​ 	.pipe(
+​ 	  map(() => msgBox.value),
+​ 	  filter(Boolean),
+​ 	  tap(() => msgBox.value = ​''​),
+​ 	  withLatestFrom(
+​ 	    roomLoads$,
+​ 	    userSubject$,
+​ 	    (message, room, user) => ({ message, room, user })
+​ 	  )
+​ 	)
+​ 	.subscribe(val => chatStream$.next(<any>val));
+
+observable stream (using merge and scan), we also want to perform different actions depending on which stream emits a new value.
 
 
 # Using HTTP in Angular 
+- HttpClient provides a post method to send a POST request
+
+​ 	addNewPhoto(photoUrl: string) {
+​ 	  ​this​.http.post<IPhoto>(​this​.api + ​'/addNewPhoto'​, {
+​ 	    url: photoUrl
+​ 	  })
+​ 	    .subscribe();
+​ 	}
+
+- Intercepting HTTP calls 
+
+​ 	​import​ { Injectable } ​from​ ​'@angular/core'​;
+​ 	​import​ { Observable } ​from​ ​'rxjs'​;
+​ 	​import​ {
+​ 	  HttpResponse,
+​ 	  HttpErrorResponse,
+​ 	  HttpEvent,
+​ 	  HttpInterceptor,
+​ 	  HttpRequest,
+​ 	  HttpHandler
+​	} ​from​ ​'@angular/common/http'​; 
+​ 	
+​ 	@Injectable({
+​ 	  providedIn: ​'root'​
+​ 	})
+​​​	​export​ ​class​ RetryInterceptorService ​implements​ HttpInterceptor { 
+​ 	
+​ 	  ​constructor​() { }
+​ 	
+​​​	  intercept(request: HttpRequest<any>, next: HttpHandler): 
+​ 	    Observable<HttpEvent<any>> {
+​ 	  }
+​ 	}
+
 
 
 # Building Reactive Forms in Angular 
