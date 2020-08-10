@@ -1,0 +1,543 @@
+Kubernetes for Absolute Beginners - Hands-on = Mumshad Mannambeth;Note=Erxin
+
+# Introduction
+- other containers 
+- other container orchestration solutions 
+docker swarm 
+kubernetes, open source google project 
+MESOS
+
+- kubernetes advantage 
+setup declarative object configuration files
+
+
+# Kubernets overview 
+- terms 
+cluster, container several nodes 
+node types, master and node 
+- master node 
+will run the process, kube-apiserver 
+controller 
+scheduller 
+- worker node 
+will run the process, kubelet
+container runtime 
+
+- kubectl commands, parts of 
+$ kubectl run hello-minikube 
+$ kubectl cluster-info 
+$ kubectl get nodes 
+
+- components 
+API server 
+etcd, key-value store used by kuberenets to store all data to manage cluster 
+scheduler, manage distributed nodes 
+kubelet, it's the agent running on the node 
+controller, will be notify node end points goes down, it will be used to decide which node will be pull up etc. 
+container runtime, it can be docter or other containers
+
+
+# Setup Kubernets 
+- minikube for single VM contain both master and node 
+ https://kubernetes.io/docs/tasks/tools/install-minikube/
+- kubeadm 
+- steps to setup minikube
+    + enable virtualization from bios 
+    + install hypervisor such as virtualbox 
+    + install kubectl 
+    + follow the wizard to enable the minikube 
+    
+- steps to setup kubeadm 
+    1. set up laptops for master and work node OS 
+
+    2. add docker to all nodes 
+    
+    3. add kubeadm to all nodes 
+    
+    4. initialize master node 
+    
+    5. POD network will be used to connect master and worker nodes 
+    
+    6. join the worker node to the master 
+- play-with-k8s.com 
+
+follow the instructions to setup kubernets clusters 
+
+
+
+# Kubernetes concepts 
+- POD
+
+app is built to docker image 
+
+kubernetes cluster has already been setup, all services should be in running states
+
+- container is encapsulate into kubernetes POD. it will be deployed all nodes. POD is the smallest element that can be deployed to a worker node 
+
+a node can run multiple POD together. 
+
+POD is one on one map to the container image 
+
+- multi-container PODs
+
+PODs support add different kinds of containers into one single PODs 
+
+the different container can communicate each other with localhost 
+
+- multi-container POD is rare to be used 
+- commands relative to POD 
+$ kubectl run ngix --image ngix 
+$ kubectl get pods 
+
+- demo 
+    + on master 
+    $ kubectl get nodes 
+    
+    $ kubectl get nodes -o wide 
+    will display ip and node field in the output table 
+    
+    $ kubectl describe pods 
+    
+    $ kubectl run nginx --image=nginx 
+    
+    wait a while the pod state will be changd to running 
+    
+
+# YAML introduction 
+- reference 
+https://yaml.org/
+
+- xml 
+- json 
+- yaml, tab intend 
+    + key value pair 
+fruit:apple 
+vegetable: carrot 
+
+    + array/list 
+frusts:
+- orange 
+- apple 
+
+    + dicationary / map 
+banana:
+    calories:105 
+    fat: 0.4g 
+
+
+
+# Kubernetes concepts - PODs ReplicaSets, Deployments 
+- PODs with YAML
+
+pod-defeinition.yml 
+
+    + top level fields of PODs 
+
+apiVersion:
+kind:Pod 
+metadata:
+    name: myapp-pod 
+    labels:
+        app:myapp 
+        type:front-end 
+spec: 
+    containers:
+        - name: nginx-container 
+          image:nginx 
+          
+$ kubectl create -f pod-definition.yml 
+        
+    + kind definitions 
+    
+kind    version 
+POD     v1 
+Service v1 
+ReplicaSet  apps/v1 
+Deployment  apps/v1 
+
+   + commands 
+$ kubectl get pods 
+$ kubectl describe pod myapp-pod 
+
+- tips & tricks 
+    + webstorm plugins for kubernetes and openshift resource support 
+    + vscode etc. 
+    
+    + http://yamllint.com, online checker 
+- Replication Controllers and ReplicaSets 
+    + replication controller, monitor kubernetes objects 
+    
+    + replication controller will automatic bring up pod when one is failed 
+    
+    + load balancing & scaling 
+    
+    + terms 
+    replication controller, old technology
+    replica set, will be used to replace the replication controller 
+    
+    + create replication controller with definition file rc-defintion.yml, have four main fields 
+    
+apiVersion:
+kind:
+metadata:
+
+spec:
+    template:
+    
+    //POD template, without the apiVersion and kind field
+    
+    replicas: 3 //the number of the replica
+    
+we can reuse the POD definition file content into the template. then 
+  
+$ kubectl create -f re-definition.yml 
+
+will create the pods required by the replication defintion files 
+
+$ kubectl get replicationcontroller 
+
+$ kubectl get pods 
+
+will list current running pods 
+
+- replication set definition file 
+    + example content 
+apiVersion: apps/v1 
+kind: ReplicaSet 
+metadata:
+    name: myapp-replicaset 
+    labels:
+        app: myapp 
+        type: front-end 
+    
+    
+spec:
+    template: //pod template 
+        metadata:
+        ...
+        spec:
+        ...
+
+    replicas: 3
+    selector:
+        matchLabels:
+            type:front-end 
+    
+    
+selector is the major different compare to the replication controller and replica sets 
+    
+selector is also provide other type of selectors 
+
+
+$ kubectl create -f replicaset-definition.yml 
+$ kubectl get replicaset 
+$ kubectl get pods 
+
+    + scale, increase the replicas, add the number field of replicas of the deinition file and run 
+$ kubectl replace -f replicaset-definition.yml 
+$ kubectl scale --replicas=6 -f replicaset-defintion.yml 
+$ kubectl scale --replicas=6 replicaset myapp-relicaset 
+
+we call also control the scale based on the load. This will be introduce in the later content
+
+$ kubectl get replicaset 
+$ kubectl delete replicaset myapp-replicaset 
+
+    + replica set is a process monitor the PODs 
+
+   
+- deployments, can be used to support run multiple services and automatic upgrade new deployed service images 
+
+    + create deployment definition files 
+apiVersion: apps/v1 
+kind: Deployment 
+metadata:
+    name: myapp-deployment 
+    labels: 
+        app: myapp 
+        type: front-end 
+        
+spec:
+    template:
+        metadata:
+            name: myapp-pod 
+            labels:
+                app: myapp 
+                type: front-end
+            spec:
+                containers:
+                - name: ngix-container
+                  image: nginx 
+                  
+    replicas: 3
+    selector:
+        matchLabels:
+            type: front-end 
+            
+$ kubectl get all 
+will list all replicas 
+
+- deployments, update and rollback 
+    + create deployment definition file 
+    
+apiVersion: apps/v1 
+kind:Deployment 
+metadata:
+    name: myapp-deployment 
+    labels:
+        app: myapp 
+        type: front-end 
+        
+    spec:
+        template:
+            metadata:
+                name:myapp-pod 
+                labels:
+                    app: myapp 
+                    
+            spec:
+                containers:
+                    - name: nginx-container
+                    image: nginx 
+                    
+        replicas: 3
+        
+        selector:
+            matchLabels:
+                app: myapp
+                
+    + the replicaSet definiton file is not required in real production environment. We only need to create a deployment defintion file. The content for the replica is as same as the replicaSet 
+    
+    + validate the yaml with http://yamllint.com
+    
+    + make sure nothing running 
+    $ kubectl get all 
+    check nothing running 
+    
+    $ kubectl create -f deployment-definition.yml
+    create the deployment 
+    
+- update and Rollback, rollout is triggered when the software upgrade. Then all the images of the containers should be updated.  
+
+$ kubectl rollout status deployment/myapp-deployment 
+$ kubectl roolout history deployment/myapp-deployment 
+
+    + deployment tragetgy 
+    Recreate, pull down all the POD and update the container image and recreate the POD. The application will be shutdown.
+    
+    Rolling update, is the default strategy, which will continue update. The application will not be shutdown
+    
+    + kubectl apply the deployment changes 
+    $ kubectl apply -f deployment-definition.yml 
+    a new deployment is created 
+    
+    $ kubectl set image <image-name> <version-info>
+    to update the image of your application. the deployment definition file may also need to be updated 
+    
+    + upgrades
+    
+    kubenetes will create a new replica set and pull up new PODs and shudown the PODs in the older replica set 
+    
+    kubunetes allow to rollback to previous versions 
+    $ kubectl rollout undo deployment/myapp-deployment 
+    
+    $ kubectl get replicasets 
+    
+    $ kubectl rollout status deployment/myapp
+    
+
+# Networking in Kubernetes 
+- kubernetes networking
+    + each node have a single IP assigned by kubernetes 
+
+    + PODs link to an internal IP 10.244.0.0
+IP is assign to POD 10.244.0.x 
+
+in docker world each IP is assign to docker 
+    
+    + kubernetes cluster, expect us setup network
+    
+    all containers/PODs can communnicate to one anotehr without NAT 
+    
+    all nodes can communicate with all containers and vice-versa witout NAT 
+
+- prebuild solution to setup networks for kubernetes 
+cisco 
+vmware NSX
+cilium 
+flannel 
+cilium 
+
+- cluster networking setup, enable communiation between different node and PODs 
+192.168.1.2, 192.168.1.3, 
+
+
+
+# Services 
+- deploy application to allowed client to access to kubenetes POD
+
+192.168.1.10  ---> {
+    192.168.1.2 (node)
+    ^
+    |
+    service {
+    
+        10.106.1.12|80 port
+    }
+    |
+    V
+    {
+        80 target port
+        10.244.0.0
+        
+        POD{
+            10.244.0.2
+        }
+    }
+}
+
+the kubenetes service is used to connect outside word to PODs 
+
+- service types 
+NodePort, mapping IP of node to port of POD, such as 30008 -> 80 port of POD
+ClisterIP 
+LoadBalancer 
+
+- service definition file 
+apiVersion: v1 
+kind: Service 
+metadata:
+    name: myapp-service 
+    
+spec:
+    type: NodePort 
+    ports:
+    - targetPort: 80 
+      port 80
+      nodePort: 30008
+      
+    selector: //add POD name and type in the POD definition file
+        app: myapp
+        type: front-end
+    
+- multiple PODs running in the node. If service select multiple PODs, the service will automatic do random load blance 
+
+- if the PODs are distributed in multiple nodes. When we create a service. kubernets will automatic extend the service to all other nodes. 
+
+the process to create service is the same 
+
+$ kubectl get services 
+
+- services, clusterIP
+front-end: apps PODs
+            ^
+            |
+            commuications with backend 
+            |
+            V   
+back-end: services PODs
+            ^
+            |
+            communication with redis 
+            |
+            V
+redis: redis PODs
+
+the kubenetes services can provide unified access for the front-end and back-end and redis layer 
+
+    + clusterIP definition file 
+apiVersion: v1 
+kind: Service 
+metadata: 
+    name: back-end 
+    
+spec:
+    type: ClusterIP 
+    ports:
+    - targetPort: 80 
+      port:80
+      
+    selector:
+        app: myapp
+        type:back-end
+        
+    + the service can be access with the cluster IP and the service name
+    $ kubectl create -f service-definition.yml 
+    
+    $ kubectl get services 
+    
+
+# Microservices Architecture 
+- demo deploy to AWS GCP
+
+docker run --links is used to link two containers 
+
+# Conclusion 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

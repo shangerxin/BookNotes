@@ -523,14 +523,155 @@ observable stream (using merge and scan), we also want to perform different acti
 ​ 	  )
 ​ 	);
 
+The HttpInterceptor interface is what tells Angular about the role of this service
+
+retryWhen, which allows us to handle the error as an observable stream, optionally retrying after a check to ensure the status code is in the 500 class
+
+
 
 # Building Reactive Forms in Angular 
+- composed rxjs with angular form api 
+
+​ 	​export​ ​class​ PhoneNumComponent ​implements​ OnInit {
+​ 	  phoneNumber = ​new​ FormControl(​''​, [
+​ 	    (control: AbstractControl) => {
+​ 	      ​// remove anything that isn't a digit​
+​ 	      ​const​ numDigits = control.value.replace(​/​​[^\d]​​+/g​, ​''​).length;
+​ 	      ​// Only worried about US-based numbers for now, no need for country code​
+​ 	      ​if​ (numDigits === 10) { ​return​ ​null​; }
+​ 	      ​// Uh oh, something's wrong​
+​ 	      ​if​ (numDigits > 10) {
+​ 	        ​return​ {
+​ 	          tooLong: { numDigits }
+​ 	        };
+​ 	      } ​else​ {
+​ 	        ​return​ {
+​ 	          tooShort: { numDigits }
+​ 	        };
+​ 	      }
+​ 	    }
+​ 	  ]);
+
+- using advanced validation 
+//registration-form.component.ts, using built in validation 
+
+​ 	username: [​''​, [
+​ 	  Validators.required,
+​ 	  Validators.maxLength(20),
+​ 	  Validators.minLength(5)
+​ 	],
+​ 	  [(control) => {
+​ 	    ​return​ ​this​.http.​get​(​this​.endpoint + ​'reactiveForms/usernameCheck/'​
+​ 	       + control.value)
+​ 	    .pipe(
+​ 	      map((res: any) => {
+​ 	        ​if​ (res.taken) {
+​ 	          ​return​ { usernameTaken: ​true​ };
+​ 	        }
+​ 	      })
+​ 	    );
+​ 	  }]
+​ 	],
+
+- updating form groups 
+​ 	​let​ myForm = fb.group({
+​ 	  name: ​''​,
+​ 	  favoriteFood: ​''​
+​ 	});
+​ 	
+​ 	​// This fails, we need to also provide favoriteFood​
+​ 	myForm.setValue({ name: ​'Randall'​ });
+
+- submitting the form 
+​ 	save() {
+​ 	  ​return​ ​this​.http.post(​this​.endpoint + ​'reactiveForms/user/save'​,
+​ 	     ​this​.registrationForm.value)
+​ 	  .subscribe(
+​ 	    next => window.localStorage.registrationForm = ​''​,
+​ 	    err => console.log(err),
+​ 	    () => console.log(​'done'​)
+​ 	  );
+​ 	}
+
+- fetching component data in the route 
+​ 	​import​ { Injectable } ​from​ ​'@angular/core'​;
+​ 	​import​ {
+​ 	  Router, Resolve
+​ 	} ​from​ ​'@angular/router'​;
+​ 	​import​ { combineLatest } ​from​ ​'rxjs'​;
+​ 	​import​ { ajax } ​from​ ​'rxjs/ajax'​;
+​ 	​import​ { pluck, map } ​from​ ​'rxjs/operators'​;
+​ 	
+​ 	@Injectable()
+​​ 	​export​ ​class​ UserDetailResolver ​implements​ Resolve<any> { 
+​ 	  ​constructor​() { }
+​ 	
+​ 	  resolve() {
+​ 	    ​return​ combineLatest(
+​ 	      ajax(​'http://localhost:3000/ng2/reactiveForms/userData/addresses'​)
+​ 	      .pipe(pluck(​'response'​)),
+​ 	      ajax(​'http://localhost:3000/ng2/reactiveForms/userData/creditCards'​)
+​ 	      .pipe(pluck(​'response'​))
+​ 	    )
+​ 	    .pipe(
+​ 	      map(responses => {
+​ 	        ​return​ {
+​ 	          addresses: responses[0],
+​ 	          creditCards: responses[1]
+​ 	        };
+​ 	      })
+​ 	    );
+​ 	  }
+​ 	}
+
+We know the entire form can be subscribed to with .valueChanges—and that’s what we’ll use for the individual form controls as well
 
 
 # Advanced Angular 
+- Zones are a new concept to JavaScript, but they were a core language feature in Dart, a language Google created to replace JavaScript. 
+
+- ngrx is a tool you can use to control all of the state management in your application.
+- defining actions 
+​ 	​import​ { Action } ​from​ ​'@ngrx/store'​;
+​ 	
+​ 	​const​ ADD_PATIENTS = ​'ADD_PATIENTS'​;
+​ 	​const​ UPDATE_PATIENT = ​'UPDATE_PATIENT'​;
+​ 	
+​ 	​export​ ​class​ AddPatientsAction ​implements​ Action {
+​ 	  type = ADD_PATIENTS;
+​ 	  ​constructor​(​public​ payload) {}
+​ 	}
+​ 	​export​ ​class​ UpdatePatientAction ​implements​ Action {
+​ 	  type = UPDATE_PATIENT;
+​ 	  ​constructor​(​public​ payload) {}
+​ 	}
+​ 	
+​ 	type PatientAction = AddPatientsAction | UpdatePatientAction;
+
+​​①​	​export​ ​function​ patientReducer(state = [], action: PatientAction) { 
+​​②​	  ​switch​ (action.type) { 
+​ 	    ​case​ UPDATE_PATIENT:
+​​③​	      ​return​ state.map((item, idx) => 
+​ 	        idx === action.payload.index ? action.payload.newPatient : item
+​ 	      );
+​​④​	    ​case​ ADD_PATIENTS: 
+​ 	      ​return​ [...state, ...action.payload];
+​​⑤​	    default: 
+​ 	      ​return​ state;
+​ 	  }
+​ 	}
+
+- inject store service, dispatch new sate 
+constructor​(​private​ store: Store<any>) {}
+...
+​this​.store.dispatch(​new​ AddPatientsAction(​this​.patients));
+
+this​.patients$ = ​this​.store.select(​'patients'​);
+
 
 
 # Reactive Game Development 
+done. 
 
 
 
