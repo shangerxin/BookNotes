@@ -1,0 +1,245 @@
+Low level prgramming c, assembly and program execution on intel 64 architecture== Igor Zhirkov;Note=Erxin
+
+
+# Assembly language and computer architecture 
+- basic computer architecture 
+general purpose registers. They are interchangeable and can be used in many different commands.
+
+Name    Alias       Description 
+r0      rax         kinds of an accumulator 
+r3      rbx         base addressing in early processor module 
+r2      rdx         data input/output 
+r4      rsp         address of the top most element in the hardware stack 
+r5      rbp         stack frame's base 
+r6      rsi         source index in string manipulation 
+r7      rdi         destination index in string manipulation 
+r8  
+r9...r15            r10 which save cpu lfags
+
+
+d for double word—lower 32 bits;
+
+w for word—lower 16 bits;
+
+b for byte—lower 8 bits.
+
+r7b is the lowest byte of register r7;
+
+r3w consists of the lowest two bytes of r3; and
+
+r0d consists of the lowest four bytes of r0.
+
+- Protection rings are one of the mechanisms designed to limit the applications’ capabilities for security and robustness reasons. 
+
+- The rsp register holds an address of the topmost element of the stack. The instructions perform as follows
+
+    + Stack grows toward zero address
+    
+    + Almost all kinds of its operands are considered signed integers and thus can be expanded with sign bit. 
+
+    push with an argument B9_16 will result in the following data unit being stored on the stack 
+    
+    0xff b9, 0xffffffb9 or 0xff ff ff ff ff ff ff b9.
+
+    push uses an 8-byte operand size. Thus an instruction push -1 will store 0xff ff ff ff ff ff ff ff on the stack
+    
+    
+    + Most architectures that support stack use the same principle with its top defined by some register. 
+    
+    
+
+# Assembly language
+- environment 
+
+complete assembler and C assignments:
+
+Debian GNU\Linux 8.0 as an operating system.
+
+NASM 2.11.05 as an assembly language compiler.
+
+GCC 4.9.2 as C language compiler. This exact version is used to produce assembly from C programs. Clang compiler can be used as well.
+
+GNU Make 4.0 as a build system.
+
+GDB 7.7.1 as a debugger.
+
+The text editor you like (preferably with syntax highlighting). We advocate ViM usage.
+
+- window subsystem official guide located at: https://msdn.microsoft.com/en-us/commandline/wsl/install_guide .
+
+    + install linux subsystem, run powershell in administrator 
+    $ dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+    
+    check window version 
+    win+r, type winver, the version should be 19041 
+    or 
+    $ ver 
+    
+    enable virutal platform 
+    $ dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+    
+    + open window store and pick the linux version 
+    
+    + check current installed WSL1/2
+    $ wsl --list --all
+    
+    $ set specific version 
+    $ wsl --set-version <distribution name> <versionNumber>
+    
+    $ set default 
+    $ wsl --set-default-version 2
+    
+- first assembly program 
+global _start
+
+section .data
+message: db 'hello, world!', 10
+
+section .text
+_start:
+    mov     rax, 1           ;system call number should be stored in rax
+    mov     rdi, 1           ; argument #1 in rdi: where to write (descriptor)?
+    mov     rsi, message     ; argument #2 in rsi: where does the string start?
+    mov     rdx, 14          ; argument #3 in rdx: how many bytes to write?
+    syscall                  ; this instruction invokes a system call
+    
+- program structure 
+- Assembly language is, in general, case insensitive, but label names are not!
+db—bytes;
+
+dw—so-called words, equal to 2 bytes each;
+
+dd—double words, equal to 4 bytes; and
+
+dq—quad words, equal to 8 bytes.
+
+//hello.asm
+message: db 'hello, world!', 10
+
+Intel architecture the term word was indeed used to describe a 16-bit data entry
+
+- basic instructions 
+
+mov, write a value into either register or memory 
+
+The syscall instruction is used to perform system calls in *nix systems
+
+    + rax, hold system call's number 
+    + registers should hold its arguments, rdi, rdx, r10, r8 and r9 
+    + execute syscall instruction 
+> nasm -felf64 hello.asm -o hello.o
+> ld -o hello hello.o
+> chmod u+x hello
+
+launch hello 
+> ./hello 
+hello, world! 
+
+- terminate the program in a correct way 
+
+section .data
+message: db 'hello, world!', 10
+
+section .text
+global _start
+
+_start:
+    mov     rax, 1           ; 'write' syscall number
+    mov     rdi, 1           ; stdout descriptor
+    mov     rsi, message     ; string address
+    mov     rdx, 14          ; string length in bytes
+    syscall
+
+    mov     rax, 60          ; 'exit' syscall number
+    xor     rdi, rdi
+    syscall                                                    
+    
+- output register contents 
+section .data
+codes:
+    db      '0123456789ABCDEF'
+
+section .text
+global _start
+_start:
+    ; number 1122... in hexadecimal format
+    mov rax, 0x1122334455667788
+
+    mov rdi, 1
+    mov rdx, 1
+    mov rcx, 64
+   ; Each 4 bits should be output as one hexadecimal digit
+   ; Use shift and bitwise AND to isolate them
+   ; the result is the offset in 'codes' array
+.loop:
+    push rax
+    sub rcx, 4
+   ; cl is a register, smallest part of rcx
+   ; rax -- eax -- ax -- ah + al
+   ; rcx -- ecx -- cx -- ch + cl
+    sar rax, cl
+    and rax, 0xf
+
+    lea rsi, [codes + rax]
+    mov rax, 1
+
+   ; syscall leaves rcx and r11 changed
+    push rcx
+    syscall
+    pop rcx
+
+    pop rax
+   ; test can be used for the fastest 'is it a zero?' check
+   ; see docs for 'test' command
+    test rcx, rcx
+    jnz .loop
+
+    mov     rax, 60 ;          invoke 'exit' system call
+    xor      rdi, rdi
+    syscall
+    
+- reference 
+
+https://asmtutor.com/
+https://www.nasm.us/
+https://www.nasm.us/xdoc/2.15.04/nasmdoc.pdf
+https://llvm.org/docs/GettingStartedTutorials.html
+
+
+# Setting up the network lab environment 
+- EVE-NG installation steps and Red Hat KVM, WMware ESXi
+
+
+# Virtual Memory
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
