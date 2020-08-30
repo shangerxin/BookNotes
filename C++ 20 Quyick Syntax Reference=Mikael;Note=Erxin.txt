@@ -2188,8 +2188,671 @@ catch (const exception& e) {
 
 
 # Type conversions 
-- 
+- convert an expression from one type to another, implicit and explicit 
 
+long a = 5; // int implicitly converted to long
+double b = a; // long implicitly converted to double
+
+    + promotion and demotion. Promotion occurs when an expression gets implicitly converted into a larger type, and demotion occurs when converting an expression to a smaller type.
+
+// Promotion
+long a = 5; // int promoted to long
+double b = a; // long promoted to double
+// Demotion
+int  c = 10.5; // warning: possible loss of data
+bool d = c; // warning: possible loss of data
+
+- explicit conversion 
+
+    + C style cast 
+int c = (int)10.5; // double demoted to int
+char d = (char)c; // int demoted to char
+
+    + C++ casts 
+static_cast<new_type> (expression)
+reinterpret_cast<new_type> (expression)
+const_cast<new_type> (expression)
+dynamic_cast<new_type> (expression)
+
+- static cast, performs conversions between compatible types. 
+
+char c = 10; // 1 byte
+int *p = (int*)&c; // 4 bytes
+*p = 5; // runtime error: stack corruption
+
+int *q = static_cast<int*>(&c); // compile-time error
+
+- reinterpret cast, This cast handles conversions between certain unrelated types, such as from one pointer type to another incompatible pointer type. It will simply perform a binary copy of the data without altering the underlying bit pattern. 
+ 
+int *r = reinterpret_cast<int*>(&c); // forced conversion
+
+- const cast add or remove the const modifier of a variable.
+const int myConst = 5;
+int *nonConst = const_cast<int*>(&myConst); // removes const
+*nonConst = 10; // potential runtime error
+
+//mainly when there is a function that takes a non-constant pointer argument, even though it does not modify the pointee
+void print(int *p) { std::cout << *p; }
+print(&myConst); // error: cannot convert const int* to int*
+print(nonConst); // allowed
+
+- dynamic cast,  This cast is only used to convert object pointers and object references into other pointers or reference types in the inheritance hierarchy. 
+
+class MyBase { public: virtual void test() {} };
+class MyChild : public MyBase {};
+int main()
+{
+  MyChild *child = new MyChild();
+  MyBase  *base = dynamic_cast<MyBase*>(child); // ok
+  // ...
+  delete child;
+}
+
+MyBase *base = new MyBase();
+MyChild *child = dynamic_cast<MyChild*>(base);
+if (child == nullptr) cout << "Null pointer returned";
+delete base;
+
+//the dynamic cast will then fail by throwing a bad_cast exception. This needs to be handled using a try-catch statement .
+#include <exception>
+#include <iostream>
+using namespace std;
+class MyBase { public: virtual void test() {} };
+class MyChild : public MyBase {};
+int main()
+{
+  MyBase *base = new MyBase();
+  try {
+    MyChild &child = dynamic_cast<MyChild&>(*base);
+  }
+  catch(const bad_cast &e) {
+  cout << e.what(); // "bad dynamic_cast"
+  }
+  delete base;
+}
+
+//dynamic cast check a conversion has succeeded during runtime. The disadvantage is that there is a performance overhead
+MyBase *base = static_cast<MyBase*>(child); // ok
+// Succeeds for a MyChild object
+MyChild *child = dynamic_cast<MyChild*>(base);
+
+// if base-to-derived (base object to derived) conversion had been performed using a static cast instead of a dynamic cast, the conversion would not have failed.
+// Allowed, but invalid
+MyChild *child = static_cast<MyChild*>(base);
+
+
+# Smart pointers 
+- Several smart pointer classes were added in C++11 for managing dynamically allocated memory and resources in general. the pointer is created, used, and then destroyed automatically when it goes out of scope
+
+a unique pointer has exclusive ownership of the object it points to and therefore cannot be copied. It can, however, transfer ownership to another unique pointer using the std::move function. The original pointer will automatic be set to null 
+
+    + unique pointer std::unique_ptr, simple acts as a container for a raw pointer. It replaces another deprecated smart pointer named auto_ptr, which was removed in C++17.
+    
+#include <memory> // include smart pointers
+#include <iostream>
+using namespace std;
+struct Foo
+{
+  int val;
+  Foo() { cout << "1"; }
+  ~Foo() { cout << "3"; }
+};
+int main()
+{
+  unique_ptr<Foo> p(new Foo()); // "1"
+  p->val = 2;
+  cout << p->val; // "2"
+} // "3"
+
+unique_ptr<Foo> u1(new Foo());
+unique_ptr<Foo> u2 = u1; // compile-time error
+unique_ptr<Foo> u3 = move(u1); // transfers ownership
+
+    + reference, why auto ptr is deprecated
+    
+    https://stackoverflow.com/questions/3697686/why-is-auto-ptr-being-deprecated
+    http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2005/n1856.html#20.4.5%20-%20Class%20template%20auto_ptr
+    
+The direct replacement for auto_ptr (or the closest thing to one anyway) is unique_ptr. As far as the "problem" goes, it's pretty simple: auto_ptr transfers ownership when it's assigned. unique_ptr also transfers ownership, but thanks to codification of move semantics and the magic of rvalue references, it can do so considerably more naturally. It also "fits" with the rest of the standard library considerably better
+
+const auto_ptr<int> source(new int);
+auto_ptr<int> target = source;  // move from const source to target
+
+ one could put auto_ptr into a container:
+
+    vector<auto_ptr<int> > vec;
+
+However field experience with this design revealed subtle problems. Namely:
+
+    sort(vec.begin(), vec.end(), indirect_less());
+
+The problem is that some implementations of sort will pick an element out of the sequence, and store a local copy of it.
+
+    ...
+    value_type pivot_element = *mid_point;
+    ...
+
+The algorithm assumed that after this construction that pivot_element and *mid_point were equivalent. However when value_type turned out to be an auto_ptr, this assumption failed, and subsequently so did the algorithm. 
+
+It does not prevent clients from sorting client-defined containers of auto_ptr, or even built-in arrays auto_ptr. For example the following code will compile today:
+
+    #include <algorithm>
+    #include <memory>
+
+    struct indirect_less
+    {
+        template <class T>
+        bool operator()(const T& x, const T& y)
+        {
+            return *x < *y;
+        }
+    };
+
+    int main()
+    {
+        std::auto_ptr<int> ptrs[3];
+        ptrs[0].reset(new int(3));
+        ptrs[1].reset(new int(2));
+        ptrs[2].reset(new int(1));
+        std::sort(ptrs, ptrs+3, indirect_less()); // run time error?!
+    }
+
+//C++11's std::unique_ptr is the "fixed" std::auto_ptr: both of them are suitable when - at any point in time during execution - there should be a single smart-pointer owner for a pointed-to object.
+
+//The crucial difference is in copy-construction or assignment from another un-expiring smart pointer, shown on the => lines below:
+   std::auto_ptr<T> ap(...);
+   std::auto_ptr<T> ap2(get_ap_to_T());   // take expiring ownership
+=> std::auto_ptr<T> ap3(ap);  // take un-expiring ownership ala ap3(ap.release());
+   ap->xyz;  // oops... can still try to use ap, expecting it to be non-NULL
+
+   std::unique_ptr<T> up(...);
+   std::unique_ptr<T> up2(get_up_to_T());   // take expiring ownership
+=> std::unique_ptr<T> up3(up);  // COMPILE ERROR: can't take un-expiring ownership
+=> std::unique_ptr<T> up4(std::move(up));  // EXPLICIT code allowed
+=> std::unique_ptr<T> up4(up.release());   // EXPLICIT code allowed
+    
+- shared pointer. A shared pointer can be copied. The memory to the object will not be deallocated until the last remaining shared pointer owning the object is destroyed, either by going out of scope or by resetting the pointer to nullptr manually.
+
+shared_ptr<Foo> s1(new Foo());
+shared_ptr<Foo> s2 = s1; // extends ownership
+s1 = nullptr; // reset pointer
+s2 = nullptr; // reset last pointer and delete memory
+
+//C++14, the use of the new keyword is discouraged in most circumstances. std::make_unique and std::make_shared functions are recommended when allocating dynamic memory.
+unique_ptr<Foo> u = make_unique<Foo>();
+shared_ptr<int> s = make_shared<int>(10);
+
+//Since C++20 there are also methods available for doing default initialization. 
+auto u2 = make_unique_for_overwrite<Foo>();
+auto s2 = make_shared_for_overwrite<int>(10);
+
+- weak shared pointer, A weak shared pointer (std::weak_ptr) can be created from a shared pointer. a weak shared pointer is non-owning, meaning that the object will be cleaned up when all shared pointers go out of scope. access the referenced object, a weak shared pointer must first be converted into a shared pointer using the lock method
+
+#include <memory>
+#include <iostream>
+using namespace std;
+void observe(weak_ptr<int> weak)
+{
+  shared_ptr<int> s = weak.lock();
+  if (s != nullptr) {
+    cout << "Pointer is " << *s << endl;
+  }
+  else {
+    cout << "Pointer has expired" << endl;
+  }
+}
+int main()
+{
+  shared_ptr<int> s = make_shared<int>(5);
+  weak_ptr<int> w = s; // copy pointer without ownership
+  observe(w); // "Pointer is 5"
+  s = nullptr; // delete managed object
+  observe(w); // "Pointer has expired"
+}
+
+
+# Templates 
+- Templates provide a way to make a class, function, or variable operate with different data types without having to rewrite the code for each type
+
+- function templates,  add a template parameter declaration before the function. typename and class is equivalent in this context 
+template<typename T>
+void swap(T& a, T& b)
+{
+  T tmp = a;
+  a = b;
+  b = tmp;
+}
+
+
+template<class T>
+void swap(T& a, T& b)
+{
+  T tmp = a;
+  a = b;
+  b = tmp;
+}
+
+//Every time the function template is called with a new type, the compiler will instantiate another function using the template. It the parameter can be determined in compile time then the type can be omitted
+
+int a = 1, b = 2;
+swap<int>(a,b); // calls int version of swap
+
+int e = 1, f = 2;
+swap(e,f); // calls int version of swap
+
+- multiple template parameters 
+
+template<class T, class U>
+void swap(T& a, U& b)
+{
+  T tmp = a;
+  a = b;
+  b = tmp;
+}
+
+int main()
+{
+  int a = 1;
+  long b = 2;
+  swap<int, long>(a,b);
+  swap(a,b); // alternative
+}
+
+- class template 
+
+template<class T>
+class MyBox
+{
+ public:
+  T a, b;
+  MyBox(const T& x, const T& y) : a(x), b(y) {}
+};
+
+int main()
+{
+    // Without type deduction
+    MyBox<int> box(1, 2); // MyBox<int>
+    // With type deduction
+    MyBox box(2.1, 3.2); // MyBox<double>
+}
+
+//if the member function definition is outside of the class then it still required to add template keyword 
+template<class T>
+class MyBox
+{
+public:
+    T a, b;
+    void swap();
+};
+
+template<class T>
+void MyBox<T>::swap()
+{
+    T tmp = a;
+    a = b;
+    b = tmp;
+}
+
+- non-type parameters, both class and function templates can also have regular function-like parameters. 
+
+template<class T, unsigned int N>
+class MyBox
+{
+public:
+    T store[N];
+};
+
+MyBox<int, 5> box; 
+
+- default types and values template parameters can be given default values and types.
+
+template<class T = int, int N = 5>
+class MyBox
+{
+ public:
+  T store[N];
+};
+
+//use the default type and parameter 
+MyBox<> box;
+
+- class template specialization, define a different implementation for a template when a specific type is passed as the template parameter, a template specialization can be declared. 
+
+there is no inheritance of members from the standard template to the specialized template. The whole class will have to be redefined.
+
+#include <iostream>
+template<class T>
+class MyBox
+{
+ public:
+  T a;
+  void print() { std::cout << a; }
+};
+
+//add special implimentation for bool type 
+template<>
+class MyBox<bool>
+{
+ public:
+  bool a;
+  void print() { std::cout << (a ? "true" : "false"); }
+};
+
+int main()
+{
+  MyBox<bool> box { true };
+  box.print(); // "true"
+}
+
+- function template specification, it is used to avoid rewritten the whole class for a specific type 
+
+#include <iostream>
+template<class T>
+class MyBox
+{
+ public:
+  T a;
+  template<class T> void print() {
+    std::cout << a;
+  }
+  template<> void print<bool>() {
+    std::cout << (a ? "true" : "false");
+  }
+};
+
+int main()
+{
+  MyBox<bool> box = { true };
+  box.print<bool>(); // "true"
+}
+
+- variable templates,  C++14 allows variables to be templated. This is achieved using the regular template syntax.
+
+template<class T>
+constexpr T pi = T(3.1415926535897932384626433L);
+
+int i = pi<int>; // 3
+float f = pi<float>; // 3.14...
+
+- variadic templates, C++11 allows template definitions to take a variable number of type arguments. 
+
+#include <iostream>
+#include <initializer_list>
+using namespace std;
+int sum(initializer_list<int> numbers)
+{
+  int total = 0;
+  for(auto& i : numbers) { total += i; }
+  return total;
+}
+
+//The initializer_list type indicates that the function accepts a brace-enclosed list as its argument, so the function must be called in this manner.
+int main()
+{
+  cout << sum( { 1, 2, 3 } ); // "6"
+}
+
+
+//variadic function is traversed recursively rather than iteratively, so once the first argument has been handled, the function calls itself with the remaining arguments.
+//The variadic template parameter is specified using the ellipsis (...) operator, followed by a name. This define is so-called parameter pack. it is defined in parameter with ...args, and unpacked in the definition of the body with args...
+
+int sum() { return 0; } // end condition
+
+template<class T0, class ... Ts>
+decltype(auto) sum(T0 first, Ts ... rest)
+{
+  return first + sum(rest ...);
+}
+
+int main()
+{
+  cout << sum(1, 1.5, true); // "3.5"
+}
+
+- fold expression, C++17 introduced fold expressions, which make it possible to apply a binary operator to all elements of a parameter pack in one statement. It will reduce the code complexity of the previous sum in C++11 
+
+template<class... T>
+decltype(auto) sum(T... args)
+{
+  // Unpacks to: a1 + (a2 + (a3 + a4))..., A unary right fold is here performed in the return statement
+  return (args + ...);
+}
+
+//unpacked from right to left, by placing the ellipsis to the left of the parameter pack
+#include <iostream>
+using namespace std;
+template<class... T>
+decltype(auto) difference(T... args)
+{
+  // Unpacks to: ...(a1 - a2) - a3
+  return (... - args);
+}
+int main()
+{
+  cout << difference(5, 2, 1); // "2" (5-2-1)
+}
+
+- Concepts, A concept is a named set of constraints that limit what template arguments may be used with a template. They were introduced in C++20 to allow template arguments to be type-checked at compile time
+
+//The is_integral_v class template used here is part of the standard library, and it is evaluated as true if T is an integral type
+#include <concepts>
+#include <type_traits>
+// Concept declaration
+template <class T>
+concept MyIntegral = std::is_integral_v<T>;
+
+//This concept can be applied to constrain template arguments
+template<MyIntegral T>
+bool is_positive(T a)
+{
+  return a > 0;
+}
+int main()
+{
+  is_positive(5); // ok, int satisfies MyIntegral
+  is_positive("Hi"); // error, string does not satisfy MyIntegral
+}
+
+    + standard library concepts 
+#include <concepts>
+template<std::integral T>
+bool is_positive(T a)
+{
+  return a > 0;
+}
+
+    + There are two ways to express a concept. The first way is in the form of a conditional expression, which was the form used for the integral concept defined earlier.
+    
+template <class T>
+concept Signed_Integral = std::integral<T> && T{-1} < T{0};
+
+    + The second way to define a concept is to use a requires clause. This clause defines objects of the types to be tested and then a list of one or more constraints. Each constraint consists of an expression in curly brackets followed by the expected return type. If all constraints are true, the compiler will allow the type. 
+    
+template<class T>
+concept Equal = requires(T a, T b)
+{
+  { a == b } -> bool;
+  { a != b } -> bool;
+};
+template<Equal T>
+bool areEqual(T x, T y)
+{
+  return x == y;
+}
+int main()
+{
+  areEqual(1, 1); // true
+}
+
+- abbreviated function templates, Function templates can be abbreviated as of C++20 by using the auto placeholder type. When auto appears in the parameter list, the function automatically becomes a function template and the auto parameter becomes its template parameter. Applying a concept to such a function is done by adding the name of the concept before the type in the parameter list.
+
+abbreviated function templates are not supported in Visual Studio 2019 as of version 16.3.
+
+#include <concepts>
+bool is_positive(std::integral auto a)
+{
+  return a > 0;
+}
+int main()
+{
+  is_positive(2); // calls int version
+  is_positive(3L); // calls long version
+}
+
+- template lambdas, With C++14 generic lambdas were introduced, which meant that parameters declared as auto became template parameters. 
+
+#include <iostream>
+#include <vector>
+using namespace std;
+int main()
+{
+  vector<int> v { 1, 2, 3 };
+  auto get_size = [](const auto& v) { return size(v); };
+  cout << get_size(v); // 3
+}
+
+//restrict this lambda to only work with vector types, added support in C++20.  allowing full use of template parameters in lambdas.
+auto get_size = []<typename T>(vector<T> const& v) { return size(v); };
+
+
+# Headers 
+-  A compilation unit consists of a source file (.cpp) and any included header files (.h or .hpp).
+
+// MyFunc.cpp
+void myFunc() {}
+// MyApp.cpp
+int main()
+{
+  myFunc(); // error: myFunc identifier not found
+}
+To make this work, the function’s prototype has to be included in MyApp.cpp .
+// MyApp.cpp
+void myFunc(); // prototype
+int main()
+{
+  myFunc(); // ok
+}
+
+    + using headers 
+// MyFunc.h
+void myFunc(); // prototype
+// MyApp.cpp
+#include "MyFunc.h"
+
+- what to include in headers. the distinction is only conceptual. the key idea is the header should contain the interface of the definition 
+
+Headers should not include using namespace directives, because that would force the namespace inclusion upon everyone using the header.
+
+- global variables and functions may be declared externally multiple times in a program, but they may be defined only once.
+
+// MyApp.h
+extern int myGlobal;
+// MyApp.cpp
+int myGlobal = 0;
+
+- Instantiating a template with the same type in many compilation units leads to significant redundant work done by the compiler and linker. To prevent this, C++11 introduced extern template declarations. 
+
+// MyApp.cpp
+MyTemp<int> b; // instantiation is done here
+// MyFunc.cpp
+extern MyTemp<int> a; // suppress redundant instantiation
+
+- If a header requires other headers, it is common to include those files as well, to make the header stand-alone. 
+// MyApp.h
+#include <stddef.h> // include size_t
+void mySize(std::size_t);
+
+- inline variables,  C++17, variables may be specified as inline, in addition to functions and methods. This allows constant and static variables to be defined in a header file
+
+// MyApp.h
+struct MyStruct
+{
+  static const int a;
+  inline static const int b = 10; // alternative
+};
+inline int const MyStruct::a = 10;
+
+//The constexpr keyword implies inline, so a variable declared as constexpr may also be initialized in a header file. It must be initialized to a compile-time constant 
+struct MyStruct {
+  static constexpr int a = 10;
+};
+
+// an inline variable is not restricted to only constant expressions. It can be assigned to a random value 
+#include <cstdlib> // rand, srand
+#include <ctime> // time
+struct MyStruct {
+  static const int die;
+};
+//This value is guaranteed to be the same for all compilation units using this header, even though the value is not set until runtime.
+inline const int MyStruct::die = (srand((unsigned)time(0)), rand()%6+1); // 1-6
+
+- include guards, The macro is then defined, which effectively prevents the file from being included again.
+
+// MyApp.h
+#ifndef MYAPP_H
+#define MYAPP_H
+// ...
+#endif // MYAPP_H
+
+
+most compiler support 
+#pragma once
+
+
+//C++17 added the __has_include preprocessor expression, which evaluates to true if the header file is found.
+#if __has_include("myapp.h")
+#include "myapp.h"
+#endif
+
+- modules, a module is a set of one or more source code files that are compiled independently. They were introduced in C++20 
+
+right-click the project in the Solution Explorer and choose Properties. From there, select All Configurations from the Configuration drop-down list and then enable module support under Configuration Properties ➤ C/C++ ➤ Language ➤ Enable C++ Modules (experimental). 
+
+The ixx file extension is required for module interface units in Visual Studio. Gcc use a cppm file extension 
+
+```
+// ModInterface.ixx
+export module mymodule; // declare module name
+
+```
+
+Only code entities explicitly marked with export will be visible to source files using the module. This is the big difference compare to traditional header file 
+
+```
+// ModInterface.ixx
+export module mymodule;
+#define VALUE 5
+int hidden() { return VALUE; }
+export int getValue() { return hidden(); }
+```
+
+any code entities it declares will be visible across the entire module but not outside the module to which it belongs 
+
+```
+// ModInterface.ixx
+export module mymodule;
+export int getValue();
+// ModImplementation.cpp
+module mymodule; // unit belongs to mymodule
+#define VALUE 5
+int hidden() { return VALUE; }
+int getValue() { return hidden(); }
+```
+
+- To get the ixx file to compile, right-click the file in the Solution Explorer and click Properties. From the Properties window, change the Item Type of the file to C/C++ Compiler and click OK. With the module ready and compiled, it can be imported into any source file to make use of its functionality. 
+
+// MyApp.cpp
+import mymodule; // import module, must appear at the global scope of the file importing the module.
+#include <iostream>
+using namespace std;
+int main()
+{
+  cout << getValue() << endl; // "5"
+}
+
+//not support in Visual Studio 2019 16.3 
+import <iostream>;
+import <vector>;
 
 
 
