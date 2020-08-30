@@ -1,0 +1,467 @@
+JavaScript The Definitive Guide, 7th Edition=David;Note=Erxin
+
+# Introduction to JavaScript
+
+
+# Lexical Structure 
+
+# Types, Values and Variables 
+- floating point literals 
+3.14
+2345.6789
+.333333333333333333
+6.02e23        // 6.02 × 10²³
+1.4738223E-32  // 1.4738223 × 10⁻³²
+
+- BigInt 
+1234n                // A not-so-big BigInt literal
+0b111111n            // A binary BigInt
+0o7777n              // An octal BigInt
+0x8000000000000000n  // => 2n**63n: A 64-bit integer
+
+1 < 2n     // => true
+2 > 1n     // => true
+0 == 0n    // => true
+0 === 0n   // => false: the === checks for type equality as well
+
+
+
+
+# Expressions and Operations 
+# Statements 
+# Objects 
+- synbols as property names
+const extension = Symbol("my extension symbol");
+let o = {
+    [extension]: { /* extension data stored in this object */ }
+};
+o[extension].x = 0; // This won't conflict with other properties of o
+
+- memoization 
+// Return a memoized version of f.
+// It only works if arguments to f all have distinct string representations.
+function memoize(f) {
+    const cache = new Map();  // Value cache stored in the closure.
+
+    return function(...args) {
+        // Create a string version of the arguments to use as a cache key.
+        let key = args.length + args.join("+");
+        if (cache.has(key)) {
+            return cache.get(key);
+        } else {
+            let result = f.apply(this, args);
+            cache.set(key, result);
+            return result;
+        }
+    };
+}
+
+- generator 
+// Yield the first n elements of the specified iterable object
+function* take(n, iterable) {
+    let it = iterable[Symbol.iterator](); // Get iterator for iterable object
+    while(n-- > 0) {           // Loop n times:
+        let next = it.next();  // Get the next item from the iterator.
+        if (next.done) return; // If there are no more values, return early
+        else yield next.value; // otherwise, yield the value
+    }
+}
+
+// An array of the first 5 Fibonacci numbers
+[...take(5, fibonacciSequence())]  // => [1, 1, 2, 3, 5]
+
+- network events
+function getCurrentVersionNumber(versionCallback) { // Note callback argument
+    // Make a scripted HTTP request to a backend version API
+    let request = new XMLHttpRequest();
+    request.open("GET", "http://www.example.com/api/version");
+    request.send();
+
+    // Register a callback that will be invoked when the response arrives
+    request.onload = function() {
+        if (request.status === 200) {
+            // If HTTP status is good, get version number and call callback.
+            let currentVersion = parseFloat(request.responseText);
+            versionCallback(null, currentVersion);
+        } else {
+            // Otherwise report an error to the callback
+            versionCallback(response.statusText, null);
+        }
+    };
+    // Register another callback that will be invoked for network errors
+    request.onerror = request.ontimeout = function(e) {
+        versionCallback(e.type, null);
+    };
+}
+
+
+
+# Arrays 
+# Functions 
+# Classes 
+# Modules 
+# JavaScript Standard Library 
+# Itertors and Generators 
+# Asynchronous JavaScript 
+- callback and event in node 
+const https = require("https");
+
+// Read the text content of the URL and asynchronously pass it to the callback.
+function getText(url, callback) {
+    // Start an HTTP GET request for the URL
+    request = https.get(url);
+
+    // Register a function to handle the "response" event.
+    request.on("response", response => {
+        // The response event means that response headers have been received
+        let httpStatus = response.statusCode;
+
+        // The body of the HTTP response has not been received yet.
+        // So we register more event handlers to to be called when it arrives.
+        response.setEncoding("utf-8");  // We're expecting Unicode text
+        let body = "";                  // which we will accumulate here.
+
+        // This event handler is called when a chunk of the body is ready
+        response.on("data", chunk => { body += chunk; });
+
+        // This event handler is called when the response is complete
+        response.on("end", () => {
+            if (httpStatus === 200) {   // If the HTTP response was good
+                callback(null, body);   // Pass response body to the callback
+            } else {                    // Otherwise pass an error
+                callback(httpStatus, null);
+            }
+        });
+    });
+
+    // We also register an event handler for lower-level network errors
+    request.on("error", (err) => {
+        callback(err, null);
+    });
+}
+
+# Metaprogramming 
+- object property descriptor 
+// Returns {value: 1, writable:true, enumerable:true, configurable:true}
+Object.getOwnPropertyDescriptor({x: 1}, "x");
+
+// Here is an object with a read-only accessor property
+const random = {
+    get octet() { return Math.floor(Math.random()*256); },
+};
+
+// Returns { get: /*func*/, set:undefined, enumerable:true, configurable:true}
+Object.getOwnPropertyDescriptor(random, "octet");
+
+// Returns undefined for inherited properties and properties that don't exist.
+Object.getOwnPropertyDescriptor({}, "x")        // => undefined; no such prop
+Object.getOwnPropertyDescriptor({}, "toString") // => undefined; inherited
+
+- well-known symboles 
+Symbol.iterator 
+Symbol.hasInstance 
+    + example 
+    // Define an object as a "type" we can use with instanceof
+    let uint8 = {
+        [Symbol.hasInstance](x) {
+            return Number.isInteger(x) && x >= 0 && x <= 255;
+        }
+    };
+    128 instanceof uint8     // => true
+    256 instanceof uint8     // => false: too big
+    Math.PI instanceof uint8 // => false: not an integer
+
+Symbol.toStringTag 
+    + example 
+    {}.toString() 
+    
+Symbol.species 
+    + In ES6 and later, the Array() constructor has a property with thesymbolic name Symbol.species.
+    + Methods like map() and slice() that create and return new arraysare tweaked slightly in ES6 and later. Instead of just creating aregular Array, they (in effect) invoke newthis.constructor[Symbol.species]() to create the new array
+    
+    EZArray[Symbol.species] = Array; // Attempt to set a read-only property fails
+
+    // Instead we can use defineProperty():
+    Object.defineProperty(EZArray, Symbol.species, {value: Array});
+    
+Symbol.isConcatSpreadable
+    + example 
+    let arraylike = {
+        length: 1,
+        0: 1,
+        [Symbol.isConcatSpreadable]: true
+    };
+    [].concat(arraylike)  // => [1]: (would be [[1]] if not spread)
+
+Pattern matching 
+    + example 
+    class Glob {
+        constructor(glob) {
+            this.glob = glob;
+
+            // We implement glob matching using RegExp internally.
+            // ? matches any one character except /, and * matches zero or more
+            // of those characters. We use capturing groups around each.
+            let regexpText = glob.replace("?", "([^/])").replace("*", "([^/]*)");
+
+            // We use the u flag to get Unicode-aware matching.
+            // Globs are intended to match entire strings, so we use the ^ and $
+            // anchors and do not implement search() or matchAll() since they
+            // are not useful with patterns like this.
+            this.regexp = new RegExp(`^${regexpText}$`, "u");
+        }
+
+        toString() { return this.glob; }
+
+        [Symbol.search](s) { return s.search(this.regexp); }
+        [Symbol.match](s)  { return s.match(this.regexp); }
+        [Symbol.replace](s, replacement) {
+            return s.replace(this.regexp, replacement);
+        }
+    }
+
+    let pattern = new Glob("docs/*.txt");
+    "docs/js.txt".search(pattern)   // => 0: matches at character 0
+    "docs/js.htm".search(pattern)   // => -1: does not match
+    let match = "docs/js.txt".match(pattern);
+    match[0]     // => "docs/js.txt"
+    match[1]     // => "js"
+    match.index  // => 0
+    "docs/js.txt".replace(pattern, "web/$1.htm")  // => "web/js.htm"
+    
+Symbol.toPrimitive
+    + converting objects to primitive values
+    
+Symbol.unscopables
+
+Template tags 
+    + convert string to html escaping 
+function html(strings, ...values) {
+    // Convert each value to a string and escape special HTML characters
+    let escaped = values.map(v => String(v)
+                                  .replace("&", "&amp;")
+                                  .replace("<", "&lt;")
+                                  .replace(">", "&gt;")
+                                  .replace('"', "&quot;")
+                                  .replace("'", "&#39;"));
+
+    // Return the concatenated strings and escaped values
+    let result = strings[0];
+    for(let i = 0; i < escaped.length; i++) {
+        result += escaped[i] + strings[i+1];
+    }
+    return result;
+}
+
+let operator = "<";
+html`<b>x ${operator} y</b>`             // => "<b>x &lt; y</b>"
+
+let kind = "game", name = "D&D";
+html`<div class="${kind}">${name}</div>` // =>'<div class="game">D&amp;D</div>'
+
+- Reflect API, a built-in object that provides methods for interceptable javascript operations, Reflect is a built-in object that simplifies creation of Proxy.
+
+In particular, Reflect allows us to call operators (new, delete…) as functions (Reflect.construct, Reflect.deleteProperty, …). That’s an interesting capability, but here another thing is important.
+
+For every internal method, trappable by Proxy, there’s a corresponding method in Reflect, with the same name and arguments as the Proxy trap.
+
+We can use Reflect to forward an oepration to the original object 
+    + reference 
+    https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect
+    
+    + have the same names as the proxy handler methods, they do have some subtle differences compare to Object methods 
+    
+    https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect/Comparing_Reflect_and_Object_methods
+    
+    + static methods
+    
+Reflect.apply(target, thisArg, argumentsList)
+
+Reflect.construct(target, agumentsList[, newTarget])
+
+Reflect.defineProperty(target, propertyKey, attributes)
+
+Reflect.deletePropperty(target, proeprtyKey)
+
+Reflect.get(target, propertyKey[, receiver])
+
+Reflect.getOwnPoerptyDescriptor(target, propertyKey)
+
+Reflect.getPropertyOf(target)
+
+Reflect.has(target, propertyKey)
+
+Reflect.isExtensible(target)
+
+Reflect.ownKeys(target)
+
+Reflect.preventExtensions(target)
+
+Reflect.set(target, propertyKey, value[, receiver])
+
+Reflect.setPrototypeOf(target, prototype)
+
+    + example 
+const duck = {
+  name: 'Maurice',
+  color: 'white',
+  greeting: function() {
+    console.log(`Quaaaack! My name is ${this.name}`);
+  }
+}
+
+Reflect.has(duck, 'color');
+// true
+Reflect.has(duck, 'haircut');
+// false
+
+
+let user = {
+  name: "John",
+};
+
+user = new Proxy(user, {
+  get(target, prop, receiver) {
+    alert(`GET ${prop}`);
+    return Reflect.get(target, prop, receiver); // (1)
+  },
+  set(target, prop, val, receiver) {
+    alert(`SET ${prop}=${val}`);
+    return Reflect.set(target, prop, val, receiver); // (2)
+  }
+});
+
+let name = user.name; // shows "GET name"
+user.name = "Pete"; // shows "SET name=Pete"
+    
+    +  theReflect object defines a convenient set of functions, all in a singlenamespace, that mimic the behavior of core language syntax andduplicate the features of various pre-existing Object functions.
+    
+- proxy objects, Whatthe Proxy class does is allows us a way to implement those fundamentaloperations ourselves and create objects that behave in ways that arenot possible for ordinary objects.
+
+let proxy = new Proxy(target, handlers);
+
+    + example 
+let t = { x: 1, y: 2 };
+let p = new Proxy(t, {});
+p.x          // => 1
+delete p.y   // => true: delete property y of the proxy
+t.y          // => undefined: this deletes it in the target, too
+p.z = 3;     // Defining a new property on the proxy
+t.z          // => 3: defines the property on the target
+
+    + Proxy.revocable() factory function. This function returns anobject that includes a Proxy object and also a revoke()function. Once you call the revoke() function, the proxy immediatelystops working
+    
+function accessTheDatabase() { /* implementation omitted */ return 42; }
+let {proxy, revoke} = Proxy.revocable(accessTheDatabase, {});
+
+proxy()   // => 42: The proxy gives access to the underlying target function
+revoke(); // But that access can be turned off whenever we want
+proxy();  // !TypeError: we can no longer call this function
+
+    + readonly proxy 
+function readOnlyProxy(o) {
+    function readonly() { throw new TypeError("Readonly"); }
+    return new Proxy(o, {
+        set: readonly,
+        defineProperty: readonly,
+        deleteProperty: readonly,
+        setPrototypeOf: readonly,
+    });
+}
+
+let o = { x: 1, y: 2 };    // Normal writable object
+let p = readOnlyProxy(o);  // Readonly version of it
+p.x                        // => 1: reading properties works
+p.x = 2;                   // !TypeError: can't change properties
+delete p.y;                // !TypeError: can't delete properties
+p.z = 3;                   // !TypeError: can't add properties
+p.__proto__ = {};          // !TypeError: can't change the prototype
+
+    + method can be added to a proxy 
+
+Internal Method	            Handler Method	Triggers when…
+[[Get]]	                    get	            reading a property
+[[Set]]	                    set	            writing to a property
+[[HasProperty]]	            has	            in operator
+[[Delete]]	                deleteProperty	delete operator
+[[Call]]	                apply	        function call
+[[Construct]]	            construct	    new operator
+[[GetPrototypeOf]]	        getPrototypeOf	Object.getPrototypeOf
+[[SetPrototypeOf]]	        setPrototypeOf	Object.setPrototypeOf
+[[IsExtensible]]	        isExtensible	Object.isExtensible
+[[PreventExtensions]]	    preventExtensions	Object.preventExtensions
+[[DefineOwnProperty]]	    defineProperty	Object.defineProperty, Object.defineProperties
+[[GetOwnProperty]]	        getOwnPropertyDescriptor	Object.getOwnPropertyDescriptor, for..in, Object.keys/values/entries
+[[OwnPropertyKeys]]	        ownKeys	Object.getOwnPropertyNames, Object.getOwnPropertySymbols, for..in, Object/keys/values/entries
+
+    + limitations, Many built-in objects, for example Map, Set, Date, Promise and others make use of so-called “internal slots”.
+    
+    + private fields, For example, getName() method accesses the private #name property and breaks after proxying
+    
+class User {
+  #name = "Guest";
+
+  getName() {
+    return this.#name;
+  }
+}
+
+let user = new User();
+
+user = new Proxy(user, {});
+
+alert(user.getName()); // Error
+
+    + proxy != target
+let allUsers = new Set();
+
+class User {
+  constructor(name) {
+    this.name = name;
+    allUsers.add(this);
+  }
+}
+
+let user = new User("John");
+
+alert(allUsers.has(user)); // true
+
+user = new Proxy(user, {});
+
+alert(allUsers.has(user)); // false
+
+    + reference 
+    https://javascript.info/proxy
+    
+- compare proxy and Reflect
+
+https://github.com/nzakas/understandinges6/blob/master/manuscript/12-Proxies-and-Reflection.md
+
+- meta programming 
+
+https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Meta_programming
+
+
+# JavaScript in Web Browsers 
+# Server-side JavaScript with Node 
+
+# JavaScript Tools and Extensions 
+- linting with eslint 
+- formatting with prettier 
+- unit testing with jest 
+- package management with npm 
+- code bundling, webpack, rollup and parcel 
+- transpilation with babel
+- jsx, markup expressions in javascript 
+- type checking with flow 
+$ npm install -g flow-bin or npm install --save-dev flow-bin
+
+
+
+
+
+
+
+
+
+

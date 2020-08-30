@@ -1,0 +1,333 @@
+What Is WebAssembly=Colin;Note=Erxin
+
+# introduction 
+- WebAssembly is the first universally supported new language and browser runtime to have been introduced since.
+
+- webassebly angular 
+https://malcoded.com/posts/web-assembly-angular/
+https://componenthouse.com/2018/02/15/how-to-make-angular-and-webassembly-work-together/
+
+    + set up a new angular project 
+    $ ng new angular-wasm 
+    
+    install web assembly compiler 
+    
+- compile webassembly from C
+https://developer.mozilla.org/en-US/docs/WebAssembly/C_to_wasm
+
+    + compiler 
+    https://emscripten.org/docs/getting_started/downloads.html
+    
+    $ git clone https://github.com/emscripten-core/emsdk.git
+    $ cd emsdk
+    $ ./emsdk install latest 
+    $ ./emsdk activate latest 
+    $ source ./emsdk_env.sh 
+    
+    $ ./emsdk install <target_version>
+    $ ./emsdk install latest-upstream
+    
+    note:
+    window required python27.12+
+    
+    + code 
+#include <emscripten.h>
+
+int EMSCRIPTEN_KEEPALIVE fibonacci(int n)
+{
+    if (n == 0 || n == 1)
+        return n;
+    else
+        return (fibonacci(n - 1) + fibonacci(n - 2));
+}
+
+$ emcc wasm/fibonacci.c -Os -s WASM=1 -s MODULARIZE=1 -o wasm/fibonacci.js
+$ node wasm/fibonacci.js
+
+    + wrap the web assembly in an angular service 
+$ ng generate service wasm
+
+import { Injectable } from '@angular/core'
+import { Observable, BehaviorSubject } from 'rxjs'
+import { filter, map } from 'rxjs/operators'
+
+import * as Module from './../../wasm/fibonacci.js'
+import '!!file-loader?name=wasm/fibonacci.wasm!../../wasm/fibonacci.wasm'
+
+@Injectable()
+export class WasmService {
+  module: any
+
+  wasmReady = new BehaviorSubject<boolean>(false)
+
+  constructor() {
+    this.instantiateWasm('wasm/fibonacci.wasm')
+  }
+
+  private async instantiateWasm(url: string) {
+    // fetch the wasm file
+    const wasmFile = await fetch(url)
+
+    // convert it into a binary array
+    const buffer = await wasmFile.arrayBuffer()
+    const binary = new Uint8Array(buffer)
+
+    // create module arguments
+    // including the wasm-file
+    const moduleArgs = {
+      wasmBinary: binary,
+      onRuntimeInitialized: () => {
+        this.wasmReady.next(true)
+      },
+    }
+
+    // instantiate the module
+    this.module = Module(moduleArgs)
+  }
+
+  public fibonacci(input: number): Observable<number> {
+    return this.wasmReady.pipe(filter(value => value === true)).pipe(
+      map(() => {
+        return this.module._fibonacci(input)
+      })
+    )
+  }
+}
+    
+- compiling from rust to webassembly 
+https://developer.mozilla.org/en-US/docs/WebAssembly/Rust_to_wasm
+
+    + rust and webassembly use cases 
+    
+    + rust to wasm team, https://github.com/rustwasm/team
+    
+- go to webassembly 
+
+https://github.com/golang/go/wiki/WebAssembly#getting-started
+
+- convert typescript to webassembly 
+https://www.assemblyscript.org/
+
+
+- other languages 
+https://webassembly.org/getting-started/developers-guide/
+
+- It was Steve Jobs’ “Thoughts on Flash,” an open letter that clearly stated that the iPhone and iPad would never support Adobe Flash, that famously triggered the end of the plug-in era.
+
+
+# The interactive web and why we need webassembly 
+- streaming download of JS 
+characters --parse--> AST (abstract syntax tree) --generate-->bytecode {run} --compile-->baseline compiled code{run&profile} --compile--> ion-compiled code{run}
+
+Interpreters ⇒ fast start time, slow execution speed
+Compilers ⇒ slow start time, fast execution speed
+
+- webassembly modules 
+
+    + c code 
+float power(float number, int pow) {
+ float res = number;
+ for (int i = 0;i < pow - 1; i++) {
+   res = res * number;
+ }
+ return res;
+}
+
+    + saved to a file power.c and compile 
+$ emcc power.c -Os -s SIDE_MODULE=1 -o power.wasm
+
+    + a compact binary forma, webassembly binary toolkit. convert binary to text code 
+    
+$ xxd power.wasm
+$ wasm2wat power.wasm -o power.wat
+
+//output 
+(module
+  (type (;0;) (func (param f32 i32) (result f32)))
+  (func (;0;) (type 0) (param f32 i32) (result f32)
+    (local i32 f32)
+    local.get 1
+    i32.const -1
+    i32.add
+    local.set 2
+    local.get 1
+    i32.const 1
+    i32.gt_s
+    if  ;; label = @1
+      i32.const 0
+      local.set 1
+      local.get 0
+      local.set 3
+      loop (result f32)  ;; label = @2
+        local.get 3
+        local.get 0
+        f32.mul
+        local.set 3
+        local.get 2
+        local.get 1
+        i32.const 1
+        i32.add
+        local.tee 1
+        i32.ne
+        br_if 0 (;@2;)
+        local.get 3
+      end
+      local.set 0
+    end
+    local.get 0)
+  (export "_power" (func 0)))
+  
+- WebAssembly has support for four types: two integers (32- and 64-bit), and two floating point (again, 32- and 64-bit). The 64-bit integer type is quite notable; JavaScript lacks high precision integers (in fact
+
+- webassembly module 
+
+WebAssembly.instantiateStreaming(fetch("power.wasm"))
+.then(({ instance }) => {
+    console.log(instance.exports.power(2, 3));
+});
+
+WebAssembly modules, which are distributed in binary format (.wasm), and inspected their more readable textual format (.wat). 
+
+- The encoding/decoding logic is often termed glue code
+
+- webasssembly design goals 
+    + minimum viable product and use cases 
+    + security 
+    + portability 
+    + performance 
+
+- language support 
+    + c/c++ with emscripten, Emscripten is an LLVM-based compiler toolchain that targets both asm.js and WebAssembly. 
+
+    {
+        LLVM front-end 
+        rust 
+        c++ 
+        c
+    }   ==> {IR} ==> {
+        LLVM back-end 
+        x86 
+        ARM
+    }
+
+    add a Fastcomp step to convert to asm.js then to wasm for webassembly 
+    
+    {
+        LLVM front-end
+    }   ==> {IR} ==> {
+        Emscripten back-end 
+        Fastcomp {asm.js}
+        Binaryen {wasm}
+    }
+    
+    + Rust 
+    
+    + C# with Blazor 
+    https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor
+    
+    run on web assembly or the server, Blazor lets you build interactive web UIs using C# instead of JavaScript. Blazor apps are composed of reusable web UI components implemented using C#
+    
+
+# WebAssembly in Practice 
+- computer aided design autoCAD 
+- pdf
+- google earth 
+
+
+# Upcoming features and proposals 
+- reference types
+- garbage collection, gc free developers from thinking too deeply about memory management 
+- threads 
+- exception handling 
+- ecmascript module integration 
+
+let req = fetch("./myModule.wasm");
+
+let imports = {
+  aModule: {
+    anImport
+  }
+};
+
+WebAssembly
+  .instantiateStreaming(req, imports)
+  .then(
+    obj => obj.instance.exports.foo()
+  );
+  
+- interface types 
+- WebAssembly MVP, there have been a few different proposals that tackle this issue, including host bindings, which made it easier to generate the required glue code, and Web IDL bindings that allowed direct invocation of browser APIs.
+
+- WebAssembly System Interface (WASI). Unlike the other features discussed in this chapter, WASI isn’t a proposed enhancement of the WebAssembly specification; instead, it is being developed as a separate standard that complements the current specification.
+
+- speed, speed, speed, javascript vs c++ vs webasssembly 
+
+https://jaxenter.com/javascript-speed-165327.html
+
+php 8 also will release just in time compiler (JIT), only compile the code which will be executed. lazy compiling 
+
+sourcecode -> parser -> ast -> interpreter/compiler -> machine code 
+
+now
+
+sourcecode -> parser -> ast -> baseline compiler -> machine code
+                                |
+                                V 
+                               optimizing compiler -> optimized machine code 
+
+- speed comparison
+
+https://medium.com/@torch2424/webassembly-is-fast-a-real-world-benchmark-of-webassembly-vs-es6-d85a23f8e193
+
+
+# Beyond the browser 
+- serverless, is a relative new concept in which you allow the cloud provider to manage everything, you just provide your code 
+
+cloudfare has published details of its new cloud computing platform called workers 
+
+- blockchain, various cryptocurrency companies investigating its use as a runtime for executing smart contracts.
+
+- Bytecode Alliance. This group, founded by Mozilla, Red Hat, Intel, and Fastly has a broad mission:
+
+Our mission is to provide state-of-the-art foundations to develop runtime environments and language toolchains where security, efficiency, and modularity can all coexist across a wide range of devices and architectures.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+

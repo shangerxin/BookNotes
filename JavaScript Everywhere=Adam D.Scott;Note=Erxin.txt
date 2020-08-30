@@ -1,0 +1,461 @@
+JavaScript Everywhere=Adam D.Scott;Note=Erxin
+
+# Our development environment 
+- Expo is a toolchain that simplifies the bootstrapping and development ofiOS and Android projects with React Native.
+
+- Prettier is a code formatting tool with support for a number oflanguages, including JavaScript, HTML, CSS, GraphQL, and Markdown. Prettier.io 
+
+- ESLint is a code linter for JavaScript
+
+
+# API introduction
+# Web application with node, express 
+- extending port 
+
+const express = require('express');
+
+const app = express();
+const port = process.env.PORT || 4000;
+
+app.get('/', (req, res) => res.send('Hello World!!!'));
+
+app.listen(port, () =>
+  console.log(`Server running at http://localhost:${port}`)
+);
+
+
+# Our first graphsql API 
+- turning our server into an API (sort of). 
+
+- apollo-server-express. Express server into a GraphQL server using the apollo-server-express package. Apollo Server is an open source GraphQL server library that works with a large number of Node.js server frameworks
+
+// Construct a schema, using GraphQL schema language
+const typeDefs = gql`
+  type Query {
+    hello: String
+  }
+`;
+
+https://www.apollographql.com/docs/apollo-server/
+
+Apollo Server is an open-source, spec-compliant GraphQL server that's compatible with any GraphQL client, including Apollo Client. It's the best way to build a production-ready, self-documenting GraphQL API 
+
+- graphql, https://graphql.org/
+
+// Apollo Server setup
+const server = new ApolloServer({ typeDefs, resolvers });
+
+// Apply the Apollo GraphQL middleware and set the path to /api
+server.applyMiddleware({ app, path: '/api' });
+
+app.listen({ port }, () =>
+  console.log(
+    `GraphQL Server running at http://localhost:${port}${server.graphqlPath}`
+  )
+);
+
+- integrate http server with apollo 
+
+const express = require('express');
+const { ApolloServer, gql } = require('apollo-server-express');
+
+// Run the server on a port specified in our .env file or port 4000
+const port = process.env.PORT || 4000;
+
+// Construct a schema, using GraphQL's schema language
+const typeDefs = gql`
+  type Query {
+    hello: String
+  }
+`;
+
+// Provide resolver functions for our schema fields
+const resolvers = {
+  Query: {
+    hello: () => 'Hello world!'
+  }
+};
+
+const app = express();
+
+// Apollo Server setup
+const server = new ApolloServer({ typeDefs, resolvers });
+
+// Apply the Apollo GraphQL middleware and set the path to /api
+server.applyMiddleware({ app, path: '/api' });
+
+app.listen({ port }, () =>
+  console.log(
+    `GraphQL Server running at http://localhost:${port}${server.graphqlPath}`
+  )
+);
+
+- GraphQL schema documentation, https://oreil.ly/DPT8C
+
+
+# Database 
+- MongoDB, https://www.mongodb.com/
+
+- Mongoose Object Document Mapper (ODM). Mongooseis a library that simplifies working with MongoDB in Node.jsapplications by reducing and streamlining boilerplate code
+
+// Require the mongoose library
+const mongoose = require('mongoose');
+
+module.exports = {
+  connect: DB_HOST => {
+    // Use the Mongo driver's updated URL string parser
+    mongoose.set('useNewUrlParser', true);
+    // Use findOneAndUpdate() in place of findAndModify()
+    mongoose.set('useFindAndModify', false);
+    // Use createIndex() in place of ensureIndex()
+    mongoose.set('useCreateIndex', true);
+    // Use the new server discovery and monitoring engine
+    mongoose.set('useUnifiedTopology', true);
+    // Connect to the DB
+    mongoose.connect(DB_HOST);
+    // Log an error if we fail to connect
+    mongoose.connection.on('error', err => {
+      console.error(err);
+      console.log(
+        'MongoDB connection error. Please make sure MongoDB is running.'
+      );
+      process.exit();
+    });
+  },
+
+  close: () => {
+    mongoose.connection.close();
+  }
+};
+
+- our graphql CRUD schema 
+type Mutation {
+  newNote(content: String!): Note!
+  updateNote(id: ID!, content: String!): Note!
+  deleteNote(id: ID!): Boolean!
+}
+
+- user accounts and authentication 
+
+    + bcrypt is a popular hashing function based on the blowfish cipher and commonly used within a range of web frameworks.
+
+// require the module
+const bcrypt = require('bcrypt');
+
+// the cost of processing the salting data, 10 is the default
+const saltRounds = 10;
+
+// function for hashing and salting
+const passwordEncrypt = async password => {
+  return await bcrypt.hash(password, saltRounds)
+};
+
+    + JSON web token, https://jwt.io/
+    
+const jwt = require('jsonwebtoken');
+
+// generate a JWT that stores a user id
+const generateJWT = await user => {
+  return await jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+}
+
+// validate the JWT
+const validateJWT = await token => {
+  return await jwt.verify(token, process.env.JWT_SECRET);
+}
+
+    
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const {
+  AuthenticationError,
+  ForbiddenError
+} = require('apollo-server-express');
+require('dotenv').config();
+
+const gravatar = require('../util/gravatar');
+
+
+# User actions 
+- create user from the note itself 
+
+// add the users context
+newNote: async (parent, args, { models, user }) => {
+  // if there is no user on the context, throw an authentication error
+  if (!user) {
+    throw new AuthenticationError('You must be signed in to create a note');
+  }
+
+  return await models.Note.create({
+    content: args.content,
+    // reference the author's mongo id
+    author: mongoose.Types.ObjectId(user.id)
+  });
+},
+
+
+module.exports = {
+  // ...
+  // add the following to the existing module.exports object:
+  user: async (parent, { username }, { models }) => {
+    // find a user given their username
+    return await models.User.findOne({ username });
+  },
+  users: async (parent, args, { models }) => {
+    // find all users
+    return await models.User.find({});
+  },
+  me: async (parent, args, { models, user }) => {
+    // find a user given the current user context
+    return await models.User.findById(user.id);
+  }
+}
+
+
+# Details 
+- cross-origin resource sharing 
+
+// first require the package at the top of the file
+const cors = require('cors');
+
+// add the middleware after app.use(helmet());
+app.use(cors());
+
+- cursor-based pagination, in which a time-based cursor or unique identifier is passed as a starting point. 
+
+- data limitations
+
+notes: async (parent, args, { models }) => {  return await models.Note.find().limit(100);}
+
+
+# Deploying our API 
+- deploy to aws, heroku's webiste 
+
+$ brew tap heroku/brew && brew install heroku
+
+https://heroku.com/apps
+
+
+# User interface and react 
+- javascript and UIs,  Facebook’s PHP library, XHP. React differed from other popular JavaSript frameworks in that it focused solely on the rendering of the UI. 
+
+- just enough react 
+
+$ npx create-react-app just-enough-react
+
+
+# Styling an application 
+- CSS-in-JS, my initial reaction was one of horror. I spent the formative years of my web development career in the web standards era. I continue to advocate for accessibility and sensible progressive enhancement for web development. “Separation of concerns” has been a core tenant of my web practices for over a decade. 
+
+
+# Working with apollo client 
+- react markdown 
+
+import ReactMarkdown from 'react-markdown';
+
+- pagination 
+
+// if the data is successful, display the data in our UI
+return (
+  // add a <React.Fragment> element to provide a parent element
+  <React.Fragment>
+    <NoteFeed notes={data.noteFeed.notes} />
+    {/* Only display the Load More button if hasNextPage is true */}
+    {data.noteFeed.hasNextPage && (
+      <Button>Load more</Button>
+    )}
+  </React.Fragment>
+);
+
+{data.noteFeed.hasNextPage && (
+  //  onClick peform a query, passing the current cursor as a variable
+  <Button
+    onClick={() =>
+      fetchMore({
+        variables: {
+          cursor: data.noteFeed.cursor
+        },
+        updateQuery: (previousResult, { fetchMoreResult }) => {
+          return {
+            noteFeed: {
+              cursor: fetchMoreResult.noteFeed.cursor,
+              hasNextPage: fetchMoreResult.noteFeed.hasNextPage,
+              // combine the new results and the old
+              notes: [
+                ...previousResult.noteFeed.notes,
+                ...fetchMoreResult.noteFeed.notes
+              ],
+              __typename: 'noteFeed'
+            }
+          };
+        }
+      })
+    }
+  >
+    Load more
+  </Button>
+)}
+
+
+# Web authentication and state 
+- creating a sing-up form 
+
+import React, { useEffect } from 'react';
+
+// include the props passed to the component for later use
+const SignUp = props => {
+  useEffect(() => {
+    // update the document title
+    document.title = 'Sign Up — Notedly';
+  });
+
+  return (
+    <div>
+      <p>Sign Up</p>
+    </div>
+  );
+};
+
+export default SignUp;
+
+- local state management, Libraries such as Redux and MobX have sought to solve the challenges of state management and have proven useful for many developers and teams. 
+
+
+# Create, read, update and delete operations 
+- “CRUD” (create, read, update, and delete) application. An authenticated user can create new notes, read notes, update the content of a note or a note’s status as a favorite, and delete a note.
+
+- update notes 
+
+import React from 'react';
+import { useQuery, useMutation, gql } from '@apollo/client';
+
+// import the Note component
+import Note from '../components/Note';
+// import the GET_NOTE query
+import { GET_NOTE } from '../gql/query';
+
+const EditNote = props => {
+  // store the id found in the url as a variable
+  const id = props.match.params.id;
+  // define our note query
+  const { loading, error, data } = useQuery(GET_NOTE, { variables: { id } });
+
+  // if the data is loading, display a loading message
+  if (loading) return 'Loading...';
+  // if there is an error fetching the data, display an error message
+  if (error) return <p>Error! Note not found</p>;
+  // if successful, pass the data to the note component
+  return <Note note={data.note} />;
+};
+
+export default EditNote;
+
+
+# Deploy a web application 
+- static websites 
+- server-side rendered react 
+
+personal computer --git commit + push --> github --> netlify --> netlify runs build scripts 
+
+- deploy with netlify 
+
+go to netlify.com and register for an account. Once you’ve created an account, click the “New site from Git” button.
+
+- desktop applications with electron 
+    + developer tools, use the electron-util library. This is a small collection of utilities that will allow us to easily check system conditions and simplifies boilerplate code for common Electron patterns
+    
+    const { is } = require('electron-util');
+    
+- electron API 
+
+https://oreil.ly/Xo7NM, electron api demos 
+
+
+# Integrating an existing web application with electron 
+- integrating web application 
+
+window.loadURL('http://localhost:1234');
+
+
+# Electron deployment 
+-  Code signing is a boost for the security and trust of users, as it helps signify the trustworthiness of the app. 
+
+https://oreil.ly/Yb4JF, electron documentation 
+
+
+
+# Mobile applications with React native 
+- Visit expo.io and create an Expo account.Install the Expo command-line tools by typing npm install expo-cli --global into your terminal application.
+
+- icons, available by visiting expo.github.io/vector-icons. A number of icon sets are included, such as Ant Design, Ionicons, Font Awesome, Entypo, Foundation, Material Icons, and Material Community Icons.
+
+
+# GraphQL and React Native 
+- We’ll store our environment variables in a file called config.js. 
+
+
+# Mobile application authentication
+- routing flow
+
+Expo’s SecureStore, create text forms in React Native, and perform authentication GraphQL mutations
+
+https://oreil.ly/nvqEO
+https://oreil.ly/XXT4k
+https://docs.expo.io/versions/latest/sdk/securestore/?redirected
+
+```
+import React from 'react';
+import { View, Button, Text } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+
+const SignIn = props => {
+  return (
+    <View>
+      <Button title="Sign in!" />
+    </View>
+  );
+}
+
+SignIn.navigationOptions = {
+  title: 'Sign In'
+};
+
+export default SignIn;
+```
+
+- authentication with graphql mutations 
+
+import React from 'react';
+import { View, Button, Text } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import { useMutation, gql } from '@apollo/client';
+
+import UserForm from '../components/UserForm';
+import Loading from '../components/Loading';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
