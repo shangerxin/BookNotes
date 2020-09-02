@@ -34,6 +34,11 @@ https://medium.com/@mikevdg/why-webassembly-is-a-big-deal-a308d72c6de1
 
 https://www.thinkwithgoogle.com/intl/en-gb/feature/testmysite/
 
+- reference MDN
+https://developer.mozilla.org/en-US/docs/WebAssembly/Concepts
+https://developer.mozilla.org/en-US/docs/WebAssembly/Using_the_JavaScript_API
+
+
 
 # First step 
 - what is webassembly 
@@ -296,6 +301,289 @@ void ValidateCategory(char* category_id, int* valid_category_ids,   1
 $ emcc validate.cpp -s RESERVED_FUNCTION_POINTERS=4
  -s EXTRA_EXPORTED_RUNTIME_METHODS=['ccall','UTF8ToString',
 'addFunction','removeFunction'] -o validate.js
+
+
+# Dynamic linking: The basic 
+- linking options 
+    + C or C++ code can manually link to a module by using the dlopen function 
+    + instruct Emscripten that there are WebAssembly modules to link to by specifying them in the dynamicLibraries array of Emscripten’s generated JavaScript file. 
+    + In your JavaScript, you can manually take the exports of one module and pass them in as imports to another using the WebAssembly JavaScript API
+    
+    https://developer.mozilla.org/en-US/docs/WebAssembly/Using_the_JavaScript_API
+
+- three approaches to dynamic linking in this chapter:        
+    + dlopen, The side module needs to be downloaded to Emscripten’s file system first.                              
+    Calling dlopen returns a handle to the side module file.                                             
+    Passing the handle and the function name that you wish to call to the dlsym function will return a function pointer to the function in the side module.                                             
+    At this point, calling the function pointer is the same as calling a normal function in your module.                              
+    Because you’re requesting a function name based on the side module’s handle, having a function with the same name in the main module won’t cause any problems.                                             
+    Linking to a side module is performed as needed.      
+
+    $ emcc calculate_primes.cpp -s SIDE_MODULE=2 -O1 -o calculate_primes.wasm
+    
+```
+#include <cstdlib>
+
+#ifdef __EMSCRIPTEN__
+  #include <dlfcn.h>         1
+  #include <emscripten.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+                             2
+
+#ifdef __cplusplus
+}
+#endif
+```
+```
+int main() {
+  emscripten_async_wget("calculate_primes.wasm",     1
+      "calculate_primes.wasm",                       2
+      CalculatePrimes,                               3
+      NULL);                                         4
+
+  return 0;
+}
+
+void* handle = dlopen(file_name, RTLD_NOW);
+
+FindPrimes find_primes = (FindPrimes)dlsym(handle, "FindPrimes");
+
+// the calculate primise function that calls a function in the side module 
+...
+void CalculatePrimes(const char* file_name) {
+  void* handle = dlopen(file_name, RTLD_NOW);      1
+  if (handle == NULL) { return; }
+
+  FindPrimes find_primes =
+      (FindPrimes)dlsym(handle, "FindPrimes");     2
+  if (find_primes == NULL) { return; }
+
+  find_primes(3, 100000);                          3
+
+  dlclose(handle);                                 4
+}
+...
+
+```
+
+1 Opens the side module
+2 Gets a reference to the FindPrimes function
+3 Calls the function in the side module
+4 Closes the side module
+
+$ emcc main.cpp -s MAIN_MODULE=1 -o main.html
+    
+    + dynamicLibraries, 
+    You give Emscripten a list of side modules that you want it to link to by including them in the dynamicLibraries array property of the Module object. This list needs to be specified before Emscripten’s JavaScript code is initialized.                                             
+    Emscripten handles downloading and linking the side module to the main module for you.                              
+    Your module’s code calls the functions in the side module the same way it calls its own functions.                              
+    It’s not possible to call a function in another module if you already have a function with that name in the current module.                              
+    All the side modules specified are linked as soon as Emscripten’s JavaScript code is initialized. 
+
+Module['dynamicLibraries'] = ['calculate_primes.wasm'];
+
+$ emcc main.cpp -s MAIN_MODULE=1 --pre-js pre.js -s EXPORTED_FUNCTIONS=['_putchar','_main'] -o main.html
+
+
+    + The WebAssembly JavaScript API                                                                  
+    You handle downloading the WebAssembly module using the fetch method and use the WebAssembly JavaScript API to have that module instantiated.                                             
+    You then download the next WebAssembly module and pass the necessary exports from the first module as the imports for the current module.                                             
+    Your module’s code calls the functions in the side module the same way it calls its own functions.                              
+    As with the dynamicLibraries approach, it’s not possible to call a function in another module if you already have a function with that name in the current module.
+
+$ emcc is_prime.c -s SIDE_MODULE=2 -O1 -o is_prime.wasm
+$ emcc find_primes.c -s SIDE_MODULE=2 -O1 -o find_primes.wasm
+
+```
+...
+const isPrimeImportObject = {                                           1
+  env: {
+    __memory_base: 0,
+  }
+};
+
+WebAssembly.instantiateStreaming(fetch("is_prime.wasm"),                2
+    isPrimeImportObject)
+.then(module => {                                                       3
+
+  const findPrimesImportObject = {                                      4
+    env: {
+      __memory_base: 0,
+      _IsPrime: module.instance.exports._IsPrime,                       5
+      _LogPrime: logPrime,                                              6
+    }
+  };
+
+  return WebAssembly.instantiateStreaming(fetch("find_primes.wasm"),    7
+      findPrimesImportObject);
+
+})                                                                      8
+.then(module => {
+  module.instance.exports._FindPrimes(3, 100);                          9
+});
+```
+
+# Dyanmic linking the implementation 
+- using dynamic linking in a single-page application 
+dlopen in your C or C++ code 
+dynamicLibraries , in your JavaScript provides Emscripten 
+Manually linking your js takes the exports of one module and passes them as the imports to another 
+
+- add code in cpp file 
+```
+#ifdef __EMSCRIPTEN__
+  EMSCRIPTEN_KEEPALIVE
+#endif
+
+#include <cstdlib>
+
+#ifdef __EMSCRIPTEN__
+  #include <emscripten.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+```
+
+# Threading web workers and pthreads
+- using a web worker to fetch and compile a webassembly module 
+http://mng.bz/gVBG
+
+- instantiating a WebAssembly module on behalf of Emscripten's JavaScript code 
+- Creating a WebAssembly module that uses pthreads 
+https://en.wikipedia.org/wiki/POSIX_Threads
+
+```
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <pthread.h>
+#include <unistd.h>
+
+#define NUM_THREADS 5
+
+void *perform_work(void *arguments){
+  int index = *((int *)arguments);
+  int sleep_time = 1 + rand() % NUM_THREADS;
+  printf("THREAD %d: Started.\n", index);
+  printf("THREAD %d: Will be sleeping for %d seconds.\n", index, sleep_time);
+  sleep(sleep_time);
+  printf("THREAD %d: Ended.\n", index);
+  
+}
+
+int main(void) {
+  pthread_t threads[NUM_THREADS];
+  int thread_args[NUM_THREADS];
+  int i;
+  int result_code;
+  
+  //create all threads one by one
+  for (i = 0; i < NUM_THREADS; i++) {
+    printf("IN MAIN: Creating thread %d.\n", i);
+    thread_args[i] = i;
+    result_code = pthread_create(&threads[i], NULL, perform_work, &thread_args[i]);
+    assert(!result_code);
+  }
+
+  printf("IN MAIN: All threads are created.\n");
+
+  //wait for each thread to complete
+  for (i = 0; i < NUM_THREADS; i++) {
+    result_code = pthread_join(threads[i], NULL);
+    assert(!result_code);
+    printf("IN MAIN: Thread %d has ended.\n", i);
+  }
+
+  printf("MAIN program has ended.\n");
+  return 0;
+}
+```
+
+- benefits of web workers 
+
+- nodejs worker threads
+https://nodejs.org/api/worker_threads.html
+
+- WebAssembly supports pthreads by using web workers and a SharedArrayBuffer.
+
+https://github.com/webassembly/threads/blob/master/proposals/threads/Overview.md
+
+```
+/// main.js ///
+let moduleBytes = ...;  // An ArrayBuffer containing the WebAssembly module above.
+let memory = new WebAssembly.Memory({initial: 1, maximum: 1, shared: true});
+let worker = new Worker('worker.js');
+const mutexAddr = 0;
+
+// Send the shared memory to the worker.
+worker.postMessage(memory);
+
+let imports = {env: {memory: memory}};
+let module = WebAssembly.instantiate(moduleBytes, imports).then(
+    ({instance}) => {
+        // Blocking on the main thread is not allowed, so we can't
+        // call lockMutex.
+        if (instance.exports.tryLockMutex(mutexAddr)) {
+            ...
+            instance.exports.unlockMutex(mutexAddr);
+        }
+    });
+
+
+/// worker.js ///
+let moduleBytes = ...;  // An ArrayBuffer containing the WebAssembly module above.
+const mutexAddr = 0;
+
+// Listen for messages from the main thread.
+onmessage = function(e) {
+    let memory = e.data;
+    let imports = {env: {memory: memory}};
+    let module = WebAssembly.instantiate(moduleBytes, imports).then(
+        ({instance}) => {
+            // Blocking on a Worker thread is allowed.
+            instance.exports.lockMutex(mutexAddr);
+            ...
+            instance.exports.unlockMutex(mutexAddr);
+        });
+};
+```
+
+- real-world use cases 
+    + Although not quite the same as pthreads in WebAssembly, web workers can be used as a polyfill for parallel processing in browsers
+    
+    + Web workers can be used to prefetch and compile WebAssembly modules in anticipation of their need.
+    
+    + WebAssembly in eBay, http://mng.bz/Ye1a
+    
+    
+# WebAssembly text format 
+# Debugging 
+# Testing 
+- memory and numeric instructions for the object types 
+http://webassembly.github.io/spec/core/text/instructions.html
+
+https://mochajs.org/#running-mocha-in-the-browser
+
+Creating automated tests using Mocha
+Running your tests at the command line in Node.js
+Running your tests in the browsers you intend to support
+
+- WebAssembly Binary toolkit 
+
+https://webassembly.github.io/wabt/demo/wat2wasm
+https://github.com/WebAssembly/wabt
 
 
 # Advanced topics 
