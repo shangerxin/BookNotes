@@ -1,0 +1,362 @@
+Programming Rust,2nd Edition=Jim;Note=Erxin
+
+# Why rust?
+- In general, C++ implementations obey the zero-overhead principle: What you don’t use, you don’t pay for. And further: What you do use, you couldn’t hand code any better.
+
+- Rust, a safe, concurrent language with the performance of C and C++.
+
+- tool, exodus, Exodus is a tool that makes it easy to successfully relocate Linux ELF binaries from one system to another. This is useful in situations where you don't have root access on a machine or where a package simply isn't available for a given Linux distribution. 
+
+https://github.com/intoli/exodus
+
+- basic types 
+
+types                   description                 values 
+i8, i16, i32, i64, i128 signed and unsigned integers 
+u8, u16, u32, u64, u128
+
+isize, usize            signed and unsigned integers same size as an anddress on the machine(32b or 64b)
+
+f32, f64,               IEEE floating-point numbers
+
+bool                    boolean 
+
+char                    unicode character, 32 bits wide 
+
+(char, u8, i32)         tuple, mixed type allowed 
+
+()                      "unit" (empty tuple)
+
+struct S {x: f32, y:f32} named-field struct        
+
+struct T {i32, char}    tuple like struct 
+
+struct E,               unit-like struct has no fields 
+
+enum Attend {O nTime, Late(u32)}    Enumeration, algebraic data type
+
+Box<Attend>             Box: owning pointer to value in heap 
+
+&i32, &mut i32          shared and mutable references 
+
+String                  UTF-8 string 
+
+&str                    Reference to str 
+
+[f64; 4], [u8; 256]     Array fixed length, all of same type 
+
+Vec<f64>                Vector, varying length all same type 
+
+&[u8], &mut [u8]        Reference to slice
+
+Result<u64, Error>      Result of operation that may fail 
+
+&dyn Any, &mut dyn Read Trait object 
+
+fn(&str) -> bool        Pointer to function 
+
+(Closure type have no written form)    Closure          |a, b|{a*b + b*b}
+
+- machine types 
+size(bits)      unsigned integer        signed integer          floating-point
+8               u8                      i8                      
+16              u16                     i16 
+32              u32                     i32                     f32     
+64              u64                     i64                     f64 
+128             u128                    i128 
+machine word    usize                   isize 
+
+- type casts 
+
+assert_eq!(   10_i8  as u16,    10_u16); // in range
+assert_eq!( 2525_u16 as i16,  2525_i16); // in range
+
+assert_eq!(   -1_i16 as i32,    -1_i32); // sign-extended
+assert_eq!(65535_u16 as i32, 65535_i32); // zero-extended
+
+// Conversions that are out of range for the destination
+// produce values that are equivalent to the original modulo 2^N,
+// where N is the width of the destination in bits. This
+// is sometimes called "truncation".
+assert_eq!( 1000_i16 as  u8,   232_u8);
+assert_eq!(65535_u32 as i16,    -1_i16);
+
+assert_eq!(   -1_i8  as u8,    255_u8);
+assert_eq!(  255_u8  as i8,     -1_i8);
+
+println!("{}", (-4).abs());
+
+- Checked, Wrapping, and Saturating Arithmetic, customize dealing with arithmetic overflow aren’t what you need. 
+
+// The sum of 10 and 20 can be represented as a u8.
+assert_eq!(10_u8.checked_add(20), Some(30));
+
+// Unfortunately, the sum of 100 and 200 cannot.
+assert_eq!(100_u8.checked_add(200), None);
+
+// Do the addition; panic if it overflows.
+let sum = x.checked_add(y).unwrap();
+
+// Oddly, signed division can overflow too, in one particular case.
+// A signed n-bit type can represent -2ⁿ⁻¹, but not 2ⁿ⁻¹.
+assert_eq!((-128_i8).checked_div(-1), None);
+
+    + prefix 
+    operation           suffix      example 
+addition 	            add 	100_i8.checked_add(27) == Some(127)
+Subtraction 	        sub 	10_u8.checked_sub(11) == None
+Multiplication      	mul 	128_u8.saturating_mul(3) == 255
+Division 	            div 	64_u16.wrapping_div(8) == 8
+Remainder 	            rem 	(-32768_i16).wrapping_rem(-1) == 0
+Negation 	            neg 	(-128_i8).checked_neg() == None
+Absolute value 	        abs 	(-32768_i16).wrapping_abs() == -32768
+Exponentiation 	        pow 	3_u8.checked_pow(4) == Some(81)
+Bitwise left shift 	    shl 	10_u32.wrapping_shl(34) == 40
+Bitwise right shift 	shr 	40_u64.wrapping_shr(66) == 10
+
+- Rust performs almost no numeric conversions implicitly.
+
+- the bool type 
+assert_eq!(false as i32, 0);
+assert_eq!(true  as i32, 1);
+
+- characters, a single Unicode character, as a 32-bit value.
+
+- tuples, A tuple is a pair, or triple, or quadruple, ... of values of assorted types
+
+let text = "I see the eigenvalue in thine eye";
+let (head, tail) = text.split_at(21);
+assert_eq!(head, "I see the eigenvalue ");
+assert_eq!(tail, "in thine eye");
+
+- Pointer types 
+
+- References, A value of type &String (pronounced “ref String”) is a reference to a String value, a &i32 is a reference to an i32, and so on.
+
+
+&T, A shared reference.
+
+&mut T, A mutable reference. You can read and modify the value it points to. Rust uses this dichotomy between shared and mutable references to enforce a “single writer or multiple readers” rule
+
+- Boxes, allocate a value in heap 
+
+let t = (12, "eggs");
+let b = Box::new(t);  // allocate a tuple in the heap
+
+- Raw pointers, Rust also has the raw pointer types *mut T and *const T. Raw pointers really are just like pointers in C++. 
+
+ only dereference raw pointers within an unsafe block.
+ 
+- Arrays, Vectors and Slices 
+
+[T; N] represents an array of N values,
+ 
+Vec<T>, called a vector of Ts, is a dynamically allocated, growable sequence of values of type T.
+ 
+The types &[T] and &mut [T], called a shared slice of Ts and mutable slice of Ts, are references to a series of elements that are a part of some other value, like an array or vector. 
+ 
+A mutable slice &mut [T] lets you read and modify elements, but can’t be shared; a shared slice &[T] lets you share access among several readers, but doesn’t let you modify elements.
+ 
+- Arrays 
+
+let lazy_caterer: [u32; 6] = [1, 2, 4, 7, 11, 16];
+let taxonomy = ["Animalia", "Arthropoda", "Insecta"];
+
+assert_eq!(lazy_caterer[3], 7);
+assert_eq!(taxonomy.len(), 3);
+
+
+let mut sieve = [true; 10000];
+for i in 2..100 {
+    if sieve[i] {
+        let mut j = i * i;
+        while j < 10000 {
+            sieve[j] = false;
+            j += i;
+        }
+    }
+}
+
+assert!(sieve[211]);
+assert!(!sieve[9876]);
+
+If n is a variable, you can’t write [true; n] to get an array of n elements. 
+
+- Vectors, Vec<T> is a resizable array of elements of type T, allocated on the heap
+
+let mut primes = vec![2, 3, 5, 7];
+assert_eq!(primes.iter().product::<i32>(), 210);
+
+- you can use slice methods on vectors 
+
+// A palindrome!
+let mut palindrome = vec!["a man", "a plan", "a canal", "panama"];
+palindrome.reverse();
+// Reasonable yet disappointing:
+assert_eq!(palindrome, vec!["panama", "a canal", "a plan", "a man"]);
+
+
+let mut v = Vec::with_capacity(2);
+assert_eq!(v.len(), 0);
+assert_eq!(v.capacity(), 2);
+
+v.push(1);
+v.push(2);
+assert_eq!(v.len(), 2);
+assert_eq!(v.capacity(), 2);
+
+v.push(3);
+assert_eq!(v.len(), 3);
+// Typically prints "capacity is now 4":
+println!("capacity is now {}", v.capacity());
+
+
+let languages: Vec<String> = std::env::args().skip(1).collect();
+for l in languages {
+    println!("{}: {}", l,
+             if l.len() % 2 == 0 {
+                 "functional"
+             } else {
+                 "imperative"
+             });
+}
+
+- Slices, written [T] without specifying the length, is a region of an array or vector. 
+
+let v: Vec<f64> = vec![0.0,  0.707,  1.0,  0.707];
+let a: [f64; 4] =     [0.0, -0.707, -1.0, -0.707];
+
+let sv: &[f64] = &v;
+let sa: &[f64] = &a;
+
+Rust automatically converts the &Vec<f64> reference and the &[f64; 4] reference to slice references that point directly to the data
+
+```
+fn print(n: &[f64]) {
+    for elt in n {
+        println!("{}", elt);
+    }
+}
+
+print(&a);  // works on arrays
+print(&v);  // works on vectors
+```
+
+- string types 
+
+let speech = "\"Ouch!\" said the well.\n";
+
+span multiple lines 
+println!("In the room the women come and go,
+    Singing of Mount Abora");
+    
+a string ends with a backslash, then the newline character and the leading whitespace on the next line are dropped
+println!("It was a bright, cold day in April, and \
+    there were four of us—\
+    more or less.");
+
+- byte strings, prefix with a b, is a slice of u8 values 
+
+let method = b"GET";
+assert_eq!(method, &[b'G', b'E', b'T']);
+
+- Strings in memory 
+
+let noodles = "noodles".to_string();
+let oodles = &noodles[1..];
+let poodles = "ಠ_ಠ";
+
+{stack frame| noodles String, oodles &str, poodles}
+
+{heap| "noodles"}
+
+{preallocated read-only memory|  "ಠ_ಠ" }
+
+A String has a resizable buffer holding UTF-8 text. The buffer is allocated on the heap
+
+- String, &str is very much like &[T]: a fat pointer to some data. String is analogous to Vec<T>:
+
+                                                            Vec<T>  String 
+Automatically frees buffers 	                            Yes 	Yes
+Growable 	                                                Yes 	Yes
+::new() and ::with_capacity() static methods 	            Yes 	Yes
+.reserve() and .capacity() methods 	                        Yes 	Yes
+.push() and .pop() methods 	                                Yes 	Yes
+Range syntax v[start..stop] 	                            Yes, returns &[T] 	Yes, returns &str
+Automatic conversion 	                                    &Vec<T> to &[T] 	&String to &str
+Inherits methods 	                                        From &[T] 	From &str
+
+each String has its own heap-allocated buffer that isn’t shared with any other String. 
+
+    + create a string 
+    1. The .to_string() method converts a &str to a String. 
+    
+    2. The format!() macro works just like println!(), except that it returns a new String instead of writing text to stdout
+
+    3. Arrays, slices, and vectors of strings have two methods, .concat() and .join(sep), that form a new String
+    
+- using string 
+
+Strings support the == and != operators. Two strings are equal if they contain the same characters in the same order
+
+Unicode, simple char-by-char comparison does not always give the expected answers. For example, the Rust strings "th\u{e9}" and "the\u{301}" are both valid Unicode representations for thé, the French word for tea.
+
+- other string like types 
+
+Stick to String and &str for Unicode text.
+
+When working with filenames, use std::path::PathBuf and &Path instead.
+
+binary data that isn’t character data at all, use Vec<u8> and &[u8].
+
+environment variable names and command-line arguments in the native form presented by the operating system, use OsString and &OsStr.
+
+interoperating with C libraries that use null-terminated strings, use std::ffi::CString and &CStr. 
+
+
+# Expression 
+- Expressions have values. Statements don’t. Rust is what is called an expression language. This means it follows an older tradition, dating back to Lisp, where expressions do all the work.
+
+In Rust, if and match can produce values. 
+
+```
+
+pixels[r * bounds.0 + c] =
+    match escapes(Complex { re: point.0, im: point.1 }, 255) {
+        None => 0,
+        Some(count) => 255 - count as u8
+    };
+    
+println!("Inside the vat, you see {}.",
+    match vat.contents {
+        Some(brain) => brain.desc(),
+        None => "nothing of interest"
+    });
+```
+
+```
+let status =
+    if cpu.temperature <= MAX_TEMP {
+        HttpStatus::Ok
+    } else {
+        HttpStatus::ServerError  // server melted
+    };
+```
+
+- Most of the control flow tools in C are statements. In Rust, they are all expressions
+
+- blocks and semicolons, Blocks, too, are expressions. A block produces a value
+
+let display_name = match post.author() {
+    Some(author) => author.name(),
+    None => {
+        let network_info = post.get_network_metadata()?;
+        let ip = network_info.client_address();
+        ip.to_string()
+    }
+};
+
+
+
+
+
