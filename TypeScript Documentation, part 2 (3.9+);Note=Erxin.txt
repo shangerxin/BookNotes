@@ -85,7 +85,174 @@ function foo<T extends any>(arg: T) {
 
 In previous TypeScript versions, declarations like export * from "foo" would be dropped in our JavaScript output if foo didn’t export any values. 
 
+- export * is always retained. TypeScript 3.9 will always emit these export * declarations. 
+
 - More libdom.d.ts refinements #
+
+
+# TypeScript 4.0
+- Variadic tuple type. 
+    + The first change is that spreads in tuple type syntax can now be generic.The first change is that spreads in tuple type syntax can now be generic.
+    
+function tail(arg) {
+  const [_, ...result] = arg;
+  return result;
+}
+
+const myTuple = [1, 2, 3, 4] as const;
+const myArray = ["hello", "world"];
+
+const r1 = tail(myTuple);
+//    ^ = const r1: [2, 3, 4]
+
+const r2 = tail([...myTuple, ...myArray] as const);
+//    ^ = const r2: [2, 3, 4, ...string[]]
+
+    + second change is that rest elements can occur anywhere in tuple 
+
+type Strings = [string, string];
+type Numbers = [number, number];
+
+type StrStrNumNumBool = [...Strings, ...Numbers, boolean];
+//   ^ = type StrStrNumNumBool = [string, string, number, number, boolean]
+
+    + TypeScript 4.0 this restriction is relaxed. we can write concat 
+
+type Arr = readonly any[];
+
+function concat<T extends Arr, U extends Arr>(arr1: T, arr2: U): [...T, ...U] {
+  return [...arr1, ...arr2];
+}
+
+    + improves the inference process for rest parameters 
+
+type Arr = readonly unknown[];
+
+function partialCall<T extends Arr, U extends Arr, R>(
+  f: (...args: [...T, ...U]) => R,
+  ...headArgs: T
+) {
+  return (...tailArgs: U) => f(...headArgs, ...tailArgs);
+}
+
+const foo = (x: string, y: number, z: boolean) => {};
+
+const f1 = partialCall(foo, 100);
+Argument of type 'number' is not assignable to parameter of type 'string'.
+
+const f2 = partialCall(foo, "hello", 100, true, "oops");
+Expected 4 arguments, but got 5.
+
+// This works!
+const f3 = partialCall(foo, "hello");
+//    ^ = const f3: (y: number, z: boolean) => void
+
+// What can we do with f3 now?
+
+// Works!
+f3(123, true);
+
+f3();
+
+- labeled tuple elements 
+
+type Range = [start: number, end: number];
+
+type Foo = [first: number, second?: string, ...rest: any[]];
+
+- class property inference from constructors 
+    + can now use control flow analysis to determine the types of properties in classes when noImplicitAny is enabled
+    
+class Square {
+    // Previously both of these were any
+    area;
+    // ^ = (property) Square.area: number
+    sideLength;
+    // ^ = (property) Square.sideLength: number
+    constructor(sideLength: number) {
+        this.sideLength = sideLength;
+        this.area = sideLength ** 2;
+    }
+}
+
+    + explicit type annotation along with a definite assignment assertion (!) if you’re in strictPropertyInitialization.
+
+- short-circuiting assignment operators 
+
+// Addition
+// a = a + b
+a += b;
+
+// Subtraction
+// a = a - b
+a -= b;
+
+// Multiplication
+// a = a * b
+a *= b;
+
+// Division
+// a = a / b
+a /= b;
+
+// Exponentiation
+// a = a ** b
+a **= b;
+
+// Left Bit Shift
+// a = a << b
+a <<= b;
+
+TypeScript 4.0 supports a new ECMAScript feature to add three new assignment operators: 
+ &&=, 
+ ||=, and 
+ ??=.
+ 
+now we can write 
+```
+let values: string[];
+(values ?? (values = [])).push("hello");
+
+// After typescript 4.0 
+(values ??= []).push("hello");
+```
+
+- unknown on catch clause bindings to improve the default any type 
+
+That’s why TypeScript 4.0 now lets you specify the type of catch clause variables as unknown instead. unknown is safer than any because it reminds us that we need to perform some sorts of type-checks before operating
+
+try {
+  // ...
+} catch (e: unknown) {
+  // Can't access values on unknowns
+  console.log(e.toUpperCase());
+Object is of type 'unknown'.
+
+  if (typeof e === "string") {
+    // We've narrowed 'e' down to the type 'string'.
+    console.log(e.toUpperCase());
+  }
+}
+
+- custom JSX factories, typescript 4.0, users can customize the fragment factory through the new jsxFragmentFactory option
+
+// Note: these pragma comments need to be written
+// with a JSDoc-style multiline syntax to take effect.
+
+/** @jsx h */
+/** @jsxFrag Fragment */
+
+import { h, Fragment } from "preact";
+
+export const Header = (
+  <>
+    <h1>Welcome</h1>
+  </>
+);
+
+- Speed improvements in build mode with --noEmitOnError 
+
+
 
 
 

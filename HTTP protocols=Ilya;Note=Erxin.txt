@@ -1,0 +1,357 @@
+HTTP protocols=Ilya;Note=Erxin
+
+
+# Brief history of HTTP 
+- original HTTP proposal by Tim Berners-Lee was designed with simplicity in mind
+
+Client request is a single ASCII character string.
+
+Client request is terminated by a carriage return (CRLF).
+
+Server response is an ASCII character stream.
+
+Server response is a hypertext markup language (HTML).
+
+Connection is terminated after the document transfer is complete.
+
+    + telnet friendly web servers support this. Telnet(teletype network) is an application protocol used on the Internet or local area network to provide a bidirectional interactive text-oriented communication facility using a virtual terminal connection.
+    
+    https://en.wikipedia.org/wiki/Telnet
+    
+    There are other TCP terminal clients, such as netcat or socat on UNIX and PuTTY on Windows, which handle such requirements. Nevertheless, Telnet may still be used in debugging network services such as SMTP, IRC, HTTP, FTP or POP3
+    
+    Telnet protocol specification 
+    https://tools.ietf.org/html/rfc854
+    https://tools.ietf.org/html/rfc855
+    https://tools.ietf.org/html/rfc856
+    https://tools.ietf.org/html/rfc857
+    https://tools.ietf.org/html/rfc858
+    https://tools.ietf.org/html/rfc859
+    https://tools.ietf.org/html/rfc860
+    https://tools.ietf.org/html/rfc861
+    
+$> telnet google.com 80
+
+- HTTP/1.0: Rapid Growth and Informational RFC. list of HTTP/1.0 capabilities, the keys changes compare to 0.9 are
+
+Request may consist of multiple newline separated header fields.
+
+Response object is prefixed with a response status line.
+
+Response object has its own set of newline separated header fields.
+
+Response object is not limited to hypertext.
+
+The connection between server and client is closed after every request.
+
+    + Requiring a new TCP connection per request imposes a significant performance penalty on HTTP/1.0.
+    
+- HTTP/1.1: Internet Standard, HTTP/1.1 changed the semantics of the HTTP protocol to use connection keepalive by default.
+
+detail can be references from O’Reilly’s HTTP: The Definitive Guide by David Gourley and Brian Totty.
+
+- HTTP/2: Improving Transport Performance,  HTTP/2 in early 2012.  delivered over HTTP/2 without modification
+
+
+# Primer on web performance 
+- impact of latency and bandwidth on web performance 
+- transport protocol(TCP) constraints imposed on HTTP 
+- features and shortcoming of the HTTP protocol itself 
+- web application trends and performance requirements 
+- browser constraints and optimizations 
+
+
+# HTTP 1.X
+- Persistent connections to allow connection reuse 
+- Chunked transfer encoding to allow response streaming 
+- Request pipeling to allow parallel request processing, deploy HTTP pipelining is to create a secure (HTTPS) tunnel between the client and server. That’s the most reliable way to avoid interference from intermediaries
+- Improve and much better specified caching mechanisms 
+- Reduce DNS lookups 
+- Make fewer HTTP requests, eliminate unnecessary resources on your pages 
+- Use a constant delivery network. 
+
+
+# HTTP/2
+- primary goals for HTTP/2 are to reduce latency by enabling full request and response multiplexing, minimize protocol overhead via efficient compression of HTTP header fields,
+
+- HTTP/2 introduces a new binary framing layer that is not backward compatible with previous HTTP/1.x servers and clients. So the major protocol version increased to HTTP/2
+
+availability of new capabilities like request prioritization, flow control, and server push
+- Brieff history of SPDY and HTTP/2 
+
+SPDY is deprecated, the successor is HTTP/2
+https://www.chromium.org/spdy
+https://www.chromium.org/spdy/spdy-whitepaper
+
+- HTTP/2 enables a more efficient use of network resources and a reduced perception of latency by introducing header field compression and allowing multiple concurrent exchanges on the same connection
+
+- binary framing layer,  HTTP/2 is the new binary framing layer (Figure 4-1), which dictates how the HTTP messages are encapsulated
+
+{
+Applicaiton (HTTP/2)
+{Binary framing}
+Session(TLS) (optional)
+Transport(TCP)
+Network(IP)
+}
+
+all HTTP/2 communication is split into smaller messages and frames, each of which is encoded in binary format.
+
+using wireshark inspect the encrypted TLS flows—which also rely on binary framing—carrying HTTP/1.x and HTTP/2 data.
+
+    + terms 
+    Stream, bidirection flow of bytes 
+    Message, a complete sequence of frames that map to a logical request or response 
+    Frame, HTTP/2 smallest unit of communication. All communication performed over a single TCP connection that can carry any number of bidirectional streams. Each stream has a unique identifier, each message is a logical HTTP message, frame is the smalest unit. 
+    
+    + request and response multiplexing 
+    
+    This behavior is a direct consequence of the HTTP/1.x delivery model, which ensures that only one response can be delivered at a time (response queuing) per connection. 
+    
+    full request and response multiplexing, by allowing the client and server to break down an HTTP message into independent frames. Use a single connection in parallel. 
+    
+    + stream prioritization, weight between 1 and 256. Support stream depenendcy, Declaring a stream dependency indicates that, if possible, the parent stream should be allocated resources ahead of its dependencies
+    
+    + With HTTP/1.x, the browser has limited ability to leverage above priority data: the protocol does not support multiplexing
+    
+- one connection per origin, HTTP/2, like its predecessors, does not mandate the use of TCP. Other transports, such as UDP, are not outside
+
+- flow control, HTTP/2 provides a set of simple building blocks that allow the client and server to implement own stream- and connection-level flow control
+
+    + it is directional, receiver may choose to set any window size for each stream and connetion 
+    + credit-based, initial connection and strea floow window(in bytes)
+    + flow control cannot be disabled, default window size is 65535 bytes 
+    + flow control is hop by hop 
+    
+- server push, the server can push additional resources to the client (Figure 4-5), without the client having to request each one explicitly
+
+can be cached 
+
+resued across different pages 
+
+multiplexed alongside other resources 
+
+prioritized by the server 
+
+declined by the client 
+
+    + All server push streams are initiated via PUSH_PROMISE frames, which signal the server’s intent to push the described resources to the client
+    
+    + PUSH_PROMISE frame it has the option to decline the stream (via a RST_STREAM frame) if it wants to 
+
+- header compression, HTTP/2 compresses request and response header metadata using the HPACK compression format that uses two simple but powerful techniques
+
+    + header fields encoded via a static Huffman code
+    
+    + both the client and server maintain and update an indexed list of previously seen header fields
+    
+    https://tools.ietf.org/html/draft-ietf-httpbis-header-compression
+    
+- compare the previous versions HTTP/2 all header field names are lowercase, and the request line is now split into individual :method, :scheme, :authority, and :path pseudo-header fields.
+
+- upgrading to HTTP/2, HTTP/2 defines 
+    + Negotiating HTTP/2 via a secure connection with TLS and ALPN
+    
+    + Upgrading a plaintext connection to HTTP/2 without prior knowledge
+    
+    + Initiating a plaintext HTTP/2 connection with prior knowledge
+    
+    + Because both HTTP/1.x and HTTP/2 run on the same port (80), in absence of any other information about server support for HTTP/2. The client has to use the HTTP Upgrade mechanism to negothiate the appropriate protocol 
+
+```    
+GET /page HTTP/1.1
+Host: server.example.com
+Connection: Upgrade, HTTP2-Settings
+Upgrade: h2c 1
+HTTP2-Settings: (SETTINGS payload) 2
+
+HTTP/1.1 200 OK 3
+Content-length: 243
+Content-type: text/html
+
+(... HTTP/1.1 response ...)
+
+          (or)
+
+HTTP/1.1 101 Switching Protocols 4
+Connection: Upgrade
+Upgrade: h2c
+
+(... HTTP/2 response ...)
+```
+        1. Initial HTTP/1.1 request with HTTP/2 upgrade header
+
+        2. Base64 URL encoding of HTTP/2 SETTINGS payload
+
+        3. Server declines upgrade, returns response via HTTP/1.1
+
+        4. Server accepts HTTP/2 upgrade, switches to new framing
+
+The client can also confirm the HTTP/2 upgrade by returning the 101 switching protocols. the worst case, the connection will fail, and the client will fall back to Upgrade workflow or switch to a TLS tunnel with ALPN negotiation.
+
+- Brief introduction to binary framing 
+
+Bit     +0..7           + 8..15             +16..23         +24..31 
+0                       length                              type 
+32      flags 
+40 R        stream identifier 
+..          frame payload 
+
+- HTTP/2 defines the types 
+
+DATA 
+
+HEADERS 
+
+PRIORITY 
+
+RST_STREAM 
+
+SETTINGS 
+
+PUSH_PROMISE 
+
+PING 
+
+GOAWAY 
+
+WINDOW_UPDATE 
+
+CONTINUATION 
+
+- tool like Wireshark, which understands the HTTP/2 protocol and can capture, decode, and analyze the exchange
+
+- initiating a new stream, HTTP/2 uses fixed-length fields exclusively. Figure 4-8. Decoded HEADERS frame in Wireshark
+
+HTTP/2 allows both client and server to initiate new streams. In the case of a server-initiated stream, a PUSH_PROMISE frame is used to declare the promise and communicate the HPACK-encoded response headers. 
+
+- The payload can be split between multiple DATA frames, with the last frame indicating the end of the message by toggling the END_STREAM flag in the header of the frame
+
+- Analyzing HTTP/2 frame data flow with tools
+
+
+# Optimizing Application Delivery 
+- every server is configured to use the latest TCP and TLS best practices. Optimizing the underlying protocols ensures that each client can get the best performance—high throughput and low latency
+
+- evergreen performance test practices 
+Reduce DNS lookups, network roudtrip imposing latency 
+Reduce TCP connections, leverage connection keep alive whenever possible to eliminate TCP handshake and slow-start latency 
+Minimize number of HTTP redirects 
+Reduce roundtrip times 
+Eliminate unnecessary resources 
+
+- Cache resource on the client 
+- Compress assets during transfer 
+- Eliminate unnecessary request bytes
+- Parallelize request and response processing 
+- Apply protocol-specific optimizations 
+- Cache resources on the client 
+Cache-Control header can specify the cache lifetime (max-age) of the resource 
+Last-Modifed and ETag headers provide validation 
+
+- Compress transferred data 
+    + compress text with gzip
+    + stripped meta data from image 
+    + sized image to minimize transfer bytes 
+    + image compress with lossy and lossless formats 
+
+- eliminate unnecessary request bytes
+    + maximum limit on the size of a cookie, but in practice most browsers enforce a 4 KB limit.
+    + http/1.x headers and cookies are transferred uncompressed 
+    + http/2 headers are comporessed with HPACK, but a minimum the cookie value is transferred on the first request 
+    
+    +  you do not need client-specific metadata when requesting static assets, such as images, scripts, and stylesheets.
+    
+- parallelize request and response processing 
+
+reuse TCP connections by optimizing connection keepalive timeout 
+
+use multiple HTTP/1.1 connections where necessary for parallel downloads 
+
+upgrade to http/2 
+
+allocate sufficient server resources to process request in parallel 
+
+    + examine the client resource waterfall (see “Analyzing the Resource Waterfall”), as well as your server logs. Common pitfalls often include the following:
+    
+    blocking resources on client such as DOM, CSSOM and javascript 
+    underprovisioned proxy and load balancer capacity 
+    underprovisioned servers, forcing slow executioin and other processing delays 
+    
+- optimizing for http/1.x 
+
+leverage http pipeling, https://learning.oreilly.com/library/view/http-protocols/9781492030478/ch03.html#HTTP_PIPELINING
+
+apply domain sharding,  default six connections per origin limit, consider splitting resources across multiple origins; https://learning.oreilly.com/library/view/http-protocols/9781492030478/ch03.html#DOMAIN_SHARDING
+
+bundle resources to reduce http requests 
+
+inline small resources, embedding small resources directly into the parent document to minimize the number of requests
+
+- optimize for http/2 
+    + eliminate domain sharding
+    + http/2 also provides a TLS connection-coalescing mechanism 
+    
+    the origins are covered by the same TLS certificate 
+    
+    the origin resolve to the same server IP address 
+    
+    example.com provides a wildcard TLS certificate that is valid for all of its subdomains (i.e., *.example.com) and references an asset on static.example.com that resolves to the same server IP address as example.com, then the HTTP/2 client is allowed to reuse the same TCP connection to fetch resources from example.com and static.example.com.
+    
+    + minimize concatenation and image spriting 
+    
+    Bundled resources may result in unnecessary data transfers
+    
+    Bundled resources may result in expensive cache invalidations
+    
+    Bundled resources may delay execution
+    
+    Bundled resources may require additional infrastructure
+    
+    Bundled resources may provide better compression if the resources contain similar content.
+    
+        * files that contain similar data may achieve better compression when bundled 
+        + each resource request carries some overhead 
+        
+- Eliminate roundtrips with server push 
+
+the client to limit, or outright disable server push, the use of server push—e.g., if the user is on an expensive network and wants to minimize the number of transferred bytes
+
+Server push is subject to same-origin restrictions, avoid duplicate same content across different pages,  they can be cached and reused across multiple pages and navigations
+
+- test http/2 server quality 
+
+
+# HTTP/3
+- reference 
+https://en.wikipedia.org/wiki/HTTP/3
+
+introduced draft as of september 2020 
+
+https://en.wikipedia.org/wiki/Internet-Draft
+
+https://blog.cloudflare.com/http3-the-past-present-and-future/
+
+QUIC, https://blog.cloudflare.com/the-road-to-quic/, a new internet transport protocol 
+
+open source implmenetation in rust, https://blog.cloudflare.com/enjoy-a-slice-of-quic-and-rust/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
