@@ -1,0 +1,822 @@
+Secure by Design=Daniel;Note=Erxin
+
+# Introduction
+- writing highly secure software. At the code level, you’ll discover security-promoting constructs like safe error handling, secure validation, and domain primitives. 
+
+- multifactor authentication, password suites like 1Password https://1password.com/ and LastPass https://www.lastpass.com/, and notification services like Have I Been Pwned https://haveibeenpwned.com,
+
+- Eric Evans. His ideas about Domain-Driven Design (DDD) provided a terminology to talk about how code should capture meaning
+
+- When using a behavior-driven development (BDD) style to express tests (as we often like to do), the names of the test methods tend to become long sentences
+
+- CSRF tokens, see https://en.wikipedia.org/wiki/Cross-site_request_forgery
+
+- security requirements, A Field Study of Current Practice, http://johnwilander.se/research_publications/paper_sreis2005_wilander_gustavsson.pdf.
+
+- categorizing security 
+    + Confidentiality—Most often associated with talking about security, is about keeping things secret
+    
+    + Integrity—Refers to when it’s important that the information doesn’t change or is only allowed to change in specific, authorized ways.
+    
+    + Availability—Means data is at hand in a timely manner. 
+
+    
+- Open Web Application Security Project (OWASP) Top 10, https://www.owasp.org/index.php/Category:OWASP_Top_Ten_Project.
+    
+An XSS attack occurs when an attacker uses a web application to send malicious code to  a different user. The malicious code could, for example, be in the form of client-side JavaScript. If the attacker enters something like <script>alert(42);</script> 
+    
+- make your user security by design 
+
+mport static org.apache.commons.lang3.Validate.*;
+
+public class Username {    ①  
+   private static final int MINIMUM_LENGTH = 4;
+   private static final int MAXIMUM_LENGTH = 40;
+   private static final String VALID_CHARACTERS = "[A-Za-z0-9_-]+";
+
+   private final String value;
+
+   public Username(final String value) {
+      notBlank(value);
+
+      final String trimmed = value.trim();
+      inclusiveBetween(MINIMUM_LENGTH,
+                       MAXIMUM_LENGTH,
+                       trimmed.length());
+      matchesPattern(trimmed,
+                     VALID_CHARACTERS,
+                     "Allowed characters are: %s", VALID_CHARACTERS);
+      this.value = trimmed;
+   }
+
+   public String value() {
+      return value;
+   }
+}
+
+public class User {
+   private final Long id;
+   private final Username username;    ②  
+
+   public User(final Long id, final Username username) {
+      this.id = notNull(id);
+      this.username = notNull(username);
+   }
+
+   // ...
+}
+
+    + advantages 
+    
+Software design is central to the interest and competence of most developers, which makes secure by design concepts easy to adapt.By focusing on design, business and security concerns gain equal priority in the view of both business experts and developers.By choosing good design constructs, nonsecurity experts are able to write secure code.By focusing on the domain, many security bugs are solved implicitly.
+    
+- validation should be executed in the following order 
+
+Length check —Is the input length within the expected boundaries?
+Lexical content check—Does the input contain the right characters and encoding?
+Syntax check—Is the input format right?
+
+- extensible markup language (XML), https://www.w3.org/XML/
+
+we’ll use the Billion Laughs attack (which exploits the expandability property of XML entities during the parsing process) as a foundation when learning how to process XML securely. 
+    
+    + internal xml entities in a nutshell 
+
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE example [
+<!ELEMENT example (#PCDATA)>
+<!ENTITY title "Secure by Design">
+]>
+<example>&title;</example>    ①  
+    
+XML parser encounters the title entity, it expands the abbreviation and replaces it with the value found in the DTD
+
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE example [
+<!ELEMENT example (#PCDATA)>
+<!ENTITY title "Secure by Design">
+]>
+<example>Secure by Design</example>    ①  
+
+Allowing entity expansion is handy indeed, but, unfortunately, it also opens up the possibility of entity expansion attacks
+
+    + the billion laughs attack 
+
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE lolz [
+<!ELEMENT lolz (#PCDATA)>
+<!ENTITY lol "lol">
+<!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+<!ENTITY lol2 "&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;">
+<!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+<!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+<!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+<!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+<!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+<!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+<!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+]>
+<lolz>&lol9;</lolz>    ①  
+
+lol9 expands into 10 lol8s, which then expands into 100 lol7s, and so on. use a design that combines parser configuration with a lexical content check
+
+    + “XML External Entity (XXE) Prevention Cheat Sheet,” https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/.
+
+import static javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING;
+
+public final class XMLParser {
+  static final String DISALLOW_DOCTYPE =
+         "http://apache.org/xml/features/disallow-doctype-decl";
+  static final String ALLOW_EXT_GEN_ENTITIES =
+         "http://xml.org/sax/features/external-general-entities";
+  static final String ALLOW_EXT_PARAM_ENTITIES =
+         "http://xml.org/sax/features/external-parameter-entities";
+  static final String ALLOW_EXTERNAL_DTD =
+         "http://apache.org/xml/features/nonvalidating/load-external-dtd";
+
+  public static Document parse(final InputStream input)
+                                    throws SAXException, IOException {
+    try {
+     final DocumentBuilderFactory factory =
+                            DocumentBuilderFactory.newInstance();
+
+     factory.setExpandEntityReferences(false);    ①  
+     factory.setFeature(FEATURE_SECURE_PROCESSING,    ②  
+                                             true);
+     factory.setFeature(DISALLOW_DOCTYPE, true);    ③  
+     factory.setFeature(ALLOW_EXT_GEN_ENTITIES,    ④  
+                                            false);
+     factory.setFeature(ALLOW_EXT_PARAM_ENTITIES,    ⑤  
+                                            false);
+     factory.setFeature(ALLOW_EXTERNAL_DTD, false);    ⑥  
+
+     return factory.newDocumentBuilder().parse(input);
+   } catch(ParserConfigurationException e) {
+           throw new IllegalStateException("Configuration Error", e);
+   }
+  }
+}
+
+- “Defense in Depth,” https://www.us-cert.gov/bsi/articles/knowledge/principles/defense-in-depth
+
+
+# Intermission, the anti-hamlet 
+- In SQL injection, the attacker tries to send commands to the database through the application. For more, see https://www.owasp.org/index.php/Top_10_2013-A1-Injection
+
+Injection. Injection flaws, such as SQL, NoSQL, OS, and LDAP injection, occur when untrusted data is sent to an interpreter as part of a command or query
+
+Broken Authentication. Application functions related to authentication and session management are often implemented incorrectly, allowing attackers to compromise passwords, keys, or session tokens, or to exploit other implementation flaws to assume other users’ identities temporarily or permanently
+
+Sensitive Data Exposure. Many web applications and APIs do not properly protect sensitive data, such as financial, healthcare, and PII. 
+
+XML External Entities (XXE). Many older or poorly configured XML processors evaluate external entity references within XML documents. 
+
+Broken Access Control. Restrictions on what authenticated users are allowed to do are often not properly enforced. 
+
+Security Misconfiguration. Security misconfiguration is the most commonly seen issue.
+
+Cross-Site Scripting XSS. XSS flaws occur whenever an application includes untrusted data in a new web page without proper validation or escaping, or updates an existing web page with user-supplied data using a browser API that can create HTML or JavaScript
+
+Insecure Deserialization. Insecure deserialization often leads to remote code execution.
+
+Using Components with Known Vulnerabilities. Components, such as libraries, frameworks, and other software modules, run with the same privileges as the application
+
+Insufficient Logging & Monitoring. Insufficient logging and monitoring, coupled with missing or ineffective integration with incident response, allows attackers to further attack systems, maintain persistence, pivot to more systems, and tamper, extract, or destroy data
+
+
+- implicit concepts represented by language primitives 
+
+void addCust(String name, String phone, String fax, int creditStatus, int vipLevel, String contact, String contactPhone, boolean partner)
+
+- gotten lots of inspiration from Domain-Driven Design and its focus on understanding and modeling the domain in a strict way
+
+class Book {    ①  
+    BookTitle title;
+
+    ISBN isbn;
+    Money price;
+    ...
+}
+
+class Quantity {    ②  
+
+  ...
+  Quantity(int quantityOfBooks) {
+      isTrue(0 < quantityOfBooks, "Quantity must be positive");
+      isTrue(quantityOfBooks <= 240,
+        "Quantity must fit in through-store flow, which is limited to 240");
+      ...
+  }
+}
+
+class Order {
+    void addOrderLine(Book book,
+                      Quantity quantity) {    ③  
+
+        ...
+    }
+
+    Quantity totalQuantity() {
+        ...
+    }
+}
+
+the quantity of the book will be checked automatically, an example of a domain primitive
+
+- make the implicit explicit 
+
+
+# Fundamentals
+- DDD, domain driven design 
+
+Focus on the core domain.
+Explore models in a creative collaboration of domain practitioners and software practitioners.
+Speak a ubiquitous language within an explicitly bounded context.
+
+https://www.infoq.com/minibooks/domain-driven-design-quickly
+
+- visual studio code for UML 
+
+https://www.freecodecamp.org/news/inserting-uml-in-markdown-using-vscode/
+
+- models are strict 
+
+    + entities
+    it distinguishable from others 
+    consistent during its life cycle 
+    contain other objects 
+    responsible for the coordination of operations on the objects it owns 
+    
+    + value objects 
+    no identity that defines it, rather it's defined by its value 
+    immutable 
+    should form a conceptual whole 
+    can reference entities 
+    explicitly defines and enforces important constrants 
+    can be used as an attribute of entities and other value objects 
+    can be short-lived 
+    
+    When your value object is modeled as a conceptual whole, it carries meaning when passed around, and it can uphold its constraints.
+
+    Deferred Validation” (1994), http://c2.com/ppr/checks.html
+    
+    + aggregates, An aggregate is a conceptual boundary that you use to group parts of the model together.
+
+    every aggregate has a boundary and a root 
+    root is a single specific entitiy 
+    root has global identity 
+    root is the only member of the aggregate that objects outside the boundary can hold reference to 
+    root conrols all access to the objects within the boundary 
+    entities other than the root have local identify, their identities don't have to be known outside of the aggregate 
+    the root can pass references to internal entities to other objects, but those references can only be used transiently and can never be hold onto 
+    the root can pass references of value objects to other objects 
+    invairants between the members of the aggregate are always enforced within each transaction 
+    invariants that span multiple aggregates can't be expected to be consistent all the time, but they can eventually become consistent 
+    objects within the aggregate can hold references to other aggregates 
+    
+        * example 
+        
+        //aggregate root 
+        company{
+            name 
+            
+            //aggregate boundary 
+            0...N Employee {
+                Role 
+            }
+        }
+
+- Semantics of the ubiquitous language, Data crossing a semantic boundary is of special interest from a security perspective because this is where the meaning of a term could implicitly change, which could open up security weaknesses.
+
+- identifying the bounded context. One of the core principles of the ubiquitous language is to avoid ambiguities, because they create a lot of confusion and misunderstanding
+
+- interactions between contexts, drawing a context map 
+
+http://www.melconway.com/Home/Conways_Law.html
+
+conceptual view of why bounded contexts are important and how context maps are created. for example in finance context Order have a meaning and in Shipping context it have a different meaning 
+
+
+# Code constructs promoting security 
+- strategies to solve security problems 
+
+immutability, involving data integrity and availability 
+failing fast, security problems involving illegal input and state 
+validation, security problems involving input validation 
+
+- each method is marked as synchronized to prevent concurrent field modification, which in turn can lead to thread contention (when threads are forced to wait for another thread to release one or more locks before executing).
+
+public class Customer {
+   private static final int MIN_INVOICE_SCORE = 500;  ①  
+   private Id id;    ②  
+   private Name name;    ③  
+   private Order order;    ④  
+   private CreditScore creditScore;    ⑤  
+
+   public synchronized Id getId() {
+      return id;
+   }
+
+   public synchronized void setId(final Id id) {
+      this.id = id;
+   }
+
+   public synchronized Name getName() {
+      return name;
+   }
+
+   public synchronized void setName(Name name) {
+      this.name = name;
+   }
+
+   public synchronized Order getOrder() {
+      this.order = OrderService.fetchLatestOrder(id);
+      return order;
+   }
+
+   public synchronized void setOrder(Order order) {
+      this.order = order;
+   }
+
+   public synchronized CreditScore getCreditScore() {
+      return creditScore;
+   }
+
+   public synchronized void setCreditScore(CreditScore creditScore){
+      this.creditScore = creditScore;    ⑥  
+   }
+
+   public synchronized boolean isAcceptedForInvoicePayment() {
+      return creditScore.compute() >
+                             MIN_INVOICE_SCORE;    ⑦  
+   }
+   ...
+}
+
+    + A ReadWriteLock is actually two locks: one for reading and one for writing. The read lock can be held by multiple reader threads until there’s a writer thread requesting the write lock, hence allowing parallel and concurrent access of data as long as it’s not modified. 
+
+    + immutable values are safe to share between threads, no locking no blocking 
+    
+import static org.apache.commons.lang3.Validate.notNull;
+
+public final class Customer {
+   private final Id id;    ①  
+   private final Name name;    ②  
+   private final CreditScore creditScore;    ③  
+
+   public Customer(final Id id, final Name name,
+                   final CreditScore creditScore) {
+      this.id = notNull(id);
+      this.name = notNull(name);
+      this.creditScore = notNull(creditScore);
+   }
+
+   public Id id() {
+      return id;
+   }
+
+   public Name name() {
+      return name;
+   }
+
+   public Order order() {
+      return OrderService.fetchLatestOrder(id);
+   }
+
+   public boolean isAcceptedForInvoicePayment() {
+      return creditScore.isAcceptedForInvoicePayment();
+   }
+}
+    + don’t need mutable data structures to support change. What you need is to separate reads from writes and perform updates through channels other than those used when reading. This might seem overly complex, but if your system has an imbalance between reads and writes, it can be worth it
+
+- The better option is to fail fast —to terminate the job as soon as it becomes clear that the preconditions aren’t met
+
+https://martinfowler.com/ieeeSoftware/failFast.pdf
+
+    + checking preconditions for method arguments 
+    
+public void queueCatName(String name) {
+    if (name == null)    ①  
+        throw new NullPointerException();
+    if (!name.matches(".*s.*"))    ②  
+        throw new IllegalArgumentException("Must contain s");
+    if (catNames.contains(name))    ③  
+        throw new IllegalArgumentException("Already queued");
+    catNames.add(name);
+}
+
+- upholding invariants in constructors 
+
+import org.apache.commons.lang3.Validate.*;
+
+enum Sex {MALE, FEMALE;}
+
+public class Cat {
+
+    private String name;
+    private final Sex sex;
+
+    public Cat(String name, Sex sex) {
+        notNull(name);    ①  
+        matchesPattern(name,".*s.*",
+                       "Cat name must contain s");    ②  
+        notNull(sex);    ③  
+        this.name = name;
+        this.sex = sex;
+    }
+    ...
+}
+
+- contract enforced through fast fails 
+
+import org.apache.commons.lang3.Validate.*;
+
+public class CatNameList {
+    private final List<String> catNames = new ArrayList<String>();
+
+    public void queueCatName(String name) {    ①  
+        notNull(name);    ②  
+        matchesPattern(name,".*s.*",
+                       "Cat name must contain s");    ③  
+        isTrue(!catNames.contains(name),
+               "Cat name already queued");    ④  
+        catNames.add(name);
+    }
+
+    public String nextCatName() {
+        validState(!catNames.isEmpty());    ⑤  
+        return catNames.get(0);
+    }
+
+    public void dequeueCatName() {
+        validState(!catNames.isEmpty());    ⑤  
+        catNames.remove(0);
+    }
+
+    public int size() {    ①  
+        return catNames.size();
+    }
+}
+
+- validation, OWASP Foundation is a worldwide nonprofit organization that works for better software security. There’s a lot of excellent resources at their website, www.owasp.org.
+    + OWASP top 10 
+https://owasp.org/www-project-top-ten/
+
+    + OWASP modsecurity core rule set 
+    
+The OWASP ModSecurity Core Rule Set (CRS) is a set of generic attack detection rules for use with ModSecurity or compatible web application firewalls
+https://owasp.org/www-project-modsecurity-core-rule-set/
+https://www.netnea.com/cms/apache-tutorial-6_embedding-modsecurity/
+
+    + zed attack proxy 
+https://owasp.org/www-project-zap/
+
+    + web security test guide lines 
+https://owasp.org/www-project-web-security-testing-guide/
+
+- types validation 
+
+origin 
+size 
+lexical content 
+syntax 
+semantics 
+
+- uisng an access key, REST API where you can manage your AWS resources, such as the S3 cloud data storage.13  When sending an HTTP request to this API, you need to provide your access key as part of the HTTP Authorization header
+
+http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html
+
+    + aws request example 
+GET /photos/puppy.jpg HTTP/1.1
+Host: johnsmith.s3.amazonaws.com
+Date: Mon, 26 Mar 2007 19:37:58 +0000
+
+Authorization: AWS AKIAIOSFODNN7EXAMPLE:frJIUN8DYpKDtOLCwo//yllqDzg=
+
+    + OAuth is a good place to start to learn 
+http://www.oauth.com/
+
+- checking size of data 
+
+import org.apache.commons.lang3.Validate.*;
+
+public class ISBN {
+    private final String isbn;
+
+    public ISBN(final String isbn) {
+        notNull(isbn);
+        inclusiveBetween(10, 10,isbn.length());
+        isTrue(isbn.matches("[0-9X]*"));    ①  
+        isTrue(isbn.matches("[0-9]{9}[0-9X]"));    ②  
+        isTrue(checksumValid(isbn));    ③  
+        this.isbn = isbn;
+    }
+
+    private boolean checksumValid(String isbn) { /.../ }
+}
+
+regexp engine will load and start processing that humongous string, not realizing it’s too big. An early length check protects the latter stages
+
+data contains the expected type of content, such as the expected characters and encoding, which is called the lexical content.
+
+- checking lexical content of data. fix the 1 billion laughs attacks. scans the data, not recognizing <!ENTITY as a legitimate lexeme. Leaf back to chapter 1, section 1.5, if you want to review the details
+
+
+# Domain primitives 
+- domain primitives and invariants
+
+- context boundaries define meaning, mean exactly what the concept is in the current domain
+
+-  of data transfer object (DTO) used to communicate with other domains. You can place invariants in those DTOs, but they won’t be the same constraints that exist in your domain
+
+invariants of domain primitive are checked at the time of creation 
+domain primitives can only exist if they are valid 
+domain primitives should always be used instead of language primitives or generic types 
+meaning is defined within the boundaries of the current domain 
+your domain primitive library to create secure code 
+
+- read one objects 
+main purpose is to facilitate detection of unintentional use 
+a senstive value or concept 
+often a domain primitve 
+can be read once and only once 
+prevents serialization of sensitive data 
+prevents subclassing and extension 
+
+import static org.apache.commons.lang3.Validate.validState;
+
+public final class Password implements Externalizable {
+
+   private final char[] value;
+   private boolean consumed = false;
+
+   public Password(final char[] value) {
+      this.value = validate(value).clone();    ①  
+   }
+
+   public synchronized char[] value() {    ②  
+      validState(!consumed, "Password value has already been consumed");
+      final char[] returnValue = value.clone();    ③  
+      Arrays.fill(value, '0');    ④  
+      consumed = true;    ⑤  
+      return returnValue;
+   }
+
+   @Override
+   public String toString() {
+      return "Password{value=*****}";
+   }
+
+   @Override
+   public void writeExternal(final ObjectOutput out) {
+      deny();
+   }
+
+   @Override
+   public void readExternal(final ObjectInput in) {
+      deny();
+   }
+
+   private static void deny() {
+      throw new UnsupportedOperationException(
+            "Serialization of passwords is not allowed");
+   }
+
+   private static char[] validate(final char[] value) {
+      // Validate length, characters and so forth
+      return value;
+   }
+}
+
+- deculttering entities 
+
+input is always validated 
+validation is consistent 
+entity code is less clusttered and more to the point 
+entity code is more readable 
+
+https://www.sciencedaily.com/terms/absolute_zero.htm
+
+- taint analysis 
+Dytan: A Generic Dynamic Taint Analysis Framework
+
+https://www.cc.gatech.edu/~orso/papers/clause.li.orso.ISSTA07.pdf
+
+taint sources 
+untainting, the way data is cleaned of suspicion through some type of check 
+propagation policy 
+taint sinks, the places where data is used in a senstive way 
+
+“Dynamic Taint Propagation for Java,” by Vivek Haldar, Deepak Chandra, and Michael Franz (https://www.acsac.org/2005/papers/45.pdf).
+
+
+# Ensuring integrity of state 
+- managing state using entities, Entities are our preferred way to implement mutable state, but let’s briefly look at the alternatives
+- consistent on creation 
+
+public class Account {
+    private AccountNumber number;    ①  
+    private LegalPerson owner;    ①  
+    private Percentage interest;    ①  
+    private Money creditLimit;    ②  
+    private AccountNumber fallbackAccount;    ②  
+
+    public Account() {}    ③  
+
+    public AccountNumber getNumber() {
+        return number;
+    }
+
+    public void setNumber(AccountNumber number) {    ④  
+        this.number = number;
+    }
+
+    public LegalPerson getOwner() {
+        return owner;
+    }
+
+    public void setOwner(LegalPerson owner) {    ④  
+        this.owner = owner;
+    }
+    ...
+}
+
+class AccountService {
+
+    void openAccount() {
+        Account account= new Account();    ⑤  
+        account.setNumber(number);    ⑥  
+        account.setOwner(accountowner);    ⑥  
+        account.setInterest(interest);    ⑥  
+        account.setCreditLimit(limit);    ⑦  
+        ...
+    }
+}
+
+- builder pattern for upholding advanced constraints 
+
+import static org.apache.commons.lang3.Validate.notNull;
+import static org.apache.commons.lang3.Validate.validState;
+
+public class Account {
+    private final AccountNumber number;
+    private final LegalPerson owner;
+    private Percentage interest;
+    private Money creditLimit;
+    private AccountNumber fallbackAccount;
+
+    private Account(AccountNumber number,
+                    LegalPerson owner,
+                    Percentage interest) {    ①  
+        this.number = notNull(number);
+        this.owner = notNull(owner);
+        this.interest = notNull(interest);
+    }
+
+    ...
+
+    private void checkInvariants() throws IllegalStateException {
+        validState(fallbackAccount != null
+                    ^ creditLimit != null);    ②  
+    }
+
+    public static class Builder {    ③  
+        private Account product;
+
+        public Builder(AccountNumber number,
+                       LegalPerson owner,
+                       Percentage interest) {    ④  
+            product = new Account(number, owner, interest);
+        }
+
+        public Builder withCreditLimit(Money creditLimit) {
+            validState(product != null);    ⑤  
+            product.creditLimit = creditLimit;
+            return this;    ⑥  
+        }
+
+        public Builder withFallbackAccount(AccountNumber fallbackAccount) {
+            validState(product != null);    ⑤  
+            product.fallbackAccount = fallbackAccount;
+            return this;    ⑥  
+        }
+
+        public Account build() {
+            validState(product != null);
+            product.checkInvariants();    ⑦  
+            Account result = product;
+            product = null;    ⑧  
+            return result;    ⑨  
+        }
+    }
+}
+
+- Separate the domain model and persistence model to emphasize that they are different contexts and to make the mapping explicit.
+
+import org.apache.commons.lang3.Validate.*;
+
+public class Account {
+    private AccountNumber number;
+    private LegalPerson owner;
+    private Percentage interest;
+    private Money creditLimit;
+    private AccountNumber fallbackAccount;
+
+    public Account(AccountNumber number,
+                    LegalPerson owner,
+                    Percentage interest) {    ①  
+        this.number = notNull(number);    ②  
+        this.owner = notNull(owner);    ②  
+        this.interest = notNull(interest);    ②  
+    }
+
+    protected Account() {}    ③  
+
+    public AccountNumber number() { ... }    ④  
+
+    public LegalPerson owner() { ... }
+
+    public void changeInterest(
+                    Percentage interest) {    ⑤  
+        notNull(interest);    ⑥  
+        this.interest = interest;
+    }
+
+    public Money creditlimit() { ... }
+
+    public void changeCreditLimit(
+                    Money creditLimit) {    ⑦  
+        notNull(creditLimit);
+        this.creditLimit = creditLimit;
+    }
+
+    public AccountNumber fallbackAccount() {
+        return fallbackAccount;
+    }
+
+    public void changeFallbackAccount(AccountNumber fallbackAccount) {
+        notNull(fallbackAccount);
+        this.fallbackAccount = Validate.notNull(fallbackAccount);
+    }
+
+    public void clearFallbackAccount() {
+        this.fallbackAccount = null;
+    }
+}
+
+class AccountService {
+    void openAccount() {
+        AccountNumber number = ...
+        LegalPerson accountowner = ...
+        Percentage interest = ...
+        Money limit = ...    ⑧  
+        Account account =
+            new Account(number,
+                        accountowner,
+                        interest);    ⑨  
+        account.changeCreditLimit(limit);    ⑩  
+        accountRepostitory.registerNew(account);
+    }
+}
+
+- getter and setter object open up the data field to arbitrary access and modification 
+- avoid sharing mutable objects
+class Person {
+
+    private Date birthdate;
+
+    Date birthdate() {
+        return birthdate.clone();    ①  
+    }
+}
+- securing the integrity of collections 
+
+class Order {
+    private List<OrderLine> orderitems;    ①  
+    public List<OrderLine> getOrderItems() {
+        return new ArrayList(orderitems);    ②  
+    }
+}
+
+static <T> List<T> unmodifiableList(List<? extends T> list)
+
+- patterns 
+    + Creation through a constructor with all mandatory attributes; optional attributes set via method calls
+    
+    + Creation through fluent interface
+    
+    + Creation through builder pattern
+    
+    + Public fields only for final attributes that can’t change
+    
+    + Restrictions on getter/setter methods
+    Without restrictions, there’s no encapsulation
+    
+    + Securing collections through immutability
+
+
+# Reducing complexity of state 
+- 
+    
+
+    
