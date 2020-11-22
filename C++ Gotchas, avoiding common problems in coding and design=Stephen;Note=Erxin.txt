@@ -1,0 +1,936 @@
+C++ Gotchas, avoiding common problems in coding and design=Stephen;Note=Erxin
+
+# Chapter 1, basics 
+- excessive commenting 
+
+a = b; //assign b to a 
+
+- magic number 
+
+class Portfolio {
+   // . . .
+   Contract *contracts_[10];
+   char id_[10];
+};
+
+if( Portfolio *p = getPortfolio() )
+   for( int i = 0; i < 10; ++i )
+       p->contracts_[i] = 0, p->id_[i] = '\0';
+       
+    + solution 
+    
+class Portfolio {
+   // . . .
+   enum { maxContracts = 10, idlen = 10 };
+   Contract *contracts_[maxContracts];
+   char id_[idlen];
+};
+
+const long patienceLimit = 40000;
+const long *p2 = &patienceLimit; // OK.
+
+- global variables 
+
+extern Environment * const theEnv;
+
+extern Environment * const theEnv = new OfficialEnv;
+
+Another, less obvious, problem with global variables is that they often require runtime static initialization. If a static variable's initial value can't be calculated at compile time, the initialization will take place at runtime
+
+    + solution, using singleton pattern, delay intialize 
+class Environment {
+public:
+   static Environment &instance();
+   virtual void op1() = 0;
+   // . . .
+protected:
+   Environment();
+   virtual ~Environment();
+private:
+   static Environment *instance_;
+   // . . .
+};
+
+
+Environment *Environment::instance_ = 0;
+
+Environment &Environment::instance() {
+   if( !instance_ )
+       instance_ = new OfficialEnv;
+   return *instance_;
+}
+
+- failure to distinguish overloading from default intialization 
+
+class C1 {
+public:
+   void f1( int arg = 0 );
+   // . . .
+};
+
+// . . .
+C1 a;
+a.f1(0);
+a.f1();
+
+class C2 {
+public:
+   void f2();
+   void f2( int );
+   // . . .
+};
+
+// . . .
+C2 a;
+a.f2(0);
+a.f2();
+
+//if we try to take the address of the class members C1::f1 and C2::f2:
+void (C1::*pmf)() = &C1::f1; //error!
+void (C2::*pmf)() = &C2::f2;
+
+With our implementation of class C2, the pointer to member pmf will refer to the f2 that takes no argument. The variable pmf is a pointer to member function that takes no argument, so the compiler will correctly choose the first member f2 as the initializer. With class C1, we'll get a compile-time error, because only one member function is named f1, and that function takes an integer argument.
+
+    + Overloading is generally used to indicate that a set of functions has common abstract meaning but different implementations.
+
+    + Default initialization is generally used for convenience, to provide a simplified interface to a function. 
+
+- misunderstanding references, References can't be const or volatile, because aliases can't be const or volatile
+
+int a = 12;
+int &ra = a;
+int *ip = &ra;      // ip refers to a
+a = 42;             // ra == 42
+
+typedef int *PI;
+typedef int &RI;
+const PI p = 0;     // const pointer
+const RI r = a;     // just a reference!
+
+//There are no null references, and there are no references to void:
+
+C *p = 0;           // a null pointer
+C &rC = *p;         // undefined behavior
+extern void &rv;    // error!
+
+    + it's convienent to bind a reference to an lvalue 
+    
+int &el = array[n-6][m-2];
+el = el*n-3;
+string &name = p->info[n].name;
+if( name == "Joe" )
+   process( name );
+
+    + Casting an object to a reference type has a very different effect from the same cast to the nonreference version
+
+char *cp = reinterpret_cast<char *>(a);
+reinterpret_cast<char *&>(a) = cp;
+
+    + bind a reference to a function, the pointer can be explicitly dereferenced. As an alias, the reference cannot, although it can be converted implicitly into a pointer to function and then dereferenced
+int f( double );
+int (* const pf)(double) = f; // const pointer to function
+int (&rf)(double) = f; // reference to function
+
+a = pf( 12.3 ); // use pointer
+a = (*pf)(12.3); // use pointer
+a = rf( 12.3 ); // use reference
+a = f( 12.3 ); // use function
+a = (*rf)(12.3); // convert ref to pointer and deref
+a = (*f)(12.3); // convert func to pointer and deref
+
+- Use of reinterpret_cast generally implies “not portable.”
+
+- miss understanding const, The integer i is an object. It has an address, and its value is variable. The const integer ci is also an object. It has an address, though (in this case) its value may not vary. reference target must have address
+
+int i = 12;
+const int ci = 12;
+
+const int *ip3 = &i;  //not change through ip3
+
+- ignoreance of bse language stubtileties 
+
+since most C++ programmers are surprised to find that it's legal to index an integer with a pointer:
+
+(-2)[p] = 6;
+
+- failure to distinguish access and visibility 
+
+class C {
+public:
+   C( int val ) : a_( val ),
+         b_( a_ ) // new
+   {}
+   int get_a() const { return a_; }
+   int get_b() const { return b_; } // new
+private:
+   int b_; // new
+   int a_;
+};
+
+- using bad language or terms in code 
+
+class C {
+   operator int *()const; // a conversion operator
+   // . . .
+};
+
+wrong                           right 
+pure virtual base class         abstract class 
+method                          member function 
+virtual method                  ???
+destructed                      destroyed 
+cast operator                   converter operator 
+
+- Null pointer, different processsor may have different definition. The trouble was that NULL would be defined in various ways on different platforms:
+
+#define NULL ((char *)0)
+#define NULL ((void *)0)
+#define NULL 0
+
+Now the standard indicates that definitions like (void *)0 are not allowed, so this isn't so much a technical issue with the use of NULL
+
+- acronyms 
+
+acronym         meaning 
+POD             plain old data, a c struct 
+POF             plain old function, a c function 
+RVO             return value optimization 
+NRV             named RVO 
+ctor            constructor 
+dtor            destructor 
+ORD             object definition rule 
+
+- ignorance of idiom 
+
+template <class T>
+class auto_ptr {
+   public:
+   auto_ptr( auto_ptr & );
+   auto_ptr &operator =( auto_ptr & );
+   // . . .
+private:
+   T *object_;
+};
+
+departing from idiom, some confusion initially arose about how to use auto_ptr properly
+
+- unnecessary cleverness 
+
+a+++++b; // error!
+a+++ ++b; // OK.
+
+as do the following two lines (see Gotcha #17):
+
+ptr->*m; // OK.
+ptr-> *m; // error!
+
+//“If the condition is true, the nested Result type is A; otherwise, it's B.”
+template <bool cond, typename A, typename B>
+struct Select {
+   typedef A Result;
+};
+template <typename A, typename B>
+struct Select<false, A, B> {
+   typedef B Result;
+};
+
+Select< sizeof(int)==sizeof(long), int, long >::Result temp = 0;
+
+- adolescent behavior 
+
+
+# Syntax 
+- array/initialization confusion 
+
+int *ip = new int(12);
+
+for( int i = 0; i < 12; ++i )
+   ip[i] = i;
+delete [] ip;
+
+    + using a standard library 
+    
+std::vector<int> iv( 12 );
+for( int i = 0; i < iv.size(); ++i )
+   iv[i] = i;
+// no explicit deletion . . .
+
+    + initialization 
+    
+int a[12]; // array of 12 ints
+int b(12); // an int initialized to 12
+
+- evaluation order indecision 
+
+int i = 12;
+int &ri = i;
+int f( int, int );
+//  . . .
+int result1 = f( i, i *= 2 ); // unportable
+
+int result2 = f( i, ri *= 2 ); // unportable
+int result3 = f( p(), q() ); // dicey . . .
+
+a = f()+g() ? p() : q(); //not good 
+a = (f()+g()) ? p() : q();
+
+- precedence problems 
+
+b = a = a + b + c;
+
+cout << "a+b = " << a+b << endl;
+
+cout << (a ? f() : g());
+
+    + Pointers to member functions are often a headache
+    
+class C {
+   // . . .
+   void f( int );
+   int mem;
+};
+
+void (C::*pfmem)(int) = &C::f;
+int C::*pdmem = &C::mem;
+C *cp = new C;
+// . . .
+cp->*pfmem(12); // error!
+
+(cp->*pfmem)(12);//good 
+
+        * seperate the complex expression into multiple lines 
+a = ++cp->*pdmem
+//to
+++cp;
+a = cp->*pdmem;
+
+- statement debacle 
+
+if( char *theName = lookup( name ) ) {
+   // do something with name . . .
+}
+// theName is out of scope here
+
+    + change to 
+char *theName = lookup( name );
+if( theName ) {
+   // do something with name . . .
+}
+// theName is still available here . . .
+
+- maximal munch problems
+
+template <typename T>
+class R {
+   // . . .
+   friend ostream &operator <<< // a sergeant operator?
+       T >( ostream &, const R & );
+};
+
+a+++++b
+
+tokenized as a ++ ++ + b
+
+list<vector<string>> lovos; // error!
+
+ syntax error. Whitespace is required:
+
+list< vector<string> > lovos;
+
+- CREATIVE declaration sepcifier ordering 
+
+int const extern size = 1024; // legal, but weird
+
+extern const int size = 1024; // normal
+
+int const *ptr = &size; //pointer to a constant integer, 
+int * const ptr2 = &size; // error!
+
+    + pointer to const 
+const int *pci1; 
+
+int const *pci2;
+
+it's easier to read in more complex pointer declarations:
+```
+int const * const *pp1;
+```
+pp1 is a pointer to a const pointer to a const int. The conventional arrangement doesn't allow such a simple rule:
+Placing the const qualifier last in the list of declaration-specifiers allows us to read the pointer modifiers in a declaration “backward”
+
+- function/object ambiguity 
+
+String s( "Semantics, not Syntax!" ); // explicit initializer
+String t;  // default initialization
+String x(); // a function declaration
+
+- migrating type-qualifiers
+
+typedef int A[12];
+extern const A ca; // array of 12 const ints
+typedef int *AP[12][12];
+volatile AP vm; // 2-D array of volatile pointers to int
+volatile int *vm2[12][12]; // 2-D array of pointers to volatile int
+
+    +  typedef and that typedef may be used only to declare a non-static member function
+
+typedef int MF() const;
+MF nonmemfunc; // error!
+class C {
+   MF memfunc; // OK.
+};
+
+    + type name should always keep uppper case
+struct buf {
+   char a, b, c, d;
+};
+// . . .
+void aFunc() {
+   char *buf = new char[ sizeof( buf ) ];
+   // . . . 
+
+- static and extern types 
+
+static class Repository {
+   // . . .
+} repository; // static
+Repository backUp;  // not static
+
+
+class Repository {
+  // . . .
+};
+static Repository repository;
+static Repository backUp;
+
+//use namespace 
+namespace {
+Repository repository;
+Repository backUp;
+}
+
+- operator function lookup anomaly
+
+class String {
+public:
+   String &operator =( const String & );
+   friend String operator +( const String &, const String & );
+   String operator –();
+   operator const char *() const;
+   // . . .
+};
+String a, b, c;
+// . . .
+a = b;
+a.operator =( b ); // same
+a + b;
+operator +( a, b ); // same
+a = -b;
+a.operator =( b.operator –() ); // same
+const char *cp = a;
+cp = a.operator const char *(); // same
+
+- operator subtities, ould be a class object that itself overloads operator ->
+
+class Ptr {
+public:
+   Ptr( T *init );
+   T *operator ->();
+   // . . .
+private:
+   T *tp_;
+};
+
+
+# Preprocessor 
+- literals which don't have an address 
+
+#define MAX 1<<16
+
+void f( int );
+void f( long );
+// . . .
+f( MAX ); // which f?
+
+const int *pmax = &Facility::max;
+const int *pMAX = &MAX; // error!
+
+- pseudofunctions 
+
+#define repeated(b, m) (b & m & (b & m)-1)
+
+typedef unsigned short Bits;
+enum { bit01 = 1<<0, bit02 = 1<<1, bit03 = 1<<2, // . . .
+Bits a = 0;
+const Bits mask = bit02 | bit03 | bit06;
+// . . .
+if( repeated( a+bit02, mask ) ) // oops!
+   // . . .
+
+- over use of #if 
+
+void buggy() {
+#ifndef NDEBUG
+   // some debugging code . . .
+#endif
+   // some actual code . . .
+#ifndef NDEBUG
+   // more debug code . . .
+#endif
+}
+
+All we have to do is make things unambiguous:
+
+const bool debug = false;
+
+- using #if for protability 
+
+void operation() {
+   // some portable code . . .
+#ifdef PLATFORM_A
+   // do something . . .
+   a(); b(); c();
+#endif
+#ifdef PLATFORM_B
+   // do same thing . . .
+   d(); e();
+#endif
+}
+
+class Doer {
+#      if ONSERVER
+   ServerData x;
+#      else
+   ClientData x;
+#      endif
+   void doit();
+   //  . . .
+};
+void Doer::doit() {
+#      if ONSERVER
+   // do server things . . .
+#      else
+   // do client things . . .
+#     endif
+}
+
+
+# Conversions
+- converting through void*
+
+void *vp = new int(12);
+// . . .
+int *ip = static_cast<int *>(vp); // will work
+
+will introduce portable problem 
+
+    + emember that static_cast is the cast operator we use (when we must cast) for relatively safe and portable conversions. platform-dependent conversions, we're forced to use reinterpret_cast. 
+char *cp = static_cast<char *>(ip); // error!
+char *cp = reinterpret_cast<char *>(ip); // works.
+
+use of a void * intermediary allaws that important warning to be circumvented
+
+char *cp = static_cast<char *>(vp); // put int addr into a char *!
+
+        * another possible problems 
+typedef void *Widget;
+void setWidget( Widget );
+Widget getWidget();
+
+// In some header file . . .
+class Button {
+   // . . .
+};
+class MyButton : public Button {
+   // . . .
+};
+// elsewhere . . .
+MyButton *mb = new MyButton;
+setWidget( mb );
+
+// somewhere else entirely . . .
+Button *b = static_cast<Button *>(getWidget()); // might work!
+
+
+//The reason this code will often work has to do with the likely way that the storage for a class object is laid out in memory. a straightforward and proper use of multiple inheritance may break the code
+// in some header file . . .
+class Subject {
+   // . . .
+};
+class ObservedButton : public Subject, public Button {
+   // . . .
+};
+// elsewhere . . .
+ObservedButton *ob = new ObservedButton;
+setWidget( ob );
+// . . .
+Button *badButton = static_cast<Button *>(getWidget()); //
+disaster!
+
+- slicing, pass derive class to a base class by value, The most common source of slicing occurs when a derived class object is passed by value to initialize a base class formal parameter
+
+class Employee {
+public:
+   virtual ~Employee();
+   virtual void pay() const;
+   // . . .
+protected:
+   void setType( int type )
+       { myType_ = type; }
+private:
+   int myType_; // bad idea, see Gotcha #69
+};
+class Salaried : public Employee {
+   // . . .
+};
+Employee employee;
+Salaried salaried;
+employee = salaried; // slice!
+
+void fire( Employee victim );
+// . . .
+fire( salaried ); // slice!
+
+    + avoid concrete base classes 
+    
+class Employee {
+public:
+   virtual ~Employee();
+   virtual void pay() const = 0;
+   // . . .
+};
+void fire( Employee ); // error, fortunately
+void rightSize( Employee & ); // OK
+Employee *getNextEmployee(); // OK
+Employee *ep = getNextEmployee(); // OK
+*ep = salaried; // error, fortunately
+Employee e2( salaried ); // error, fortunately
+
+- misunderstanding pointer to const conversion 
+
+char **ppc;
+const char **ppcc = ppc; // error!
+
+int * * * const cnnn = 0;
+   // n==3, signature == none, none, none
+int * * const * ncnn = 0;
+   // n==3, signature == const, none, none
+int * const * * nncn = 0;
+   // signature == none, const, none
+int * const * const * nccn = 0;
+   // signature == const, const, none
+const int * * * nnnc = 0;
+   // signature == none, none, const
+
+// examples of application of rules
+ncnn = cnnn; // OK
+nncn = cnnn; // error!
+nccn = cnnn; // OK
+ncnn = cnnn; // OK
+nnnc = cnnn; // error!
+
+typedef int T;
+const T t = 12345;
+T *pt;
+const T **ppt = (const T **)&pt; // an evil cast!
+*ppt = &t;  // put a const T * into a T *!
+*pt = 54321; // trash t!
+
+    +  avoid the complexities of pointers to pointers through use of references or the standard library. For example, it's common in C to pass the address of a pointer (that is, a pointer to a pointer) to modify the value of the pointer:
+
+    + In C++, we prefer to pass the pointer argument as a reference to non-constant. 
+
+char *get_token( char *&s, char *ws = " \t\n" ) {
+   char *p;
+   do
+       for( p = ws; *p && *s != *p; p++ );
+   while( *p ? *s++ : 0 );
+   char *ret = s;
+   do
+       for( p = ws; *p && *s != *p; p++ );
+   while( *p ? 0 : *s ? s++ : 0 );
+   if( *s ) *s++ = '\0';
+   return ret;
+}
+// . . .
+while( *tokens )
+   cout << get_token( tokens ) << endl;
+
+- misunderstanding pointer to pointer to base conversion 
+
+D1 d1;
+D1 *d1p = &d1; // OK
+B **ppb1 = &d1p; // error, fortunately
+D2 *d2p;
+B **ppb2 = &d2p; // error, fortunately
+*ppb2 = *ppb1; // now d2p points to a D1!
+
+- pointer to multidimensional array problems 
+
+int a[5];
+int * const pa = a;
+int * const *ppa = &pa;
+const int alen = sizeof(a)/sizeof(a[0]); // alen == 5
+
+
+int aa[2][3];
+const int aalen = sizeof(aa)/sizeof(aa[0]); // aalen = 2
+
+void processElems( int *, size_t );
+void processElems( void *, size_t );
+// . . .
+processElems( a, alen );
+processElems( aa, aalen ); // oops!
+
+
+int (* const paa)[3] = aa;
+int (* const *ppaa)[3] = &paa;
+void processElems( int (*)[3], size_t );
+// . . .
+processElems( aa, aalen ); // OK.
+
+- unchecked downcasting 
+
+class A { public: virtual ~A(); };
+class B { public: virtual ~B(); };
+class D : public A, public B {};
+class E : public B {};
+B *bp = getMeAB(); // get an object derived from B
+D *dp = static_cast<D*>(bp); // safe???
+
+    + downcasting is unnecessary; systematic use of downcasts is often an indication of bad design.  it's often a good idea to use a dynamic_cast, which will perform a runtime check to ensure that the cast is correct
+
+if( D *dp = dynamic_cast<D *>(bp) ) {
+   // cast succeeded
+}
+else {
+   // cast failed
+}
+
+- misusing conversion operators 
+
+the presence of too many conversion operators in a class can result in ambiguity:
+
+class Cell {
+public:
+   // . . .
+   operator int() const;
+   operator double() const;
+   operator const char *() const;
+   typedef char **PPC;
+   operator PPC() const;
+   // etc . . .
+};
+
+straightforward alternative of explicit conversion functions:
+
+class Cell {
+public:
+   // . . .
+   int toInt() const;
+   double toDouble() const;
+   const char *toPtrConstChar() const;
+   char **toPtrPtrChar() const;
+   // etc . . .
+};
+
+- unintended constructor conversion 
+
+class String {
+public:
+   String( const char * );
+   operator const char *() const;
+   // . . .
+};
+String name1( "Fred" ); // direct init
+name1 = "Joe"; // implicit conversion
+const char *cname = name1; // implicit conversion
+String name2 = cname; // implicit conversion, copy init
+String name3 = String( cname ); // explicit conversion, copy init
+
+    + simple argument constructor 
+    
+template <class T>
+class BoundedStack {
+public:
+   BoundedStack( int maxSize ); //add explicit keyword 
+   ~BoundedStack();
+   bool operator ==( const BoundedStack & ) const;
+   void push( const T & );
+   void pop();
+   const T &top() const;
+   // . . .
+};
+
+if( s == 37 ) { // oops!
+   // . . .
+   
+- casting under multiple inheritance 
+
+class A { /* . . .*/ };
+class B { /* . . .*/ };
+class C : public A, public B { /* . . .*/ };
+// . . .
+C *cp = new C;
+A *ap = cp; // OK
+B *bp = cp; // OK
+
+if( bp == cp ) // . . .
+
+if( bp ? (char *)bp-delta==(char *)cp : cp==0 )
+
+not guaranteed by the standard, and reinterpret_cast may actually change the bit representation of the pointer.)
+
+cp = reinterpret_cast<C *>(bp);  // yes, I do want to dump core . . .
+
+- casting incomplete types 
+
+class Y;
+class Z;
+Y *convert( Z * );
+
+//The use of reinterpret_cast is preferable to that of an old-style cast, in this case, because it will be more consistently incorrect
+Y *convert( Z *zp )
+   { return reinterpret_cast<Y *>(zp); }
+   
+   
+Y *convert( Z *zp )
+   { return (Y *)zp; }
+// . . .
+class Z : public X, public Y { // . . .
+// . . .
+Z *zp = new Z;
+Y *yp1 = convert( zp );
+Y *yp2 = (Y *)zp;
+cout << zp << ' ' << yp1 << ' ' << yp2 << endl;
+
+- temporary initialization of formal arguments 
+class String {
+public:
+   String( const char * = "" );
+   ~String();
+   friend bool operator ==( const String &, const String & );
+   friend bool operator !=( const String &, const String & );
+   // . . .
+private:
+   char *s_;
+};
+inline bool
+operator ==( const String &a, const String &b )
+   { return strcmp( a.s_, b.s_ ) == 0; }
+
+inline bool
+operator !=(const String &a, const String &b )
+   { return !(a == b); }
+   
+
+String s( "Hello, World!" );
+String t( "Yo!" );
+if( s == t ) {
+   //  . . .
+}
+else if( s == "Howdy!" ) { // implicit conversion
+   //  . . .
+}
+
+- references and temporaries, reference may be freely substituted for its initializer with no change in meaning. Well…mostly. its initializer must have an address as well as a value
+
+int a = 12;
+int &r = a;
+++a; // same as ++r
+int *ip = &r; // same as &a
+int &r2 = 12; // error! 12 is a literal
+
+an lvalue from a non-lvalue initializer:
+
+const int &r3 = 12; // OK.
+
+- ambiguity failure of dynamic_cast 
+
+class Screen {
+public:
+   //...
+   virtual bool isEntryScreen() const
+       { return false; }
+};
+class EntryScreen : public Screen {
+public:
+   bool isEntryScreen() const
+       { return true; }
+};
+//  . . .
+Screen *getCurrent();
+//  . . .
+if( getCurrent()->isEntryScreen() )
+   //  . . .
+   
+class Screen {
+public:
+   //...
+   virtual bool isEntryScreen() const
+       { return false; }
+   virtual bool isPricingScreen() const
+       { return false; }
+   virtual bool isSwapScreen() const
+       { return false; }
+   // ad infinitum . . .
+};
+
+if( EntryScreen *es = dynamic_cast<EntryScreen *>(sp) ) {
+   // do stuff with the entry screen...
+}
+  
+- misunderstanding contravariance 
+class Employee {
+public:
+   double level_;
+   virtual void fire() = 0;
+   bool validate() const;
+};
+class Hourly : public Employee {
+public:
+   double rate_;
+   void fire();
+   bool validate() const;
+};
+// . . .
+Hourly *hp = new Hourly, h;
+// . . .
+*hp = h;
+
+
+double Hourly::*hvalue = &Hourly::rate_;
+hp->*hvalue = 1.85;
+h.*hvalue = hp->*hvalue;
+
+A pointer to data member is generally implemented as an offset. 
+
+Contravariance again. It's illegal to assign the address of the derived class's validate function to a pointer to member of the base class, but it's fine to initialize a pointer to member of a derived class with the address of a base class member function.
+
+
+# Initialization
+- assignment/initialization confusion 
+
+
+# Memory and resource management 
+
+# Polymorephism 
+
+# Class Design 
+
+# Hierarchy Design 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -355,6 +355,766 @@ Counter({'a': 10, 'z': 3, 'b': 2, 'r': 2, 'c': 1, 'd': 1})
 [('a', 10), ('z', 3), ('b', 2)]
 ```
 
+- building custom mappings 
+
+collection.UserDict, it is implemented in python not as same as dict which is implemented in C 
+
+typing.TypedDict 
+
+- collection.UserDict worth to noting method 
+
+MutableMapping.update,  This powerful method can be called directly but is also used by __init__ to load the instance from other mappings
+
+Mapping.get, obtain results consistent with __getitem__
+
+- Python 3.3, the types module provides a wrapper class called MappingProxyType, which, given a mapping, returns a mappingproxy instance that is a read-only
+
+- dictionary views, The dict instance methods .keys(), .values(), and .items() return instances of classes called dict_keys, dict_values, and dict_items
+
+- In Python 3, the standard string representation of sets always uses the {…} notation
+
+s ^ z, s.__xor__(z), symmetric difference 
+ 	
+
+z ^ s, s.__rxor__(z)
+
+s ^= z, s.__ixor__(z) s updated with symmetric difference of s and z
+
+- set operations on dict views 
+
+- performance experiment, how the size of a dict, set, or list affects the performance
+
+1,000 1× 0.099ms 1.00×
+
+- The hash() built-in function works directly with built-in types and falls back to calling __hash__ for user-defined types
+
+Python then probes the next bucket and finds it empty. So 'Wed' ends up at index 4
+
+
+# Text versus bytes 
+- bytes, bytearray, memory view 
+
+- decoder, legacy 8-bit encodings like 'cp1252', 'iso8859_1', and 'koi8_r' are able to decode any stream of bytes
+
+- encode 
+
+>>> u16le = 'El Niño'.encode('utf_16le')
+>>> list(u16le)
+[69, 0, 108, 0, 32, 0, 78, 0, 105, 0, 241, 0, 111, 0]
+>>> u16be = 'El Niño'.encode('utf_16be')
+>>> list(u16be)
+[0, 69, 0, 108, 0, 32, 0, 78, 0, 105, 0, 241, 0, 111]
+
+- handle text file using the unicode sandwich 
+    1. bytes -> str, decode bytes on input 
+    2. process text only 
+    3. encode text on output 
+
+
+    + bug example 
+    >>> open('cafe.txt', 'w', encoding='utf_8').write('café')
+4
+>>> open('cafe.txt').read()
+'cafÃ©'
+
+Windows default file encoding—code page 1252—and the trailing bytes in the file were decoded as characters 'Ã©' instead of 'é'.
+
+- check default encoding 
+```
+import sys, locale
+
+expressions = """
+        locale.getpreferredencoding()
+        type(my_file)
+        my_file.encoding
+        sys.stdout.isatty()
+        sys.stdout.encoding
+        sys.stdin.isatty()
+        sys.stdin.encoding
+        sys.stderr.isatty()
+        sys.stderr.encoding
+        sys.getdefaultencoding()
+        sys.getfilesystemencoding()
+    """
+
+my_file = open('dummy', 'w')
+
+for expression in expressions.split():
+    value = eval(expression)
+    print(expression.rjust(30), '->', repr(value))
+```
+
+- two normalization forms—NFKC and NFKD—the letter K stands for “compatibility.” These are stronger forms of normalization
+
+- sorting with the unicode collection 
+
+https://pypi.python.org/pypi/pyuca/
+
+Unicode Collation Algorithm (UCA)
+
+>>> import pyuca
+>>> coll = pyuca.Collator()
+>>> fruits = ['caju', 'atemoia', 'cajá', 'açaí', 'acerola']
+>>> sorted_fruits = sorted(fruits, key=coll.sort_key)
+>>> sorted_fruits
+['açaí', 'acerola', 'atemoia', 'cajá', 'caju']
+
+- finding characters by name 
+
+The unicodedata module has functions to retrieve character metadata, including unicodedata.name()
+
+
+# Record-like data structures 
+- three builders 
+
+collections.namedtuple 
+
+typing.NamedTuple: an alternative that allows type annotations on the fields
+
+@dataclasses.dataclass: a class decorator that allows more customization than previous alternatives
+
+__init__, __repr__, and __eq__ methods automatically, as well as other useful features
+
+```
+>>> from collections import namedtuple
+>>> Coordinate = namedtuple('Coordinate', 'lat long')
+>>> issubclass(Coordinate, tuple)
+True
+>>> moscow = Coordinate(55.756, 37.617)
+>>> moscow
+Coordinate(lat=55.756, long=37.617)  1
+>>> moscow == Coordinate(lat=55.756, long=37.617)  2
+True
+```
+
+typing.NamedTuple provides the same funcionality, adding a type annotation to each field
+
+- variable notation sytnax 
+
+var_name: some_type
+
+var_name: some_type = a_value
+
+    + example 
+``` 
+class DemoPlainClass:
+
+    a: int           
+    b: float = 1.1   
+    c = 'spam'       
+```
+
+a becomes an annotation, but is otherwise discarded.
+b is saved as an annotation, and also becomes a class attribute with value 1.1.
+c is just a plain old class attribute, not an annotation.
+
+None of those three attributes will be in a new instance of DemoPlainClass. If you create an object o = DemoPlainClass(), o.a will raise AttributeError, while o.b and o.c will retrieve the class attributes with values 1.1 and 'spam'—that’s just normal Python object behavior.
+
+means a and b will work as read-only instance attributes—which makes sense when we recall that DemoNTClass instances are just a fancy tuples
+
+- @dataclass 
+
+@dataclass(*, init=True, repr=True, eq=True, order=False,
+              unsafe_hash=False, frozen=False)
+
+Python objects, it’s not too hard for a nosy programmer to go around the protection afforded by frozen=True.
+
+
+# Object references, mutability and recycling 
+- == and is
+
+The == operator compares the values of objects (the data they hold), while is compares their identities
+
+- copies are shallow by default 
+
+- Weak references to an object do not increase its reference count. The object that is the target of a reference is called the referent. 
+
+>>> import weakref
+>>> a_set = {0, 1}
+>>> wref = weakref.ref(a_set)  1
+>>> wref
+<weakref at 0x100637598; to 'set' at 0x100636748>
+>>> wref()  2
+
+    + not every python object can be weak referenced. Basic list and dict instances may not be referents, but a plain subclass of either can solve this problem 
+
+- WeakValueDictionary skit, The class WeakValueDictionary implements a mutable mapping where the values are weak references to objects. 
+
+
+# Functions as object 
+- higher-order functions are map, filter, reduce
+
+- functools 
+
+>>> from functools import reduce  1
+>>> from operator import add  2
+>>> reduce(add, range(100))  3
+4950
+>>> sum(range(100))  4
+4950
+>>>
+
+- nine flavors of callable object 
+
+user defined functions 
+
+built-in functions 
+
+built-in methods, dict.get 
+
+methods, function defined in the body of class 
+
+classes 
+
+class instances 
+
+generator functions, use yield keyword in their body 
+
+native coroutine functions, defined with async, 
+
+asynchronouns generator functions, defined with async and have yeild in their body. generator for use with async for
+
+- freezing arguments with functools.partial 
+
+The functools module provides several higher-order functions. The best known of them is probably reduce
+
+
+# Type hints in functions 
+- typing, Any type, also known as the dynamic type. When a type checker sees an untyped function like this
+
+def double(n: Any) -> Any:
+    return n * 2
+    
+- optional and union types 
+
+from typing import Optional
+
+def show_count(count: int, singular: str, plural: Optional[str] = None) -> str:
+
+- collection types and type hints
+
+list
+typing.List
+
+
+set
+typing.Set
+
+
+frozenset
+typing.FrozenSet
+
+
+collections.deque
+typing.Deque
+
+
+collections.abc.MutableSequence
+typing.MutableSequence
+
+
+collections.abc.Sequence
+typing.Sequence
+
+
+collections.abc.Collection
+typing.Collection
+
+
+collections.abc.Container
+typing.Container
+
+
+collections.abc.Set
+typing.AbstractSet
+
+
+collections.abc.MutableSet
+typing.MutableSet
+
+- mapping types, views and their type hints
+
+dict
+typing.Dict
+
+collections.defaultdict
+typing.DefaultDict
+
+collections.OrderedDict
+typing.OrderedDict
+
+collections.Counter
+typing.Counter
+
+collections.ChainMap
+typing.ChainMap
+
+collections.abc.Mapping
+typing.Mapping
+
+collections.abc.MutableMapping
+typing.MutableMapping
+
+collections.abc.MappingView
+typing.MappingView
+
+collections.abc.KeysView
+typing.KeysView
+
+collections.abc.ItemsView
+typing.ItemsView
+
+collections.abc.ValuesView
+typing.ValuesView
+
+- type dict 
+
+from typing import TypedDict, List
+import json
+
+class BookDict(TypedDict):
+    isbn: str
+    title: str
+    authors: List[str]
+    pagecount: int
+
+- abstract base classes 
+
+collections.abc. Ideally, a function should accept arguments of those abstract types
+
+A similar comment appears in the entries for typing.Dict and typing.Set.
+
+- iterable, The typing.List documentation I just quoted recommends Sequence and Iterable for function parameter type hints
+
+- typevar with constraints
+
+from typing import Iterable, TypeVar
+from decimal import Decimal
+from fractions import Fraction
+
+NumberT = TypeVar('NumberT', float, Decimal, Fraction)
+
+def mode(data: Iterable[NumberT]) -> NumberT:
+
+- bounded typevar 
+
+from typing import Iterable, Hashable
+
+def mode(data: Iterable[Hashable]) -> Hashable:
+
+- protocols, similar to interface 
+
+In Python, a protocol definition is written as a typing.Protocol subclass. However, classes that implement a protocol don’t need to inherit
+
+```
+from typing import Protocol, Any
+
+class Comparable(Protocol):  1
+    def __lt__(self, other: Any) -> bool: ...  
+
+from typing import TypeVar, Iterable, List
+from comparable import Comparable
+
+CT = TypeVar('CT', bound=Comparable)
+
+def top(series: Iterable[CT], length: int) -> List[CT]:
+    ordered = sorted(series, reverse=True)
+    return ordered[:length]
+```
+
+- no return
+
+def exit(__status: object = ...) -> NoReturn: ...
+
+- overload signature 
+```
+@overload
+def sum(__iterable: Iterable[_T]) -> Union[_T, int]: ...
+@overload
+def sum(__iterable: Iterable[_T], start: _S) -> Union[_T, _S]: ...
+
+
+from functools import reduce  1
+from operator import add
+from typing import overload, Iterable, Union, TypeVar
+
+T = TypeVar('T')
+S = TypeVar('S')  2
+
+@overload
+def sum(it: Iterable[T]) -> Union[T, int]: ...  3
+@overload
+def sum(it: Iterable[T], /, start: S) -> Union[T, S]: ...  4
+def sum(it, /, start=0):  5
+    return reduce(add, it, start)
+```
+
+- annotating positional-only and variadic parameters 
+
+def tag(name, /, *content, class_=None, **attrs):
+
+The type hint for the arbitrary keyword arguments is **attrs: str. In this example, the type of attrs will be Dict[str, str]
+
+At runtime, as a module is loaded, Python reads the type hints in functions, classes and modules and stores them in attributes named __annotations__
+
+
+# Decorators and closures 
+- Coverage of the functools.lru_cache decorator was updated to include “Simplified usage of lru_cache in Python 3.8”.
+
+- decorators 
+
+@decorate
+def target():
+    print('running target()')
+
+    + example 
+    
+import time
+
+
+def clock(func):
+    def clocked(*args):  1
+        t0 = time.perf_counter()
+        result = func(*args)  2
+        elapsed = time.perf_counter() - t0
+        name = func.__name__
+        arg_str = ', '.join(repr(arg) for arg in args)
+        print(f'[{elapsed:0.8f}s] {name}({arg_str}) -> {result!r}')
+        return result
+    return clocked  
+
+
+    + functools 
+    
+import time
+import functools
+
+
+def clock(func):
+    @functools.wraps(func)
+    def clocked(*args, **kwargs):
+        t0 = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = time.perf_counter() - t0
+        name = func.__name__
+        arg_lst = []
+        if args:
+            arg_lst.append(', '.join(repr(arg) for arg in args))
+        if kwargs:
+            pairs = [f'{k}={v!r}' for k, v in kwargs.items()]
+            arg_lst.append(', '.join(pairs))
+        arg_str = ', '.join(arg_lst)
+        print(f'[{elapsed:0.8f}s] {name}({arg_str}) -> {result!r}')
+        return result
+    return clocked
+
+- memoization with functools.lru_cache 
+
+
+import functools
+
+from clockdeco import clock
+
+
+@functools.lru_cache  1
+@clock  2
+def fibonacci(n):
+    if n < 2:
+        return n
+    return fibonacci(n-2) + fibonacci(n-1)
+
+
+if __name__ == '__main__':
+    print(fibonacci(6))
+
+- single dispatch generic functions 
+
+import html
+
+def htmlize(obj):
+    content = html.escape(repr(obj))
+    return f'<pre>{content}</pre>'
+
+The @singledispatch decorator is very different. It’s a runtime feature.
+
+functools.singledispatch exists since Python 3.4, but it only supports type hints since Python 3.7
+
+@singledispatch marks the base function that handles the object type.
+
+```
+from functools import singledispatch
+from collections import abc
+import fractions
+import decimal
+import html
+import numbers
+
+@singledispatch  1
+def htmlize(obj: object) -> str:
+    content = html.escape(repr(obj))
+    return f'<pre>{content}</pre>'
+
+@htmlize.register  2
+def _(text: str) -> str:  3
+    content = html.escape(text).replace('\n', '<br>\n')
+    return f'<p>{content}</p>'
+
+@htmlize.register  4
+def _(seq: abc.Sequence) -> str:
+    inner = '</li>\n<li>'.join(htmlize(item) for item in seq)
+    return '<ul>\n<li>' + inner + '</li>\n</ul>'
+
+@htmlize.register  5
+def _(n: numbers.Integral) -> str:
+    return f'<pre>{n} (0x{n:x})</pre>'
+
+@htmlize.register  6
+def _(n: bool) -> str:
+    return f'<pre>{n}</pre>'
+
+@htmlize.register(fractions.Fraction)  7
+def _(x) -> str:
+    frac = fractions.Fraction(x)
+    return f'<pre>{frac.numerator}/{frac.denominator}</pre>'
+
+@htmlize.register(decimal.Decimal)  8
+@htmlize.register(float)
+def _(x) -> str:
+    frac = fractions.Fraction(x).limit_denominator()
+    return f'<pre>{x} ({frac.numerator}/{frac.denominator})</pre>'
+```
+    
+A single class with many overloaded variations of a method is better than a single function with a lengthy stretch of if/elif/elif/elif blocks. But both solutions are flawed because they concentrate too much responsibility in a single code unit
+    
+The advantage of @singledispath is supporting modular extension: each module can register a specialized function for each type it supports. 
+    
+- parameterized decorators 
+    
+registry = set()  1
+
+def register(active=True):  2
+    def decorate(func):  3
+        print('running register'
+              f'(active={active})->decorate({func})')
+        if active:   4
+            registry.add(func)
+        else:
+            registry.discard(func)  5
+
+        return func  6
+    return decorate  7
+
+@register(active=False)  8
+def f1():
+    print('running f1()')
+
+@register()  9
+def f2():
+    print('running f2()')
+
+def f3():
+    print('running f3()')
+    
+- parameterized clock decorator 
+    
+import time
+
+DEFAULT_FMT = '[{elapsed:0.8f}s] {name}({args}) -> {result}'
+
+def clock(fmt=DEFAULT_FMT):  1
+    def decorate(func):      2
+        def clocked(*_args): 3
+            t0 = time.perf_counter()
+            _result = func(*_args)  4
+            elapsed = time.perf_counter() - t0
+            name = func.__name__
+            args = ', '.join(repr(arg) for arg in _args)  5
+            result = repr(_result)  6
+            print(fmt.format(**locals()))  7
+            return _result  8
+        return clocked  9
+    return decorate  10
+
+if __name__ == '__main__':
+
+    @clock()  11
+    def snooze(seconds):
+        time.sleep(seconds)
+
+    for i in range(3):
+        snooze(.123)
+        
+- a class based clock decorator 
+
+import time
+
+DEFAULT_FMT = '[{elapsed:0.8f}s] {name}({args}) -> {result}'
+
+class clock:  1
+
+    def __init__(self, fmt=DEFAULT_FMT):  2
+        self.fmt = fmt
+
+    def __call__(self, func):  3
+        def clocked(*_args):
+            t0 = time.perf_counter()
+            _result = func(*_args)  4
+            elapsed = time.perf_counter() - t0
+            name = func.__name__
+            args = ', '.join(repr(arg) for arg in _args)
+            result = repr(_result)
+            print(self.fmt.format(**locals()))
+            return _result
+        return clocked
+
+
+# Design patterns with first class functions 
+- context 
+- strategy 
+- concrete strategy 
+- function-oriented strategy 
+
+import typing
+from typing import Sequence, Optional, Callable
+
+
+class Customer(typing.NamedTuple):
+    name: str
+    fidelity: int
+
+
+class LineItem:
+    def __init__(self, product: str, quantity: int, price: float):
+        self.product = product
+        self.quantity = quantity
+        self.price = price
+
+    def total(self):
+        return self.price * self.quantity
+
+
+class Order:  # the Context
+    def __init__(
+        self,
+        customer: Customer,
+        cart: Sequence[LineItem],
+        promotion: Optional[Callable[['Order'], float]] = None,
+    ) -> None:
+        self.customer = customer
+        self.cart = list(cart)
+        self.promotion = promotion
+
+    def total(self) -> float:
+        if not hasattr(self, '__total'):
+            self.__total = sum(item.total() for item in self.cart)
+        return self.__total
+
+    def due(self) -> float:
+        if self.promotion is None:
+            discount = 0.0
+        else:
+            discount = self.promotion(self)  1
+        return self.total() - discount
+
+    def __repr__(self):
+        fmt = '<Order total: {:.2f} due: {:.2f}>'
+        return fmt.format(self.total(), self.due())
+
+- globals() Return a dictionary representing the current global symbol table. 
+
+
+# Classes and protocols 
+- object representations
+repr() Return a string representing the object as the developer wants to see it.
+
+str() Return a string representing the object as the user wants to see it.
+
+methods __repr__ and __str__ support repr() and str(), as we saw in Chapter 1.
+
+- vector class redux 
+
+Class method is modified by the classmethod decorator.
+
+The classmethod decorator is not mentioned in the Python tutorial, and neither is staticmethod
+
+classmethod. Example 11-3 shows its use: to define a method that operates on the class and not on instances. classmethod changes the way the method is called, so it receives the class itself as the first argument, instead of an instance
+    
+>>> class Demo:
+...     @classmethod
+...     def klassmeth(*args):
+...         return args  1
+...     @staticmethod
+...     def statmeth(*args):
+...         return args  2
+...
+>>> Demo.klassmeth()  3
+(<class '__main__.Demo'>,)
+>>> Demo.klassmeth('spam')
+(<class '__main__.Demo'>, 'spam')
+>>> Demo.statmeth()   4
+()
+>>> Demo.statmeth('spam')
+('spam',)
+
+- hashable, Implementing __hash__ and __eq__ correctly is all it takes.
+- private attribute, Private attribute names are “mangled” by prefixing the _ and the class name
+- “protect” attributes by convention (e.g., self._x
+- If you are dealing with millions of instances with few attributes, the __slots__ class attribute can save a lot of memory, by letting the interpreter store the instance attributes in a tuple instead of a dict
+
+A __slots__ attribute defined in a class is not inherited by subclasses. 
+
+the __slots__ list, your instances will keep attributes named in __slots__ in the per-instance tuple
+
+    + You must remember to redeclare __slots__ in each subclass
+
+    + Instances will only be able to have the attributes listed in __slots__
+
+    + Instances cannot be targets of weak references unless you remember to include '__weakref__' in __slots__
+    
+    
+# Sequence hacking hashing and slicing 
+- implement Vector 
+
+from array import array
+import reprlib
+import math
+
+
+class Vector:
+    typecode = 'd'
+
+    def __init__(self, components):
+        self._components = array(self.typecode, components)  1
+
+    def __iter__(self):
+        return iter(self._components)  2
+
+    def __repr__(self):
+        components = reprlib.repr(self._components)  3
+        components = components[components.find('['):-1]  4
+        return 'Vector({})'.format(components)
+
+    def __str__(self):
+        return str(tuple(self))
+
+    def __bytes__(self):
+        return (bytes([ord(self.typecode)]) +
+                bytes(self._components))  5
+
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
+
+    def __abs__(self):
+        return math.sqrt(sum(x * x for x in self))  6
+
+    def __bool__(self):
+        return bool(abs(self))
+
+    @classmethod
+    def frombytes(cls, octets):
+        typecode = chr(octets[0])
+        memv = memoryview(octets[1:]).cast(typecode)
+        return cls(memv)  
 
 
 
@@ -363,5 +1123,5 @@ Counter({'a': 10, 'z': 3, 'b': 2, 'r': 2, 'c': 1, 'd': 1})
 
 
 
-
-
+    
+    
