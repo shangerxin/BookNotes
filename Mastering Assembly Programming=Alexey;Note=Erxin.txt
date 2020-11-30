@@ -17,4 +17,285 @@ GitHub at https://github.com/PacktPublishing/Mastering-Assembly-Programming.
 
 
 # Intel architecture 
-- 
+- processor registers and the functionality 
+
+general purpose registers 
+
+floating point regsiters 
+
+segment registers 
+
+control registers 
+
+debug registers 
+
+EFlags regsiter, this is also known as the status register on some platforms. arithmetic logic unit(ALU)
+
+- processor registers 
+
+real mode, good old dos mode 
+
+protected mode, introduced in 80286, provides access to larger amount of memory, paging introduced in 80386 allows even easier memory addressing virtualization 
+
+- general purpose registers (GPR), All R* registers are only available in the long mode. Registers SIL, DIL, BPL, and SPL are only available in the long mode. Registers AH, BH, CH, and DH cannot be used in instructions that are not valid outside the long mode.
+
+RAX 
+RBX
+ECX
+EDX
+
+ESI
+EDI
+
+EBP
+ESP
+
+R8
+R9
+R10 
+R11
+R12
+R13
+R14 
+R15 
+
+- accumulators, The EAX register is also known as an accumulator and is used with multiplication and division operations, both as implied and target operands.
+
+the EDX register is used for storing partial results when the values of the operands are larger 
+
+- counter, ECX 
+
+int ecx = 10; 
+do 
+{ 
+    // do your stuff 
+    ecx--; 
+}while(ecx > 0);
+
+mov eax, 0x12345
+mov cl, 5 
+shl eax, cl
+
+- STACK POINTER, esp, together with SS describes the stack area of a thread, where SS contains the descriptor of the stack segment and ESP is t he index that points ot the current position within the stack 
+
+- source and destination indices, ESI and EDI registers serve as source and destination index registers. Intel Instruction Set Architecture (ISA)
+
+- BP, base pointer, most common use is to point to the base of a stack frame during function calls. we can use any register for this purpose if needed 
+
+we could use as a base for addressing 
+
+EBX was intended to point to a data segment 
+
+- instruction pointer, IP, cannot be used for data storage--EIP (IP in the real mode or RIP in the long mode). This is the instruction pointer and contains the address of the instruction after the instruction currently being executed
+
+- All the other registers have no special meaning from the processor's perspective and may be used for any purpose.
+
+- floating point registers, 8087 has eight registers 
+- 128bit XMM registers, SSE extension, streaming SIMD extension and SIMD 
+    16 bytes
+    eight words
+    four double words
+    two quad words
+    four floats
+    two doubles
+
+- segment registers and memory organization 
+- real mode 
+Segment registers are a rather interesting topic, as they are the ones that tell the processor which memory areas may be accessed and how exactly they may be accessed. 
+
+if a certain segment register was loaded with the 0x1234 value, it, in fact, was pointing to the address 0x12340; therefore, pointers in real mode were rather offsets into segments pointed to by segment registers. 
+
+    + example DI register (as we are talking about a 16-bit real mode now), which is used with the DS (data segment) register automatically, and load it with, let's say, 0x4321 when the DS register is loaded with the 0x1234 value. Then the 20-bit address would be 0x12340 + 0x4321 = 0x16661. Thus, it was possible to address at most 1 MB of memory in real mode
+
+    + six segement register 
+CS, contains the base address of currently used code segment 
+DS, contains the base address of the currently used data segment 
+SS, contains the base address of the currently used stack segment
+ES, extra data segement for the programmer's use 
+FS and GS, introduced with the 80386. no specific hardware-defined function and are for the programmer's use. have tasks for OS in windows and linux. 
+
+    + The CS register is used together with the IP register (the instructions pointer, also known as the program counter on other platforms), where the IP (or EIP in protected mode and RIP in long mode) points to the offset of the instruction in the code segment following the instruction currently being executed.
+
+    + DS and ES are implied when using SI and DI registers, respectively, unless another segment register is implicitly specified in the instruction. For example, the lodsb instruction,
+
+mov ax, [si] 
+mov [es:di], ax
+
+loads a double word from the location pointed by DS:SI and stores it to another location pointed by ES:DI.
+
+- protected mode segmentation  
+
+The two least significant bits designate the requested privilege level (0 for kernel space to 3 for user land). 
+
+The third bit (at index 2) is the TI bit (table indicator), which indicates whether the descriptor being referred is in a global descriptor table (0) or in a local descriptor table (1)
+
+The memory descriptor is a tiny 8-byte structure, which describes the range of physical memory, its access rights, and some additional attributes
+
+Byte    |   Bites in byte       |   Meaning
+0           0-7                     first eight bits of segment limit (size)
+1           0-7                     bits 8-15 of segment limit 
+2           0-7                     bits 0-7 segment base address 
+3           0-7                     bits 8-15 of segment base address 
+4           0-7                     bits 16-23 of segment base address 
+5           0                       is set to '1' if segement has been accessed 
+            1                       is set to '1' if segment is writable 
+            2                       is set to '1' if segment expands down (e.g. stack segment)
+            3                       is set to '1' if segment contains executable code 
+            4                       always '1' 
+            5-6                     privilege level, DPL=0 for most privileged segement
+            7                       present this bit is for use by operating system 
+6           0-3                     bits 16-19 of segment limit 
+            4                       available this bit is not used by the processor and free for os 
+            5                       set to 1 on long mode otherwise set to 0 
+            6                       default also set to '0' use 16 bit address otherwise 32 bit 
+            7                       granularity bit, set to zero segment limit as number 
+7           0-7                     bits 24-31 of segment base address 
+
+GDT: Global descriptor table (used by the operating system)
+LDT: Local descriptor table (per task descriptor table)
+
+other types of descriptors
+interrupt descriptors (stored in the interrupt description table (IDT))
+system descriptors
+
+- protected mode paging, Paging is a more convenient memory management scheme introduced in 80386 and has been a bit enhanced since then. 32-bit CPU uses a two-level translation scheme for the derivation of a physical address
+
+address bits                meaning 
+0-11                        offset into a 4kb page 
+12-21                       index of the page entry in the table of 1024 pages 
+22-31                       index of the page table entry in a 1024 entries page directory 
+
+Intel architecture also support Page Size Extension (PSE), which makes it possible to use the so-called large pages of 4 MB.
+address bits                meaning 
+0-21                        offset into a 4 mb page 
+22-31                       index of the corresponding entry in a 1024 entries page directory 
+
+- the Physical Address Extension (PAE) was introduced, which significantly changes the scheme and allows access to a much bigger range of memory. 
+
+- protected mode - paging, The idea behind paging is memory virtualization--this is the mechanism that makes it possible for different processes to have the same memory layout.
+
+in C, C++, or any other high-level language that compiles into native code are virtual and do not correspond to physical addresses. 
+
+translation of a virtual address to physical is implemented in hardware. a 32-bit CPU uses a two-level translation scheme
+
+address             meaning 
+0-11                offset into a 4kb pager 
+12-21               index of the page entry in the table of 1024 pages 
+22-31               index of the page table entry in a 1024-entries page directory 
+
+modern processors based on Intel architecture also support Page Size Extension (PSE), which makes it possible to use the so-called large pages of 4 MB. In this case, the translation of a virtual address into a physical address is a bit different
+
+address             mearning 
+0-21                offset into a 4mb page 
+22-31               index of the corresponding entry in a 1024-entries page directory 
+
+Furthermore, the Physical Address Extension (PAE) was introduced, which significantly changes the scheme and allows access to a much bigger range of memory.
+
+address             meaning 
+0-11                offset into a 4 kb page 
+12-20               index of a page entry in the table of 512 pages 
+21-29               index of a page table entry in a 512 entries page directory 
+30-31               index of a page directory entry in a four-entires page directory pointer table 
+
+- long mode paging 
+
+Address bits 	Meaning
+0 - 11 	        Offset into a 4 KB page
+12 - 20 	    Index of a page entry in the table of 512 pages
+21 - 29 	    Index of a page table entry in the page directory
+30 - 38 	    Index of a page directory entry in the page directory pointer table
+39 - 47 	    Index of a page directory pointer table in the page-map level 4 table
+
+- control registers based on intel architecture. six control and one extended feature enable register (EFER)
+CR0, contains various control flags that modify the basic operation of the processor 
+CR1, reserved for future use 
+CR2, contains the page fault linear address when a page fault occurs 
+CR3, this register is used when virtual addressing is enabled 
+CR4, used in theprotected mode for controlling different options of the processor 
+CR8, is new and only available in long mode 
+EFER, one of the several model-specific registers 
+
+- debug registers, which are mostly used by debuggers for setting the so-called hardware breakpoints. 
+
+DR0, DR1, DR2 and DR3 
+
+    + debug control register DR7 
+    
+bit     name        description 
+0       L0          local enable for breakpoint in DR0 
+1       G0          global enable for breakpoint in DR0 
+..    
+
+- the EFlags register, (E stands for extended). This register is referred to as Flags in real mode, EFlags in protected mode, or RFlags in long mode.
+
+- The carry flag (CF) is mostly used for the detection of carry/borrow in arithmetic operations and is set if the bit width result of the last such operation 
+
+- The parity flag (PF) is set to 1 in case the number of 1s in the least significant byte is even; otherwise, the flag is set to zero.
+
+- The adjust flag (AF) signals when a carry or borrow occurred in the four least significant bits. binary coded decimal (BCD) arithmetics
+
+- zero flag (ZF) is set when the result of an arithmetic or bitwise operation is 0
+
+- The sign flag (SF) is set when the last mathematical operation resulted in a negative number
+
+- trap flag, rap flag (TF) causes a single step interrupt after every executed instruction.
+
+- The interrup enable flag (IF) defines whether processor will or will not react to incoming interrupts.
+
+only accessible in real mode or at the Ring 0 protection level in other modes.
+
+- The direction flag (DF) controls the direction of string operations. 
+
+- overflow flag(OF), OF is set when the result of the operation is either too small or too big a number to fit into the destination operand. 
+
+- remaining bits, The remaining 20 bits of the EFlags register are not that important for us while in user-land except
+
+
+# Setup a development environment 
+- flat assembler, FASM
+
+visual studio 2017 community 
+
+GNU compiler collection GCC
+
+flat assembler
+
+- microsoft macro assembler 
+
+Modern integrated development environments (IDEs) are very complex
+
+A 32-bit binary that produces 32-bit code
+A 32-bit binary that produces 64-bit code
+A 64-bit binary that produces 32-bit code
+A 64-bit binary that produces 64-bit code
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

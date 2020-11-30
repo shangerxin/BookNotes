@@ -911,6 +911,62 @@ Contravariance again. It's illegal to assign the address of the derived class's 
 # Initialization
 - assignment/initialization confusion 
 
+    + Initialization is the process of turning raw storage into an object. For a class object, this could entail setting up internal mechanisms for virtual functions and virtual base classes
+
+    + Assignment is the process of replacing the existing state of a well-defined object with a new state
+
+class SloppyCopy {
+public:
+   SloppyCopy &operator =( const SloppyCopy & );
+   // Note: compiler default SloppyCopy(const SloppyCopy &) . . .
+private:
+   T *ptr;
+};
+void f( SloppyCopy ); // pass by value
+
+SloppyCopy sc;
+f( sc );     // alias what ptr points to, probable error
+
+//The initialization will be accomplished with SloppyCopy’s copy constructor.
+
+//A raw_storage_iterator is used to assign to uninitialized storage. Ordinarily, an assignment operator requires that both its arguments be properly initialized objects
+template <class Out, class T>
+class raw_storage_iterator
+   : public iterator<output_iterator_tag,void,void,void,void> {
+public:
+   raw_storage_iterator& operator =( const T& element );
+   // . . .
+protected:
+   Out cur_;
+};
+template <class Out, class T>
+raw_storage_iterator<Out, T> &
+raw_storage_iterator<Out,T>::operator =( const T &val ) {
+   T *elem = &*cur_; // get a ptr to element
+   new ( elem ) T(val); // placement and copy constructor
+   return *this;
+}
+
+//an assignment operator requires that both its arguments be properly initialized objects; otherwise, a problem is likely when the assignment attempts to “clean up” the left argument before setting its new value. 
+struct X {
+   T *t_;
+   X &operator =( const X &rhs ) {
+       if( this != &rhs )
+           {  delete t_;
+           t_ = new T(*rhs.t_); }
+       return *this;
+   }
+   // . . .
+};
+// . . .
+X x;
+X *buf = (X *)malloc( sizeof(X) ); // raw storage . . .
+X &rx = *buf; // foul trickery . . .
+rx = x; // probable error!
+
+Another common misapprehension is that assignment is somehow involved in the following initialization:
+T d = a; // not an assignment
+
 
 # Memory and resource management 
 
