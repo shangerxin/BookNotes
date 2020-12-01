@@ -1,0 +1,335 @@
+Getting started with reverse engineering=Josh;Note=Erxin
+
+# Introduction
+- basic structure of the courses 
+- why to learn?
+career opportunities 
+    + break down complex problems into pieces and find root causes
+    
+necessary for some careers 
+
+deeper understanding into how things work 
+
+techinically challenging
+
+defend your assets 
+
+adversarial thinking
+
+- career path 
+
+incident responder 
+
+malware analyst 
+
+penetration tester 
+
+vulnerability research 
+
+software developer 
+
+- module introduction 
+
+verser engineering process 
+
+tools and concepts 
+
+intruction set architectures 
+
+static versus dynamic analysis 
+
+workflow 
+
+native code obfuscation 
+
+- the reverse engineering process, native code not interpreted languages 
+
+a window environment 
+
+essential tools for becoming an effective reverse engineer 
+
+- tools and concepts 
+
+assembly language, the core of reversing native code 
+
+cpu architecture registers, virtual memory and more 
+
+static analysis IDA pro, hex editors & binary parsing tools 
+
+dynamic analysis windbg and tracing programs 
+
+methodology how to apply these tools to find answers 
+
+instruction set architectures (ISA), abstract model of a computer, defines what is need to pgram it 
+
+example include intel x86 and x86-64, arm and AMD 
+
+this course focus on intel x86 & x86-64 
+
+concepts will overlap with other architectures 
+
+- static vs dynamic analysis 
+
+    + static 
+    involves analyszing a program and its code without execution 
+    
+    + activities go from looking at strings to digging in with a disassembler 
+    
+    + dynamic analysis 
+    
+    involves analyszing the program during execution 
+    
+    process monitors, debuggers, network capture 
+    
+    + a combination approach can be very effective 
+    
+- a reverse workflow 
+
+    1. unknown binary file 
+    
+    2. basic analysis, check the format and structures etc 
+    
+    3. advanced analysis, windbg ida pro do static and dynamic analysis 
+    
+    + reporting and documentation 
+    
+    + look for next sample 
+    
+    + native code obfuscation, authors will attempt to make their code difficult to analysze whether for malicious or non-malicious purposes 
+    
+    + anti-analysis techniques can also be employed to slow down your ability to reverse engineer software 
+    
+    + native code obfuscation can be difficultto detect, given enough time and effort it's not impossible though 
+    
+- examples of code obfuscation
+
+    + interpreted code (javascript)
+    
+    + native code, assembly code pattern EA exes 
+    
+- summary 
+
+
+# Assembly basics 
+- module introduction 
+cpu 
+
+assembler and program segments 
+
+intel instruction set architecture (ISA)
+
+essential instructions 
+
+bitwise operations, endianness and size 
+
+- how cpu works 
+
+program on disk -[load by os loader]-> primary memory -[fetch]-> cpu -[decode, execute]->
+
+- CPU cores & clock cycles 
+
+originally, cpus had a signle core, this limited the number of instructions it could execute concurrently 
+
+modern systems now come with multiple physical cores 
+
+virtual cores are also possible, but not perform as well as physical cores, intel's hyper-threading technology is an example 
+
+cpu clock speeds indicate the number of instructions it can execute per second 
+
+    + other components 
+    network card 
+    gpu 
+    memory 
+    etc. 
+    
+- layers of memory 
+
+CPU registers 
+
+caches 
+
+primary  memory 
+
+secondary storage, hard drive etc. 
+
+input devices 
+
+- registers 
+    + 32 bit 
+EAX AX  AL  AH
+EBX 
+ECX 
+ESI 
+EDI 
+EBP 
+ESP 
+...
+
+    + 64 BIT, extend registers and add more registers 
+RAX     EAX     AX    AL    AH
+RBX 
+RCX 
+RDX 
+RSI 
+RDI 
+RBP 
+RSP 
+R8-R15
+    
+    + thinking in 1s and 0s 
+    
+- pointer registers 
+
+    + 32 bit pointer registers with 16-b9it portions 
+    
+    EIP, instruction pointer 
+    ESP, stack pointer 
+    EBP, base pointer 
+    
+    + 64 bit pointer registers 
+    RIP 
+    
+    RSP 
+    
+    RBP 
+    
+    + index registers 
+    
+    ESI, source index 
+    
+    EDI, destination index 
+    
+    RSI 
+    RDI 
+    
+    common for copy 
+    
+    + EFLAGS & RLFAGS, 32 and 64 bit registers that represent the results of operations and the state of the CPU 
+
+    carry flag, CF 
+    zero flag, ZF 
+    sign flag, SF 
+    trap flag, TF 
+    direction flag, DF 
+    overflow flag, OF
+    
+    upper 32 bit RFLAG are reserved 
+    
+- the assembler and program segments 
+    + binary file formats 
+    
+    exe {
+        header {
+            information about the binary files 
+        }
+        
+        sections{
+            Code (.text)
+            imports/exports 
+            read-only data 
+            resources 
+            other sections 
+        }
+    }
+    
+    + segment purposes 
+    
+    .text/.code program instructions in binary state, entry point of program 
+    
+    .data/.idata, initialized data 
+    
+    .rsrc, resources used by the program, icons, images, arbitrary binary data, malware author may inject arbitrary binary data such as shell code for hard reverse engineering 
+    
+    .bss, unitialized data, such as global defined variables 
+    
+    not all list of segments. the name of the segment can be changed 
+    
+    + executing a program decide which way we dealing with files 
+    
+        + exe file we talk about offset of the file and contents
+
+        + loded into memory will be assigned to virtual memory with virtual addresses
+        
+    + sample program 
+    
+    [bits 32]               //defines architecture 
+    
+    section .text           //define the section of code 
+    
+    global _START           //define the entry point 
+        
+    _START                  //entry point 
+    
+        push ebp 
+        
+        mov esp, ebp        //instructions
+        
+        sub esp, 8h         //*nasm syntax 
+
+- instruction set architecture
+
+    + defines the instructions the CPU understands 
+    
+    this is machine code in binary state 
+    
+    compiler/assembler/interpreter translates source code into appropriate machine code 
+    
+    when reverse engineering, disasssemblers revert machine code back to assembly 
+    
+    decompilers may be able to generate code in original language 
+
+- it starts with a Mnemonic 
+
+mnemonics are human readable forms of the instructions add, move sub are some examples 
+
+operands are arguments expected by the instructions 
+
+operands can be a few types
+
+OPCODES are simply the binary representation of the instruction and any operands often displayed as hexadecimal values 
+
+- generating machine code 
+
+write an instruction -> translate assembler compiler or interpreter -> results in machine code 
+
+xor eax, eax            -->   0x31 0xC0 0011000111000000
+
+- essential instructions 
+
+1503 instructions defined in intel's ISA 
+
+intel documentation is authority of source 
+
+organized into few primary categories 
+    + arthemetic 
+    + memory 
+    + comparison 
+    + control flow
+    + bit-minipulation 
+    
+- binary math 
+
+addition, substraction 
+
+
+
+# Working with native code 
+
+# Using debuggers 
+
+# Practical assembly
+
+# Reverse engineering 
+
+# Conclusion 
+
+
+
+
+
+
+
+
+
+
+
