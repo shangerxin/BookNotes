@@ -1,0 +1,237 @@
+Mastering Reverse Engineering=Reginald;Note=Erxin
+
+# Introduction
+- a good report answers questions 
+
+how a reversed engineered object works 
+
+when specific behavior triggers 
+
+why specific code used in the program 
+
+where it was intended to work on 
+
+what the whole program does 
+
+- tools 
+
+binary analysis tools, 
+
+disassemblers, 
+
+decompilers, 
+
+debuggers, 
+
+monitoring tools.
+
+- binary analysis tools 
+
+Microsoft executable file, an EXE file, begin with the MZ header, first four bytes 
+
+D0 CF 11 E0
+
+- disassemblers, view the low level code of a program 
+
+Application Program Interface (API) functions. The following screenshot shows a code snippet of a program module that uses the GetJob() 
+ 
+.text: 10001010 ; int __cdecl GetPageCount(HANDLE hPrinter, DOWRD JobId)
+.text: 10001010                 public GetPageCount
+.text: 10001010 GetPageCount    proc near 
+.text: 10001010
+.text: 10001010 var_C           = dword ptr -0Ch 
+.text: 10001010 pcbNeeded       = dword ptr -8
+...
+.text: 10001035                 push eax        ;hPrinter
+.text: 10001036                 mov [ebp+pcbNeeded], 0 
+.text: 1000103D                 call ds:GetJob
+.text: 10001043                 mov  esi, [ebp+pcbNeeded]
+...
+
+- debugger, monitor, decompiler, malware handling    
+
+- basic analysis laptop setup
+
+The sandbox environment here is where we do analysis of a file. MITM, mentioned on the right of the diagram, means the man in the middle 
+
+sandbox ---> MITM ----> Internet 
+
+store images or re-image disks would be the best solution for us here. These programs include Fog, Clonezilla, DeepFreeze, and HDClone
+
+- download windows virtual machine 
+
+https://developer.microsoft.com/en-us/microsoft-edge/tools/vms/
+
+- samples 
+
+Dev C++ (http://www.bloodshed.net/
+Visual Studio C++ (https://www.visualstudio.com/downloads/)
+MASM32 (http://www.masm32.com/)
+
+    + malware 
+    
+https://github.com/PacktPublishing/Mastering-Reverse-Engineering
+https://github.com/ytisf/theZoo
+
+
+# Identification and extraction of hidden components 
+- discuss 
+    1. malware delivery 
+    2. malware persistence 
+    3. malware playload 
+- Persistence is when malware consistently runs in the background
+
+- SysInternals suite (https://docs.microsoft.com/en-us/sysinternals/downloads/sysinternals-suite)
+
+- Microsoft introduced the registry system, which is actually stored in protected files called registry hives.
+
+- filesystems, different disk filesystems such as FAT, NTFS, ex2, ex3, XFS, and APFS
+
+- MacOS X versions, file information and data are stored in resource forks. Resource forks are actually deprecated but backward compatibility still exists on recent versions of MacOS. A file has two forks stored in the filesystem, the data fork and the resource fork.
+
+simple copy mac application to window and then copy back will not work
+
+- memory 
+- registry system will store data like:
+    + associated programs that execute expecific files 
+    + aossiciate icons 
+    + software settings 
+    + user and group profiles 
+    + printer setup 
+    + designated drivers for specific services 
+    
+- typical malware behavior
+    + directly change the system 
+    + persistence 
+    Any entries made under the registry key HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\
+Windows\CurrentVersion\Run are expected to run every time Windows starts.
+
+    + run keys when window starts 
+    
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnce
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunOnceEx
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunServices
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\N\RunServicesOnce
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run
+HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Windows\CurrentVersion\Run
+
+    + run keys when current user login 
+    
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnce
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\RunOnceEx
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunServices
+HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\RunServicesOnce
+HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Windows\Run
+
+    + other run keys, The malware may still persist if it keeps on placing its own file path under the RunOnce, RunOnceEx or RunServicesOnce keys. 
+
+    + load run values 
+    boot execute value 
+    winlogon key 
+    policy scripts keys 
+    AppInit_Dlls values 
+    Servies keys 
+    File associations, HKEY_CLASSES_ROOT or in HKEY_LOCAL_MACHINE\SOFTWARE\Classes\[File type or extension name]\shell\open\command . For example, the (Default) value is set to malware.exe "%1" %*.  As a result, malware.exe runs and uses %1
+
+    + start up values,  %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
+    ...
+        
+    + image file execution options keys 
+    HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\[Process Name]
+    ...
+
+- malware delivery 
+    + instant message apps 
+    + computer network 
+    LAN (Local Area Network) or WAN (Wide Area Network), file sharing protocols are also open for attackers to abuse. 
+    + media storage 
+
+    it generates an autorun.inf file that points to the dropped executable file, as can be seen in the following example
+    
+    + exploits and compromised websites 
+    
+    download malware that can give the attacker more access. This concept was used to develop exploit kits
+    
+    User -[access sites with malicious] -> compromised sites can be a series of redirected landing pages -[exploit kit gate scans for vulnerabilities of the Users] -> User  
+    
+    
+- malware usually create drop files at 
+
+The Windows System folder: C:\Windows\System32
+The Windows folder:  C:\Windows
+The user profile folder:   C:\Users\[username]
+The Appdata folder:  C:\Users\[username]\AppData\Roaming
+The recycle bin folder:  C:\$Recycle.Bin
+The desktop folder: C:\Users\[username]\Desktop
+The temporary folder:  C:\Users\[username]\AppData\Local\Temp
+
+- malware payloads
+
+encrypting files for ransom 
+
+deleting all files 
+..
+    
+- tools 
+regedit/regedit32 to search registry 
+
+taskmgr to list process 
+
+explorer or cmd to traverse directory 
+
+Autoruns
+
+Process explorer to check process information 
+    
+- further reading 
+
+https://medium.com/@johnpaticklita/cryptomalware-spreads-on-facebook-79a299590116
+    
+https://msdn.microsoft.com/en-us/library/windows/desktop/ms724871(v=vs.85).aspx
+    
+
+# The low level language 
+- turn assembly language back to source, this is called versing 
+
+binary numbers, bases, ascii table 
+
+x86 architecture 
+
+assembly language instructions 
+
+tools used to edit and compile an assembly language source code 
+
+debugging 
+
+exceptions and error handling 
+
+window APIs 
+
+high level constructs 
+    
+- binary editors, HxD Editor or HIEW (Hacker's View)
+    
+https://mh-nexus.de/en/hxd/
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
