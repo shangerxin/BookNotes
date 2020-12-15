@@ -967,8 +967,150 @@ rx = x; // probable error!
 Another common misapprehension is that assignment is somehow involved in the following initialization:
 T d = a; // not an assignment
 
+- if the objects being assigned contain a pointer to a heap-allocated buffer, the assignment will typically delete the buffer before setting the new value of the object. If the object is uninitialized, the deletion of the uninitialized pointer member will result in undefined behavior
+
+struct X {
+   T *t_;
+   X &operator =( const X &rhs ) {
+       if( this != &rhs )
+           {  delete t_; t_ = new T(*rhs.t_); }
+       return *this;
+   }
+   // . . .
+};
+// . . .
+X x;
+X *buf = (X *)malloc( sizeof(X) ); // raw storage . . .
+X &rx = *buf; // foul trickery . . .
+rx = x; // probable error!
+
+- copy on an uninitialized array of X will most probably fail
+
+X a[N];
+X *ary = (X *)malloc( N*sizeof(X) );
+copy( a, a+N, ary ); // assign to raw storage!
+
+- copy operations aren't inherited but using declaration that imports the rather accommodating nonvirtual base class 
+
+class Derived;
+class Base {
+public:
+   Derived &operator =( const Derived & );
+   virtual Base &operator =( const Base & );
+};
+class Derived : public Base {
+public:
+   using Base::operator =; // hidden
+   template <class T>
+   Derived &operator =( const T & ); // not a copy assign
+   Derived &operator =( const Base & ); // not a copy assign
+};
+
+- initialization list is immaterial 
+
+class C {
+public:
+   C( const char *name );
+private:
+   const int len_;
+   string n_;
+};
+// . . .
+C::C( const char *name )
+   : n_( name ), len_( n_.length() ) // error!!!
+   { }
+   
+- from a virtual base pointer or reference is to use a dynamic_cast (but see Gotcha #45):
+
+if( D *dp = dynamic_cast<D *>(ap) ) {
+// do something with dp . . .
+}
+
+- initialization order 
+
+// in file term.cpp
+const char *terminalType = getenv( "TERM" );
+// in file vt100.cpp
+extern const char *terminalType;
+bool isVT100 = strcmp( terminalType, "vt100" )==0; // error?
+
+There is an implicit ordering dependency between the initializations of terminalType and isVT100, but the C++ language does not, and cannot, guarantee a particular initialization order.
+
+- schwarz counter, standard technique 
+//term.h 
+extern const char *terminalType;
+//other things to initialize . . .
+class InitMgr {  // Schwarz counter
+public:
+   InitMgr()
+       {  if( !count_++ ) init(); }
+   ~InitMgr()
+       {  if( !--count_ ) cleanup(); }
+   void init();
+   void cleanup();
+private:
+   static long count_; // one per process
+};
+namespace {  InitMgr initMgr; }  // one per file inclusion
+
+//term.cpp
+extern const char *terminalType = 0;
+long InitMgr::count_ = 0;
+void InitMgr::init() {
+   if( !(terminalType = getenv( "TERM" )) )
+       terminalType = "VT100";
+   // other initializations . . .
+}
+void InitMgr::cleanup() {
+   // any required cleanup . . .
+}
+
+best to minimize use of static variables and avoid runtime static initializations 
+
+- initializae a class variable with the return value 
+
+String ab( a+b ); // efficient
+ab = a + b; // probably not efficient
+
+- runtime static initialization of static class members is a tremendously bad idea 
+
+class Account {
+public:
+   Account() {
+       . . .  calculateCount()  . . .
+   }
+   // . . .
+   static long numAccounts;
+   static const int fudgeFactor;
+   int calculateCount()
+       {  return numAccounts+fudgeFactor; }
+};
+// . . .
+static Account myAcct; // oops!
+// . . .
+long Account::numAccounts = 0;
+const int Account::fudgeFactor = atoi(getenv("FUDGE"));
+
+The Account object myAcct is defined before the static data member fudgeFactor, so the constructor for myAcct will use an uninitialized fudgeFactor when it calls calculateCount
 
 # Memory and resource management 
+- check result of a standard use of new 
+
+int *ip = new int;
+if( ip ) { // condition always true
+   // . . .
+}
+else {
+   // will never execute
+}
+
+int *ip = new (nothrow) int;
+if( ip ) { // condition almost always true
+   // . . .
+}
+else {
+   // will almost never execute
+}
 
 # Polymorephism 
 

@@ -444,11 +444,213 @@ multiplication
 
 # Working with native code 
 - Module introduction 
-+ the portable executable (PE) file format 
-+ an introduction to the windows 
-+ demo: parsing PE files 
-+ lab: analyzing PE files 
-+ module conclusion 
+    + the portable executable (PE) file format 
+    + an introduction to the windows 
+    + demo: parsing PE files 
+    + lab: analyzing PE files 
+    + module conclusion 
+
+- the portable executable file format 
+
+    + binary file format used predominantly in windows operating systems 
+    
+    + houses executable code for executables (EXEs) and dynamic link libraries (DLLs)
+    
+    + a flag diffedrentiates between the two otherwise use the same format specifications 
+    
+    + made up of multiple sections at a minimum will have a section for code and another for data
+    
+- PE file format 
+
+Exe 
+|-------------
+headers 
+IMAGE_DOS_HEADER
+    IMAGE_FILE_HEADER 
+    IMAGE_OPTIONAL_HEADER 
+    IMAGE_DAT_DIRECTORY
+    
+IMAGE_NT_HEADERS 
+
+IMAGE_SECTION_HEADER
+
+|--------------
+sections 
+
+    + sections 
+.text/.code 
+.bss 
+.rdata 
+export data 
+import data 
+resources 
+thread-local storage 
+debug information 
+
+    + IMAGE_DOS_HEADER 
+all PEs start with this header, first 64 bytes of file 
+
+has 19 members, magic and e_lfanew etc 
+        * magic contains values 4Dh, 4Ah (MZ), signifies a valid dos header 
+        
+        e_lfanew, DWORD, contains offset for IMAGE_NT_HEADERS 
+
+
+    + IMAGE_DOS_HEADER structure 
+    
+IMAGE_DOS_HEADER STRUCT {
+    e_magic     word 
+    ... 58 bytes of additional members 
+    e_lfanew    dword 
+}
+
+PE is little endian in memory 
+E0 00 00 00 to address 000000E0
+
+the e_lfanew pointed content will be IMAGE_NT_HEADERS
+50 45 00 00   stands for PE... 
+
+    + IMAGE_NT_HEADERS STRUCTURE 
+    
+IMAGE_NT_STRUCT {
+    Signature dword 
+    FileHeader IMAGE_FILE_HEADER 
+    OptionalHeader IMAGE_OPTIONAL_HEADER32 
+}
+
+IMAGE_NT_HEADERS will contain entry point of the program, image base(virtual memory), whether it uses address space layout randomization (ASLR, data execution prevention (DEP)) and other security feature 
+
+    + _IMAGE_OPTIONAL_HEADER {
+    
+    image_base  //optional used
+    entry_point  //optional used
+    }
+    
+    + IMAGE_DATA_DIRECTORIES 
+    
+holds at most 16 entries, array of IAMGE_DATA_DIRECTORY structures 
+
+refers to different parts of code 
+imports 
+exports 
+resources 
+relocation tables 
+
+typedef struct _IMAGE_DATA_DIRECTORY {
+    DWORD VirtualAddress;
+    DWORD Size;
+} IMAGE_DATA_DIRECTORY, *PIMAGE_DATA_DIRECTORY;
+
+- IMAGE_SECTION_HEADER {
+    BYTE Name
+    
+    union {
+        DWORD PhysicalAddress //address when load into memory 
+        DWORD VirtualSize 
+    }
+    DWORD VirtualAddress    //address of section in memory 
+    DWORD SizeOfRawData     //size of section on disk 
+    DWORD PointerToRawData  //beginning of section on disk 
+    ...
+    DWORD Characteristics  //characteristics of the image 
+}
+
+    + from disk to memory 
+    
+loader will navigate DOS header to find PE section, checks for validaity > section tables are read and sections mapped into memory > loader then parses other aspects of the image, such as imports and exports > finally, uses AddressOfEntry to calculate entry point and begins image execution 
+
+- an introduction to the windows application program interface (API)
+
+formerly known as the Win32 API, when reversing allows us to understand what a program does 
+
+MSDN, microsoft developer network
+
+    + document, msdn.microsoft.com 
+    
+    + core concepts 
+    
+    + types and Hungarian notation 
+    
+    BYTE, WORD and DWORD are used to represent 8, 16, 32 bit values. contrast to C types such as int, short and unsigned int 
+    
+    hungarian notation is a prefix notation used to identify a variable's type 
+    
+    + Handles, opened or created by the OS 
+    
+    provide access to windows, menus, files, directories, et cetera 
+    
+    similar in concept of a C pointer 
+        * canot do arithmetic on them 
+        * will look like a pointer in assembly 
+    you can view process handles with tools like process hacker, used the value to back map to the type when reverse 
+    
+    + creating a process with the windows API 
+    
+BOOL WINAPI CreateProcess (
+    _In_opt_ LPCTSTR lpApplicationName,
+    _Inout_opt_ LPTSTR lpCommandLine,
+    ...
+)
+    _opt_ means optional  
+    
+    + user mode there and back again 
+    
+User mode { windows API, kernel32, user32, ws2_32 and other dlls}
+                A
+                |
+                V
+                native API, NTDLL
+|-----------------------------------------------------------------
+                A
+                |
+                V
+kernel mode  {  Kernel API}
+
+    + linking code 
+    
+    static: directory copies code from the library into the executable, it is difficult to reverse 
+    
+    runtime: imports from the libraries only when the function is needed, malware often uses this technique 
+    
+    dynamic: os looks for libraries when executable is loaded, this is the most common 
+    
+    + Common dlls 
+    Kernel32, core functionality, memory, proceses, files, and hardware 
+    Advapi32, service manager, registry 
+    User32, user interface 
+    Ntdll, low level api, not intetneded to be called directly 
+    WSock32/ws2_32, low-level network 
+    Wininet, high level networking(HTTP, FTP, etc)    
+
+- demo, parsing PE files 
+    
+    + use the following tools to automatically parse a PE file 
+    010 hex editor 
+    PE studio 
+    dependency walker 
+    
+        * open a PE file with the hex editor 
+        first two bytes are the magic 4D 5A 
+        
+        60H Aress contain the e_lfanew dword, will pointo the IMAGE_NT_HEADERS, will be the PE signature 
+        
+        * with the Template menu, we can apply the Exe template will display the results 
+        
+    + dependency walker 
+    right top panel is the import functions, we can use the ordinal number to reference a function with the dependency walker  
+    
+    right left panel is the the avaliable functions 
+    
+    + PE studio, will list indicators, virustotal, this tool integrate with maware service total. 
+    
+    does-stub, will start display the file information 
+    file-header 
+    optional-header 
+    directories 
+    sections 
+    ....
+    
+- lab, analyzing PE files 
 
 
 
