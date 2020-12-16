@@ -721,6 +721,26 @@ class AccountService {
     }
 }
 
+- fluent interface, make the code read like text 
+
+    + a method should either be a command or a query.3  A usual interpretation is that a command should change state but return nothing, and a query should return the answer but change nothing.
+    
+    + In a way, the object acts as its own builder (more on the builder pattern in the next section). But it completely misses the fluent part
+    
+class Person {
+  private String firstname;
+  ...
+  public Person setFirstName(String firstname) {
+    this.firstname = firstname;
+    return this;
+  }
+  ...
+}
+
+Person p = new Person()
+            .setFirstName("Deve").setLastName("Loper")
+            .setProfession("Developer");
+
 - builder pattern for upholding advanced constraints 
 
 import static org.apache.commons.lang3.Validate.notNull;
@@ -857,6 +877,23 @@ class Person {
         return birthdate.clone();    ①  
     }
 }
+- catching advanced constraints in code 
+
+two optional attributes: credit limit and fallback account. An advanced constraint might span both of these attributes. 
+
+    + check advanced constraints in separate method
+    
+import static org.apache.commons.lang3.Validate.validState;
+
+private void checkInvariants()
+    throws IllegalStateException {    ①  
+
+    validState(fallbackAccount != null
+                ^ creditLimit != null);    ②  
+}
+
+    
+
 - securing the integrity of collections 
 
 class Order {
@@ -867,6 +904,19 @@ class Order {
 }
 
 static <T> List<T> unmodifiableList(List<? extends T> list)
+
+- builder pattern for upholding 
+
+void openAccount() {
+    AccountBuilder accountBuilder =    ①  
+            new AccountBuilder(number,    ②  
+                               accountOwner,
+                               interest);
+    accountBuilder.withCreditLimit(limit);    ③  
+④  
+    Account account = accountBuilder.build();    ⑤  
+    ...
+}
 
 - patterns 
     + Creation through a constructor with all mandatory attributes; optional attributes set via method calls
@@ -881,6 +931,7 @@ static <T> List<T> unmodifiableList(List<? extends T> list)
     Without restrictions, there’s no encapsulation
     
     + Securing collections through immutability
+    
 
 - summary 
 
@@ -897,6 +948,59 @@ You must take care so that the data in a collection can’t be changed from the 
     
 
 # Reducing complexity of state 
+- partially immutable entities, entities partially immutable to avoid integrity-breaking mistakes.
+
+- entity rule upheld by a service method 
+
+public class Person {
+    private final boolean married;
+    public Person(boolean married) {
+        this.married = married;
+    }
+    public boolean isMarried() {
+        return married;
+    }
+    public void date(Person datee) {}    ①  
+}
+
+public class Work {
+    private Person boss;
+    private Person employee;
+
+    void afterwork() {
+        // boss attempts to date
+        if (!boss.isMarried()) {    ②  
+            boss.date(employee);
+        } else {    ③  
+            logger.warn("bad egg");
+        }
+    }
+}
+- entity snapshot, makes it easier to grasp what states the entity can have. supports high capacity and fast response times by avoiding locking 
+
+- implementing entity state as a seperate object 
+- splitting the complex states into an entity chain 
+
+a book order can be in a lot of distinct states, draw a state graph 
+
+- splitting the state graph into phases 
+
+- when to form an antity relay, one phase to another and few transition points 
+
+entity replay, makes it easier to handle and complex state graphs 
+
+
+# Leveraging your delivery pipleine for security 
+- possible security weaknesses 
+
+https://www.owasp.org/index.php/Web_Application_Penetration_Testing
+
+- using a deliver pipleline 
+
+build > {unit test, applicaiton test, integration test} > system test > availability tests > deploy 
+
+    + unit test 
+    normal input testing 
 - mutable state, entities are also hard to code. 
 
 void withdraw(Money amount) {
@@ -1131,6 +1235,14 @@ the perils of slippery toggles
 
     + change the code directly
     
+    boundary input 
+    
+    invalid input 
+    
+    extreme input 
+    
+    + defense in depth 
+    https://www.us-cert.gov/bsi/articles/knowledge/principles/defense-in-depth
     + toggle the feature by change configuration 
     
     + methods for verify feature toggles 
@@ -1146,7 +1258,146 @@ the perils of slippery toggles
 - automatic security tests 
 https://www.owasp.org/index.php/OWASP_Cheat_Sheet_Series
 
-The Open Web Application Security Project® (OWASP) is a nonprofit foundation that works to improve the security of software.
+    + understand the domain rules 
+
+- unit test frameworks for different kinds of languages 
+
+- regular expresions look around 
+
+http://www.regular-expressions.info/lookaround.html
+
+-  NCC Group white paper, “Second-Order Code Injection Attacks,” available at https://www.nccgroup.trust/uk/our-research/second-order-code-injection-attacks/.
+
+html embedding 
+
+cross-site scripting 
+
+sql injection 
+
+buffer overflow 
+
+file includes, allows an attacker to inject malicious code sucn as file location referenes or configuration variables 
+
+timing, synchronously or asynchronously by the application 
+
+location 
+
+environment 
+
+source
+
+    + XSS 
+    
+Testing for XSS injections can be done in a similar fashion by using dictionaries with different ways of expressing <script>, along with the less than (<) character
+
+
+    + sql injection 
+    
+import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.DynamicTest.dynamicTest;
+ 
+class EmailAddressTest {
+  @TestFactory
+  Stream<DynamicTest> should_reject_SQL() {
+     return Stream.of(
+           "'or%20select *",                         ①  
+          "admin'--",                               ①  
+           "<>\"'%;)(&+",                            ①  
+           "'%20or%20''='",                          ①  
+           "'%20or%20'x'='x",                        ①  
+           "\"%20or%20\"x\"=\"x",                    ①  
+           "')%20or%20('x'='x",                      ①  
+           "0 or 1=1",                               ①  
+           "' or 0=0 --",                            ①  
+          "\" or 0=0 --")                           ①   
+           .map(input ->
+              dynamicTest("Rejected: " + input,
+                 () -> assertThrows(                 ②  
+                       RuntimeException.class,
+                       () -> new EmailAddress(input))));
+  }
+}
+
+- verifying feature toggles, This means you shouldn’t verify only the feature code in your application, but also the toggles themselves.
+
+examples:
+
+remove functionality in public API 
+
+replace existing functionality 
+
+new authentication/authorization 
+
+alternating behavior 
+
+- dealing with combinatory complexity 
+
+- toogles are subject to auditing 
+
+OWASP publishes a number of cheat sheets that you can use as a guide when writing your own security tests. See https://www.owasp.org/index.php/OWASP_Cheat_Sheet_Series.
+
+
+- vulnerability scanning tools 
+
+OWASP has a great list of tools at https://www.owasp.org/index.php/Category:Vulnerability_Scanning_Tools.
+
+OWASP Dependency Check is an example of a tool you can use to scan for vulnerable dependencies; see https://www.owasp.org/index.php/OWASP_Dependency_Check.
+
+- testing for availability 
+
+“Engineering Principles for Information Technology Security (A Baseline for Achieving Security),” available at https://csrc.nist.gov/publications/detail/sp/800-27/rev-a/archive/2004-06-21. withdraw to 
+https://csrc.nist.gov/publications/detail/sp/800-160/vol-1/final
+https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-160v1.pdf
+
+
+US-CERT Security Tip ST04-015, “Understanding Denial-of-Service Attacks” at https://www.us-cert.gov/ncas/tips/ST04-015
+
+distributed denial of service (DDoS) attack, A utility for arming (creating) many bees (micro EC2 instances) to attack (load test) targets (web applications).
+https://github.com/newsapps/beeswithmachineguns
+
+more generic term DoS attack
+
+https://aws.amazon.com for more information on the Amazon Elastic Compute Cloud.
+
+- exploiting domain rules,  “Domain-Driven Security’s Take on Denial-of-Service (DoS) Attacks,” available at http://www.diva-portal.org/smash/record.jsf?pid=diva2%3A945831.
+
+- validating configuration 
+
+examples of configuration hot spots to test 
+
+web containers, http headers, CSRF tokens, output encoding 
+network communication, transport layer security, https and so on 
+data parsing, behavior of data parsers 
+authentication mechanisms, authentication on/off, integration settings 
+
+- HTTP headers to consider is the OWASP Secure Headers Project at https://www.owasp.org/index.php/OWASP_Secure_Headers_Project
+
+- cross site tracing, https://www.owasp.org/index.php/Cross_Site_Tracing for details.
+
+- Regular expressions can be sensitive to inefficient backtracking, and, therefore, you should check the length of input before sending it to the regular expression engine.
+
+
+# Handling failures securely 
+- using exceptions to deal with failure 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    The Open Web Application Security Project® (OWASP) is a nonprofit foundation that works to improve the security of software.
 
 supplying malicious data to check for flaws input validation, such as flaws that enable sql injection or buffer overflow attacks 
 
