@@ -254,7 +254,310 @@ export const Header = (
 
 
 
+# TypeScript 4.1 
+- template literal types 
 
+    + expect functions parameter recieve a set of strings 
+
+function setVerticalAlignment(location: "top" | "middle" | "bottom") {
+  // ...
+}
+
+setVerticalAlignment("middel");
+
+    + used in property names in mapped types 
+    
+type Options = {
+  [K in "noImplicitAny" | "strictNullChecks" | "strictFunctionTypes"]?: boolean;
+};
+
+    + new string literal type 
+    
+type World = "world";
+
+type Greeting = `hello ${World}`;
+//   ^ = type Greeting = "hello world"
+
+    + union substitution positions, it produces the set of every possible string literal 
+    
+type Color = "red" | "blue";
+type Quantity = "one" | "two";
+
+type SeussFish = `${Quantity | Color} fish`;
+//   ^ = type SeussFish = "one fish" | "two fish" | "red fish" | "blue fish"
+
+    + example, 9 possible strings 
+
+type VerticalAlignment = "top" | "middle" | "bottom";
+type HorizontalAlignment = "left" | "center" | "right";
+
+// Takes
+//   | "top-left"    | "top-center"    | "top-right"
+//   | "middle-left" | "middle-center" | "middle-right"
+//   | "bottom-left" | "bottom-center" | "bottom-right"
+
+
+    + generic to infer from parts of the eventName string to figure out the associated property.
+
+type PropEventSource<T> = {
+    on<K extends string & keyof T>
+        (eventName: `${K}Changed`, callback: (newValue: T[K]) => void ): void;
+};
+
+declare function makeWatchedObject<T>(obj: T): T & PropEventSource<T>;
+
+let person = makeWatchedObject({
+    firstName: "Homer",
+    age: 42,
+    location: "Springfield",
+});
+
+// works! 'newName' is typed as 'string'
+person.on("firstNameChanged", newName => {
+    // 'newName' has the type of 'firstName'
+    console.log(`new name is ${newName.toUpperCase()}`);
+});
+
+// works! 'newAge' is typed as 'number'
+person.on("ageChanged", newAge => {
+    if (newAge < 0) {
+        console.log("warning! negative age");
+    }
+});
+
+    + converting to lowercase and uppercase 
+    
+type EnthusiasticGreeting<T extends string> = `${Uppercase<T>}`
+
+type HELLO = EnthusiasticGreeting<"hello">;
+//   ^ = type HELLO = "HELLO"
+
+- key remapping in mapped types 
+
+type Options = {
+  [K in "noImplicitAny" | "strictNullChecks" | "strictFunctionTypes"]?: boolean;
+};
+// same as
+//   type Options = {
+//       noImplicitAny?: boolean,
+//       strictNullChecks?: boolean,
+//       strictFunctionTypes?: boolean
+//   };
+
+//new object types based on other object types 
+/// 'Partial<T>' is the same as 'T', but with each property marked optional.
+type Partial<T> = {
+  [K in keyof T]?: T[K];
+};
+
+    + re-map keys in mapped types 
+    
+TypeScript 4.1 allows you to re-map keys in mapped types with a new as clause.
+
+type MappedTypeWithNewKeys<T> = {
+    [K in keyof T as NewKeyType]: T[K]
+    //            ^^^^^^^^^^^^^
+    //            This is the new syntax!
+}
+
+        * with the help of remapping we can easily create property names 
+        
+type Getters<T> = {
+    [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]
+};
+
+interface Person {
+    name: string;
+    age: number;
+    location: string;
+}
+
+type LazyPerson = Getters<Person>;
+//   ^ = type LazyPerson = {
+//       getName: () => string;
+//       getAge: () => number;
+//       getLocation: () => string;
+//   }
+
+    + remove keys 
+    
+// Remove the 'kind' property
+type RemoveKindField<T> = {
+    [K in keyof T as Exclude<K, "kind">]: T[K]
+};
+
+interface Circle {
+    kind: "circle";
+    radius: number;
+}
+
+type KindlessCircle = RemoveKindField<Circle>;
+//   ^ = type KindlessCircle = {
+//       radius: number;
+//   }
+
+- recursive conditional types, conditional types can now immediately reference themselves within their branches, making it easier to write recursive type aliases.
+
+type ElementType<T> = T extends ReadonlyArray<infer U> ? ElementType<U> : T;
+
+function deepFlatten<T extends readonly unknown[]>(x: T): ElementType<T>[] {
+  throw "not implemented";
+}
+
+// All of these return the type 'number[]':
+deepFlatten([1, 2, 3]);
+deepFlatten([[1], [2, 3]]);
+deepFlatten([[1], [[2]], [[[3]]]]);
+
+    + deeply unwrap promises 
+    
+type Awaited<T> = T extends PromiseLike<infer U> ? Awaited<U> : T;
+
+/// Like `promise.then(...)`, but more accurate in types.
+declare function customThen<T, U>(
+  p: Promise<T>,
+  onFulfilled: (value: Awaited<T>) => U
+): Promise<Awaited<U>>;
+
+- Checked Indexed Accesses ((--noUncheckedIndexedAccess)), index signatures signal to the type system that users can access arbitrarily-named properties. called --noUncheckedIndexedAccess. Under this new mode, every property access (like foo.bar) or indexed access (like foo["bar"]) is considered potentially undefined. That means that in our last example, opts.yadda will have the type string | number | undefined as opposed to just string | number. If you need to access that property, you’ll either have to check for its existence first or use a non-null assertion operator (the postfix ! character)
+
+interface Options {
+  path: string;
+  permissions: number;
+
+  // Extra properties are caught by this index signature.
+  [propName: string]: string | number;
+}
+
+function checkOptions(opts: Options) {
+  opts.path; // string
+  opts.permissions; // number
+
+  // These are all allowed too!
+  // They have the type 'string | number'.
+  opts.yadda.toString();
+  opts["foo bar baz"].toString();
+  opts[Math.random()].toString();
+}
+
+// Basically saying "trust me I know what I'm doing"
+// with the '!' non-null assertion operator.
+opts.yadda!.toString();
+
+- paths without baseUrl, Using path-mapping is fairly common - often it’s to have nicer imports, often it’s to simulate monorepo linking behavior.
+
+- checkJs Implies allowJs 
+
+- react 17 jsx factories 
+
+react-jsx 
+react-jsxdev 
+
+    + tsconfig.json for production 
+// ./src/tsconfig.json
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "target": "es2015",
+    "jsx": "react-jsx",
+    "strict": true
+  },
+  "include": ["./**/*"]
+}
+
+    + for development 
+    
+// ./src/tsconfig.dev.json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsxdev"
+  }
+}
+
+- editor support for the JSDoc @see tag 
+
+// @filename: first.ts
+export class C {}
+
+// @filename: main.ts
+import * as first from "./first";
+
+/**
+ * @see first.C
+ */
+function related() {}
+
+- breaking changes 
+
+    + lib.d.ts Changes
+lib.d.ts may have a set of changed APIs, potentially in part due to how the DOM types are automatically generated. 
+
+    + abstract Members Can’t Be Marked async
+
+    + any/unknown Are Propagated in Falsy Positions
+
+declare let foo: unknown;
+declare let somethingElse: { someProp: string };
+
+let x = foo && somethingElse; //x will be any type 
+    + resolve parameters are not longer optional in promises
+    
+to explicit omit the parameter, we can give Promise an explicit void generic type argument (i.e. write it out as Promise<void>). This leverages new functionality in TypeScript 4.1 where a potentially-void trailing parameter can become optional.
+
+new Promise<void>((resolve) => {
+  //     ^^^^^^
+  doSomethingAsync(() => {
+    doSomething();
+    resolve();
+  });
+});
+
+    + conditional spreads create optional properties, object spreads (like { ...foo }) don’t operate over falsy values. So in code like { ...foo }, foo will be skipped over if it’s null or undefined.
+    
+interface Person {
+  name: string;
+  age: number;
+  location: string;
+}
+
+interface Animal {
+  name: string;
+  owner: Person;
+}
+
+function copyOwner(pet?: Animal) {
+  return {
+    ...(pet && pet.owner),
+    otherStuff: 123,
+  };
+}
+
+// We could also use optional chaining here:
+
+function copyOwner(pet?: Animal) {
+  return {
+    ...pet?.owner,
+    otherStuff: 123,
+  };
+}
+
+    + the returned type sometimes uses all-optional properties.
+
+{
+    x: number;
+    name?: string;
+    age?: number;
+    location?: string;
+}
+
+    + unnmatched parameters are no longer related, use type assertion as much as possible 
+
+
+
+
+
+# TypeScript 4.2 
 
 
 

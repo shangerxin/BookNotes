@@ -1,0 +1,270 @@
+Clean code in python=Mariano;Note=Erxin
+
+# Introduction 
+- reference 
+
+https://learning.oreilly.com/library/view/clean-code-in/9781788835831/4b12de53-f12c-4305-8873-7f65141dfbf0.xhtml
+
+- PEP8 
+https://pep8.org/
+https://www.python.org/dev/peps/pep-0008/
+https://realpython.com/python-pep8/
+
+- docstring 
+
+>>> def my_function():
+ ... """Run some computation"""
+ ... return None
+ 
+__doc__ attribute 
+
+- annotations, special attribute is also included, and it is __annotations__. This will give us access to a dictionary that maps the name of the annotations (as keys in the dictionary) with their corresponding values
+
+class Point:
+    lat: float
+    long: float
+ 
+>>> Point.__annotations__
+{'lat': <class 'float'>, 'long': <class 'float'>}
+
+- docstring vs annotations
+
+The documentation serves as valuable input, not only for understanding and getting an idea of what is being passed around, but also as a valuable source for unit tests.
+
+- Mypy, main tool for optional static checking in python 
+
+Mypy (http://mypy-lang.org/) is the main tool for optional static type checking in Python.
+
+- checking code with pylint, checking the structure of the code (basically, this is compliance with PEP-8) in Python, such as pycodestyle (formerly known as PEP-8), Flake8, and many more
+
+$ pip install pylint 
+
+Flake8
+
+- setup automatic checks, working is through makefiles. Makefiles are powerful tools that let us configure commands to be run in the project
+
+    + makefile example
+    
+typehint:
+mypy src/ tests/
+ 
+test:
+pytest tests/
+ 
+lint:
+pylint src/ tests/
+ 
+checklist: lint typehint test
+ 
+.PHONY: typehint test lint checklist
+
+//run the file 
+$ make checklist 
+
+- automatic format tool, Black (https://github.com/ambv/black) automatically format the code. There are many tools that will edit the code automatically
+
+
+
+# Pythonic code 
+- indexes and slices 
+
+ary[start:end]
+
+- rewrite the __getitem__ for a list 
+
+- create context management __enter__ and __exit__. On the first line of the context manager, the with statement will call the first method, __enter__
+
+rewritten with the contextmanager decorator
+
+- underscores in python
+
+What it does is create the attribute with the following name instead: "_<class-name>__<attribute-name>". In this case, an attribute named '_Connector__timeout', will be created
+
+```
+>>> class Connector:
+...     def __init__(self, source):
+...         self.source = source
+...         self.__timeout = 60
+...
+...      def connect(self):
+...         print("connecting with {0}s".format(self.__timeout))
+...         # ...
+```
+
+do not use double underscores in your code 
+
+- properties 
+
+Don't write custom get_* and set_* methods for all attributes on your objects. Most of the time, leaving them as regular attributes is just enough. If you need to modify the logic for when an attribute is retrieved or modified
+
+
+```
+class User:
+    def __init__(self, username):
+        self.username = username
+        self._email = None
+
+    @property
+    def email(self):
+        return self._email
+
+    @email.setter
+    def email(self, new_email):
+        if not is_valid_email(new_email):
+            raise ValueError(f"Can't set {new_email} as it's not a 
+            valid email")
+        self._email = new_email
+```
+
+- iterable objects 
+
+If the object contains one of the iterator methods—__next__ or __iter__
+If the object is a sequence and has __len__ and __getitem__
+
+from datetime import timedelta
+
+class DateRangeIterable:
+    """An iterable that contains its own iterator object."""
+
+    def __init__(self, start_date, end_date):
+        self.start_date = start_date
+        self.end_date = end_date
+        self._present_day = start_date
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._present_day >= self.end_date:
+            raise StopIteration
+        today = self._present_day
+        self._present_day += timedelta(days=1)
+        return today
+
+- container objects 
+
+implement a __contains__ method then we can 
+
+```
+element in container 
+```
+
+- dynamic attributes for objects, __getattr__ magic methodd 
+
+```
+class DynamicAttributes:
+
+    def __init__(self, attribute):
+        self.attribute = attribute
+
+    def __getattr__(self, attr):
+        if attr.startswith("fallback_"):
+            name = attr.replace("fallback_", "")
+            return f"[fallback resolved] {name}"
+        raise AttributeError(
+            f"{self.__class__.__name__} has no attribute {attr}"
+        )
+```
+
+mplementing a method so dynamic as __getattr__, and use it with caution. When implementing __getattr__, raise AttributeError.
+
+
+- callable objects 
+
+The magic method __call__ will be called when we try to execute our object
+
+from collections import defaultdict
+
+class CallCount:
+
+    def __init__(self):
+        self._counts = defaultdict(int)
+
+    def __call__(self, argument):
+        self._counts[argument] += 1
+        return self._counts[argument]
+        
+>>> cc = CallCount()
+
+
+
+# Caveats in python 
+- multiple default arguments, use None as default sentinel 
+
+```
+def wrong_user_display(user_metadata: dict = {"name": "John", "age": 30}):
+    name = user_metadata.pop("name")
+    age = user_metadata.pop("age")
+
+    return f"{name} ({age})"
+```
+
+correct implementation 
+
+```
+def user_display(user_metadata: dict = None):
+    user_metadata = user_metadata or {"name": "John", "age": 30}
+
+    name = user_metadata.pop("name")
+    age = user_metadata.pop("age")
+
+    return f"{name} ({age})"
+```
+
+- extending built in types, Don't extend directly from dict, use collections.UserDict instead. For lists, use collections.UserList, and for strings, use collections.UserString
+
+The reason for this is that in CPython the methods of the class don't call each other (as they should), so if you override one of them, this will not be reflected by the rest, resulting in unexpected outcomes.
+```
+class BadList(list):
+    def __getitem__(self, index):
+        value = super().__getitem__(index)
+        if index % 2 == 0:
+            prefix = "even"
+        else:
+            prefix = "odd"
+        return f"[{prefix}] {value}"
+        
+>>> bl = BadList((0, 1, 2, 3, 4, 5))
+>>> bl[0]
+'[even] 0'
+>>> bl[1]
+'[odd] 1'
+>>> "".join(bl)
+Traceback (most recent call last):
+```   
+   
+```
+from collections import UserList
+
+class GoodList(UserList):
+    def __getitem__(self, index):
+        value = super().__getitem__(index)
+        if index % 2 == 0:
+            prefix = "even"
+        else:
+            prefix = "odd"
+        return f"[{prefix}] {value}"
+```
+
+
+# design by contract 
+- Preconditions are all of the guarantees a function or method expects to receive in order to work correctly
+- Postcondition, responsible for enforcing the state after the method or function has returned.
+- Pythonic contracts 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

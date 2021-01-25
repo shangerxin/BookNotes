@@ -103,7 +103,7 @@ remove the comemnt in the source
 - decorator pattern 
 
 
-## It takes forever to maek a change 
+## It takes forever to make a change 
 - understanding 
 - lag time
 
@@ -229,7 +229,185 @@ tactics
 
 
 # Dependency breaking techniques 
+- Adapter paramter 
+
+- break out method object 
+
+use Expose Static Method to get your changes under test.
+
+class GDIBrush
+{
+public:
+    void draw(vector<point>& renderingRoots,
+              ColorMatrix& colors,
+              vector<point>& selection);
+    ...
+
+private:
+    void drawPoint(int x, int y, COLOR color);
+    ...
+
+};
+
+void GDIBrush::draw(vector<point>& renderingRoots,
+                    ColorMatrix& colors,
+                    vector<point>& selection)
+{
+    for(vector<points>::iterator it = renderingRoots.begin();
+            it != renderingRoots.end();
+            ++it) {
+        point p = *it;
+        ...
+
+        drawPoint(p.x, p.y, colors[n]);
+    }
+    ...
+
+}
+
+The GDIBrush class has a long method named draw. We can’t easily write tests for it, and it is going to be very difficult to create an instance of GDIBrush in a test harness.
+
+class Renderer
+{
+private:
+    GDIBrush *brush;
+    vector<point>& renderingRoots;
+    ColorMatrix& colors;
+    vector<point>& selection;
+
+public:
+    Renderer(GDIBrush *brush,
+             vector<point>& renderingRoots,
+             ColorMatrix& colors,
+             vector<point>& selection)
+        : brush(brush), renderingRoots(renderingRoots),
+          colors(colors), selection(selection)
+        {}
+
+    void draw();
+};
+
+void Renderer::draw()
+{
+    for(vector<points>::iterator it = renderingRoots.begin();
+            it != renderingRoots.end();
+            ++it) {
+        point p = *it;
+        ...
+        drawPoint(p.x, p.y, colors[n]);
+    }
+    ...
+
+}
+
+Now we can make GDIBrush’s draw method delegate to the new Renderer.
+
+void GDIBrush::draw(vector<point>& renderingRoots,
+                    ColorMatrix &colors,
+                    vector<point>& selection)
+{
+    Renderer renderer(this, renderingRoots,
+                      colors, selection);
+    renderer.draw();
+}
+
+- definition completion 
+
+1. Identify a class with definitions you’d like to replace.
+
+2. Verify that the method definitions are in a source file, not a header.
+
+3. Include the header in the test source file of the class you are testing.
+
+4. Verify that the source files for the class are not part of the build.
+
+5. Build to find missing methods.
+
+6. Add method definitions to the test source file until you have a complete build.
+
+- Encapsulate Global References, follow these steps:
+
+1. Identify the globals that you want to encapsulate.
+
+2. Create a class that you want to reference them from.
+
+3. Copy the globals into the class. If some of them are variables, handle their initialization in the class.
+
+4. Comment out the original declarations of the globals.
+
+5. Declare a global instance of the new class.
+
+6. Lean on the Compiler (315) to find all the unresolved references to the old globals.
+
+7. Precede each unresolved reference with the name of the global instance of the new class.
+
+8. In places where you want to use fakes, use Introduce Static Setter (372), Parameterize Constructor (379), Parameterize Method (383) or Replace Global Reference with Getter (399).
+
+- Expose Static Method, follow these steps:
+
+1. Write a test that accesses the method that you want to expose as a public static method of the class.
+
+2. Extract the body of the method to a static method. Remember to Preserve Signatures (312). You’ll have to use a different name for the method.
+
+3. compile 
+
+- Extract and Override Factory Method, follow these steps:
+
+1. Identify an object creation in a constructor.
+
+2. Extract all of the work involved in the creation into a factory method.
+
+3. Create a testing subclass and override the factory method in it to avoid dependencies on problematic types under test.
+
+- extract override factory method 
+
+public class WorkflowEngine
+{
+    public WorkflowEngine () {
+        this.tm = makeTransactionManager();
+        ...
+    }
+    protected TransactionManager makeTransactionManager() {
+        Reader reader
+            = new ModelReader(
+                AppConfiguration.getDryConfiguration());
+
+        Persister persister
+            = new XMLStore(
+                AppConfiguration.getDryConfiguration());
+
+        return new TransactionManager(reader, persister);
+    }
+    ...
+}
+
+When we have that factory method, we can subclass and override it so that we can return a new transaction manager whenever we need one:
+
+public class TestWorkflowEngine extends WorkflowEngine
+{
+    protected TransactionManager makeTransactionManager() {
+        return new FakeTransactionManager();
+    }
+}
+
+- Extract and Override Getter, follow these steps:
+
+1. Identify the object you need a getter for.
+
+2. Extract all of the logic needed to create the object into a getter.
+
+3. Replace all uses of the object with calls to the getter, and initialize the reference that holds the object to null in all constructors.
+
+4. Add the first-time logic to the getter so that the object is constructed and assigned to the reference whenever the reference is null.
+
+5. Subclass the class and override the getter to provide an alternative object for testing.
+
 - 
+
+
+
+
+
 
 
 

@@ -1,0 +1,2479 @@
+Flask web development document;Note=Erxin
+
+# Reference
+- website 
+
+https://palletsprojects.com/p/flask/
+
+https://github.com/pallets/flask
+
+- introduction 
+lightweight WSCG web application 
+
+- example 
+
+from flask import Flask, escape, request
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    name = request.args.get("name", "World")
+    return f'Hello, {escape(name)}!'
+    
+$ env FLASK_APP=hello.py flask run
+ * Serving Flask app "hello"
+ * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+ 
+- version 1.1 
+- document, https://flask.palletsprojects.com/en/1.1.x/
+- depened on jinja template 
+
+https://www.palletsprojects.com/p/jinja/
+    + example 
+```
+{% extends "layout.html" %}
+{% block body %}
+  <ul>
+  {% for user in users %}
+    <li><a href="{{ user.url }}">{{ user.username }}</a></li>
+  {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+- WSGI tookit werkzeug, one of the most advanced WSGI utility libraries.
+
+https://www.palletsprojects.com/p/werkzeug/
+
+    + example 
+    
+```
+from werkzeug.wrappers import Request, Response
+
+@Request.application
+def application(request):
+    return Response("Hello, World!")
+
+if __name__ == "__main__":
+    from werkzeug.serving import run_simple
+    run_simple("localhost", 5000, application)
+```
+
+- dependency 
+jinja
+wekzeug 
+MarkupSafe, comes with jinja
+ItsDangerous, securely signs data to ensure its integrity 
+Click, a framework or writing command lien application, allow to add custom management commands 
+
+    + example 
+@click.command()
+@click.option("--count", default=1, help="Number of greetings.")
+@click.option("--name", prompt="Your name",
+              help="The person to greet.")
+def hello(count, name):
+    """Simple program that greets NAME for a total of COUNT times."""
+    for _ in range(count):
+        click.echo("Hello, %s!" % name)
+
+if __name__ == '__main__':
+    hello()
+$ python hello.py --count=3
+Your name: Click
+Hello, Click!
+Hello, Click!
+Hello, Click!
+
+- optional dependency 
+Blinker, support for Signals
+
+SimpleJSON, flast JSON implementation that is compatible with python's json module 
+
+python-dotenv, enables support for environment variables from dotnev
+
+Watchdog, provides a faster more efficient reloader for development server, monitors the current directory recursively (which means, it will traverse any sub-directories) to detect changes
+
+- install, python 3 venv module, python 2 virtualenv 
+
+    + create env 
+    $ python3 -m venv venv 
+    
+    + active env 
+    
+    $ . venv/bin/activate 
+    
+    + install flask 
+    $ pip install flask 
+
+
+
+# User's Guide 
+## quick start
+
+- minimal application 
+
+```
+#hello.py 
+
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def hello_world():
+    return 'Hello, World!'
+```
+    
+route() decorator to tell Flask what URL should trigger our function
+
+- run the application 
+
+$ export FLASK_APP=hello.py
+$ flask run
+ * Running on http://127.0.0.1:5000/
+
+this is the local access only server 
+
+    + run the server to the public, to listen all IPs 
+    
+$ flask run --host=0.0.0.0
+
+    + run as debug mode 
+    
+$ export FLASK_ENV=development
+$ flask run
+
+    + on window use set instead of export 
+    
+- routing 
+
+@app.route('/')
+def index():
+    return 'Index Page'
+
+@app.route('/hello')
+def hello():
+    return 'Hello, World'
+    
+- variable rules, converter to specify the type of the argument like <converter:variable_name>.
+
+from markupsafe import escape
+
+@app.route('/user/<username>')
+def show_user_profile(username):
+    # show the user profile for that user
+    return 'User %s' % escape(username)
+
+@app.route('/post/<int:post_id>')
+def show_post(post_id):
+    # show the post with the given id, the id is an integer
+    return 'Post %d' % post_id
+
+@app.route('/path/<path:subpath>')
+def show_subpath(subpath):
+    # show the subpath after /path/
+    return 'Subpath %s' % escape(subpath)
+
+    + converter types 
+string, default accepts any text 
+int, accepts positive integers 
+float, like string but also accepts slashes 
+uuid, accepts UUID strings 
+
+- urls/redirection behavior 
+
+@app.route('/projects/')
+def projects():
+    return 'the project page'
+    
+@app.route('about')
+    return 'the about page'
+    
+The canonical URL for the projects endpoint has a trailing slash. It’s similar to a folder in a file system. If you access the URL without a trailing slash, Flask redirects you to the canonical URL with the trailing slash.
+
+The canonical URL for the about endpoint does not have a trailing slash. It’s similar to the pathname of a file. Accessing the URL with a trailing slash produces a 404 “Not Found” error.
+
+- URL building, use the url_for() function. It accepts the name of the function as its first argument and any number of keyword arguments, each corresponding to a variable part of the URL rule. url reversing 
+
+    + more descriptive 
+    + escaping special characters 
+    + generate absolute path avodiing unexpected behavior of relative path in browsers 
+    
+    + example 
+    
+```
+from markupsafe import escape
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return 'index'
+
+@app.route('/login')
+def login():
+    return 'login'
+
+@app.route('/user/<username>')
+def profile(username):
+    return '{}\'s profile'.format(escape(username))
+
+with app.test_request_context():
+    print(url_for('index'))
+    print(url_for('login'))
+    print(url_for('login', next='/'))
+    print(url_for('profile', username='John Doe'))
+/
+/login
+/login?next=/
+/user/John%20Doe
+```
+    
+- HTTP methods, You can use the methods argument of the route() decorator to handle different HTTP methods.
+
+```
+from flask import request
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        return do_the_login()
+    else:
+        return show_the_login_form()
+```
+
+- static files 
+
+To generate URLs for static files, use the special 'static' endpoint name:
+
+url_for('static', filename='style.css')
+
+- rendering template, render a template you can use the render_template() method.
+
+```
+from flask import render_template
+
+@app.route('/hello/')
+@app.route('/hello/<name>')
+def hello(name=None):
+    return render_template('hello.html', name=name)
+```
+
+    + jinja2 template document reference 
+    http://jinja.pocoo.org/docs/templates/
+
+Inside templates you also have access to the request, session and g 1 objects as well as the get_flashed_messages() function.
+
+    + template example 
+    
+Here is an example template:
+
+<!doctype html>
+<title>Hello from Flask</title>
+{% if name %}
+  <h1>Hello {{ name }}!</h1>
+{% else %}
+  <h1>Hello, World!</h1>
+{% endif %}
+
+    + template file structure 
+
+Case 1: a module:
+
+/application.py
+/templates
+    /hello.html
+Case 2: a package:
+
+/application
+    /__init__.py
+    /templates
+        /hello.html
+        
+    + Automatic escaping is enabled, so if name contains HTML it will be escaped automatically. If you can trust a variable and you know that it will be safe HTML. safe by using the Markup class or by using the |safe filter in the template
+
+>>> from markupsafe import Markup
+>>> Markup('<strong>Hello %s!</strong>') % '<blink>hacker</blink>'
+Markup(u'<strong>Hello &lt;blink&gt;hacker&lt;/blink&gt;!</strong>')
+
+- accessing request data, In Flask this information is provided by the global request object. the request is context locals 
+
+- context locals 
+
+    + Imagine the context being the handling thread. A request comes in and the web server decides to spawn a new thread (or something else, the underlying object is capable of dealing with concurrency systems other than threads). When Flask starts its internal request handling it figures out that the current thread is the active context and binds the current application and the WSGI environments to that context (thread). It does that in an intelligent way so that one application can invoke another application without breaking.
+    
+    + in unit test creating a request object yourself and binding it to the context. The easiest solution for unit testing is to use the test_request_context() context manager.
+
+```
+from flask import request
+
+with app.test_request_context('/hello', method='POST'):
+    # now you can do something with the request until the
+    # end of the with block, such as basic assertions:
+    assert request.path == '/hello'
+    assert request.method == 'POST'
+```
+
+- the request object 
+
+    + method attribute. 
+    
+    + form attribute.
+    
+    + args attribute to access the parameter
+
+searchword = request.args.get('key', '')
+    
+    + example 
+    
+```
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    error = None
+    if request.method == 'POST':
+        if valid_login(request.form['username'],
+                       request.form['password']):
+            return log_the_user_in(request.form['username'])
+        else:
+            error = 'Invalid username/password'
+    # the code below is executed if the request method
+    # was GET or the credentials were invalid
+    return render_template('login.html', error=error)
+```
+
+    + reference doc 
+    https://flask.palletsprojects.com/en/1.1.x/api/#flask.Request
+
+- file upload 
+
+    + make sure not to forget to set the enctype="multipart/form-data" attribute on your HTML form, otherwise the browser will not transmit your files at all.
+
+    + uploaded file likes a python file object with a save method 
+
+```
+from flask import request
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        f = request.files['the_file']
+        f.save('/var/www/uploads/uploaded_file.txt')
+    ...
+    
+from flask import request
+from werkzeug.utils import secure_filename
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        f = request.files['the_file']
+        f.save('/var/www/uploads/' + secure_filename(f.filename))
+    ...
+```
+
+- cookies, set cookies and get cookies 
+    + read cookies 
+
+```
+from flask import request
+
+@app.route('/')
+def index():
+    username = request.cookies.get('username')
+    # use cookies.get(key) instead of cookies[key] to not get a
+    # KeyError if the cookie is missing.
+```
+
+    + set cookies 
+    
+```
+from flask import make_response
+
+@app.route('/')
+def index():
+    resp = make_response(render_template(...))
+    resp.set_cookie('username', 'the username')
+    return resp
+```
+
+- about response 
+
+    + return value from a view function is automatically converted into a response. If the return value is a string it’s converted into a response object with the string as response body, a 200 OK status code, text/html mimetype 
+    
+    + if the value is dict, jsonify() is called to produce a response.
+    
+    + response conversions in flask 
+    
+1. response object is directly returned 
+2. a string will be convert to a response object with the string as data 
+3. a dict, a response object is created using jsonify 
+4. a tuple then tuple have to be in the form (response, status), (response, headers), or (response, status, headers)
+5. none works than Flask will assume the return value is a valid WSGI application and convert that into a response object.
+
+    + example 
+        * use make_resposne()
+        
+@app.errorhandler(404)
+def not_found(error):
+    resp = make_response(render_template('error.html'), 404)
+    resp.headers['X-Something'] = 'A value'
+    return resp
+
+- redirects and errors 
+
+```
+from flask import abort, redirect, url_for
+
+@app.route('/')
+def index():
+    return redirect(url_for('login'))
+
+@app.route('/login')
+def login():
+    abort(401)
+    this_is_never_executed()
+```
+
+    + customize error page 
+    
+```
+from flask import render_template
+
+@app.errorhandler(404)
+def page_not_found(error):
+    return render_template('page_not_found.html'), 404
+```
+
+- deffered request callbacks, when request handling starts there is no response object yet. it is created as necessary either by a view function or by some other component in the system 
+
+    + be a before_request() callback that wants to set a cookie on the response object
+    
+    + after_request() callback 
+
+    + example 
+```
+from flask import request, after_this_request
+
+@app.before_request
+def detect_user_language():
+    language = request.cookies.get('user_lang')
+
+    if language is None:
+        language = guess_language_from_request()
+
+        # when the response exists, set a cookie with the language
+        @after_this_request
+        def remember_language(response):
+            response.set_cookie('user_lang', language)
+            return response
+
+    g.language = language
+```
+
+    + look into Flask community extensions that support more complex applications
+    
+- sessions, In addition to the request object there is also a second object called session which allows you to store information specific to a user from one request to the next. have to set a secret key to use the session object 
+
+```
+from flask import Flask, session, redirect, url_for, request
+from markupsafe import escape
+
+app = Flask(__name__)
+
+# Set the secret key to some random bytes. Keep this really secret!
+app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
+
+@app.route('/')
+def index():
+    if 'username' in session:
+        return 'Logged in as %s' % escape(session['username'])
+    return 'You are not logged in'
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        session['username'] = request.form['username']
+        return redirect(url_for('index'))
+    return '''
+        <form method="post">
+            <p><input type=text name=username>
+            <p><input type=submit value=Login>
+        </form>
+    '''
+
+@app.route('/logout')
+def logout():
+    # remove the username from the session if it's there
+    session.pop('username', None)
+    return redirect(url_for('index'))
+```
+
+escape() will escaping for you if you are not using the template engine
+
+    + generate secret keys 
+
+lask.secret_key (or SECRET_KEY):
+
+$ python -c 'import os; print(os.urandom(16))'
+b'_5#y2L"F4Q8z\n\xec]/'
+
+- To flash a message use the flash() method, to get hold of the messages you can use get_flashed_messages()
+- logging, logger is a standard python Logger 
+
+
+app.logger.debug('A value for debugging')
+app.logger.warning('A warning occurred (%d apples)', 42)
+app.logger.error('An error occurred')
+
+- application errors 
+
+https://flask.palletsprojects.com/en/1.1.x/errorhandling/#application-errors
+
+- hooking in WSGI middleware, ProxyFix middleware for running behind Nginx
+
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app)
+
+- flask extensions 
+
+https://flask.palletsprojects.com/en/1.1.x/extensions/#extensions
+
+- deploying to a web server
+
+https://flask.palletsprojects.com/en/1.1.x/deploying/#deployment
+
+    + host options 
+    flask on heroku 
+    flask on google app engine 
+    flask on AWS elastic beanstalk 
+    iis 
+    pythonanywhere 
+    
+    + self-hosted options 
+    standardalone wsgi containers 
+        * gunicorn 
+        * uwsgi 
+        * gevent 
+        * twisted web 
+        * proxy setups 
+        
+    + uwsgi 
+    + mod_wsgi(apachi)
+    + fastcgi 
+    + cgi 
+
+
+
+# Application errors 
+- error logging tools, sentry-sdk client with extra flask dependencies:
+
+$ pip install sentry-sdk[flask]
+
+- error handlers 
+
+@app.errorhandler(werkzeug.exceptions.BadRequest)
+def handle_bad_request(e):
+    return 'bad request!', 400
+
+# or, without the decorator
+app.register_error_handler(400, handle_bad_request)
+
+
+class InsufficientStorage(werkzeug.exceptions.HTTPException):
+    code = 507
+    description = 'Not enough storage space.'
+
+app.register_error_handler(InsufficientStorage, handle_507)
+
+raise InsufficientStorage()
+
+- generic exception handlers, HTTPException or even Exception 
+
+```
+from flask import json
+from werkzeug.exceptions import HTTPException
+
+@app.errorhandler(HTTPException)
+def handle_exception(e):
+    """Return JSON instead of HTML for HTTP errors."""
+    # start with the correct headers and status code from the error
+    response = e.get_response()
+    # replace the body with JSON
+    response.data = json.dumps({
+        "code": e.code,
+        "name": e.name,
+        "description": e.description,
+    })
+    response.content_type = "application/json"
+    return response
+```
+
+    + An error handler for Exception might seem useful for changing how all errors, even unhandled ones, are presented to the user.
+
+
+```
+from werkzeug.exceptions import HTTPException
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # pass through HTTP errors
+    if isinstance(e, HTTPException):
+        return e
+
+    # now you're handling non-HTTP exceptions only
+    return render_template("500_generic.html", e=e), 500
+```
+
+- unhandled exceptions, 500 Internal Server Error will be returned instead. See flask.Flask.handle_exception() for information about this behavior.
+
+@app.errorhandler(InternalServerError)
+def handle_500(e):
+    original = getattr(e, "original_exception", None)
+
+    if original is None:
+        # direct 500 error, such as abort(500)
+        return render_template("500.html"), 500
+
+    # wrapped unhandled error
+    return render_template("500_unhandled.html", e=original), 500
+
+
+
+# Tutorial 
+
+## Project layout 
+- example 
+
+/home/user/Projects/flask-tutorial
+├── flaskr/
+│   ├── __init__.py
+│   ├── db.py
+│   ├── schema.sql
+│   ├── auth.py
+│   ├── blog.py
+│   ├── templates/
+│   │   ├── base.html
+│   │   ├── auth/
+│   │   │   ├── login.html
+│   │   │   └── register.html
+│   │   └── blog/
+│   │       ├── create.html
+│   │       ├── index.html
+│   │       └── update.html
+│   └── static/
+│       └── style.css
+├── tests/
+│   ├── conftest.py
+│   ├── data.sql
+│   ├── test_factory.py
+│   ├── test_db.py
+│   ├── test_auth.py
+│   └── test_blog.py
+├── venv/
+├── setup.py
+└── MANIFEST.in
+
+
+
+## application setup 
+- flask application is an instance of the Flask class. create a global Flask instance directly at the top of your code 
+
+- application factory 
+
+```
+import os
+
+from flask import Flask
+
+
+def create_app(test_config=None):
+    # create and configure the app
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_mapping(
+        SECRET_KEY='dev',
+        DATABASE=os.path.join(app.instance_path, 'flaskr.sqlite'),
+    )
+
+    if test_config is None:
+        # load the instance config, if it exists, when not testing
+        app.config.from_pyfile('config.py', silent=True)
+    else:
+        # load the test config if passed in
+        app.config.from_mapping(test_config)
+
+    # ensure the instance folder exists
+    try:
+        os.makedirs(app.instance_path)
+    except OSError:
+        pass
+
+    # a simple page that says hello
+    @app.route('/hello')
+    def hello():
+        return 'Hello, World!'
+
+    return app
+```
+
+- run the application 
+
+For Linux and Mac:
+
+$ export FLASK_APP=flaskr
+$ export FLASK_ENV=development
+$ flask run
+For Windows cmd, use set instead of export:
+
+> set FLASK_APP=flaskr
+> set FLASK_ENV=development
+> flask run
+For Windows PowerShell, use $env: instead of export:
+
+> $env:FLASK_APP = "flaskr"
+> $env:FLASK_ENV = "development"
+> flask run
+
+
+## Define and access the database 
+- connect to database 
+
+import sqlite3
+
+import click
+from flask import current_app, g
+from flask.cli import with_appcontext
+
+
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect(
+            current_app.config['DATABASE'],
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        g.db.row_factory = sqlite3.Row
+
+    return g.db
+
+
+def close_db(e=None):
+    db = g.pop('db', None)
+
+    if db is not None:
+        db.close()
+        
+- create the tables 
+
+DROP TABLE IF EXISTS user;
+DROP TABLE IF EXISTS post;
+
+CREATE TABLE user (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL
+);
+
+CREATE TABLE post (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author_id INTEGER NOT NULL,
+  created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  FOREIGN KEY (author_id) REFERENCES user (id)
+);
+Add the Python functions that will run these SQL commands to the db.py file:
+
+flaskr/db.py
+def init_db():
+    db = get_db()
+
+    with current_app.open_resource('schema.sql') as f:
+        db.executescript(f.read().decode('utf8'))
+
+
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Clear the existing data and create new tables."""
+    init_db()
+    click.echo('Initialized the database.')
+
+- register with the application 
+
+def init_app(app):
+    app.teardown_appcontext(close_db)
+    app.cli.add_command(init_db_command)
+    
+    
+## Blueprints and views 
+- A Blueprint is a way to organize a group of related views and other code.
+
+import functools
+
+from flask import (
+    Blueprint, flash, g, redirect, render_template, request, session, url_for
+)
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from flaskr.db import get_db
+
+bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
+def create_app():
+    app = ...
+    # existing code omitted
+
+    from . import auth
+    app.register_blueprint(auth.bp)
+
+    return app
+    
+https://flask.palletsprojects.com/en/1.1.x/api/#flask.Flask.register_blueprint
+
+- the first view, register 
+
+@bp.route('/register', methods=('GET', 'POST'))
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        db = get_db()
+        error = None
+
+        if not username:
+            error = 'Username is required.'
+        elif not password:
+            error = 'Password is required.'
+        elif db.execute(
+            'SELECT id FROM user WHERE username = ?', (username,)
+        ).fetchone() is not None:
+            error = 'User {} is already registered.'.format(username)
+
+        if error is None:
+            db.execute(
+                'INSERT INTO user (username, password) VALUES (?, ?)',
+                (username, generate_password_hash(password))
+            )
+            db.commit()
+            return redirect(url_for('auth.login'))
+
+        flash(error)
+
+    return render_template('auth/register.html')
+    
+- login 
+
+@bp.route('/login', methods=('GET', 'POST'))
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        db = get_db()
+        error = None
+        user = db.execute(
+            'SELECT * FROM user WHERE username = ?', (username,)
+        ).fetchone()
+
+        if user is None:
+            error = 'Incorrect username.'
+        elif not check_password_hash(user['password'], password):
+            error = 'Incorrect password.'
+
+        if error is None:
+            session.clear()
+            session['user_id'] = user['id']
+            return redirect(url_for('index'))
+
+        flash(error)
+
+    return render_template('auth/login.html')
+    
+- require authentication in other views 
+
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped_view(**kwargs):
+        if g.user is None:
+            return redirect(url_for('auth.login'))
+
+        return view(**kwargs)
+
+    return wrapped_view
+    
+- endpoints and URLs 
+
+The url_for() function generates the URL to a view based on a name and arguments. 
+
+
+## Templates 
+- the base layout 
+
+;base.html 
+```
+<!doctype html>
+<title>{% block title %}{% endblock %} - Flaskr</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<nav>
+  <h1>Flaskr</h1>
+  <ul>
+    {% if g.user %}
+      <li><span>{{ g.user['username'] }}</span>
+      <li><a href="{{ url_for('auth.logout') }}">Log Out</a>
+    {% else %}
+      <li><a href="{{ url_for('auth.register') }}">Register</a>
+      <li><a href="{{ url_for('auth.login') }}">Log In</a>
+    {% endif %}
+  </ul>
+</nav>
+<section class="content">
+  <header>
+    {% block header %}{% endblock %}
+  </header>
+  {% for message in get_flashed_messages() %}
+    <div class="flash">{{ message }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</section>
+```
+
+g is automatically available in templates. Based on if g.user is set (from load_logged_in_user). url_for is automatically available 
+
+
+
+
+## Static files 
+- flaskr/static directory and referenced with url_for('static', filename='...')
+
+
+
+## Blog blueprint 
+- blog blueprint, list all posts, allow logged in users to create posts 
+
+;blog.py 
+from flask import (
+    Blueprint, flash, g, redirect, render_template, request, url_for
+)
+from werkzeug.exceptions import abort
+
+from flaskr.auth import login_required
+from flaskr.db import get_db
+
+bp = Blueprint('blog', __name__)
+
+;__init__.py 
+def create_app():
+    app = ...
+    # existing code omitted
+
+    from . import blog
+    app.register_blueprint(blog.bp)
+    app.add_url_rule('/', endpoint='index')
+
+    return app
+    
+- delete 
+
+@bp.route('/<int:id>/update', methods=('GET', 'POST'))
+@login_required
+def update(id):
+    post = get_post(id)
+
+    if request.method == 'POST':
+        title = request.form['title']
+        body = request.form['body']
+        error = None
+
+        if not title:
+            error = 'Title is required.'
+
+        if error is not None:
+            flash(error)
+        else:
+            db = get_db()
+            db.execute(
+                'UPDATE post SET title = ?, body = ?'
+                ' WHERE id = ?',
+                (title, body, id)
+            )
+            db.commit()
+            return redirect(url_for('blog.index'))
+
+    return render_template('blog/update.html', post=post)
+    
+    
+
+## Make project installable 
+- using all standard python tools to manage everything 
+- describe the project 
+
+The setup.py file describes your project and the files that belong to it.
+
+setup.py
+from setuptools import find_packages, setup
+
+setup(
+    name='flaskr',
+    version='1.0.0',
+    packages=find_packages(),
+    include_package_data=True,
+    zip_safe=False,
+    install_requires=[
+        'flask',
+    ],
+)
+
+- install the project 
+
+$ pip install -e .
+
+- list project 
+
+You can observe that the project is now installed with pip list.
+
+$ pip list
+
+
+
+## Test coverage 
+-  use pytest and coverage to test and measure your code. Install them both:
+
+$ pip install pytest coverage 
+
+- steup and fixtures 
+
+import os
+import tempfile
+
+import pytest
+from flaskr import create_app
+from flaskr.db import get_db, init_db
+
+with open(os.path.join(os.path.dirname(__file__), 'data.sql'), 'rb') as f:
+    _data_sql = f.read().decode('utf8')
+
+
+@pytest.fixture
+def app():
+    db_fd, db_path = tempfile.mkstemp()
+
+    app = create_app({
+        'TESTING': True,
+        'DATABASE': db_path,
+    })
+
+    with app.app_context():
+        init_db()
+        get_db().executescript(_data_sql)
+
+    yield app
+
+    os.close(db_fd)
+    os.unlink(db_path)
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+
+@pytest.fixture
+def runner(app):
+    return app.test_cli_runner()
+    
+- running the test 
+extra configuration setup.cfg file 
+[tool:pytest]
+testpaths = tests
+
+[coverage:run]
+branch = True
+source =
+    flaskr
+
+
+$ pytest
+
+$ coverage run -m pytest
+
+
+
+## Deploy to production 
+- build and install,  deploy your application elsewhere, you build a distribution file. wheel format 
+
+$ pip install wheel
+
+$ python setup.py bdist_wheel
+
+output dist/flaskr-1.0.0-py3-none-any.whl. The file name is in the format of {project name}-{version}-{python tag} -{abi tag}-{platform tag}.
+
+install 
+$ pip install flaskr-1.0.0-py3-none-any.whl
+
+create database 
+
+$ export FLASK_APP=flaskr
+$ flask init-db
+
+- configure the secret key 
+
+output a random secret key:
+
+$ python -c 'import os; print(os.urandom(16))'
+b'_5#y2L"F4Q8z\n\xec]/'
+
+Create the config.py file in the instance folder, which the factory will read from if it exists. Copy the generated value into it.
+
+;venv/var/flask-instance/config.py 
+```
+SECRET_KEY = b'_5#y2L"F4Q8z\n\xec]/'
+```
+
+- run with a production server, the default flask run in development server. run under production server Waitress 
+
+$ pip install waitress 
+
+https://docs.pylonsproject.org/projects/waitress/en/stable/
+
+$ waitress-serve --call 'flaskr:create_app'
+
+more deployment options, https://flask.palletsprojects.com/en/1.1.x/deploying/
+
+
+
+## Keep developing 
+- more references 
+
+https://palletsprojects.com/p/jinja/
+https://palletsprojects.com/p/werkzeug/
+https://palletsprojects.com/p/itsdangerous/
+https://flask.palletsprojects.com/en/1.1.x/extensions/#extensions
+
+
+
+# Templates 
+- jinja setup 
+
+http://jinja.pocoo.org/docs/templates/
+
+- standard context, jinja2 default template 
+
+config, current configuration object 
+request, the current request object 
+session, current session object 
+g, request-bound object for global variables, flask.g 
+url_for(), the flask.url_for() function 
+get_flashed_messages() function 
+
+- the jinja context behavior, {% from '_helpers.html' import my_macro with context %}
+
+- standard filters provided by jinja2 
+
+tojson() 
+
+- control autoescaping,  |safe filter to explicitly mark a string as safe HTML,  Markup object before passing it to the template. This is in general the recommended way
+
+{% autoescape false %}
+    <p>autoescaping is disabled here
+    <p>{{ will_not_be_escaped }}
+{% endautoescape %}
+
+- registering filters, create your own filter, jinja_env of the application or use the template_filter() decorator.
+
+@app.template_filter('reverse')
+def reverse_filter(s):
+    return s[::-1]
+
+def reverse_filter(s):
+    return s[::-1]
+app.jinja_env.filters['reverse'] = reverse_filter
+
+; in the template, the reverse become a new filter 
+{% for x in mylist | reverse %}
+{% endfor %}
+
+- context processors, To inject new variables automatically into the context of a template, context processors exist in Flask. Context processors run before the template is rendered and have the ability to inject new values into the template context.
+
+@app.context_processor
+def inject_user():
+    return dict(user=g.user)
+    
+makes a variable called user available in the template with the value of g.user; we can also make function avaliable in template 
+
+@app.context_processor
+def utility_processor():
+    def format_price(amount, currency=u'€'):
+        return u'{0:.2f}{1}'.format(amount, currency)
+    return dict(format_price=format_price)
+    
+;format_price avaliable in all template 
+{{ format_price(0.33) }}
+
+
+# Testing flask applications 
+- test skeleton 
+
+a Python file to store our tests (test_flaskr.py). When we format the filename like test_*.py, it will be auto-discoverable by pytest.
+ 
+ 
+- test framework 
+
+$ pip intall pytest 
+
+    + example, create a pytest fixture called client() that configures the application for testing and initializes a new database
+    
+```
+import os
+import tempfile
+
+import pytest
+
+from flaskr import flaskr
+
+
+@pytest.fixture
+def client():
+    db_fd, flaskr.app.config['DATABASE'] = tempfile.mkstemp()
+    flaskr.app.config['TESTING'] = True
+
+    with flaskr.app.test_client() as client:
+        with flaskr.app.app_context():
+            flaskr.init_db()
+        yield client
+
+    os.close(db_fd)
+    os.unlink(flaskr.app.config['DATABASE'])
+    
+```
+    
+    + pytest 
+https://docs.pytest.org/en/latest/fixture.html
+
+        * pytest fixture example 
+        
+```
+import pytest
+
+
+class Fruit:
+    def __init__(self, name):
+        self.name = name
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+
+@pytest.fixture
+def my_fruit():
+    return Fruit("apple")
+
+
+@pytest.fixture
+def fruit_basket(my_fruit):
+    return [Fruit("banana"), my_fruit]
+
+
+def test_my_fruit_in_basket(my_fruit, fruit_basket):
+    assert my_fruit in fruit_basket
+```
+
+- request session objects like in view functions. Here is a full example that demonstrates this approach:
+
+import flask
+
+app = flask.Flask(__name__)
+
+with app.test_request_context('/?name=Peter'):
+    assert flask.request.path == '/'
+    assert flask.request.args['name'] == 'Peter'
+
+- faking resources and context 
+
+```
+from contextlib import contextmanager
+from flask import appcontext_pushed, g
+
+@contextmanager
+def user_set(app, user):
+    def handler(sender, **kwargs):
+        g.user = user
+    with appcontext_pushed.connected_to(handler, app):
+        yield
+```
+
+- test json apis 
+
+from flask import request, jsonify
+
+@app.route('/api/auth')
+def auth():
+    json_data = request.get_json()
+    email = json_data['email']
+    password = json_data['password']
+    return jsonify(token=generate_token(email, password))
+
+with app.test_client() as c:
+    rv = c.post('/api/auth', json={
+        'email': 'flask@example.com', 'password': 'secret'
+    })
+    json_data = rv.get_json()
+    assert verify_token(email, json_data['token'])
+    
+- testing cli commands 
+
+import click
+
+@app.cli.command('hello')
+@click.option('--name', default='World')
+def hello_command(name):
+    click.echo(f'Hello, {name}!')
+
+def test_hello():
+    runner = app.test_cli_runner()
+
+    # invoke the command directly
+    result = runner.invoke(hello_command, ['--name', 'Flask'])
+    assert 'Hello, Flask' in result.output
+
+    # or by name
+    result = runner.invoke(args=['hello'])
+    assert 'World' in result.output
+    
+    
+
+# Logging 
+- using the standard python logging module. the instance is app.logger 
+
+@app.route('/login', methods=['POST'])
+def login():
+    user = get_user(request.form['username'])
+
+    if user.check_password(request.form['password']):
+        login_user(user)
+        app.logger.info('%s logged in successfully', user.username)
+        return redirect(url_for('index'))
+    else:
+        app.logger.info('%s failed to log in', user.username)
+        abort(401)
+        
+- basic logging configuration 
+
+from logging.config import dictConfig
+
+dictConfig({
+    'version': 1,
+    'formatters': {'default': {
+        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+    }},
+    'handlers': {'wsgi': {
+        'class': 'logging.StreamHandler',
+        'stream': 'ext://flask.logging.wsgi_errors_stream',
+        'formatter': 'default'
+    }},
+    'root': {
+        'level': 'INFO',
+        'handlers': ['wsgi']
+    }
+})
+
+app = Flask(__name__)
+
+- default configuration 
+
+WSGI server in environ['wsgi.errors'] (which is usually sys.stderr). Outside a request, it will log to sys.stderr
+
+- removing the default handler if you want prevent the default logging actions 
+
+from flask.logging import default_handler
+
+app.logger.removeHandler(default_handler)
+
+- email errors to admins, configure a logging.handlers.SMTPHandler to send an email when errors and higher are logged.
+
+import logging
+from logging.handlers import SMTPHandler
+
+mail_handler = SMTPHandler(
+    mailhost='127.0.0.1',
+    fromaddr='server-error@example.com',
+    toaddrs=['admin@example.com'],
+    subject='Application Error'
+)
+mail_handler.setLevel(logging.ERROR)
+mail_handler.setFormatter(logging.Formatter(
+    '[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+))
+
+if not app.debug:
+    app.logger.addHandler(mail_handler)
+    
+- injecting request information 
+
+from flask import has_request_context, request
+from flask.logging import default_handler
+
+class RequestFormatter(logging.Formatter):
+    def format(self, record):
+        if has_request_context():
+            record.url = request.url
+            record.remote_addr = request.remote_addr
+        else:
+            record.url = None
+            record.remote_addr = None
+
+        return super().format(record)
+
+formatter = RequestFormatter(
+    '[%(asctime)s] %(remote_addr)s requested %(url)s\n'
+    '%(levelname)s in %(module)s: %(message)s'
+)
+default_handler.setFormatter(formatter)
+mail_handler.setFormatter(formatter)
+
+- others 
+
+add handlers to the root logger instead of only the app logger
+
+```
+from flask.logging import default_handler
+
+root = logging.getLogger()
+root.addHandler(default_handler)
+root.addHandler(mail_handler)
+```
+
+Depending on your project, it may be more useful to configure each logger you care about separately, instead of configuring only the root logger.
+
+```
+for logger in (
+    app.logger,
+    logging.getLogger('sqlalchemy'),
+    logging.getLogger('other_package'),
+):
+    logger.addHandler(default_handler)
+    logger.addHandler(mail_handler)
+```
+
+
+
+# Configuration handling 
+- The config is actually a subclass of a dictionary and can be modified just like any dictionary:
+
+app = Flask(__name__)
+app.config['TESTING'] = True
+
+- environment and debug features
+
+Setting FLASK_ENV to development will enable debug mode, defaults to production.
+
+$ export FLASK_ENV=development
+$ flask run
+
+- builtin configuration values
+
+ENV, Flask and extensions may enable behaviors based on the environment, such as enabling debug mode. The env attribute maps to this config key
+
+DEBUG, Whether debug mode is enabled.
+
+TESTING, enable testing mode 
+
+PROPAGATE_EXCEPTIONS, exceptions are re-raised rather than being handled by the app's error handlers 
+
+PRESERVE_CONTEXT_ON_EXCEPTION, don't pop the request context when an exception occurs, allows debuggers to introspect the request data on errors 
+
+TRAP_HTTP_EXCEPTIONS, if no handler for an HTTPException then re-raise it to be handled by the interactive debugger 
+
+SECRET_KEY, for securely signing the session cookie, can be used for other security related extensions or application 
+
+SESSION_COOKIE_NAME
+
+SESSION_COOKIE_DOMAIN 
+
+SESSION_COOKIE_HTTPONLY 
+
+SESSION_COOKIE_PATH 
+
+SESSION_COOKIE_SECURE 
+
+SESSION_COOKIE_SAMESITE 
+
+PERMANANT_SESSION_LIFETIME, Control whether the cookie is sent with every response when session.permanent is true. Sending the cookie every time (the default) can more reliably keep the session from expiring, but uses more bandwidth
+
+SESSION_REFRESH_EACH_REQUEST, control whether the cookie is sent with every response when session.permanent is true 
+
+USE_X_SENDFILE, When serving files, set the X-Sendfile header instead of serving the data with Flask
+
+SEND_FILE_MAX_AGE_DEFAULT, serving files, set the cache control max age to this number of seconds 
+
+SERVER_NAME, what host and port is bound to 
+
+APPLICATION_ROOT, what path is mounted under by the application/web server 
+
+PREFERRED_URL_SCHEME, use this scheme for generating external URLs 
+
+MAX_CONTENT_LENGTH 
+
+JSON_AS_ASCII 
+
+JSON_SORT_KEYS 
+
+JSONIFY_PRETTYPRINT_REGULAR 
+
+JSONIFY_MIMETYPE 
+
+TEMPLATES_AUTO_RELOAD 
+
+EXPLAIN_TEMPLATE_LOADING 
+
+MAX_COOKIE_SIZE 
+
+- configure from files 
+
+app = Flask(__name__)
+app.config.from_object('yourapplication.default_settings')
+app.config.from_envvar('YOURAPPLICATION_SETTINGS')
+
+- configure from environment variables 
+
+import os
+
+_mail_enabled = os.environ.get("MAIL_ENABLED", default="true")
+MAIL_ENABLED = _mail_enabled.lower() in {"1", "t", "true"}
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
+
+- development/production 
+
+    + inheritance for configuration 
+    
+```
+class Config(object):
+    DEBUG = False
+    TESTING = False
+    DATABASE_URI = 'sqlite:///:memory:'
+
+class ProductionConfig(Config):
+    DATABASE_URI = 'mysql://user@localhost/foo'
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+
+class TestingConfig(Config):
+    TESTING = True
+    
+
+app.config.from_object('configmodule.ProductionConfig')
+```
+
+- fabric, a high level python library design to execute shelll commands remotely over ssh 
+
+https://www.fabfile.org/
+
+>>> result = Connection('web1').run('hostname')
+web1
+>>> result
+<Result cmd='hostname' exited=0>
+
+- instance folders, With Flask 0.8 a new attribute was introduced: Flask.instance_path. It refers to a new concept called the “instance folder”. The instance folder is designed to not be under version control and be deployment specific
+
+app = Flask(__name__, instance_path='/path/to/instance/folder')
+
+Please keep in mind that this path must be absolute when provided.
+
+relative paths in config files can be flipped between “relative to the application root” (the default) to “relative to instance folder” via the instance_relative_config switch to the application constructor:
+
+```
+app = Flask(__name__, instance_relative_config=True)
+app.config.from_object('yourapplication.default_settings')
+app.config.from_pyfile('application.cfg', silent=True)
+```
+
+
+
+# Signals 
+- blinker, https://pythonhosted.org/blinker/
+- subscribing to signals 
+
+connect() method of a signal. The first argument is the function that should be called when the signal is emitted
+
+```
+from flask import template_rendered
+from contextlib import contextmanager
+
+@contextmanager
+def captured_templates(app):
+    recorded = []
+    def record(sender, template, context, **extra):
+        recorded.append((template, context))
+    template_rendered.connect(record, app)
+    try:
+        yield recorded
+    finally:
+        template_rendered.disconnect(record, app)
+
+
+with captured_templates(app) as templates:
+    rv = app.test_client().get('/')
+    assert rv.status_code == 200
+    assert len(templates) == 1
+    template, context = templates[0]
+    assert template.name == 'index.html'
+    assert len(context['items']) == 10
+```
+
+Additionally there is a convenient helper method (connected_to()) that allows you to temporarily subscribe a function to a signal with a context manager on its own
+
+- The connected_to() method arrived in Blinker with version 1.1.
+
+- creating signals 
+
+from blinker import Namespace
+my_signals = Namespace()
+
+model_saved = my_signals.signal('model-saved')
+
+- extension development
+
+flask.signals.Namespace class
+
+- sending signals with send() method. it accept a sender as first argument and optionally some keyword arguments that forwarded to the sigal subscriblers 
+
+class Model(object):
+    ...
+
+    def save(self):
+        model_saved.send(self)
+        
+- passing proxies as senders, pass current_app as sender to a signal. Use current_app._get_current_object() instead. 
+
+- sigals and flask's request context, The Request Context when receiving signals. Context-local variables are consistently available between request_started and request_finished, so you can rely on flask.g and others as needed
+
+- decorator based signal subscriptions 
+
+from flask import template_rendered
+
+@template_rendered.connect_via(app)
+def when_template_rendered(sender, template, context, **extra):
+    print 'Template %s is rendered with %s' % (template.name, context)
+    
+- core signals, https://flask.palletsprojects.com/en/1.1.x/api/#core-signals-list
+
+
+
+
+# Plugable views 
+- pluggable views inspired by the generic views from Django which are based on classes instead of functions.
+
+@app.route('/users/')
+def show_users(page):
+    users = User.query.all()
+    return render_template('users.html', users=users)
+
+- The way this works is that whenever the request is dispatched a new instance of the class is created and the dispatch_request() method is called with the parameters from the URL rule. The class itself is instantiated with the parameters passed to the as_view() function. 
+
+
+from flask.views import View
+
+class ListView(View):
+
+    def get_template_name(self):
+        raise NotImplementedError()
+
+    def render_template(self, context):
+        return render_template(self.get_template_name(), **context)
+
+    def dispatch_request(self):
+        context = {'objects': self.get_objects()}
+        return self.render_template(context)
+
+class UserView(ListView):
+
+    def get_template_name(self):
+        return 'users.html'
+
+    def get_objects(self):
+        return User.query.all()
+
+class RenderTemplateView(View):
+    def __init__(self, template_name):
+        self.template_name = template_name
+    def dispatch_request(self):
+        return render_template(self.template_name)
+
+app.add_url_rule('/about', view_func=RenderTemplateView.as_view('about_page', template_name='about.html'))
+
+- method hints, pluggable views are attached to the application like a regular function by either using route() or better add_url_rule(). you can provide a methods attribute that has this information
+
+class MyView(View):
+    methods = ['GET', 'POST']
+
+    def dispatch_request(self):
+        if request.method == 'POST':
+            ...
+        ...
+
+app.add_url_rule('/myview', view_func=MyView.as_view('myview'))
+
+- method based dispatching for RESTful APIs execute a different function for each HTTP method. With the flask.views.MethodView you can easily do that
+
+from flask.views import MethodView
+
+class UserAPI(MethodView):
+
+    def get(self):
+        users = User.query.all()
+        ...
+
+    def post(self):
+        user = User.from_form_data(request.form)
+        ...
+
+app.add_url_rule('/users/', view_func=UserAPI.as_view('users'))
+
+- decorating views, instead of decorate the class, decorate the return value of as_view() by hand
+
+def user_required(f):
+    """Checks whether user is logged in or raises error 401."""
+    def decorator(*args, **kwargs):
+        if not g.user:
+            abort(401)
+        return f(*args, **kwargs)
+    return decorator
+
+view = user_required(UserAPI.as_view('users'))
+app.add_url_rule('/users/', view_func=view)
+
+
+
+
+# The application context 
+- application context is pushed when a request context is pushed 
+- purpose of the context 
+
+flask application use config to access views and cli commands. 
+
+app context referring to an app directly, use current_app proxy 
+
+flask automatic push an app context when handling a request. view funcitons, error handlers and other functions that run during a request will have access to current_app 
+
+- lifetime of the context, app context will have the same lifetime as a request 
+
+- manually push a context 
+
+def create_app():
+    app = Flask(__name__)
+
+    with app.app_context():
+        init_db()
+
+    return app
+    
+- storing data, use session or database to store data across requests 
+
+    + example maange a database connection 
+    
+from flask import g
+
+def get_db():
+    if 'db' not in g:
+        g.db = connect_to_database()
+
+    return g.db
+
+@app.teardown_appcontext
+def teardown_db(exception):
+    db = g.pop('db', None)
+
+    if db is not None:
+        db.close()
+        
+        
+
+# The request context 
+- purpose of the context 
+
+the request data can be considered global to that worker during that request. Flask uses the term context local for this.
+
+- lifeteime of the context, begins handling a request, it pushes a request context, which also pushes an The Application Context. When the request ends it pops the request context then the application context
+
+The context is unique to each thread, it cannot be passed to other thread. Context locals are implemented in Werkzeug. 
+
+- Manually push a context 
+
+def generate_report(year):
+    format = request.args.get('format')
+    ...
+
+with app.test_request_context(
+        '/make_report/2017', data={'format': 'short'}):
+    generate_report()
+    
+- The Flask.wsgi_app() method is called to handle each request. It manages the contexts during the request. Internally, the request and application contexts work as stacks, _request_ctx_stack and _app_ctx_stack.
+
+- Callbacks and errors
+
+    + A Blueprint can add handlers for these events that are specific to the blueprint.
+    
+    + before each request, before_request() functions are called, if one of the functions return a value the other functions are skipped 
+    
+    + if before_request() functions did not return a response, the view function for the matched route is called 
+    
+    + the return value of the view is converted into an actual response object and passed to the after_request() functions. each function returns a modified or new response_object 
+    
+    + after the response is returned, the contexts are popped, which calls the teardown_request() and teardown_appcontext() functions. these function are called even if an unhandled exception was raised at any point above 
+    
+    + an exception is raised before the teardown functions, flask tries to match it with an errorhandler() function 
+    
+    + If debug mode is enabled, unhandled exceptions are not converted to a 500 response and instead are propagated to the WSGI server. to allow development server present the interactive debugger 
+    
+- teardown callbacks, no sequence guarantee, The teardown callbacks are independent of the request dispatch, and are instead called by the contexts when they are popped. The functions are called even if there is an unhandled exception during dispatch, and for manually pushed contexts. 
+
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    print('during view')
+    return 'Hello, World!'
+
+@app.teardown_request
+def show_teardown(exception):
+    print('after with block')
+
+with app.test_request_context():
+    print('during with block')
+
+# teardown functions are called after the context with block exits
+
+with app.test_client() as client:
+    client.get('/')
+    # the contexts are not popped even though the request ended
+    print(request.path)
+
+# the contexts are popped and teardown functions are called after
+# the client with block exits
+
+- signals 
+
+If signals_available is true, the following signals are sent:
+
+request_started is sent before the before_request() functions are called.
+
+request_finished is sent after the after_request() functions are called.
+
+got_request_exception is sent when an exception begins to be handled, but before an errorhandler() is looked up or called.
+
+request_tearing_down is sent after the teardown_request() functions are called.
+
+- context preservation on error 
+
+- notes on proxies
+
+    + The proxy objects cannot fake their type as the actual object types.
+    
+    + The reference to the proxied object is needed in some situations, such as sending Signals or passing data to a background thread
+
+underlying object that is proxied, use the _get_current_object() method:
+
+app = current_app._get_current_object()
+my_signal.send(app)
+
+
+
+# Modular application with blueprints 
+- flask defined a concept of blueprints for making application components and supporting common patterns within an application or across applications. 
+
+A Blueprint object works similarly to a Flask application object, but it is not actually an application. Rather it is a blueprint of how to construct or extend an application.
+
+- why blueprint? 
+
+    + factor an application into a set of blueprints. this is ideal for larger applications; a project could instantiate an application object, initialize several extensions, register a collection of blueprints 
+    
+    + Register a blueprint on an application at a URL prefix and/or subdomain
+    
+    + register a blueprint multiple times on an application with different URL rules 
+    
+    + provide template filters, static files, templates and other utilities through blueprints. 
+    
+    + register a blueprint on an application for any of these cases when initializing a flask extension 
+    
+    + you cannot unregister a blueprint once an application was created without having to destroy the whole application object
+    
+    + flask associates view functions with blueprint when dispatching requests and generating URLs from one endpoint to another 
+    
+- example 
+
+from flask import Blueprint, render_template, abort
+from jinja2 import TemplateNotFound
+
+simple_page = Blueprint('simple_page', __name__,
+                        template_folder='templates')
+
+@simple_page.route('/', defaults={'page': 'index'})
+@simple_page.route('/<page>')
+def show(page):
+    try:
+        return render_template('pages/%s.html' % page)
+    except TemplateNotFound:
+        abort(404)
+        
+bind a function with the help of the @simple_page.route decorator, the blueprint will record the intention of registering the function show on the application when it’s later registered. 
+
+blueprint's name does not modify the URL, only the endpoint 
+
+- registering blueprints 
+
+```
+from flask import Flask
+from yourapplication.simple_page import simple_page
+
+app = Flask(__name__)
+app.register_blueprint(simple_page [, url_prefix='/pages'])
+```
+
+blueprint can be mounted at different locations with url_prefix
+
+>>> app.url_map
+Map([<Rule '/static/<filename>' (HEAD, OPTIONS, GET) -> static>,
+ <Rule '/<page>' (HEAD, OPTIONS, GET) -> simple_page.show>,
+ <Rule '/' (HEAD, OPTIONS, GET) -> simple_page.show>])
+
+- blueprint resources
+
+    + blueprint resource folder 
+    
+    folder is inferred from the second argument to Blueprint which is usually __name__. This argument specifies what logical Python module or package corresponds to the blueprint
+    
+    Blueprint.root_path property to see what the resource folder
+    
+    quick open resource file with 
+    
+    ```
+    with simple_page.open_resource('static/style.css') as f:
+        code = f.read()
+    ```
+    
+    + static files, a blueprint can expose a folder with static files by providing path to the folder. It is either an absolute path or relative to the blueprint’s location
+    
+    admin = Blueprint('admin', __name__, static_folder='static')
+    
+    endpoint is named blueprint_name.static. the URLs can be generated with url_for() 
+    
+    url_for('admin.static', filename='style.css')
+    
+    blueprint static folders are not searched if the file does not exist in the application static folder
+    
+    + templates, use blueprint to expose templates 
+    
+    admin = Blueprint('admin', __name__, template_folder='templates')
+    
+    you have provided templates as a template_folder you will have to create a file like this: yourapplication/admin/templates/admin/index.html
+    
+    template layout file structure:
+    
+    ```
+    yourpackage/
+    blueprints/
+        admin/
+            templates/
+                admin/
+                    index.html
+            __init__.py
+    ```
+    
+    enable the EXPLAIN_TEMPLATE_LOADING config variable which will instruct Flask to print out the steps it goes through to locate templates on every render_template
+    
+    
+- building URLs with blueprint 
+
+url_for('blueprint_name.attributes')
+
+    + reference a resource in the same blueprint 
+    
+url_for('.attributes')
+
+- error handlers, customize error pages with blueprint
+
+@simple_page.errorhandler(404)
+def page_not_found(e):
+    return render_template('pages/404.html') 
+    
+    
+@app.errorhandler(404)
+@app.errorhandler(405)
+def _handle_api_error(ex):
+    if request.path.startswith('/api/'):
+        return jsonify_error(ex)
+    else:
+        return ex
+
+
+
+# Extensions 
+- Flask extensions are usually named “Flask-Foo” or “Foo-Flask”. You can search PyPI for packages tagged with Framework :: Flask
+
+- Generally, extensions pull their own configuration from app.config and are passed an application instance during initialization
+
+    + use example 
+    
+from flask_foo import Foo
+
+foo = Foo()
+
+app = Flask(__name__)
+app.config.update(
+    FOO_BAR='baz',
+    FOO_SPAM='eggs',
+)
+
+foo.init_app(app)
+
+
+
+# Commandline interface 
+- application discovery 
+
+FLASK_APP environment variable is specify how to load the application 
+
+Unix Bash (Linux, Mac, etc.):
+
+$ export FLASK_APP=hello
+$ flask run
+Windows CMD:
+
+> set FLASK_APP=hello
+> flask run
+Windows PowerShell:
+
+> $env:FLASK_APP = "hello"
+> flask run
+
+- FLASK_APP has three parts: an optional path that sets the current working directory, a Python file or dotted import path, and an optional variable name of the instance or factory. 
+
+
+FLASK_APP=src/hello
+Sets the current working directory to src then imports hello.
+
+FLASK_APP=hello.web
+Imports the path hello.web.
+
+FLASK_APP=hello:app2
+Uses the app2 Flask instance in hello.
+
+FLASK_APP="hello:create_app('dev')"
+The create_app factory in hello is called with the string 'dev' as the argument.
+
+- run the development server 
+
+$ flask run 
+
+- open a shell 
+
+$ flask shell 
+
+- environment 
+
+$ FLASK_ENV=development flask run 
+
+    + If python-dotenv is installed, running the flask command will set environment variables defined in the files .env and .flaskenv. This can be used to avoid having to set FLASK_APP manually every time you open a new terminal
+    
+- setting command options 
+
+$ export FLASK_RUN_PORT=8000
+$ flask run
+ * Running on http://127.0.0.1:8000/
+
+- disable dotenv 
+
+Keep in mind that the environment variables must be set before the app loads or it won’t configure as expected.
+
+$ export FLASK_SKIP_DOTENV=1
+$ flask run
+
+- custom commands. This example adds the command create-user that takes the argument name.
+
+import click
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.cli.command("create-user")
+@click.argument("name")
+def create_user(name):
+    ...
+$ flask create-user admin
+
+    + organize multiple related commands 
+    
+import click
+from flask import Flask
+from flask.cli import AppGroup
+
+app = Flask(__name__)
+user_cli = AppGroup('user')
+
+@user_cli.command('create')
+@click.argument('name')
+def create_user(name):
+    ...
+
+app.cli.add_command(user_cli)
+$ flask user create demo
+
+- registering commands with blueprints 
+
+from flask import Blueprint
+
+bp = Blueprint('students', __name__)
+
+@bp.cli.command('create')
+@click.argument('name')
+def create(name):
+    ...
+
+app.register_blueprint(bp)
+$ flask students create alice
+
+
+bp = Blueprint('students', __name__, cli_group='other')
+# or
+app.register_blueprint(bp, cli_group='other')
+
+- application context, Flask app’s cli command() decorator will be executed with an application context pushed. Flask decorator, you can use with_appcontext() to get the same behavior.
+
+import click
+from flask.cli import with_appcontext
+
+@click.command()
+@with_appcontext
+def do_work():
+    ...
+
+app.cli.add_command(do_work)
+If you’re sure a command doesn’t need the context, you can disable it:
+
+@app.cli.command(with_appcontext=False)
+def do_work():
+    ...
+
+- plugins, flask will automatic load commands specify in the flask.commands entry point 
+
+from setuptools import setup
+
+setup(
+    name='flask-my-extension',
+    ...,
+    entry_points={
+        'flask.commands': [
+            'my-command=flask_my_extension.commands:cli'
+        ],
+    },
+)
+Inside flask_my_extension/commands.py you can then export a Click object:
+
+import click
+
+@click.command()
+def cli():
+    ...
+    
+- custom scripts, app factory is a convient to define your own click script.  create your own Click object and export it as a console script entry point.
+
+import click
+from flask import Flask
+from flask.cli import FlaskGroup
+
+def create_app():
+    app = Flask('wiki')
+    # other setup
+    return app
+
+@click.group(cls=FlaskGroup, create_app=create_app)
+def cli():
+    """Management script for the Wiki application."""
+Define the entry point in setup.py:
+
+from setuptools import setup
+
+setup(
+    name='flask-my-extension',
+    ...,
+    entry_points={
+        'console_scripts': [
+            'wiki=wiki:cli'
+        ],
+    },
+)
+
+
+
+# Development server 
+- command line 
+
+$ export FLASK_APP=my_application
+$ export FLASK_ENV=development
+$ flask run
+
+- interactive debugger and reloader 
+
+$ flask run --no-reload 
+
+- in code 
+
+if __name__ == '__main__':
+    app.run()
+
+
+
+# Working with the shell
+- command line interface 
+
+    + creating a request context 
+
+>>> ctx = app.test_request_context()
+>>> ctx.push()
+>>> ctx.pop()
+
+- firing before/after request 
+
+>>> ctx = app.test_request_context()
+>>> ctx.push()
+>>> app.preprocess_request()
+
+will return a response object, to shutdown a request need to trick a bit before after request functions 
+
+>>> app.process_response(app.response_class())
+<Response 0 bytes [200 OK]>
+>>> ctx.pop()
+
+The functions registered as teardown_request() are automatically called when the context is popped
+
+- improving the shell experience 
+
+>>> from shelltools import *
+
+
+
+# Patterns for flask 
+- application factories 
+
+def create_app(config_filename):
+    app = Flask(__name__)
+    app.config.from_pyfile(config_filename)
+
+    from yourapplication.model import db
+    db.init_app(app)
+
+    from yourapplication.views.admin import admin
+    from yourapplication.views.frontend import frontend
+    app.register_blueprint(admin)
+    app.register_blueprint(frontend)
+
+    return app
+The downside is that you cannot use the application object in the blueprints at import time. You can however use it from within a request. How do you get access to the application with the config? Use current_app:
+
+from flask import current_app, Blueprint, render_template
+admin = Blueprint('admin', __name__, url_prefix='/admin')
+
+@admin.route('/')
+def index():
+    return render_template(current_app.config['INDEX_TEMPLATE'])
+    
+
+- Application dispatching is the process of combining multiple Flask applications on the WSGI level.
+
+    + Werkzeug provides a builtin server for development available at werkzeug.serving.run_simple()
+    
+    https://flask.palletsprojects.com/en/1.1.x/deploying/#deployment
+    
+    enable debugging 
+    
+```
+from flask import Flask
+from werkzeug.serving import run_simple
+
+app = Flask(__name__)
+app.debug = True
+
+@app.route('/')
+def hello_world():
+    return 'Hello World!'
+
+if __name__ == '__main__':
+    run_simple('localhost', 5000, app,
+               use_reloader=True, use_debugger=True, use_evalex=True)
+```
+
+    + combining application with werkzeug.wsgi.DispatcherMiddleware, each flask app is a valid WSGI app and they are combined by the dispatcher 
+    
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from frontend_app import application as frontend
+from backend_app import application as backend
+
+application = DispatcherMiddleware(frontend, {
+    '/backend': backend
+})
+
+    + dispatch by subdomain 
+    
+```
+from threading import Lock
+
+class SubdomainDispatcher(object):
+
+    def __init__(self, domain, create_app):
+        self.domain = domain
+        self.create_app = create_app
+        self.lock = Lock()
+        self.instances = {}
+
+    def get_application(self, host):
+        host = host.split(':')[0]
+        assert host.endswith(self.domain), 'Configuration error'
+        subdomain = host[:-len(self.domain)].rstrip('.')
+        with self.lock:
+            app = self.instances.get(subdomain)
+            if app is None:
+                app = self.create_app(subdomain)
+                self.instances[subdomain] = app
+            return app
+
+    def __call__(self, environ, start_response):
+        app = self.get_application(environ['HTTP_HOST'])
+        return app(environ, start_response)
+```
+
+        * use the dispatcher 
+        
+```
+from myapplication import create_app, get_user_for_subdomain
+from werkzeug.exceptions import NotFound
+
+def make_app(subdomain):
+    user = get_user_for_subdomain(subdomain)
+    if user is None:
+        # if there is no user for that subdomain we still have
+        # to return a WSGI application that handles that request.
+        # We can then just return the NotFound() exception as
+        # application which will render a default 404 page.
+        # You might also redirect the user to the main page then
+        return NotFound()
+
+    # otherwise create the application for the specific user
+    return create_app(user)
+
+application = SubdomainDispatcher('example.com', make_app)
+```
+
+    + dispatch by path 
+```
+from threading import Lock
+from werkzeug.wsgi import pop_path_info, peek_path_info
+
+class PathDispatcher(object):
+
+    def __init__(self, default_app, create_app):
+        self.default_app = default_app
+        self.create_app = create_app
+        self.lock = Lock()
+        self.instances = {}
+
+    def get_application(self, prefix):
+        with self.lock:
+            app = self.instances.get(prefix)
+            if app is None:
+                app = self.create_app(prefix)
+                if app is not None:
+                    self.instances[prefix] = app
+            return app
+
+    def __call__(self, environ, start_response):
+        app = self.get_application(peek_path_info(environ))
+        if app is not None:
+            pop_path_info(environ)
+        else:
+            app = self.default_app
+        return app(environ, start_response)
+```
+The big difference between this and the subdomain one is that this one falls back to another application if the creator function returns None:
+
+```
+from myapplication import create_app, default_app, get_user_for_prefix
+
+def make_app(prefix):
+    user = get_user_for_prefix(prefix)
+    if user is not None:
+        return create_app(user)
+
+application = PathDispatcher(default_app, make_app)
+```
+
+- Implementing API Exceptions
+- Using URL Processors
+- Deploying with Setuptools
+- Deploying with Fabric
+- Using SQLite 3 with Flask
+- SQLAlchemy in Flask
+- Uploading Files
+- Caching
+- View Decorators
+- Form Validation with WTForms
+- Template Inheritance
+- Message Flashing
+- AJAX with jQuery
+- Custom Error Pages
+- Lazily Loading Views
+- MongoDB with MongoEngine
+- Adding a favicon
+- Streaming Contents
+- Deferred Request Callbacks
+- Adding HTTP Method Overrides
+- Request Content Checksums
+- Celery Background Tasks
+- Subclassing Flask
+- Single-Page Applications
+
+
+
+# Deployment options 
+- 
+
+# Becoming big 
+
+# API reference 
+https://flask.palletsprojects.com/en/1.1.x/api/
+
+# Additional notes 
+## Design decisions in flask 
+
+## html/xhtml faq 
+
+## security considerations 
+
+## Unicode in flask 
+
+## flask extension development 
+-  An extension has to ensure that it works with multiple Flask application instances at once. This is a requirement because many people will use patterns like the Application Factories pattern to create their application as needed to aid unittests
+
+https://flask.palletsprojects.com/en/1.1.x/extensiondev/#
+
+
+## pocoo styleguide 
+- The Pocoo styleguide is the styleguide for all Pocoo Projects, including Flask. This styleguide is a requirement for Patches to Flask and a recommendation for Flask extensions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
