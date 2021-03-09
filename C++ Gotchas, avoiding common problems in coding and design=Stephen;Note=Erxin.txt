@@ -1,5 +1,8 @@
 C++ Gotchas, avoiding common problems in coding and design=Stephen;Note=Erxin
 
+# reference 
+https://learning.oreilly.com/library/view/c-gotchas-avoiding/0321125185/
+
 # Chapter 1, basics 
 - excessive commenting 
 
@@ -1093,6 +1096,8 @@ const int Account::fudgeFactor = atoi(getenv("FUDGE"));
 
 The Account object myAcct is defined before the static data member fudgeFactor, so the constructor for myAcct will use an uninitialized fudgeFactor when it calls calculateCount
 
+
+
 # Memory and resource management 
 - check result of a standard use of new 
 
@@ -1112,6 +1117,98 @@ else {
    // will almost never execute
 }
 
+- use of the new operator will cause a call to an operator new function that takes a single argument of type size_t,
+
+Widget *w = new Widget( arg );
+// . . .
+delete w;
+
+    + design decision is not with a comment but with code:
+
+class Widget {
+public:
+   void *operator new( size_t );
+   void operator delete( void *, size_t );
+   void *operator new[]( size_t n )
+       { return ::operator new[](n); }
+   void operator delete[]( void *p, size_t )
+       { ::operator delete[](p); }
+   // . . .
+};
+
+- checking for allocation failure 
+    + life use example, but contain pertencial errors 
+bool error = false;
+String **array = new String *[n];
+if( array ) {
+   for( String **p = array; p < array+n; ++p ) {
+       String *tmp = new String;
+       if( tmp )
+           *p = tmp;
+       else {
+           error = true;
+           break;
+       }
+   }
+}
+else
+   error = true;
+if( error )
+   handleError();
+   
+    + This code is shorter, clearer, faster, and correct. The standard behavior of new is to throw a bad_alloc exception in the event of allocation failure.
+    
+String **array = new String *[n];
+for( String **p = array; p < array+n; ++p )
+   *p = new String;
+   
+   + check the result of a standard use of new will never indicate a failure 
+   
+int *ip = new int;
+if( ip ) { // condition always true
+   // . . .
+}
+else {
+   // will never execute
+}
+
+        * improved 
+        
+employ the standard “nothrow” version of operator new that will return a null pointer on failure:
+
+int *ip = new (nothrow) int;
+if( ip ) { // condition almost always true
+   // . . .
+}
+else {
+   // will almost never execute
+}
+   
+    +  new operator actually specifies two function calls: a call to an operator new function to allocate storage, followed by an invocation of a constructor to initialize the storage. 
+    
+Thing *tp = new Thing( arg );
+    
+    the Thing constructor fails and throws any exception, the runtime system will call an appropriate operator delete to reclaim the storage
+    
+- replacing global new and delete, almost never a good idea to replace the standard, global versions of operator new, operator delete, array new, or array delete, even though the standard permits it
+
+void *operator new( size_t n, const string &pat ) {
+   char *p = static_cast<char *>(::operator new( n ));
+   const char *pattern = pat.c_str();
+   if( !pattern || !pattern[0] )
+       pattern = "\0"; // note: two null chars
+   const char *f = pattern;
+   for( int i = 0; i < n; ++i ) {
+       if( !*f )
+           f = pattern;
+       p[i] = *f++;
+   }
+  return p;
+}
+
+    
+
+   
 # Polymorephism 
 
 # Class Design 
