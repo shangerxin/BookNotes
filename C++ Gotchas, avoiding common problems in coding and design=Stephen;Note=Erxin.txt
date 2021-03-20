@@ -1206,9 +1206,122 @@ void *operator new( size_t n, const string &pat ) {
   return p;
 }
 
-    
+void *operator new( size_t n, Buffer &buffer ); // overloaded new
+void operator delete( void *p,
+   Buffer &buffer ); // corresponding delete
+// . . .
+Thing *thing1 = new Thing; // use standard operator new
+Buffer buf;
+Thing *thing2 = new (buf) Thing; // use overloaded operator new
+delete thing2; // incorrect, should have used overloaded delete
+delete thing1; // correct, uses standard operator delete
 
-   
+thing2->~Thing(); // correct, destroy Thing
+operator delete( thing2, buf ); // correct, use overloaded delete
+
+- confusing scope and activation of member new and delete 
+
+class String {
+public:
+   void *operator new( size_t ); // member operator new
+   void operator delete( void * ); // member operator delete
+   void *operator new[]( size_t ); // member operator new[]
+   void operator delete [] ( void * ); // member operator delete[]
+   String( const char * = "" );
+   // . . .
+};
+void f() {
+   String *sp = new String( "Heap" ); // uses String::operator new
+   int *ip = new int( 12 ); // uses ::operator new
+   delete ip; // uses :: operator delete
+   delete sp; // uses String::delete
+}
+
+- throwing string literals, exception they're caught based on their type, not on their value
+
+throw "Stack underflow!";
+
+try {
+   // . . .
+}
+catch( const char *msg ) {
+   string m( msg );
+   if( m == "stack underflow" ) // . . .
+   else if( m == "connection timeout" ) // . . .
+   else if( m == "security violation" ) // . . .
+   else throw;
+}
+
+    + use standard exception instead 
+    
+class StackUnderflow : public std::runtime_error {
+public:
+   explicit StackUnderflow( const char *msg = "stack underflow" )
+       : std::runtime_error( msg ) {}
+};
+
+necessary to provide proper copy and destruction semantics for exception types. the copied exception must be destroyed after it has been handled. 
+
+- improper exception mechanics. it's not a good idea to throw a pointer.
+
+throw new StackUnderflow( "operator stack" );
+
+    + This approach also leaves open the possibility that the pointer may refer to a location that's on the runtime stack
+    
+StackUnderflow e( "arg stack" ); 
+throw &e;
+
+    + Don't throw pointers, throw objects. anonymous temporary clearly states that the StackUnderflow object is for use only as an exception object, since its lifetime is restricted to the throw-expression
+
+throw StackUnderflow( "arg stack" );
+
+    + What's the best way to catch an exception object? Not by value:
+
+try {
+   // . . .
+}
+catch( ContainerFault fault ) {
+   // . . .
+}
+
+    + It's generally better to re-throw an existing exception object rather than handle the original exception and throw a new one
+
+catch( ContainerFault &fault ) {
+   // do partial recovery . . .
+   if( !condition )
+       fault.modifyState();
+   throw;
+}
+
+    + catch statement be ordered from most specific to most general.
+
+- abusing local addresses 
+
+char *uniqueLab = newLabel1();
+char mybuf[16], *pmybuf = mybuf;
+while( *pmybuf++ = *uniqueLab++ );
+
+    + avoid returning a reference that refers to memory allocated with function. it will lead to neglect delete the storage, causing memory leak 
+    
+int &f()
+   { return *new int( 5 ); }
+// . . .
+int i = f(); // memory leak!
+
+    + overloaded operator functions 
+    
+a particularly bad idea for overloaded operator functions:
+
+Complex &operator +( const Complex &a, const Complex &b )
+   { return *new Complex( a.re+b.re, a.im+b.im ); }
+// . . .
+Complex a, b, c;
+a = b + c + a + b; // lots of leaks!
+
+- failure to employ resource aquisition is intialization 
+
+
+
 # Polymorephism 
 
 # Class Design 
