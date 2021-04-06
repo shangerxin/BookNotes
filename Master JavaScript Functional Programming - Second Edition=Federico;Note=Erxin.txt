@@ -216,3 +216,1584 @@ const once = fn => {
 
 - an even bettter solution 
 
+```
+const onceAndAfter = (f, g) => {
+  let done = false;
+  return (...args) => {
+    if (!done) {
+      done = true;
+      f(...args);
+    } else {
+      g(...args);
+    }
+  };
+};
+```
+
+
+# Starting out with functions a core concept 
+- concepts 
+
+Some basic and very important concepts about lambda calculus, which is the theoretical basis for FP
+Arrow functions, which are the most direct translation of lambda calculus into JavaScript
+Using functions as first-class objects, a key concept in FP
+
+- examples 
+
+A named function declaration: function first(...) {...};
+An anonymous function expression: var second = function(...) {...};
+A named function expression: var third = function someName(...) {...};
+
+An immediately-invoked expression: var fourth = (function() { ...; return function(...) {...}; })(); 
+A function constructor: var fifth = new Function(...);
+An arrow function: var sixth = (...) => {...};
+
+- bind local this reference 
+
+using closure 
+
+using bind function 
+
+using arrow function 
+
+- working with arguments
+
+somethingElse(...args);
+
+- Currying gets its name from Haskell Curry, who developed the concept. 
+
+const altSum3 = x => y => z => x + y + z;
+
+altSum3(1)(2)(3); // 6
+
+- this is not true for hoisting. In this case, JavaScript moves all definitions to the top of the current scope, but does not move the assignments
+
+var xyzzy = function(...) { ... }
+
+equal to 
+
+function xyzzy(...){...}
+
+- can build a dispatch table and simplify the preceding code.
+
+function doAction2(state = initialState, action) {
+  return dispatchTable[action.type]
+    ? dispatchTable[action.type](state, action)
+    : state;
+}
+
+- called pointfree style or tacit style, and its main characteristic is that you never specify the arguments for each function application.
+
+fetch("some/remote/url").then(processResult);
+
+- working with methods, callbacks, promises, and continuations 
+
+fetch("some/remote/url")
+  .then(data => {
+    // Do some work with the returned data
+  })
+  .catch(error => {
+    // Process all errors here
+  });
+
+- we can pass mutliple kinds of callback 
+
+function doSomething(a, b, c, normalContinuation, errorContinuation) {
+  let r = 0;
+  // ... do some calculations involving a, b, and c,
+  // and store the result in r
+    
+  // if an error happens, invoke:
+  // errorContinuation("description of the error")
+    
+  // otherwise, invoke:
+  // normalContinuation(r)
+}
+
+- polyfills 
+
+    + initializeGetAjax function, and immediately run it—this pattern is called the immediately invoked function expression (IIFE)
+    
+(function() {
+  // do something...
+})();
+
+    +_extend built in types 
+    
+if (!String.prototype.includes) {
+  String.prototype.includes = function(search, start) {
+    "use strict";
+    if (typeof start !== "number") {
+      start = 0;
+    }
+
+    if (start + search.length > this.length) {
+      return false;
+    } else {
+      return this.indexOf(search, start) !== -1;
+    }
+  };
+}
+
+
+# Behaving properly - pure functions 
+- classify functions 
+
+Pure functions: These return a value that depends only on its arguments and have no side effects whatsoever. robust
+
+Side effects: These don't return anything (actually, in JavaScript, these functions return an undefined value, but that's not relevant here), but do produce some kind of side effects. 
+    + change global state 
+    + change inner state 
+    + change arguments 
+
+Functions with side effects: This means that they return a value that may not only depend on the function arguments, but also involve side effects.
+
+- order of execution You know that their execution—in whichever order—won't ever have any sort of impact on the system. 
+
+- We memoized the function by hand, but we can do it with a higher-order function.
+
+- self documentation, Unit tests (which we'll be covering in the next section) also work as documentation, because they provide examples of what the function returns
+
+- global state—both getting and setting it—the solution is well known. The key points to this are as follows:
+
+    + pass the global state as arguments 
+    + if the function needs to update a state, instead of directly modify it, produce a new version of the state and return it 
+    
+- testing impure functions, white-box testing, as opposed to black-box testing, where we know nothing about the function code itself
+
+
+# Transformations 
+- reducing an array to a value, reduce()
+
+avoid off-by-one mistake 
+
+const mySum = myArray.reduce(sum, 0); // 163
+
+- average an array 
+Array.prototype.average = function() {
+  return this.reduce((x, y) => x + y, 0) / this.length;
+};
+
+let myAvg = [22, 9, 60, 12, 4, 56].average(); // 27.166667
+
+- map 
+["123.45", "67.8", "90"].map(parseFloat);
+// [123.45, 67.8, 90]
+
+["123.45", "-67.8", "90"].map(parseInt);
+// [123, NaN, NaN]
+
+- range(start,stop) function that generates an array of numbers, (start, stop]
+
+- flattening array 
+
+const a = [[1, 2], [3, 4, [5, 6, 7]], 8, [[[9, 10]]]];
+
+console.log(a.flat()); // or a.flat(1)
+// [ 1, 2, 3, 4, [ 5, 6, 7 ], 8, [ 9, 10 ] ]
+
+- findIndex, find 
+
+arr.find(fn);
+// arr.reduce((x, y) => (x === undefined && fn(y) ? y : x), undefined);
+
+- async/await 
+
+const fakeAPI = (delay, value) =>
+  new Promise(resolve => setTimeout(() => resolve(value), delay));
+
+- async forEach 
+
+const forEachAsync = (arr, fn) =>
+  arr.reduce(
+    (promise, value) => promise.then(() => fn(value)),
+    Promise.resolve()
+  );
+
+(async () => {
+  console.log("START FOREACH VIA REDUCE");
+  await forEachAsync([1, 2, 3, 4], async n => {
+    const x = await fakeAPI(n * 1000, n);
+    useResult(x);
+  });
+  console.log("END FOREACH VIA REDUCE");
+})();
+
+- mapAsync = (arr, fn) => Promise.all(arr.map(fn));
+
+const filterAsync = (arr, fn) =>  mapAsync(arr, fn).then(arr2 => arr.filter((v, i) => Boolean(arr2[i])));
+
+- reduceAsync = (arr, fn, init) =>
+  Promise.resolve(init).then(accum =>
+    forEachAsync(arr, async (v, i) => {
+      accum = await fn(accum, v, i);
+    }).then(() => accum)
+  );
+
+
+# Producing functions - higher-order functions 
+- wrapped functions, keep their original functionality while adding some kdin of new feature 
+
+    + Decorators are being considered for general adoption in JavaScript, but are currently (December 2019) still at Stage 2
+    
+    + add logging 
+    
+const addLogging = fn => (...args) => {
+  console.log(`entering ${fn.name}: ${args})`);
+  const valueToReturn = fn(...args);
+  console.log(`exiting ${fn.name}: ${valueToReturn}`);
+  return valueToReturn;
+};
+
+const addLogging3 = (fn, logger = console.log) => (...args) => {
+  logger(`entering ${fn.name}: ${args}`);
+  try {
+    const valueToReturn = fn(...args);
+    logger(`exiting ${fn.name}: ${valueToReturn}`);
+    return valueToReturn;
+  } catch (thrownError) {
+    logger(`exiting ${fn.name}: threw ${thrownError}`);
+    throw thrownError;
+  }
+};
+
+    + timing functions 
+const addTiming = (fn, getTime = myGet, output = myPut) => (...args) => {
+  let tStart = getTime();
+
+  try {
+    const valueToReturn = fn(...args);
+    output("normal exit", fn.name, tStart, getTime());
+    return valueToReturn;
+
+  } catch (thrownError) {
+    output("exception thrown", fn.name, tStart, getTime());
+    throw thrownError;
+  }
+};
+
+Using performance.now() provides the highest accuracy.
+
+    + memorizing functions 
+    
+function fib(n) {
+  if (n == 0) {
+    return 0;
+  } else if (n == 1) {
+    return 1;
+  } else {
+    return fib(n - 2) + fib(n - 1);
+  }
+}
+
+const memoize = fn => {
+  let cache = {};
+  return x => (x in cache ? cache[x] : (cache[x] = fn(x)));
+};
+
+fib = memoize(fib);
+
+addTiming(fib)(45); // 0.080 ms
+addTiming(fib)(40); // 0.025 ms
+addTiming(fib)(35); // 0.009 ms
+
+    + more complex memoization
+    
+const memoize2 = fn => {
+  if (fn.length === 1) {
+    let cache = {};
+    return x => (x in cache ? cache[x] : (cache[x] = fn(x)));
+  } else {
+    return fn;
+  }
+};
+
+const memoize3 = fn => {
+  let cache = {};
+  const PRIMITIVES = ["number", "string", "boolean"];
+  return (...args) => {
+    let strX =
+      args.length === 1 && PRIMITIVES.includes(typeof args[0])
+        ? args[0]
+        : JSON.stringify(args);
+    return strX in cache ? cache[strX] : (cache[strX] = fn(...args));
+  };
+};
+
+const memoize4 = fn => {
+  let cache = {};
+  return (...args) => {
+    let strX = JSON.stringify(args);
+    return strX in cache ? cache[strX] : (cache[strX] = fn(...args));
+  };
+};
+
+- altered functions, differ in some key points from their original versions such as once(), not() invert() etc. 
+
+    + once 
+    
+const once = func => {
+  let done = false;
+  return (...args) => {
+    if (!done) {
+      done = true;
+      func(...args);
+    }
+  };
+};
+    
+const once2 = func => {
+  let done = false;
+  let result;
+  return (...args) => {
+    if (!done) {
+      done = true;
+      result = func(...args);
+    }
+    return result;
+  };
+};
+
+const onceAndAfter = (f, g) => {
+  let done = false;
+  return (...args) => {
+    if (!done) {
+      done = true;
+      return f(...args);
+    } else {
+      return g(...args);
+    }
+  };
+};
+
+const onceAndAfter2 = (f, g) => {
+  let toCall = f;
+  return (...args) => {
+    let result = toCall(...args);
+    toCall = g;
+    return result;
+  };
+};
+
+- logically negating a function, programming declaratively 
+
+const delinquent = serviceResult.accountsData.filter(v => v.balance < 0);
+
+const notDelinquent = serviceResult.accountsData.filter(
+  v => v.balance >= 0
+);
+
+const notDelinquent2 = serviceResult.accountsData.filter(
+  v => !(v.balance < 0)
+);
+
+const filterNot = arr => fn => arr.filter(not(fn));
+
+- inverting the results 
+
+const spanishComparison = (a, b) => a.localeCompare(b, "es");
+
+const invert = fn => (...args) => -fn(...args);
+
+- arity changing 
+
+const arity = (fn, n) => (...args) => fn(...args.slice(0, n));
+
+const unary = fn => arity(fn, 1);
+const binary = fn => arity(fn, 2);
+const ternary = fn => arity(fn, 3);
+
+["123.45", "-67.8", "90"].map(unary(parseInt));  // [123, -67, 90]
+
+
+# Changing function in other ways 
+- turning operations into functions 
+
+const mySum = myArray.reduce(binaryOp("+"), 0);
+
+const factorialByRange = n => range(1, n + 1).reduce(binaryOp("*"), 1);
+
+const binaryOp2 = op => new Function("x", "y", `return x ${op} y;`);
+
+- a handier implementation 
+
+const isNegative = curry(binaryOp2(">"))(0);
+
+const binaryLeftOp = (x, op) => y => binaryOp2(op)(x,y);
+
+const binaryOpRight = (op, y) => x => binaryOp2(op)(x,y);
+
+const isNegative1 = binaryLeftOp(0, ">");
+
+const isNegative2 = binaryOpRight("<", 0);
+
+const isNegative3 = x => x < 0;
+
+
+- turning function into promises 
+
+const promisify = fn => (...args) =>
+  new Promise((resolve, reject) =>
+    fn(...args, (err, data) => (err ? reject(err) : resolve(data)))
+  );
+
+fspromise("./readmenot.txt") // failure
+  .then(goodRead)
+  .catch(badRead);
+
+- getting a property from an object 
+
+const getField = attr => obj => obj[attr];
+
+let averageLon = average(markers.map(getField("lon")));
+
+- demethodizing, turing methods into functions 
+
+const demethodize1 = fn => (arg0, ...args) => fn.apply(arg0, args);
+const demethodize2 = fn => (arg0, ...args) => fn.call(arg0, ...args);
+const demethodize3 = fn => (...args) => fn.bind(...args)();
+
+const map = demethodize(Array.prototype.map);
+const toUpperCase = demethodize(String.prototype.toUpperCase);
+
+const result2 = map(name, toUpperCase);
+/* ["F", "U", "N", "C", "T", "I", "O", "N", "A", "L"]*/
+
+- finding the optimum 
+
+const findOptimum = arr => Math.max(...arr);
+
+const myArray = [22, 9, 60, 12, 4, 56];
+findOptimum(myArray); // 60
+
+const findOptimum2 = fn => arr => arr.reduce(fn);
+const findMaximum = findOptimum2((x, y) => (x > y ? x : y));
+const findMinimum = findOptimum2((x, y) => (x < y ? x : y));
+
+
+# Transforming functions, currying and partial application 
+- given function 
+
+Currying: A classic FP theoretical function that transforms a function with many parameters. transforming an m-ary function (that is, a function of arity m) into a sequence of m unary functions, each of which receives one argument of the original function, from left to right.
+
+Partial application: Another time-honored FP transformation. providing n arguments to an m-ary function, being n less than or equal to m, to transform it into a function with (m-n) parameters
+
+Partial currying (a name of my own): Can be seen as a mixture of the two previous transformations
+
+- curring 
+
+const make3 = (a, b, c) => String(100 * a + 10 * b + c);
+
+const make3curried = a => b => c => String(100 * a + 10 * b + c);
+
+currying by using the bind() method. This allows us to fix one argument (or more
+
+const step1 = make3.bind(null, 6);
+const step2 = step1.bind(null, 5);
+const step3 = step2.bind(null, 8);
+
+step3(); // "658"
+
+- partial 
+
+const myParameters = {
+  method: "GET",
+  headers: new Headers(),
+  cache: "default"
+};
+
+const myFetch = partial(fetch, undefined, myParameters);
+// undefined means the first argument for fetch is not yet defined
+// the second argument for fetch() is set to myParameters
+
+myFetch("a/first/url")
+  .then(/* do something */)
+  .catch(/* on error */);
+
+const nonsense = (a, b, c, d, e) => `${a}/${b}/${c}/${d}/${e}`;
+
+const fix2and5 = (a, c, d) => nonsense(a, 22, c, d, 1960);
+
+- partial application with closures 
+
+const partialByClosure = (fn, ...args) => {
+  const partialize = (...args1) => (...args2) => {
+    for (let i = 0; i < args1.length && args2.length; i++) {
+      if (args1[i] === undefined) {
+        args1[i] = args2.shift();
+      }
+    }
+
+    const allParams = [...args1, ...args2];
+    return (allParams.includes(undefined) || allParams.length < fn.length
+      ? partialize
+      : fn)(...allParams);
+  };
+
+  return partialize(...args);
+};
+
+- parameter order 
+
+const flipTwo = fn => (p1, p2) => fn(p2, p1);
+
+
+
+# Connecting functions - pipelining and composition 
+- pipelining a way to join functions together in similar way 
+- chaining, a variant of pipelining
+- composing, a classic operation with its origins 
+- transducing, an optimized way to compse map/filter/reduce 
+- pipeline 
+
+const pipeline = (...fns) => (...args) => {
+  let result = fns[0](...args);
+  for (let i = 1; i < fns.length; i++) {
+    result = fns[i](result);
+  }
+  return result;
+};
+
+pipeline(getDir, filterOdt, count)("/home/fkereki/Documents"); // still 4
+
+    + pipeline with shorter code 
+    
+const pipeline2 = (...fns) =>
+  fns.reduce((result, f) => (...args) => f(result(...args)));
+
+pipeline2(getDir, filterOdt, count)("/home/fkereki/Documents"); // 4
+
+    + using pipeTwo 
+    
+const pipeTwo = (f, g) => (...args) => g(f(...args));
+
+//or 
+
+const pipeTwo = (f, g) => (...args) => g(...f(...args));
+    
+const pipeline3 = (...fns) => fns.reduce(pipeTwo);
+
+pipeline3(getDir, filterOdt, count)("/home/fkereki/Documents"); // again 4
+
+- debugging pipeline
+
+    +  Tapping allows you to apply a function so that you can inspect data as it flows through the pipeline
+
+const tap = curry((fn, x) => (fn(x), x));
+
+const tee3 = tap(console.log);
+
+const tap2 = fn => x => (fn(x), x);
+
+    + second idea we mentioned is based on the addLogging() function that we wrote
+
+pipeline2(
+  addLogging(getDir), 
+  addLogging(filterOdt), 
+  addLogging(count))("/home/fkereki/Documents"));
+
+- pointfree functions 
+
+const countOdtFiles3 = path =>
+  pipeTwo(pipeTwo(getDir, filterOdt), count)(path);
+
+const countOdtFiles4 = path =>
+  pipeTwo(getDir, pipeTwo(filterOdt, count))(path);
+
+const getLat = obj => curry(getField)("lat")(obj);
+
+    + convert to pionterfree 
+    
+const isNegativeBalance = v => v.balance < 0;
+
+const isNegative = curry(binaryOp(">"))(0);
+
+- chaining and fluent interfaces 
+
+const range = (start, stop) =>
+  new Array(stop - start).fill(0).map((v, i) => start + i);
+
+    + the graphic D3.js library (see https://d3js.org/ for more on it) frequently uses this style
+    
+ var node = svg
+  .selectAll(".node")
+  .data(pack(root).leaves())
+  .enter()
+  .append("g")
+  .attr("class", "node")
+  .attr("transform", function(d) { 
+    return "translate(" + d.x + "," + d.y + ")"; 
+  });
+    
+    + chaining method calls 
+    
+class City {
+  constructor(name, lat, long) {
+    this.name = name;
+    this.lat = lat;
+    this.long = long;
+  }
+
+  getName() {
+    return this.name;
+  }
+
+  setName(newName) {
+    this.name = newName;
+  }
+
+  setLat(newLat) {
+    this.lat = newLat;
+  }
+
+  setLong(newLong) {
+    this.long = newLong;
+  }
+
+  getCoords() {
+    return [this.lat, this.long];
+  }
+}
+    
+const getHandler = {
+  get(target, property, receiver) {
+    if (typeof target[property] === "function") {
+      // requesting a method? return a wrapped version
+      return (...args) => {
+        const result = target[property](...args);
+        return result === undefined ? receiver : result;
+      };
+    } else {
+      // an attribute was requested - just return it
+      return target[property];
+    }
+  },
+};
+const chainify = obj => new Proxy(obj, getHandler);
+    
+myCity = chainify(myCity);
+
+console.log(myCity
+  .setName("Pune, India")
+  .setLat(18.5626)
+  .setLong(73.8087)
+  .getCoords(), 
+  myCity.getName());
+
+// [ 18.5626, 73.8087 ] 'Pune, India'
+
+- composing, order is reversed from the one in pipelining.
+
+
+const not = fn => (...args) => !fn(...args);
+
+const positiveBalance = not(isNegativeBalance);
+
+
+const logicalNot = unaryOp("!");
+
+const positiveBalance = compose(logicalNot, isNegativeBalance);
+
+    + counting files 
+
+const countOdtFiles2 = path => count(filterOdt(getDir(path)));
+
+const countOdtFiles2b = path => compose(count, filterOdt, getDir)(path);
+
+countOdtFiles2b("/home/fkereki/Documents"); // 4, no change here
+
+    + finding unique words 
+
+const removeNonAlpha = str => str.replace(/[^a-z]/gi, " ");
+const toUpperCase = demethodize(String.prototype.toUpperCase);
+const splitInWords = str => str.trim().split(/\s+/);
+const arrayToSet = arr => new Set(arr);
+const setToList = set => Array.from(set).sort();
+
+//changed to 
+const getUniqueWords = compose(
+  setToList,
+  arrayToSet,
+  splitInWords,
+  toUpperCase,
+  removeNonAlpha
+);
+
+console.log(getUniqueWords(<string>));
+
+    + composing with higher-order functions 
+    
+const getUniqueWords2 = str =>
+  setToList(arrayToSet(splitInWords(toUpperCase(removeNonAlpha(str)))));
+
+console.log(getUniqueWords2(GETTYSBURG_1_2));
+
+const pipeTwo = (f, g) => (...args) => g(f(...args));
+const composeTwo = (f, g) => (...args) => f(g(...args));
+const composeTwoByFlipping = flipTwo(pipeTwo);
+
+const compose = (...fns) => pipeline(...(fns.reverse()));
+
+console.log(
+  compose(
+    setToList,
+    arrayToSet,
+    splitInWords,
+    toUpperCase,
+    removeNonAlpha
+  )(GETTYSBURG_1_2)
+);
+
+- transducing 
+
+const testOdd = x => x % 2 === 1;
+const testUnderFifty = x => x < 50;
+const duplicate = x => x + x;
+const addThree = x => x + 3;
+
+const myArray = [22, 9, 60, 24, 11, 63];
+
+const a0 = myArray
+  .filter(testOdd)
+  .map(duplicate)
+  .filter(testUnderFifty)
+  .map(addThree);
+
+//The alternative solution would be to take the first element of the input array and apply all the transformations in sequence to it. Then, you would need to take the second element 
+
+    + composing reducers 
+const mapTR = fn => reducer => (accum, value) => reducer(accum, fn(value));
+
+const filterTR = fn => reducer => (accum, value) =>
+  fn(value) ? reducer(accum, value) : accum;
+
+const addToArray = (a, v) => {
+  a.push(v);
+  return a;
+};
+
+const testOddR = filterTR(testOdd);
+const testUnderFiftyR = filterTR(testUnderFifty);
+const duplicateR = mapTR(duplicate);
+const addThreeR = mapTR(addThree);
+
+const a1 = myArray.reduce(
+  testOddR(duplicateR(testUnderFiftyR(addThreeR(addToArray)))),
+  []
+);
+
+    + generalizing for all reducers 
+    
+const makeReducer2 = (arr, fns, reducer = addToArray, initial = []) =>
+  arr.reduce(compose(...fns)(reducer), initial);
+
+const a3 = makeReducer2(myArray, [
+  testOddR,
+  duplicateR,
+  testUnderFiftyR,
+  addThreeR,
+]);
+
+
+# Design function recursion 
+- decrease and conquer, solving a single simpler case of itself 
+
+const search = (arr, key) => {
+  if (arr.length === 0) {
+    return false;
+
+  } else if (arr[0] === key) {
+    return true;
+
+  } else {
+    return search(arr.slice(1), key);
+  }
+};
+
+- divide and conquer divide your problem into two or more smaller versions 
+
+const hanoi = (disks, from, to, extra) => {
+  if (disks === 1) {
+    console.log(`Move disk 1 from post ${from} to post ${to}`);
+
+  } else {
+    hanoi(disks - 1, from, extra, to);
+    console.log(`Move disk ${disks} from post ${from} to post ${to}`);
+    hanoi(disks - 1, extra, to, from);
+  }
+};
+
+- dynamic programming breaking into similar versions 
+
+const quicksort = arr => {
+  if (arr.length < 2) {
+    return arr;
+
+  } else {
+    const pivot = arr[0];
+    const smaller = arr.slice(1).filter(x => x < pivot);
+    const greaterEqual = arr.slice(1).filter(x => x >= pivot);
+    return [...quicksort(smaller), pivot, ...quicksort(greaterEqual)];
+  }
+};
+
+console.log(quicksort([22, 9, 60, 12, 4, 56]));
+// [4, 9, 12, 22, 56, 60]
+
+- mapping and filtering,  imply going through all the elements in an array and applying a callback to each to produce output
+
+const mapR = (arr, cb) =>
+    arr.length === 0 ? [] : [cb(arr[0])].concat(mapR(arr.slice(1), cb));
+    
+const mapR2 = (arr, cb, i = 0, orig = arr) =>
+  arr.length == 0
+    ? []
+    : [cb(arr[0], i, orig)].concat(
+        mapR2(arr.slice(1), cb, i + 1, orig)
+      );
+      
+const mapR3 = (orig, cb) => {
+const mapLoop = (arr, i) =>
+    arr.length == 0
+      ? []
+      : [cb(arr[0], i, orig)].concat(
+          mapR3(arr.slice(1), cb, i + 1, orig)
+        );
+    
+  return mapLoop(orig, 0);
+};
+
+
+const mapR4 = (orig, cb) => {
+  const mapLoop = (arr, i) => {
+    if (arr.length == 0) {
+      return [];
+
+    } else {
+      const mapRest = mapR4(arr.slice(1), cb, i + 1, orig);
+      if (!(0 in arr)) {
+        return [,].concat(mapRest);
+
+      } else {
+        return [cb(arr[0], i, orig)].concat(mapRest);
+      }
+    }
+  };
+
+  return mapLoop(orig, 0);
+};
+
+
+const filterR = (orig, cb) => {
+  const filterLoop = (arr, i) => {
+    if (arr.length == 0) {
+      return [];
+
+    } else {
+      const filterRest = filterR(arr.slice(1), cb, i + 1, orig);
+      if (!(0 in arr)) {
+        return filterRest;
+
+      } else if (cb(arr[0], i, orig)) {
+        return [arr[0]].concat(filterRest);
+
+      } else {
+        return filterRest;
+      }
+    }
+  };
+
+  return filterLoop(orig, 0);
+};
+
+- higher order function 
+
+const reduceR = (orig, cb, accum) => {
+  const reduceLoop = (arr, i) => {
+    return arr.length == 0
+      ? accum
+      : reduceR(
+          arr.slice(1),
+          cb,
+          !(0 in arr) ? accum : cb(accum, arr[0], i, orig),
+          i + 1,
+          orig
+        );
+  };
+
+  return reduceLoop(orig, 0);
+};
+
+const findR = (arr, cb) => {
+  if (arr.length === 0) {
+    return undefined;
+
+  } else {
+    return cb(arr[0]) ? arr[0] : findR(arr.slice(1), cb);
+  }
+};
+
+const pipelineR = (first, ...rest) =>
+  rest.length == 0
+    ? first
+    : (...args) => pipelineR(...rest)(first(...args));
+    
+- tail calls (for obvious reasons) and have higher efficiency, not only because of the saved stack space, but also because a jump is quite a bit faster than any alternative
+    
+function fact2(n) {
+  if (n === 0) {
+    return 1;
+
+  } else {
+    const aux = fact2(n - 1);
+    return n * aux;
+  }
+}
+    
+- continuation passing style 
+    
+function getTime() {
+  return new Date().toTimeString();
+}
+
+console.log(getTime()); // "21:00:24 GMT+0530 (IST)"
+    
+function getTime2(cont) {
+  return cont(new Date().toTimeString());
+}
+
+getTime2(console.log); // similar result as above
+    
+const fibC = (n, cont) => {
+  if (n <= 1) {
+    return cont(n);
+
+  } else {
+    return fibC(n - 2, p => fibC(n - 1, q => cont(p + q)));
+  }
+};  
+    
+- trampolines and thunks, thunk is simple, a nullary function helps delay a computation 
+
+const getIsoDateAndTime = () => new Date().toISOString(); // a thunk
+
+const isoDateAndTime = getIsoDateAndTime(); // getting the thunk's value
+
+    + trampoline comes in. A trampoline is just a loop that calls a function, gets its return, and, if it is a thunk, then it calls it so that recursion will proceed
+    
+const trampoline = (fn) => {
+  while (typeof fn === 'function') {
+    fn = fn();
+  }
+  return fn;
+};
+    
+const sumAll = n => (n == 0 ? 0 : n + sumAll(n - 1));
+
+sumAll(10000); // Uncaught RangeError: Maximum call stack size exceeded
+
+//fix 
+
+const sumAll3 = n => {
+  const sumAllT = (n, cont) =>
+    n === 0 ? () => cont(0) : () => sumAllT(n - 1, v => () => cont(v + n));
+
+  return trampoline(sumAllT(n, x => x));
+};
+    
+function Thunk(fn) {
+  this.fn = fn;
+}
+
+var trampoline2 = thk => {
+  while (typeof thk === "object" && thk.constructor.name === "Thunk") {
+    thk = thk.fn();
+  }
+  return thk;
+};
+
+
+
+# Ensuring purity - immutability 
+- avoid function modifying global objects 
+- avoid modify the object pass by reference 
+
+using const 
+freezing objects so that they can't be modified 
+creating clones of objects to avoid modifying the original 
+using getters and setters to control what is changed 
+using functional concepts 
+
+- deep feeze 
+
+const deepFreeze = obj => {
+  if (obj && typeof obj === "object" && !Object.isFrozen(obj)) {
+    Object.freeze(obj);
+    Object.getOwnPropertyNames(obj).forEach(prop => deepFreeze(obj[prop]));
+  }
+
+  return obj;
+};
+
+- clone 
+
+const jsonCopy = obj => JSON.parse(JSON.stringify(obj));
+
+const deepCopy = obj => {
+  let aux = obj;
+  if (obj && typeof obj === "object") {
+    aux = new obj.constructor();
+    Object.getOwnPropertyNames(obj).forEach(
+      prop => (aux[prop] = deepCopy(obj[prop]))
+    );
+  }
+
+  return aux;
+};
+
+- lenses,  Ramda: http://ramdajs.com/docs/#lens
+
+const lens1 = lens(getField("user"), setField("user"));
+
+lenses allow us to focus on the user attribute of whatever object we use them with. With lenses, there are three basic operations
+
+    1. view(): Used to access the value of an attribute
+    2. set(): Used to modify the value of an attribute
+    3. over(): Used to apply a function to an attribute and change its value
+
+console.log(set(lens1, "FEFK", author));
+/*
+  user: "FEFK",
+  name: {first: "Federico", middle: "", last: "Kereki"},
+  books: [
+    {name: "Google Web Toolkit", year: 2010},
+    {name: "Functional Programming", year: 2017},
+    {name: "Javascript Cookbook", year: 2018},
+  ],
+}
+*/
+
+const newAuthor = over(lens1, x => x + x + x, author);
+console.log(newAuthor);
+/*
+  user: "fkerekifkerekifkereki",
+  name: {first: "Federico", middle: "", last: "Kereki"},
+  books: [
+    {name: "GWT", year: 2010},
+    {name: "FP", year: 2017},
+    {name: "CB", year: 2018},
+  ],
+}
+*/
+
+const lens = (getter, setter) => ({getter, setter});
+
+- prisms is similar to using lenses, except for what happens when an attribute is not present
+
+const author = {
+  user: "fkereki",
+  name: {
+    first: "Federico",
+    middle: "",
+    last: "Kereki"
+  },
+  books: [
+    { name: "GWT", year: 2010 },
+    { name: "FP", year: 2017 },
+    { name: "CB", year: 2018 }
+  ]
+};
+
+const pUser = prismProp("user");
+
+console.log(review(pUser, author).toString()); 
+
+/*
+    fkereki
+*/
+
+const getFieldP = curry((attr, obj) =>
+  obj && attr in obj ? obj[attr] : undefined
+);
+
+const setFieldP = curry((attr, value, obj) =>
+  obj && attr in obj ? { ...obj, [attr]: value } : { ...obj }
+);
+
+let myObj3 = setIn(["d", "j", 1, "k"], 99999, myObj2);
+/*
+{
+  a: 111,
+  b: 222,
+  c: 333,
+  d: {
+    e: 444,
+    f: 88888,
+    g: {h: 666, i: 777},
+    j: [{k: 100}, {k: 99999}, {k: 300}]
+  }
+}
+
+
+# Implmenting design patterns the functional way 
+- patterns are often described in terms of four essential basic elements 
+
+a simple name is used to describe the problem  
+the context to which the pattern applies specific situations 
+a solution that lists the elements 
+the consequences if you apply the pattterns good and bad 
+
+- categories 
+
+behavior patterns 
+
+creational design patterns 
+
+structural design patterns
+
+concurrent patterns 
+
+architectural patterns  
+
+- we're not going fully functional if an oop pattern fits 
+
+facade and adapter, to provide new interfaces to other code. the idea is to provide a new interface to a system that makes it easier to use.
+
+decorator to add new functionality to existing code 
+
+strategy, template nad command to let you fine-tune algorithms by passing functions as paramters 
+
+observer which leads to reactive programming, a declarative way of dealing with events 
+
+other patterns that do not fully match the correponding oop ones 
+
+- example facade
+
+const simpleAjax = (function() {
+  const hard = require("hardajaxlibrary");
+
+  const convertParamsToHardStyle = params => {
+    // ...
+  };
+
+  const makeStandardUrl = url => {
+    // ...
+  };
+
+  const getUrl = (url, params, callback) => {
+    // ...
+  };
+
+  const postUrl = (url, params, callback) => {
+    // ...
+  };
+
+  return {
+    getUrl,
+    postUrl
+  };
+})();
+
+
+- decorator, example with react 
+
+const makeVisible = component => {
+  return (
+    <div style={{border: "1px solid red"}}>
+      {component}
+    </div>
+  );
+};
+
+class ListOfNames extends React.Component {
+  render() {
+    return (
+      <div>
+        <h1>
+          {this.props.title}
+        </h1>
+        <ul>
+          {this.props.people.map(v =>
+            makeVisible(
+              <FullNameDisplay
+                first={v.first}
+                last={v.last}
+              />
+             )
+           )}
+         </ul>
+       </div>
+    );
+  }
+}
+
+- strategy, template and command 
+
+//instead of using switch 
+
+function findRoute(routeAlgorithm, fromPoint, toPoint) {
+  return routeAlgorithm(fromPoint, toPoint);
+}
+
+- observer and reactive programming 
+
+observables to JavaScript (see https://github.com/tc39/proposal-observable) 
+
+
+complete lists and descriptions, you should access https://www.learnrxjs.io/operators/ and https://rxjs.dev/guide/operators.
+
+    + detect multiple click rxjs 
+    
+const spanClick$ = fromEvent(
+  document.getElementById("mySpan"),
+  "click"
+);               
+
+spanClick$
+  .pipe(
+    buffer(spanClick$.pipe(debounceTime(250))),
+    map(list => list.length),
+    filter(x => x >= 3)
+  )
+  .subscribe(e => {
+    console.log(`${e} clicks at ${new Date()}`);
+  });
+
+- typeahead searches 
+
+const { fromEvent, pipe } = rxjs;
+const {
+  debounceTime,
+  distinctUntilChanged,
+  filter,
+  map,
+  reduce,
+  switchMap
+} = rxjs.operators;
+
+
+const textInput$ = fromEvent(
+  document.getElementById("myText"),
+  "input"
+).pipe(
+  map(e => e.target.value),
+  debounceTime(200),
+  filter(w => w.length === 0 || w.length > 3),
+  distinctUntilChanged(),
+  switchMap(w => getCitiesOrNull(w))
+);
+
+- other patterns 
+
+curring and partial application 
+
+declarative functions 
+
+persistent data structure 
+
+chain of responsibility 
+
+- functional patterns 
+
+processing collection using filter/map/reduce 
+
+lazy evaluation with thunks 
+
+persistent data structures for immutability 
+
+wrapped values for checks operations 
+
+
+
+# Buidling better containers - functional data types 
+- data types 
+
+visit https://flow.org/ for Flow, 
+https://www.typescriptlang.org/ for TypeScript, 
+and http://elm-lang.org/ for Elm. 
+If you want to know more about type checks, the corresponding web pages are https://flow.org/en/docs/types/functions/,
+
+- extending current data types 
+
+Boolean.prototype.map = function(fn) {  return !!fn(this);};
+
+// Number.map :: Number ⇝ (Number → a) → Number
+Number.prototype.map = function(fn) {
+  return Number(fn(this));
+};
+
+// String.map :: String ⇝ (String → a) → String
+String.prototype.map = function(fn) {
+  return String(fn(this));
+};
+
+- containers, wrapping, basic container 
+
+const VALUE = Symbol("Value");
+
+class Container {
+  constructor(x) {
+    this[VALUE] = x;
+  }
+
+  map(fn) {
+    return fn(this[VALUE]);
+  }
+}
+
+
+class Container {
+  // 
+  // everything as above
+  //
+
+  static of(x) {
+    return new Container(x);
+  }
+
+  toString() {
+    return `${this.constructor.name}(${this[VALUE]})`;
+  }
+
+  valueOf() {
+    return this[VALUE];
+  }
+}
+
+- enhancing containers 
+
+class Functor extends Container {
+  static of(x) {
+    return new Functor(x);
+  }
+
+  map(fn) {
+    return Functor.of(fn(this[VALUE]));
+  }
+}
+
+- dealing with missing values with maybe 
+
+class Nothing extends Functor {
+  isNothing() {
+    return true;
+  }
+
+  toString() {
+    return "Nothing()";
+  }
+
+  map(fn) {
+    return this;
+  }
+}
+
+class Just extends Functor {
+  isNothing() {
+    return false;
+  }
+
+  map(fn) {
+    return Maybe.of(fn(this[VALUE]));
+  }
+}
+
+class Maybe extends Functor {
+  constructor(x) {
+    return x === undefined || x === null
+      ? new Nothing()
+      : new Just(x);
+  }
+
+  static of(x) {
+    return new Maybe(x);
+  }
+}
+
+const plus1 = x => x + 1;
+
+Maybe.of(2209).map(plus1).map(plus1).toString(); // "Just(2211)"
+
+Maybe.of(null).map(plus1).map(plus1).toString(); // "Nothing()"
+
+- Dark Sky API (see https://darksky.net/ for more on this API and how to register with it)
+
+- monads, Once you happen to finally understand monads, you immediately lose the ability to explain them to other people
+
+difference between monads and functors is that the former adds some extra functionality
+
+    + reference, fantasy land specification 
+    https://github.com/fantasyland/fantasy-land/
+
+
+const fakeSearchForSomething = key => {
+  if (key % 2 === 0) {
+    return {key, some: "whatever", other: "more data"};
+
+  } else {
+    throw new Error("Not found");
+  }
+};
+
+const findSomething = key => {
+  try {
+    const something = fakeSearchForSomething(key);
+    return Maybe.of(something);
+  } catch (e) {
+    return Maybe.of(null);
+  }
+};
+
+class Monad extends Functor {
+  static of(x) {
+    return new Monad(x);
+  }
+
+  map(fn) {
+    return Monad.of(fn(this[VALUE]));
+  }
+
+  unwrap() {
+    const myValue = this[VALUE];
+    return myValue instanceof Container ? myValue.unwrap() : this;
+  }
+}
+
+- handling alternatives the either monad. 
+
+a left value, which should be null but if present then it cannot be mapped over 
+
+a right value, which should be normal value of the functor and can be mapped over 
+
+class Left extends Monad {
+  isLeft() {
+    return true;
+  }
+    
+  map(fn) {
+    return this;
+  }
+}
+
+
+
+class Right extends Monad {
+  isLeft() {
+    return false;
+  }
+
+  map(fn) {
+    return Either.of(null, fn(this[VALUE]));
+  }
+}
+
+class Either extends Monad {
+  constructor(left, right) {
+    return right === undefined || right === null
+      ? new Left(left)
+      : new Right(right);
+  }
+
+  static of(left, right) {
+    return new Either(left, right);
+  }
+}
+
+const getAlerts2 = (lat, long, callback) => {
+  const SERVER = "https://api.darksky.net/forecast";
+  const UNITS = "units=si";
+  const EXCLUSIONS = "exclude=minutely,hourly,daily,flags";
+  const API_KEY = "you.have.to.get.your.own.key";
+
+  request
+    .get(`${SERVER}/${API_KEY}/${lat},${long}?${UNITS}&${EXCLUSIONS}`)
+    .end((err, res) =>
+      callback(
+        err
+          ? Either.of("AJAX FAILURE", null)
+          : Either.of(null, JSON.parse(res.text))
+        )
+      );
+};
+
+- calling a function the try monad 
+
+class Try extends Either {
+  constructor(fn, msg) {
+    try {
+      return Either.of(null, fn());
+    } catch (e) {
+      return Either.of(msg || e, null);
+    }
+  }
+
+  static of(fn, msg) {
+    return new Try(fn, msg);
+  }
+}
+
+const getField2 = attr => obj => Try.of(() => obj[attr], "NULL OBJECT");
+
+const x = getField2("somefield")(null);
+
+console.log(x.isLeft()); // true
+
+console.log(x.toString()); // Left(NULL OBJECT)
+
+- unexpected monads - promises 
+
+promise.resolve 
+
+promise.then 
+
+monad.map(), monad.chain()
+
+Promise.prototype.ap = function(promise2) {
+  return this.then(x => promise2.map(x));
+};
+
+you may still need Promise.race() and Promise.all(), so it's likely you will keep using promises, even if you opt for full ES8 coding.
+
+- function as structure 
+
+data Tree a = Nil | Node a (Tree a) (Tree a)
+
+empty :: Tree a -> Bool
+empty Nil = True
+empty (Node root left right) = False
+
+const myTree = Tree(
+  22,
+  Tree(
+    9,
+    Tree(4, EmptyTree(), EmptyTree()),
+    Tree(12, EmptyTree(), EmptyTree())
+  ),
+  Tree(
+    60,
+    Tree(56, EmptyTree(), EmptyTree()),
+    EmptyTree()
+  )
+);
+
+const treeToObject = tree =>
+  tree(
+    (value, left, right) => {
+      const leftBranch = treeToObject(left);
+      const rightBranch = treeToObject(right);
+      const result = { value };
+
+      if (leftBranch) {
+        result.left = leftBranch;
+      }
+
+      if (rightBranch) {
+        result.right = rightBranch;
+      }
+
+      return result;
+    },
+    () => null
+  );
+
+
