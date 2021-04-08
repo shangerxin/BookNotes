@@ -254,8 +254,920 @@ class GoodList(UserList):
 
 
 
+# Defense programming 
+- Defensive programming is a technique that has several aspects
+value substitution 
+error logging 
+exception handling 
+
+- value substitution, replacing missing parameters with default values is acceptable, but substituting erroneous data with legal close values is more dangerous
+
+- handle exceptions at the right level of abstraction 
+
+def connect_with_retry(connector, retry_n_times, retry_threshold=5):
+    """Tries to establish the connection of <connector> retrying
+    <retry_n_times>.
+
+    If it can connect, returns the connection object.
+    If it's not possible after the retries, raises ConnectionError
+
+    :param connector: An object with a `.connect()` method.
+    :param retry_n_times int: The number of times to try to call
+                                ``connector.connect()``.
+    :param retry_threshold int: The time lapse between retry calls.
+
+    """
+    for _ in range(retry_n_times):
+        try:
+            return connector.connect()
+        except ConnectionError as e:
+            logger.info(
+                "%s: attempting new connection in %is", e, retry_threshold
+            )
+            time.sleep(retry_threshold)
+    exc = ConnectionError(f"Couldn't connect after {retry_n_times} times")
+    logger.exception(exc)
+    raise exc
+    
+    
+
+class DataTransport:
+    """An example of an object that separates the exception handling by
+    abstraction levels.
+    """
+
+    retry_threshold: int = 5
+    retry_n_times: int = 3
+
+    def __init__(self, connector):    
+        self._connector = connector
+        self.connection = None
+
+    def deliver_event(self, event):
+        self.connection = connect_with_retry(
+            self._connector, self.retry_n_times, self.retry_threshold
+        )
+        self.send(event)
+
+    def send(self, event):
+        try:
+            return self.connection.send(event.decode())
+        except ValueError as e:
+            logger.error("%r contains incorrect data: %s", event, e)
+            raise
 
 
+- avoid empty exception blocks 
+
+try:
+    process_data()
+except:
+    pass 
+    
+
+- include the original exception, python 3+, raise <e> from <original_exception> syntax. When using this construction, the original traceback will be embedded into the new exception
+
+def process(data_dictionary, record_id):    try:        return data_dictionary[record_id]    except KeyError as e:        raise InternalDataError("Record not present") from e
+
+- using assertions in python 
+
+try:
+    assert condition.holds(), "Condition is not satisfied"
+except AssertionError:
+    alternative_procedure()
+    
+
+- separation of concerns, A ripple effect means the propagation of a change in the software from a starting point. This could be the case of an error or exception triggering a chain of other exceptions
+
+- cohesion means that objects should have a small and well-defined purpose, and they should do as little as possible
+
+- DRY/OAOO, don't repeat yourself, once and only once 
+
+error prone
+
+expsnesive 
+
+unreliable 
+
+    + using generator, decorators to improve code quality 
+    
+- YAGNI, you aren't gonna need it, don't over engineer it. 
+
+- KIS, keep it simple. not let the user read to check the code/document 
+
+class Namespace:
+    """Create an object from keyword arguments."""
+
+    ACCEPTED_VALUES = ("id_", "user", "location")
+
+    def __init__(self, **data):
+        accepted_data = {
+            k: v for k, v in data.items() if k in self.ACCEPTED_VALUES
+        }
+        self.__dict__.update(accepted_data)
+
+- EAFP/LBYL, easier to ask forgiveness than permission, while LBYL, look before you leap 
+
+    + LBYL, check the validation before you do the operation, such as read a file 
+    
+if os.path.exists(filename):
+    with open(filename) as f:
+        ...
+
+- composition and inheritance 
+
+have a class that defines certain components with its behavior that are defined by the interface of this class (its public methods and attributes), and then you need to specialize this class in order to create objects that do the same but with something else added, or with some particular parts of its behavior changed.
+
+examples, python exception classes, python http classes 
+
+- multiple inheritance in python, ask the clas for the resolution order 
+
+```
+class BaseModule:
+    module_name = "top"
+
+    def __init__(self, module_name):
+        self.name = module_name
+
+    def __str__(self):
+        return f"{self.module_name}:{self.name}"
+
+
+class BaseModule1(BaseModule):
+    module_name = "module-1"
+
+
+class BaseModule2(BaseModule):
+    module_name = "module-2"
+
+
+class BaseModule3(BaseModule):
+    module_name = "module-3"
+
+
+class ConcreteModuleA12(BaseModule1, BaseModule2):
+    """Extend 1 & 2"""
+
+>>> [cls.__name__ for cls in ConcreteModuleA12.mro()]
+['ConcreteModuleA12', 'BaseModule1', 'BaseModule2', 'BaseModule', 'object']
+```
+
+- mixins, A mixin is a base class that encapsulates some common behavior with the goal of reusing code. mixin is not useful on its own 
+
+class UpperIterableMixin:
+    def __iter__(self):
+        return map(str.upper, super().__iter__())
+
+
+class Tokenizer(UpperIterableMixin, BaseTokenizer):
+    pass
+
+- arguments in functions and methods 
+
+    + The first rule in Python is that all arguments are passed by a value.
+
+    + Don't mutate function arguments. except you explicit let the user known this
+
+- variable number of arguments 
+
+*args 
+
+**kwargs 
+
+- function arguments and coupling 
+- The idea here is to reify: create the abstraction that was missing from our design
+
+- structure the code 
+
+    + Defensive programming is a good idea, especially for critical parts of the application
+
+    + avoid using exception as a control flow (go-to) kind of construction
+
+- SOLID principle 
+
+S: Single responsibility principle
+O: Open/closed principle
+L: Liskov's substitution principle, To implement proper class hierarchies in object-oriented design, by complying with Liskov's substitution principle. 
+I: Interface segregation principle
+D: Dependency inversion principle, To design with interface segregation and dependency inversion
+
+- SRP
+    + anti-pattern of SRP single response principle 
+
+# srp_1.py
+class SystemMonitor:
+    def load_activity(self):
+        """Get the events from a source, to be processed."""
+
+    def identify_events(self):
+        """Parse the source raw data into events (domain objects)."""
+
+    def stream_events(self):
+        """Send the parsed events to an external agent."""
+        
+    + create smaller and more cohesive abstractions.
+
+- OCP, open close principle
+
+# openclosed_3.py
+class Event:
+    def __init__(self, raw_data):
+        self.raw_data = raw_data
+
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return False
+
+
+class UnknownEvent(Event):
+    """A type of event that cannot be identified from its data"""
+
+
+class LoginEvent(Event):
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return (
+            event_data["before"]["session"] == 0
+            and event_data["after"]["session"] == 1
+        )
+
+
+class LogoutEvent(Event):
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return (
+            event_data["before"]["session"] == 1
+            and event_data["after"]["session"] == 0
+        )
+
+
+class TransactionEvent(Event):
+    """Represents a transaction that has just occurred on the system."""
+
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return event_data["after"].get("transaction") is not None
+
+
+class SystemMonitor:
+    """Identify events that occurred in the system."""
+
+    def __init__(self, event_data):
+        self.event_data = event_data
+
+    def identify_event(self):
+        for event_cls in Event.__subclasses__():
+            try:
+                if event_cls.meets_condition(self.event_data):
+                    return event_cls(self.event_data)
+            except KeyError:
+                continue
+        return UnknownEvent(self.event_data)
+
+- liskov's substitution principle, any class, a client should be able to use any of its subtypes indistinguishably, without even noticing
+
+A subclass can never make preconditions stricter than they are defined on the parent class
+A subclass can never make postconditions weaker than they are defined on the parent class
+
+```
+# lsp_2.py
+
+class Event:
+    def __init__(self, raw_data):
+        self.raw_data = raw_data
+
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return False
+
+    @staticmethod
+    def meets_condition_pre(event_data: dict):
+        """Precondition of the contract of this interface.
+
+        Validate that the ``event_data`` parameter is properly formed.
+        """
+        assert isinstance(event_data, dict), f"{event_data!r} is not a dict"
+        for moment in ("before", "after"):
+            assert moment in event_data, f"{moment} not in {event_data}"
+            assert isinstance(event_data[moment], dict)
+            
+# lsp_2.py
+class SystemMonitor:
+    """Identify events that occurred in the system."""
+
+    def __init__(self, event_data):
+        self.event_data = event_data
+
+    def identify_event(self):
+        Event.meets_condition_pre(self.event_data)
+        event_cls = next(
+            (
+                event_cls
+                for event_cls in Event.__subclasses__()
+                if event_cls.meets_condition(self.event_data)
+            ),
+            UnknownEvent,
+        )
+        return event_cls(self.event_data)
+
+# lsp_2.py
+class TransactionEvent(Event):
+    """Represents a transaction that has just occurred on the system."""
+
+    @staticmethod
+    def meets_condition(event_data: dict):
+        return event_data["after"].get("transaction") is not None
+
+        
+```
+
+- pylint, incompatible signatures detection 
+- Mypy to detect incorrect datatypes 
+
+https://mypy.readthedocs.io/en/stable/getting_started.html#installing-and-running-mypy
+
+- interface segregation, interfaces are implicitly defined by a class according to its methods. This is because Python follows the so-called duck typing principle
+
+- dependency inversion principle, force whatever implementation or detail to adapt to our code via a sort of API
+
+
+# Using decorators to improve our code 
+- The retry decorator doesn't take any parameters, so it can be easily applied to any function
+
+```
+# decorator_function_1.py
+class ControlledException(Exception):
+    """A generic exception on the program's domain."""
+
+def retry(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        last_raised = None
+        RETRIES_LIMIT = 3
+        for _ in range(RETRIES_LIMIT):
+            try:
+                return operation(*args, **kwargs)
+            except ControlledException as e:
+                logger.info("retrying %s", operation.__qualname__)
+                last_raised = e
+        raise last_raised
+
+    return wrapped
+    
+@retry
+def run_operation(task):
+    """Run a particular task, simulating some failures on its execution."""
+    return task.run()
+```
+
+- decorator class, create smaller or simpler classes that will be enhanced later on by decorators 
+```
+class LoginEventSerializer:
+    def __init__(self, event):
+        self.event = event
+
+    def serialize(self) -> dict:
+        return {
+            "username": self.event.username,
+            "password": "**redacted**",
+            "ip": self.event.ip,
+            "timestamp": self.event.timestamp.strftime("%Y-%m-%d 
+             %H:%M"),
+        }
+
+class LoginEvent:
+    SERIALIZER = LoginEventSerializer
+
+    def __init__(self, username, password, ip, timestamp):
+        self.username = username
+        self.password = password
+        self.ip = ip
+        self.timestamp = timestamp
+
+    def serialize(self) -> dict:
+        return self.SERIALIZER(self).serialize()
+```
+
+the implementation have several issues:
+    * too many classes in future 
+    * not flexible, hard to reuse 
+    * biolerplate, The serialize() method will have to be present in all event classes, calling the same code 
+    
+alternative with decorator 
+
+```
+def hide_field(field) -> str:
+    return "**redacted**"
+
+
+def format_time(field_timestamp: datetime) -> str:
+    return field_timestamp.strftime("%Y-%m-%d %H:%M")
+
+
+def show_original(event_field):
+    return event_field
+
+
+class EventSerializer:
+    def __init__(self, serialization_fields: dict) -> None:
+        self.serialization_fields = serialization_fields
+
+    def serialize(self, event) -> dict:
+        return {
+            field: transformation(getattr(event, field))
+            for field, transformation in 
+            self.serialization_fields.items()
+        }
+
+
+class Serialization:
+    
+    def __init__(self, **transformations):
+        self.serializer = EventSerializer(transformations)
+
+    def __call__(self, event_class):
+        def serialize_method(event_instance):
+            return self.serializer.serialize(event_instance)
+        event_class.serialize = serialize_method
+        return event_class
+
+
+from dataclasses import dataclass
+from datetime import datetime
+
+@Serialization(
+    username=show_original,
+    password=hide_field,
+    ip=show_original,
+    timestamp=format_time,
+)
+@dataclass
+class LoginEvent:
+    username: str
+    password: str
+    ip: str
+    timestamp: datetime
+```
+
+- decorator with nested functions, define a functon that returns a function. the internal function is the one catually being called 
+
+```
+RETRIES_LIMIT = 3
+
+
+def with_retry(retries_limit=RETRIES_LIMIT, allowed_exceptions=None):
+    allowed_exceptions = allowed_exceptions or (ControlledException,)
+
+    def retry(operation):
+
+        @wraps(operation)
+        def wrapped(*args, **kwargs):
+            last_raised = None
+            for _ in range(retries_limit):
+                try:
+                    return operation(*args, **kwargs)
+                except allowed_exceptions as e:
+                    logger.info("retrying %s due to %s", operation, e)
+                    last_raised = e
+            raise last_raised
+
+        return wrapped
+
+    return retry
+    
+    
+# decorator_parametrized_1.py
+@with_retry()
+def run_operation(task):
+    return task.run()
+
+
+@with_retry(retries_limit=5)
+def run_with_custom_retries_limit(task):
+    return task.run()
+
+
+@with_retry(allowed_exceptions=(AttributeError,))
+def run_with_custom_exceptions(task):
+    return task.run()
+
+
+@with_retry(
+    retries_limit=4, allowed_exceptions=(ZeroDivisionError, AttributeError)
+)
+def run_with_custom_parameters(task):
+    return task.run()
+```
+
+- decorator objects, e can pass the parameters in the __init__ method, and then implement the logic of the decorator on the magic method named __call__.
+
+This will create a new object and initialize it with these parameters, as defined in the init method. After this, the @ operation is invoked, so this object will wrap the function named run_with_custom_reries_limit, meaning that it will be passed to the call magic method.
+
+```
+class WithRetry:
+
+    def __init__(self, retries_limit=RETRIES_LIMIT, allowed_exceptions=None):
+        self.retries_limit = retries_limit
+        self.allowed_exceptions = allowed_exceptions or (ControlledException,)
+
+    def __call__(self, operation):
+
+        @wraps(operation)
+        def wrapped(*args, **kwargs):
+            last_raised = None
+
+            for _ in range(self.retries_limit):
+                try:
+                    return operation(*args, **kwargs)
+                except self.allowed_exceptions as e:
+                    logger.info("retrying %s due to %s", operation, e)
+                    last_raised = e
+            raise last_raised
+
+        return wrapped
+        
+@WithRetry(retries_limit=5)
+def run_with_custom_retries_limit(task):
+    return task.run()
+```
+
+- good uses for decorators 
+
+transforming parameters 
+
+tracing code, measure and logging 
+
+validate parameters 
+
+implement retry oprations 
+
+simplify classes by moving some (repetive) logic into decorators 
+
+    + tools,  functools.wraps
+    
+- common errors, wrapper level local variables, remind the closure scope 
+
+- implement the decorator as class object, creating decorators that will always works. reuse our decorator and apply it to a function, a class, a method, or a static method.
+
+from functools import wraps
+from types import MethodType
+
+
+class inject_db_driver:
+    """Convert a string to a DBDriver instance and pass this to the 
+       wrapped function."""
+
+    def __init__(self, function):
+        self.function = function
+        wraps(self.function)(self)
+
+    def __call__(self, dbstring):
+        return self.function(DBDriver(dbstring))
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return self.__class__(MethodType(self.function, instance))
+
+
+
+# Descriptors 
+- descriptor a class that implements the descriptor protocol. 
+__get__ 
+__set__ 
+__delete__ 
+__set_name__ 
+
+    + naming convension 
+ClientClass 
+DescriptorClass 
+Client 
+Descriptor 
+
+- it has to be defined as class attribute. Always place the descriptor object as a class attribute
+
+```
+class DescriptorClass:
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        logger.info("Call: %s.__get__(%r, %r)", 
+        self.__class__.__name__,instance, owner)
+        return instance
+
+
+class ClientClass:
+    descriptor = DescriptorClass()
+
+>>> client = ClientClass()
+>>> client.descriptor
+INFO:Call: DescriptorClass.__get__(<ClientClass object at 0x...>, <class 'ClientClass'>)
+<ClientClass object at 0x...>
+>>> client.descriptor is client
+INFO:Call: DescriptorClass.__get__(ClientClass object at 0x...>, <class 'ClientClass'>)
+True
+```
+
+make the descriptor transparently run all sorts of transformations without clients even noticing. This takes encapsulation to a new level
+
+- non-data descriptors, only implements the __get__ method 
+
+class NonDataDescriptor:
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return 42
+
+
+class ClientClass:
+    descriptor = NonDataDescriptor()
+
+- data descriptor, implement set method, A possible alternative here is to use weak references, with the weakref module, and create a weak reference key dictionary if we want to do that
+
+class DataDescriptor:
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return 42
+
+    def __set__(self, instance, value):
+        logger.debug("setting %s.descriptor to %s", instance, value)
+        instance.__dict__["descriptor"] = value
+
+
+class ClientClass:
+    descriptor = DataDescriptor()
+
+- we can use descriptor to track attribute changes, logging etc. 
+
+-  functools.partial (https://docs.python.org/3.6/library/functools.html#functools.partial) as a way of simulating sub-classes, by applying a partial application of the transformation function for that class
+
+- built-in decorators, @property, @classmethod, @staticmethod 
+
+- slots, class defines the __slots__ attribute, it can contain all the attributes that the class expects
+
+class Coordinate2D:
+    __slots__ = ("lat", "long")
+
+    def __init__(self, lat, long):
+        self.lat = lat
+        self.long = long
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.lat}, {self.long})"
+
+
+- using typing MethodType to define method like descriptor
+
+
+
+# Using generators 
+- generator expression 
+
+>>> (x**2 for x in range(10))
+<generator object <genexpr> at 0x...>
+
+- idioms for iteration 
+
+class SequenceOfNumbers:
+
+    def __init__(self, start=0):
+        self.current = start
+
+    def __next__(self):
+        current = self.current
+        self.current += 1
+        return current
+
+    def __iter__(self):
+        return self
+
+>>> list(zip(SequenceOfNumbers(), "abcdef"))
+[(0, 'a'), (1, 'b'), (2, 'c'), (3, 'd'), (4, 'e'), (5, 'f')]
+>>> seq = SequenceOfNumbers(100)
+>>> next(seq)
+100
+>>> next(seq)
+101
+
+- simplfy code by iterators, such as nested loops, repeated iterations 
+
+how the auxiliary generator that was created works as an abstraction for the iteration that's required. In this case, we just need to iterate over two dimensions, but if we needed more, a different object could handle this without the client needing to know about it
+
+def _iterate_array2d(array2d):
+    for i, row in enumerate(array2d):
+        for j, cell in enumerate(row):
+            yield (i, j), cell
+
+def search_nested(array, desired_value):
+    try:
+        coord = next(
+            coord
+            for (coord, cell) in _iterate_array2d(array)
+            if cell == desired_value
+        )
+    except StopIteration:
+        raise ValueError("{desired_value} not found")
+
+    logger.info("v
+
+- coroutines, uses of coroutines, and how to delegate to sub-generators (coroutines) in order to refactor code. close() the generator will receive the GeneratorExit exception
+
+- This method will throw the exception at the line where the generator is currently suspended
+
+- advanced coroutines 
+
+yield from syntax allows us to go further and avoid the nested loop because it's able to produce the values from a sub-generator directly
+
+- async programming, The await and async def syntax were introduced. The former is intended to be used instead of yield from, and it only works with awaitable objects
+
+
+# Unit testing and refactoring 
+- defining the boundaries of what to test 
+
+unittest: https://docs.python.org/3/library/unittest.html
+pytest: https://docs.pytest.org/en/latest/
+
+- code coverage, One of the most widely used libraries for this is coverage (https://pypi.org/project/coverage/).
+
+
+# Common design pattern 
+- creation 
+factories 
+
+singleton and shared state (monostate)
+
+```
+class GitFetcher:
+    _current_tag = None
+
+    def __init__(self, tag):
+        self.current_tag = tag
+
+    @property
+    def current_tag(self):
+        if self._current_tag is None:
+            raise AttributeError("tag was never set")
+        return self._current_tag
+
+    @current_tag.setter
+    def current_tag(self, new_tag):
+        self.__class__._current_tag = new_tag
+
+    def pull(self):
+        logger.info("pulling from %s", self.current_tag)
+        return self.current_ta
+```
+
+    + borg pattern 
+
+```
+class BaseFetcher:
+    def __init__(self, source):
+        self.source = source
+
+
+class TagFetcher(BaseFetcher):
+    _attributes = {}
+
+    def __init__(self, source):
+        self.__dict__ = self.__class__._attributes
+        super().__init__(source)
+
+    def pull(self):
+        logger.info("pulling from tag %s", self.source)
+        return f"Tag = {self.source}"
+
+
+class BranchFetcher(BaseFetcher):
+    _attributes = {}
+
+    def __init__(self, source):
+        self.__dict__ = self.__class__._attributes
+        super().__init__(source)
+
+    def pull(self):
+        logger.info("pulling from branch %s", self.source)
+        return f"Branch = {self.source}"
+```
+
+    + we can create a mixin to reduce the duplicated code 
+    
+```
+class SharedAllMixin:
+    def __init__(self, *args, **kwargs):
+        try:
+            self.__class__._attributes
+        except AttributeError:
+            self.__class__._attributes = {}
+
+        self.__dict__ = self.__class__._attributes
+        super().__init__(*args, **kwargs)
+
+
+class BaseFetcher:
+    def __init__(self, source):
+        self.source = source
+
+
+class TagFetcher(SharedAllMixin, BaseFetcher):
+    def pull(self):
+        logger.info("pulling from tag %s", self.source)
+        return f"Tag = {self.source}"
+
+
+class BranchFetcher(SharedAllMixin, BaseFetcher):
+    def pull(self):
+        logger.info("pulling from branch %s", self.source)
+        return f"Branch = {self.source}"
+```
+
+- builder, structural patterns 
+
+    + adapter, Also known as a wrapper, this pattern solves the problem of adapting interfaces of two or more objects that are not compatible.
+    
+```
+from _adapter_base import UsernameLookup
+
+
+class UserSource(UsernameLookup):
+    def fetch(self, user_id, username):
+        user_namespace = self._adapt_arguments(user_id, username)
+        return self.search(user_namespace)
+
+    @staticmethod
+    def _adapt_arguments(user_id, username):
+        return f"{user_id}:{username}"
+```   
+
+    + composite, The composite object, however, will act as a client; this also will pass this request along with all the objects it contains
+
+```
+class Product:
+    def __init__(self, name, price):
+        self._name = name
+        self._price = price
+
+    @property
+    def price(self):
+        return self._price
+
+
+class ProductBundle:
+    def __init__(
+        self,
+        name,
+        perc_discount,
+        *products: Iterable[Union[Product, "ProductBundle"]]
+    ) -> None:
+        self._name = name
+        self._perc_discount = perc_discount
+        self._products = products
+
+    @property
+    def price(self):
+        total = sum(p.price for p in self._products)
+        return total * (1 - self._perc_discount)
+```
+
+    + Decorator, This pattern allows us to dynamically extend the functionality of some objects, without needing inheritance.
+
+    + Facade,  a relation of many-to-many among several objects, and we want them to interact. Instead of creating all of these connections, we place an intermediate object in front of many of them that act as a facade.
+
+- behavior patterns 
+
+    + chain of responsibility, we are going to create the events in a slightly different way. Each event still has the logic to determine whether or not it can process a particular log line
+    
+    + template method, The template method is a pattern that yields important benefits when implemented properly. Mainly, it allows us to reuse code
+    
+    can work with chain of responsibility method 
+    
+    + command, The command pattern provides us with the ability to separate an action that needs to be done from the moment that it is requested to its actual execution
+    
+    + state, The state pattern is a clear example of reification in software design, making the concept of our domain problem an explicit object rather than just a side value
+    
+    The state pattern is a clear example of reification in software design, making the concept of our domain problem an explicit object rather than just a side value
+    
+    + null object pattern, guaranteed clients can use the objects that are returned with polymorphism without having to run extra checks on them 
+
+- final thoughts about design patterns 
+
+
+# Clean architecture 
+- from clean code to clean architecture 
+- The dependency inversion principle (DIP), explained in Chapter 4, The SOLID Principles, is of great help in this regard
+- seperate features into different packages 
+- containers 
+- They meet the criteria behind the principle of separation of concerns (SoC) of the architecture.
+
+
+# reference 
+https://cleancoders.com/
+
+https://cleancoders.com/episode/clean-code-in-the-browser-episode-1
+
+https://cleancoders.com/episode/clean-code-episode-1
 
 
 
