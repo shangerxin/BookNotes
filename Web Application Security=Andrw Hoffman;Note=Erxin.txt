@@ -1,0 +1,572 @@
+Web Application Security=Andrw Hoffman;Note=Erxin
+
+
+# Preface 
+- Vulnerabilities considered in depth 
+
+cross-site scripting (XSS)
+
+
+
+# Recon
+- information gathering 
+- web application mapping 
+- applications you intend to test frequently and over long periods of time
+
+
+# The structure of a modern web application 
+- modern web application 
+REST API 
+JSON or XML 
+JavaScript 
+SPA framework (React, Vue, EmberJS, AngularJS)
+An authentication and authorization system 
+One or more web servers(typically on linux)
+One or more web server software(ExpressJS, Apache, Nginx)
+One or more databases(MySql, MongoDB, etc)
+A local data store on client(cookie, web storage, indexdb)
+
+- rest API 
+
+must be separate from the client 
+
+must be stateless 
+
+must be easily cacheable 
+
+each endpoint should define a specific object or method 
+
+/moderators/joe/logs/xx_xx...
+
+GET, POST, PUT and DELETE 
+
+put for update a existing element 
+post for add a new element 
+
+- the OAuth protocol is great for websites that want to integrate with larger websites. 
+
+- A subset of local storage called session storage operates identically
+
+
+# Finding subdomains 
+- multiple subdomain 
+                    test.my.megabank.com
+                    my.megabank.com
+www.megabank.com <- megabank.com -> mail.megabank.com 
+
+- view webrequests 
+
+browser’s network tools, or a more powerful tool like Burp, PortSwigger, or ZAP.
+
+- results come from the XHR tab, under the Network tab, which will show you any HTTP POST, GET, PUT, DELETE
+
+- check the data for performing penetration tests 
+
+past includes:
+
+Cached copies of GitHub repos that were accidentally turned public before being turned private again
+
+SSH keys
+
+Various keys for services like Amazon AWS or Stripe that were exposed periodically and then removed from a public-facing web application
+
+DNS listings and URLs that were not intended for a public audience
+
+Pages detailing unreleased products that were not intended to be live
+
+Financial records hosted on the web but not intended to be crawled by a search engine
+
+Email addresses, phone numbers, and usernames
+
+- information many places, such as:
+
+Search engines
+
+Social media posts
+
+Archiving applications, like archive.org
+
+Image searches and reverse image searches
+
+- check search engine cache 
+
+site:mega-bank.com log in
+
+- add specific negative conditions to any query string. For example, -inurl:<pattern> will reject any URLs that match the pattern supplied.
+
+- Archive.org strives to preserve the history of the internet
+
+- Zone Transfer Attacks
+
+Walking through a public-facing web app and analyzing network requests will only get you so far
+
+works against improperly configured Domain Name System (DNS) servers. It’s not really a “hack,” although though its name would imply it is.
+
+    + we need to pretend we are a DNS server and request a DNS zone file as if we needed it in order to update our own records. We need to first find the DNS servers associated with https://www.mega-bank.com. 
+    
+    in unix 
+    
+    $ host -t mega-bank.com 
+    mega-bank.com name server ns1.bankhost.com
+    mega-bank.com name server ns2.bankhost.com
+
+    host refers to a DNS lookup utility that you can find in most Linux distros as well as in recent versions of macOS. The -t flag specifies we want to request the nameservers that are responsible for resolving mega-bank.com
+
+    make a zone transfer request 
+    $ host -l mega-bank.com ns1.bankhost.com
+
+    wish to get a zone transfer file for mega-bank.com from ns1.bankhost.com in order to update our records.
+    If the request is successful, indicating an improperly secured DNS server, you would see a result like 
+    ```
+    Using domain server:
+    Name: ns1.bankhost.com
+    Address: 195.11.100.25
+    Aliases:
+
+    mega-bank.com has address 195.250.100.195
+    mega-bank.com name server ns1.bankhost.com
+    mega-bank.com name server ns2.bankhost.com
+    mail.mega-bank.com has address 82.31.105.140
+    admin.mega-bank.com has address 32.45.105.144
+    internal.mega-bank.com has address 25.44.105.144
+    ```
+    
+- brute forcing subdomains 
+
+fire off a request to <subdomain-guess>.mega-bank.com. If we receive a response, we mark it as a live subdomain.
+
+a list of potential subdomains
+
+takes advantage of the DNS library provided within Node.js
+
+```
+const dns = require('dns');
+const promises = [];
+
+/*
+ * This list can be filled with the previous brute force
+ * script, or use a dictionary of common subdomains.
+ */
+const subdomains = [];
+
+/*
+ * Iterate through each subdomain, and perform an asynchronous
+ * DNS query against each subdomain.
+ *
+ * This is much more performant than the more common `dns.lookup()`
+ * because `dns.lookup()` appears asynchronous from the JavaScript,
+ * but relies on the operating system's getaddrinfo(3) which is
+ * implemented synchronously.
+ */
+subdomains.forEach((subdomain) => {
+  promises.push(new Promise((resolve, reject) => {
+    dns.resolve(`${subdomain}.mega-bank.com`, function (err, ip) {
+      return resolve({ subdomain: subdomain, ip: ip });
+    });
+  }));
+});
+
+// after all of the DNS queries have completed, log the results
+Promise.all(promises).then(function(results) {
+  results.forEach((result) => {
+    if (!!result.ip) {
+      console.log(result);
+    }
+  });
+});
+```
+
+- dictionary attacks 
+
+A popular open source DNS scanner called dnscan ships with a list of the most popular subdomains on the internet
+
+dnscan repository on GitHub hosts files containing the top 10,000 subdomains that can be integrated into your recon process
+
+```
+const dns = require('dns');
+const csv = require('csv-parser');
+const fs = require('fs');
+
+const promises = [];
+
+/*
+ * Begin streaming the subdomain data from disk (versus
+ * pulling it all into memory at once, in case it is a large file).
+ *
+ * On each line, call `dns.resolve` to query the subdomain and
+ * check if it exists. Store these promises in the `promises` array.
+ *
+ * When all lines have been read, and all promises have been resolved,
+ * then log the subdomains found to the console.
+ *
+ * Performance Upgrade: if the subdomains list is exceptionally large,
+ * then a second file should be opened and the results should be
+ * streamed to that file whenever a promise resolves.
+ */
+fs.createReadStream('subdomains-10000.txt')
+  .pipe(csv())
+  .on('data', (subdomain) => {
+    promises.push(new Promise((resolve, reject) => {
+      dns.resolve(`${subdomain}.mega-bank.com`, function (err, ip) {
+        return resolve({ subdomain: subdomain, ip: ip });
+      });
+    }));
+  })
+  .on('end', () => {
+
+   // after all of the DNS queries have completed, log the results
+   Promise.all(promises).then(function(results) {
+     results.forEach((result) => {
+       if (!!result.ip) {
+         console.log(result);
+       }
+     });
+   });
+  });
+```
+
+
+# API Analysis 
+- endpoint discovery，APIs follow a REST format or a SOAP format. REST
+
+GET api.mega-bank.com/users/1234
+GET api.mega-bank.com/users/1234/payments
+POST api.mega-bank.com/users/1234/payments
+
+- REST http verb 
+
+POST    Create
+GET     Read
+PUT     Update/Replace
+PATCH   Update/Modify
+DELETE  Delete
+
+special method that only exists to give information about a particular API’s verbs. This method is called OPTIONS
+
+automatic test API entry points with http verbs 
+
+- many modern applications send authentication tokens with every request. This means if we can reverse engineer the type of authentication used and understand how the token is being attached to requests, it will be easier to analyze 
+
+    + HTTP basic 
+    username and pasword sent on each request
+    
+    strengths, all major browsers support this natively 
+    
+    session does not expire, easy to intercept 
+    
+        * example 
+        
+        ```
+        GET /homepage
+        HOST mega-bank.com
+        Authorization: Basic am9lOjEyMzQ=
+        Content Type: application/json
+        ```
+        
+        Basic authorization header being sent. Furthermore, the string am9lOjEyMzQ= is simply a base64-encoded username:password
+        
+        basic authentication is typically only used on web applications that enforce SSL/TLS traffic encryption. This way, credentials cannot be intercepted midair
+        
+        we should try is attaching an authorization header and check the return 
+    
+    + HTTP Digest authentication 
+    
+    hashed username:realm:password sent on reach request 
+    
+    more difficult to intercept; server can reject expired tokens 
+    
+    encryption strength dependent on hashing algorithm used 
+    
+    + OAuth, "Bearer" token-based auth; allows sign in with other websites such as Amazon -> Twitch 
+    
+    Tokenized permissions can be shared from one app to another from intergrations 
+    
+    Phishing risk; central site can be compromised, compromising all connected apps 
+    
+    
+- common shapes, OAuth 2.0 flow may expect the following data
+
+{
+  "response_type": code,
+  "client_id": id,
+  "scope": [scopes],
+  "state": state,
+  "redirect_uri": uri
+}
+    
+OAuth 2.0 endpoint should be structured as follows
+    
+https://discordapp.com/api/oauth2/authorize?response_type=code&client_\
+id=157730590492196864&scope=identify%20guilds.\
+join&state=15773059ghq9183habn&redirect_uri=https%3A%2F%2Fnicememe.\
+website&prompt=consent
+    
+    + facebook auth 2 
+GET https://graph.facebook.com/v4.0/oauth/access_token?
+   client_id={app-id}
+   &redirect_uri={redirect-uri}
+   &client_secret={app-secret}
+   &code={code-parameter}
+    
+  
+  
+# Identifying third party dependencies 
+- ReDoS, Prototype Pollution, and XSS vulnerabilities on the web
+    
+largest SPA frameworks 
+
+EmberJS, LinkedIn, Netflix 
+
+AngularJS, Google 
+
+React, Facebook 
+
+VueJS, Adobe, Githab 
+    
+- detecting javascript libraries 
+    
+```
+const getScripts = function() {
+
+  /*
+   * A query selector can either start with a "."
+   * if referencing a CSS class, a "#" if referencing
+   * an `id` attribute, or with no prefix if referencing an HTML element.
+   *
+   * In this case, 'script' will find all instances of <script>.
+   */
+  const scripts = document.querySelectorAll('script');
+
+  /*
+   * Iterate through each `<script>` element, and check if the element
+   * contains a source (src) attribute that is not empty.
+   */
+  scripts.forEach((script) => {
+    if (script.src) {
+       console.log(`i: ${script.src}`);
+    }
+  });
+};
+```
+    
+- detecting global css libraries 
+    
+```
+const getStyles = function() {
+  const scripts = document.querySelectorAll('link');
+
+  /*
+   * Iterate through each script, and confirm that the `link`
+   * element contains a `rel` attribute with the value `stylesheet`.
+   *
+   * Link is a multipurpose element most commonly used for loading CSS
+   * stylesheets, but also used for preloading, icons, or search.
+   */
+  scripts.forEach((link) => {
+    if (link.rel === 'stylesheet') {
+       console.log(`i: ${link.getAttribute('href')}`);
+    }
+  });
+};
+```
+    
+- detecting server-side frameworks. all of the code require for the client is downloaded and stored in memory referenced via DOM 
+    
+    + x header detection 
+    X-Powered-By: ASP.NET
+    
+    Server: Microsoft-IIS/4.5
+    X-AspNet-Version: 4.0.25
+    
+    + default error message and 404 pages 
+    
+    Ruby on Rails is one of the largest open source web application frameworks, and its source code is hosted on GitHub for easier collaboration.
+    
+    HTML powering this page can be found at the public GitHub repository for Ruby on Rails under the file location rails/railties/lib/rails/generators/rails/app/templates/public/404.html
+    
+    determine that the version of Ruby on Rails being tested is somewhere between version 3.2.16 and 4.2.8. It just so happens that Ruby on Rails version 3.2.x until 4.2.7 was subject to a XSS vulnerability
+    
+    + database detection 
+    
+    Most databases support the notion of a “primary key,” which refers to a key in a table (SQL) or document (NoSQL) 
+    
+    MongoDB, a popular NoSQL database. By default, MongoDB generates a field called _id for each document created. The _id key is generated using a low-collision hashing algorithm
+    
+    find a primary key in the form of a request like:
+
+    GET users/:id
+    
+    
+
+# Identifying weak points in application architecture 
+- well organized set of notes for each application 
+
+technology used in the web application 
+
+list of API endpoints by HTTP verb 
+
+list of API endpoint shapes 
+
+functionality included in the web application 
+
+domains used by the web application 
+
+configurations found 
+
+authentication/session management systems 
+
+- writes user-provided HTML directly to the DOM is definitely a risk and may allow a user to upload a script (if proper sanitization is not present) and execute that script on another user’s machine (XSS).
+    
+loaded into the DOM and evaluated as DOM test message<script>alert('hacked');</script>
+
+instant messaging system 
+
+UI to write a message 
+
+API endpoint to receive a message just written and submitted 
+
+a database table to store a message 
+
+an API endpoint to retrieve one or more messages 
+
+UI code to display one or more messages 
+
+- avoid XSS risk 
+
+import { DOMPurify } from '../utils/DOMPurify';
+
+// makes use of: https://github.com/cure53/DOMPurify
+const appendToDOM = function(data, selector, unsafe = false) {
+  const element = document.querySelector(selector);
+
+  // for cases where DOM injection is required (not default)
+  if (unsafe) {
+   element.innerHTML = DOMPurify.sanitize(data);
+  } else { // standard cases (default)
+   element.innerText = data;
+  }
+};
+
+- multiple layers of security, XSS risk could occur. The layers were:
+
+API POST
+
+Database Write
+
+Database Read
+
+API GET
+
+Client Read
+
+    + such as XXE or CSRF—each vulnerability can occur as a result of insufficient security mechanisms at more than one layer
+
+- SHA-3 from a source like OpenJDK and still gain all of the benefits that come from NIST and community testing.
+
+- a securely architected application will only reinvent features that are purely functional, such as reinventing a schema for storing comments, or a notification system.
+
+- A good web application developer understands this and will focus their energy on developing where their expertise lies, and request assistance when operating outside of their primary domain.
+
+
+# Offense 
+- earn about attacks that stem from insecure API endpoints,
+
+- hacker's mindset 
+
+identify third-party dependencies (often OSS) in an application
+
+
+
+# Cross-site scripting (XSS)
+- XXS categorized a number of ways 
+
+stored, code is stored on a database prior to execution 
+
+reflected, the code is not stored in a database, but reflected by a server 
+
+DOM-based, code is both stored and executed in the browser
+
+- Open Web Application Security Project (OWASP) 
+
+- discover XXS vulnerabilities
+
+UI for submitting support requests does not support bolding text. support wrapped with html tag 
+
+as a stored XSS attack—a variation of XSS that relies on the actual attack code being stored in the application owner’s databases.
+
+    + run a script in the browser that was not written by the web application owner 
+    
+    can run behind the scenes, without any visibility or required user input to start 
+    
+    can obtain any type of data present in the current web application 
+    
+    can freely send and receive data from a malicious web server 
+    
+    occur as result of improperly santized user input being embedded in the UI 
+    
+    can be used to steal session tokens, leading to account takeover 
+    
+    can be used to draw DOM objects over current UI, leading to perfect phishing attacks that cannot be identified by a nontechnical user 
+    
+- stored XSS
+
+- Reflected XSS attacks, on the other hand, operate identically to stored XSS attacks but are not stored in a database, nor should they regularly hit a server.
+
+shares the malicious link on the web waiting for user to click 
+
+include a script tag in the query params: support.mega-bank.com/search?query=open+<script>alert(test);</script>checking+account.
+
+Opening up this URL loads the search results, but initially pops up an alert modal with the word “test” inside.
+
+- DOM based XSS
+
+DOM is rebuilt using DOMParser.parseFromString()
+
+DOM XSS, and they can be found in all major browsers via window.location.search.
+
+- mutation-based XSS, dubbed mutation-based XSS (mXSS).
+
+mXSS attacks are possible against all major browsers today. They rely on developing a deep understanding of methods by which the browser performs optimizations
+
+<noscript><p title="</noscript><img src=x onerror=alert(1)>">
+
+browser DOM performed some optimizations causing it to look like this:
+
+```
+<noscript><p title="</noscript>
+<img src="x" onerror="alert(1)">
+"">
+"
+```
+
+when it passed sanitization and moved to a real browser environment the <p title=" was ignored and the img onerror became valid.
+
+Mutation-based XSS is extremely new, and often misunderstood in the application security industry.
+
+
+# Cross site request forgery (CSRF)
+- CSRF attacks take advantage of the way browsers operate and the trust relationship between a website and the browser. 
+
+- query parameter tampering 
+
+HTTP GET requests. The most common of which is simply an <a href="https://my-site.com"></a> embedded in an HTML snippet
+
+GET /resource-url?key=value HTTP/1.1
+Host: www.mega-bank.com
+
+treat user click the like and send the http get request to server with current user's auth cookie 
+
+- CSRF attack are:
+
+Privilege escalation
+
+The user account that initiates the request typically does not know it occurred (it is a stealthy attack)
+
+
+
+
+
+
+
+
+
