@@ -67,6 +67,8 @@ import torch
 import onnxruntime
 from onnxruntime.training import ORTTrainer, optim
 
+
+
 # Model definition
 class NeuralNet(torch.nn.Module):
   def __init__(self, input_size, hidden_size, num_classes):
@@ -88,6 +90,9 @@ trainer = ORTTrainer(model,              # model
                      optimizer_config,   # optimizer configuration
                      criterion)          # loss function
 
+
+
+
 # Training Loop
 for t in range(1000):
   # forward + backward + weight update
@@ -104,6 +109,7 @@ https://www.onnxruntime.ai/python/auto_examples/
 - tutorial
 - API summary 
 - gallery of examples 
+
 
 
 # Tutorials 
@@ -134,6 +140,221 @@ https://docs.donkeycar.com/
 https://www.onnxruntime.ai/docs/tutorials/resnet50_csharp.html
 
 
+
+# How to 
+- install ORT(onnix runtime?), build require visual c++ 2019 runtime 
+default cpu 
+gpu provider, nvidia cuda 
+gpu provider directml(windows)
+
+- build for inferencing 
+
+https://www.onnxruntime.ai/docs/how-to/build/inferencing.html
+
+    + requires 
+    cmake 3.13
+    
+    + commandline 
+
+$ .\build.bat --config RelWithDebInfo --build_shared_lib --parallel
+
+    + install from source 
+```
+  export ONNX_ML=1
+  python3 setup.py bdist_wheel
+  pip3 install --upgrade dist/*.whl
+```
+
+    + common build instructions 
+
+basic build, build.bat 
+release build, --config release 
+use OpenMP, --use_openmp, OpenMP will parallelize some of the code 
+build parallel, --parallel, speed up build 
+share lirary, --build_shared_lib
+enable training, --enable_training 
+
+    + APIs and language bindings 
+python, --build_wheel 
+c# and c nuget, --build_nuget 
+WindowML, --use_winml, --use_dml, windowsml depends on directml and the onnxruntime shared library 
+Java, --build_java 
+Node.js, --build_nodejs 
+
+- build for training 
+
+$ .\build.bat --config RelWithDebInfo --build_shared_lib --parallel --enable_training
+
+    + requires 
+    
+    GPU/CUDA 
+    CUDA 10.2 
+    cuDNN 8.0 
+    NCC 2.7 
+    OpenMPI 4.0.4 
+    
+- build onnx runtime with execution providers 
+
+    + built files, libraries will be named ‘onnxruntime_providers_*.dll’ 
+    
+    + cuda 
+    cuda, https://developer.nvidia.com/cuda-toolkit
+    cuDNN, https://developer.nvidia.com/cudnn
+    
+    + tensorRT provider 
+    
+    
+- build for Android/iOS 
+
+- build for reduce size, operator kernels included in the build can be reduced to just the kernels required by your model/s
+
+providing the configuration file in the --include_ops_by_config parameter
+
+- tune performance 
+
+    + tool, Onnx Go Live tool,  converting models to ONNX and optimizing performance with ONNX Runtime
+    
+    https://github.com/microsoft/OLive
+    
+    + profiling performanc report 
+    ```
+    import onnxruntime as rt
+
+    sess_options = rt.SessionOptions()
+    sess_options.enable_profiling = True
+    ```
+    
+    will get a json and open into chrome tab chrome://tracing
+    
+    + build the EP, Official Python packages on Pypi only support the default CPU (MLAS) and default GPU (CUDA)
+    
+    $ CUDA: ./build.sh --config RelWithDebInfo --use_cuda --build_wheel --parallel
+    
+    $ DNNL: ./build.sh --config RelWithDebInfo --use_dnnl --build_wheel --parallel
+    
+    + c#, add --build_csharp 
+    
+    $ DNNL: ./build.sh --config RelWithDebInfo --use_dnnl --build_csharp --parallel
+    
+    $ CUDA: ./build.sh --config RelWithDebInfo --use_cuda --build_csharp --parallel
+    
+    + register EP to use DNNL, CUDA or TensorRT 
+    C API 
+    ```    
+    const OrtApi* g_ort = OrtGetApi(ORT_API_VERSION);
+    OrtEnv* env;
+    g_ort->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "test", &env)
+    OrtSessionOptions* session_option;
+    g_ort->OrtCreateSessionOptions(&session_options);
+    g_ort->OrtSessionOptionsAppendExecutionProvider_CUDA(sessionOptions, 0);
+    OrtSession* session;
+    g_ort->CreateSession(env, model_path, session_option, &session);
+    ```
+    
+    C# 
+    ```
+    SessionOptions so = new SessionOptions();
+    so.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
+    so.AppendExecutionProvider_CUDA(0);
+    var session = new InferenceSession(modelPath, so);
+    ```
+    
+    python API 
+    ```
+    import onnxruntime as rt
+
+    so = rt.SessionOptions()
+    so.graph_optimization_level = rt.GraphOptimizationLevel.ORT_ENABLE_ALL
+    session = rt.InferenceSession(model, sess_options=so)
+    session.set_providers(['CUDAExecutionProvider'])
+    ```
+        
+- not all CUDA kernels are implemented, as these have been prioritized on an as-needed basis. This means that if your model contains operators that do not have a CUDA implementation, it will fall back to CPU
+
+- TensorRT EP may depend on a different version of CUDA than the CUDA EP
+- DirectML is the hardware-accelerated DirectX 12 library for machine learning on Windows and supports all DirectX 12 capable devices (Nvidia, Intel, AMD)
+
+- search for cuda path from 
+
+CUDA_PATH_V10_1=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1
+CUDA_PATH_V10_2=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.2
+CUDA_PATH_V11_1=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1
+
+onnxruntime_python.cmake 
+```
+if (WIN32)
+  set(VERSION_INFO_FILE "${ONNXRUNTIME_ROOT}/python/version_info.py")
+
+  if (onnxruntime_USE_CUDA)
+    file(WRITE "${VERSION_INFO_FILE}" "use_cuda = True\n")
+
+    file(GLOB CUDNN_DLL_PATH "${onnxruntime_CUDNN_HOME}/bin/cudnn64_*.dll")
+    if (NOT CUDNN_DLL_PATH)
+      message(FATAL_ERROR "cuDNN not found in ${onnxruntime_CUDNN_HOME}")
+    endif()
+    get_filename_component(CUDNN_DLL_NAME ${CUDNN_DLL_PATH} NAME_WE)
+    string(REPLACE "cudnn64_" "" CUDNN_VERSION "${CUDNN_DLL_NAME}")
+
+    file(APPEND "${VERSION_INFO_FILE}"
+      "cuda_version = \"${onnxruntime_CUDA_VERSION}\"\n"
+      "cudnn_version = \"${CUDNN_VERSION}\"\n"
+    )
+  else()
+    file(WRITE "${VERSION_INFO_FILE}" "use_cuda = False\n")
+  endif()
+
+  if ("${MSVC_TOOLSET_VERSION}" STREQUAL "142")
+    file(APPEND "${VERSION_INFO_FILE}" "vs2019 = True\n")
+  else()
+    file(APPEND "${VERSION_INFO_FILE}" "vs2019 = False\n")
+  endif()
+endif()
+```
+
+
+# onnx simplifier issue 
+- reference 
+https://github.com/daquexian/onnx-simplifier/issues/52
+
+- example code 
+
+```
+import onnxruntime as rt
+import os
+import onnx
+import torch
+
+device = torch.device(device='cuda')
+pathmodel = os.path.join('model.onnx') # put your frozen onnx model here
+model = onnx.load(pathmodel)
+
+onnx.checker.check_model(model)
+
+sess = rt.InferenceSession(pathmodel)
+print(sess.get_providers())
+
+print("Set the CPUExecutionProvider ")
+sess.set_providers(['CPUExecutionProvider'])
+print("Let us check again.")
+print(sess.get_providers())
+
+print("Set back to CUDAExecutionProvider ")
+sess.set_providers(['CUDAExecutionProvider'])
+print("Let us check again.")
+print(sess.get_providers())
+```
+
+to simplify onnx model, we need to run 
+```
+python3 -c "import onnxsim; print(onnxsim.__file__)"
+```
+
+- if we have modified the onnxruntime version, we still need to install onnx-simplifier again! And if we install both versions, we cannot only uninstall cpu versions in order to use gpu version. We must uninstall both versions, and then install gpu versions again. Sequentially, should install onnx-simplifier again
+
+
+
+
+
 # parscal VOC dataset mirror 
 https://pjreddie.com/projects/pascal-voc-dataset-mirror/
 - popular dataset for building and evaluating algorithms for impage classification, object detection and segmentation 
@@ -141,25 +362,87 @@ https://pjreddie.com/projects/pascal-voc-dataset-mirror/
 http://host.robots.ox.ac.uk/pascal/VOC/index.html
 
 
+# ADM ROCm Platform 
+- AMD ROCm is the first open-source software development platform for HPC/Hyperscale-class GPU computing.
+
+https://rocmdocs.amd.com/en/latest/
+
 
 # darknet, yolo 
 https://github.com/pjreddie/darknet
 
 
+# OLive, meaning ONNX Go Live, is a sequence of docker images that automates the process of ONNX model shipping
+
+https://github.com/microsoft/OLive
 
 
 
+# Onnx github 
+- issues relative to simplifier by onnxruntime-gpu 
+
+```
+import onnxruntime as rt
+import os
+import onnx
+import torch
+
+device = torch.device(device='cuda')
+pathmodel = os.path.join('model.onnx') # put your frozen onnx model here
+model = onnx.load(pathmodel)
+
+onnx.checker.check_model(model)
+
+sess = rt.InferenceSession(pathmodel)
+print(sess.get_providers())
+
+print("Set the CPUExecutionProvider ")
+sess.set_providers(['CPUExecutionProvider'])
+print("Let us check again.")
+print(sess.get_providers())
+
+print("Set back to CUDAExecutionProvider ")
+sess.set_providers(['CUDAExecutionProvider'])
+print("Let us check again.")
+print(sess.get_providers())
+```
+- onnxruntime c api, graph optimization level 
+
+https://github.com/microsoft/onnxruntime/blob/master/include/onnxruntime/core/session/onnxruntime_c_api.h#L241
+
+// Graph optimization level.
+// Refer to https://www.onnxruntime.ai/docs/resources/graph-optimizations.html
+// for an in-depth understanding of Graph Optimizations in ORT
+typedef enum GraphOptimizationLevel {
+  ORT_DISABLE_ALL = 0,
+  ORT_ENABLE_BASIC = 1,
+  ORT_ENABLE_EXTENDED = 2,
+  ORT_ENABLE_ALL = 99
+} GraphOptimizationLevel;
 
 
 
+# microsoft/xlang 
+- reference, https://github.com/microsoft/xlang
+
+- introduction 
+
+The xlang project is the hub for the constellation of tools that enable development of Windows applications across a variety of programming languages. This includes tooling to process metadata, and tooling to access APIs from various programming languages including C#, C++, Rust, and Python.
+
+- window for rust 
+
+https://github.com/microsoft/windows-rs.git
+
+The windows crate lets you call any Windows API past, present, and future using code generated on the fly directly from the metadata describing the API
 
 
+# Window machine learning 
+- reference 
+https://github.com/microsoft/Windows-Machine-Learning
 
+https://github.com/microsoft/Windows-Machine-Learning.git
 
-
-
-
-
+https://github.com/microsoft/Windows-Machine-Learning/tree/master/Samples
 
 
 
