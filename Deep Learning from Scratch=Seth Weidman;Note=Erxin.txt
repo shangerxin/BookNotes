@@ -49,6 +49,8 @@ def deriv(func: Callable[[ndarray], ndarray],
     return (func(input_ + delta) - func(input_ - delta)) / (2 * delta)
 ```
 
+slope = (f(a+0.001) - f(a-0.001))/0.002
+
 - nested function 
 
 def chain_length_2(chain: Chain,
@@ -65,10 +67,401 @@ def chain_length_2(chain: Chain,
     return f2(f1(x))
 
 
+- chain rule, lets us compute derivatives of composite functions.
+
+    + math 
+df2(x)/du = df2(f1(x))/du * df1(x)/du
+
+- code 
+
+def sigmoid(x: ndarray) -> ndarray:
+    '''
+    Apply the sigmoid function to each element in the input ndarray.
+    '''
+    return 1 / (1 + np.exp(-x))
+
+
+def chain_deriv_2(chain: Chain,
+                  input_range: ndarray) -> ndarray:
+    '''
+    Uses the chain rule to compute the derivative of two nested functions:
+    (f2(f1(x))' = f2'(f1(x)) * f1'(x)
+    '''
+
+    assert len(chain) == 2, \
+    "This function requires 'Chain' objects of length 2"
+
+    assert input_range.ndim == 1, \
+    "Function requires a 1 dimensional ndarray as input_range"
+
+    f1 = chain[0]
+    f2 = chain[1]
+
+    # df1/dx
+    f1_of_x = f1(input_range)
+
+    # df1/du
+    df1dx = deriv(f1, input_range)
+
+    # df2/du(f1(x))
+    df2du = deriv(f2, f1(input_range))
+
+    # Multiplying these quantities together at each point
+    return df1dx * df2du
+
+- a slightly longer example, f1f2f3
+
+```
+def chain_deriv_3(chain: Chain,
+                  input_range: ndarray) -> ndarray:
+    '''
+    Uses the chain rule to compute the derivative of three nested functions:
+    (f3(f2(f1)))' = f3'(f2(f1(x))) * f2'(f1(x)) * f1'(x)
+    '''
+
+    assert len(chain) == 3, \
+    "This function requires 'Chain' objects to have length 3"
+
+    f1 = chain[0]
+    f2 = chain[1]
+    f3 = chain[2]
+
+    # f1(x)
+    f1_of_x = f1(input_range)
+
+    # f2(f1(x))
+    f2_of_x = f2(f1_of_x)
+
+    # df3du
+    df3du = deriv(f3, f2_of_x)
+
+    # df2du
+    df2du = deriv(f2, f1_of_x)
+
+    # df1dx
+    df1dx = deriv(f1, input_range)
+
+    # Multiplying these quantities together at each point
+    return df1dx * df2du * df3du
+```
+
+PLOT_RANGE = np.range(-3, 3, 0.01)
+plot_chain([leaky_relu, sigmoid, square], PLOT_RANGE)
+plot_chain_deriv([leaky_relu, sigmoid, square], PLOT_RANGE)
+
+- math 
+
+    + matrix multiple 
+    
+```
+def matmul_forward(X: ndarray,
+                   W: ndarray) -> ndarray:
+    '''
+    Computes the forward pass of a matrix multiplication.
+    '''
+
+    assert X.shape[1] == W.shape[0], \
+    '''
+    For matrix multiplication, the number of columns in the first array should
+    match the number of rows in the second; instead the number of columns in the
+    first array is {0} and the number of rows in the second array is {1}.
+    '''.format(X.shape[1], W.shape[0])
+
+    # matrix multiplication
+    N = np.dot(X, W)
+
+    return N
+```
+
+    + matrix forward extra 
+    
+s=f(X,W)=σ(ν(X,W))=σ(x1×w1+x2×w2+x3×w3)
+```
+def matrix_forward_extra(X: ndarray,
+                         W: ndarray,
+                         sigma: Array_Function) -> ndarray:
+    '''
+    Computes the forward pass of a function involving matrix multiplication,
+    one extra function.
+    '''
+    assert X.shape[1] == W.shape[0]
+
+    # matrix multiplication
+    N = np.dot(X, W)
+
+    # feeding the output of the matrix multiplication through sigma
+    S = sigma(N)
+
+    return S
+```
+
+    + matrix function backward 
+    
+∂f∂X=∂σ∂u(ν(X,W))×∂ν∂X(X,W)=∂σ∂u(x1×w1+x2×w2+x3×w3)×WT
+
+```
+def matrix_function_backward_1(X: ndarray,
+                               W: ndarray,
+                               sigma: Array_Function) -> ndarray:
+    '''
+    Computes the derivative of our matrix function with respect to
+    the first element.
+    '''
+    assert X.shape[1] == W.shape[0]
+
+    # matrix multiplication
+    N = np.dot(X, W)
+
+    # feeding the output of the matrix multiplication through sigma
+    S = sigma(N)
+
+    # backward calculation
+    dSdN = deriv(sigma, N)
+
+    # dNdX
+    dNdX = np.transpose(W, (1, 0))
+
+    # multiply them together; since dNdX is 1x1 here, order doesn't matter
+    return np.dot(dSdN, dNdX)
+```
+
+- computational graph with two 2d matrix inputs 
+
+L=Λ(σ(X×W)) =σ(XW11)+σ(XW12)+σ(XW21)+σ(XW22)+σ(XW31)+σ(XW32)
+
+
+```
+def matrix_function_forward_sum(X: ndarray,
+                                W: ndarray,
+                                sigma: Array_Function) -> float:
+    '''
+    Computing the result of the forward pass of this function with
+    input ndarrays X and W and function sigma.
+    '''
+    assert X.shape[1] == W.shape[0]
+
+    # matrix multiplication
+    N = np.dot(X, W)
+
+    # feeding the output of the matrix multiplication through sigma
+    S = sigma(N)
+
+    # sum all the elements
+    L = np.sum(S)
+
+    return L
+```
+- compute this directly 
+
+∂Λ∂u(N)=∂Λ∂u(S)×∂σ∂u(N)
+
+```
+def matrix_function_backward_sum_1(X: ndarray,
+                                   W: ndarray,
+                                   sigma: Array_Function) -> ndarray:
+    '''
+    Compute derivative of matrix function with a sum with respect to the
+    first matrix input.
+    '''
+    assert X.shape[1] == W.shape[0]
+
+    # matrix multiplication
+    N = np.dot(X, W)
+
+    # feeding the output of the matrix multiplication through sigma
+    S = sigma(N)
+
+    # sum all the elements
+    L = np.sum(S)
+
+    # note: I'll refer to the derivatives by their quantities here,
+    # unlike the math, where we referred to their function names
+
+    # dLdS - just 1s
+    dLdS = np.ones_like(S)
+
+    # dSdN
+    dSdN = deriv(sigma, N)
+
+    # dLdN
+    dLdN = dLdS * dSdN
+
+    # dNdX
+    dNdX = np.transpose(W, (1, 0))
+
+    # dLdX
+    dLdX = np.dot(dSdN, dNdX)
+
+    return dLdX
+```
+
+-  gradient of L with respect to W would be XT. However, because of the order in which the XT expression factors out of the derivative for L,
+
+∂Λ/∂u(W)=XT×(∂Λ/∂u)(S)×(∂σ/∂u)(N)
+
+
+# Fundamentals 
+- linear regression 
+
+yi=β0+β1×x1+...+βn×xk+ϵ
+
+pi=xi×W=w1×xi1+w2×xi2+...+wk×xik
+
+pbatch=Xbatch×W
+
+MSE(pbatch,ybatch) = ((y1−p1)^2+(y2−p2)^2+(y3−p3)^2)3
+
+L=Λ((ν(X,W),Y)
+
+pbatch_with_bias=x_i dot W + b
+
+```
+def forward_linear_regression(X_batch: ndarray,
+                              y_batch: ndarray,
+                              weights: Dict[str, ndarray])
+                              -> Tuple[float, Dict[str, ndarray]]:
+    '''
+    Forward pass for the step-by-step linear regression.
+    '''
+    # assert batch sizes of X and y are equal
+    assert X_batch.shape[0] == y_batch.shape[0]
+
+    # assert that matrix multiplication can work
+    assert X_batch.shape[1] == weights['W'].shape[0]
+
+    # assert that B is simply a 1x1 ndarray
+    assert weights['B'].shape[0] == weights['B'].shape[1] == 1
+
+    # compute the operations on the forward pass
+    N = np.dot(X_batch, weights['W'])
+
+    P = N + weights['B']
+
+    loss = np.mean(np.power(y_batch - P, 2))
+
+    # save the information computed on the forward pass
+    forward_info: Dict[str, ndarray] = {}
+    forward_info['X'] = X_batch
+    forward_info['N'] = N
+    forward_info['P'] = P
+    forward_info['y'] = y_batch
+
+    return loss, forward_info
+```
+
+- calculating the gradients
+
+(∂Λ/∂P)(P,Y)×(∂α/∂N)(N,B)×(∂ν/∂W)(X,W)
+
+Λ(P,Y)=(Y−P)^2 
+
+(∂Λ/∂P)(P,Y)=−1×(2×(Y−P))
+
+```
+dLdP = -2 * (Y - P)
+```
+
+```
+def loss_gradients(forward_info: Dict[str, ndarray],
+                   weights: Dict[str, ndarray]) -> Dict[str, ndarray]:
+    '''
+    Compute dLdW and dLdB for the step-by-step linear regression model.
+    '''
+    batch_size = forward_info['X'].shape[0]
+
+    dLdP = -2 * (forward_info['y'] - forward_info['P'])
+
+    dPdN = np.ones_like(forward_info['N'])
+
+    dPdB = np.ones_like(weights['B'])
+
+    dLdN = dLdP * dPdN
+
+    dNdW = np.transpose(forward_info['X'], (1, 0))
+
+    # need to use matrix multiplication here,
+    # with dNdW on the left (see note at the end of last chapter)
+    dLdW = np.dot(dNdW, dLdN)
+
+    # need to sum along dimension representing the batch size
+    # (see note near the end of this chapter)
+    dLdB = (dLdP * dPdB).sum(axis=0)
+
+    loss_gradients: Dict[str, ndarray] = {}
+    loss_gradients['W'] = dLdW
+    loss_gradients['B'] = dLdB
+
+    return loss_gradients
+```
+
+for key in weights.keys():
+    weights[key] -= learning_rate * loss_grads[key]
+
+- use these gradients to train the model 
+    + select a batch of data 
+    + run the forward pass of the model 
+    + run the backward pass of the model using the info computed on the forward pass 
+    + use the gradients computed on the backward pass to update the weights 
+
+```
+forward_info, loss = forward_loss(X_batch, y_batch, weights)
+
+loss_grads = loss_gradients(forward_info, weights)
+
+for key in weights.keys():  # 'weights' and 'loss_grads' have the same keys
+    weights[key] -= learning_rate * loss_grads[key]
+    
+train_info = train(X_train, y_train,
+                   learning_rate = 0.001,
+                   batch_size=23,
+                   return_weights=True,
+                   seed=80718)
+```
+
+- assessing our model 
+
+```
+def predict(X: ndarray,
+            weights: Dict[str, ndarray]):
+    '''
+    Generate predictions from the step-by-step linear regression model.
+    '''
+    N = np.dot(X, weights['W'])
+
+    return N + weights['B']
+    
+preds = predict(X_test, weights)  # weights = train_info[0]
+```
+
+
+```
+def mae(preds: ndarray, actuals: ndarray):
+    '''
+    Compute mean absolute error.
+    '''
+    return np.mean(np.abs(preds - actuals))
+    
+def rmse(preds: ndarray, actuals: ndarray):
+    '''
+    Compute root mean squared error.
+    '''
+    return np.sqrt(np.mean(np.power(preds - actuals, 2)))
+```
+
+- sigmoid function 
+
+    + First, we want the function we use here to be monotonic so that it “preserves” information about the numbers that were fed in. Let’s say that, given the date that was fed in, two of our linear regressions produced values of –3 and 3, respectively
+    
+    + nonlinear; this nonlinearity will enable our neural network to model the inherently nonlinear relationship between the features and the target
+    
+    + sigmoid function has the nice property that its derivative can be expressed in terms of the function itself:
+
+(∂σ/∂u(x))=σ(x)×(1−σ(x))
 
 
 
-
+# Deep learning from scratch 
+- 
 
 
 

