@@ -4,6 +4,482 @@ Microsoft online document-Component Object Model(COM);Note=Erxin
 # The component object model 
 - C, Java, and VBScript can be used to create and use COM objects.
 
+- caller can access only the interface member functions. Internal state is unavailable to a caller unless it is exposed in the interface.
+
+- Interfaces are strongly typed. Every interface has its own unique interface identifier, named an IID, globally unique identifier (GUID),
+
+- define a new interface with using the interface definition language (IDL)
+
+- The IDL supplied by Microsoft is based on simple extensions to DCE IDL, an industry standard for Remote Procedure Call (RPC)-based distributed computing
+
+- In addition, interfaces use only single inheritance
+
+- interface implementation In C++, a COM interface is modeled as an abstract base class, a C++ class that contains only pure virtual member functions
+
+- any programming language that supports the concept of function pointers to implement a COM interface
+
+- A COM class is identified by using a unique 128-bit Class ID (CLSID) that associates a class with a particular deployment in the file system, which for Windows is a DLL or EXE. A CLSID is a GUID
+
+- You obtain a new CLSID by using the CoCreateGuid function or by using a COM authoring tool
+
+- The lifetime of a COM object instance is controlled by its reference count
+
+The IUnknown member functions AddRef and Release control the count. 
+
+When the reference count reaches zero, the Release member function may free the instance
+
+- client/server model 
+
+    + client 
+The client is responsible for managing the lifetime of the instance by calling its Release function when the client has finished using it.
+
+A COM client is any caller that passes a CLSID to the system to request an instance of a COM object. create an instance is to call the COM function, CoCreateInstance
+
+To create multiple objects based on a single CLSID, call the CoGetClassObject function. 
+
+To connect to an object that is already created and running, call the GetActiveObject function.
+
+    + server 
+A server associates a CLSID with a COM class, houses the implementation of the class, implements a class factory for creating instances of the class, and provides for unloading the server.
+
+A COM server is not the same as the COM object that it provides to the system. implementation of the IClassFactory interface. 
+
+Clients can call the CreateInstance method to request a new instance of a COM object, but normally the CreateInstance is encapsulated in the CoCreateInstance
+
+- Service Control Manager, SCM ahndles the client request for an instance of a COM object 
+
+    1. A client requests an interface pointer to a COM object from the COM Library by calling a function such as CoCreateInstance with the CLSID of the COM object
+    
+    2. The COM Library queries the SCM to find the server that corresponds with the requested CLSID.
+
+    3. The SCM locates the server and requests the creation of the COM object from the class factory that is provided by the server.
+    
+    4. If successful, the COM Library returns an interface pointer to the client.
+    
+COM system connects a server object to a client, the client and object communicate directly.
+
+register a COM server with the host system, you can specify different ways for the server to be activated. 
+
+    + In-process: The SCM returns the file path of the DLL that contains the object server implementation. The COM Library loads the DLL and queries it for its class factory interface pointer
+
+    + Local: The SCM starts the local executable which registers a class factory on startup, and its interface pointer is available to the system and clients.
+
+    + Remote: The local SCM acquires a class factory interface pointer from the SCM that is running on a remote computer.
+
+- storage and stream objects, Storage and stream objects are sharable among processes 
+
+    + storage
+A storage object is conceptually similar to a directory in a file system. Each storage can contain any number of sub-storage objects and any number of streams. 
+
+Each storage has its own access rights. Through the IStorage interface, you can perform operations such as enumerating, moving, copying, renaming, creating, and deleting elements
+
+https://docs.microsoft.com/en-us/windows/desktop/Stg/storage-object-naming-conventions
+
+    + stream 
+    
+A stream object contains data and is conceptually similar to a single file in a file system. 
+Each stream has access rights and a single seek pointer. Through the IStream interface, you can read, write, seek, and perform other operations on the stream's underlying data
+
+- COM object can read and write itself to persistent storage 
+
+IPersistStorage: The COM object reads and writes its persistent state to a storage object. 
+
+IPersistStream: The COM object reads and writes its persistent state to a stream object.
+
+IPersistFile: The COM object reads and writes its persistent state directly to a file on the underlying system. no semantics for storages and streams 
+
+Streams can remain open for long periods of time without consuming file-system resources. 
+
+- data transfer, Uniform data transfer represents all data transfers by using the IDataObject interface. COM defines two data structures
+
+    + The FORMATETC structure represents a generalized clipboard format
+    
+    + STGMEDIUM structure represents the transfer medium as a memory handle
+
+The client creates a STGMEDIUM structure and passes it to the GetData method, and the data object returns the data in the provided STGMEDIUM structure
+
+COM handles data-change notifications by using an advise sink object, which implements the IAdviseSink interface.
+
+- remoting, COM enables remote and distributed computation. Interface remoting enables a member function to return an interface pointer to a COM object that is in a different process or on a different host computer. 
+
+client always call an in-process implement. if the COM is in-process the call is direct. if COM is out-of-process or remote, COM provides a proxy to forward the call using remote procedure call(RPC)
+
+a COM object always receives calls from a client through an in-process. if caller is out-of-process or remote. COM provides a stub implementation that receives the remote procedure call from the proxy in the client process.
+
+Marshaling is the procedure for packaging the call stack for transmission from proxy to stub. Unmarshaling is the unpackaging that occurs at the receiving end. 
+
+https://docs.microsoft.com/en-us/windows/desktop/api/combaseapi/nf-combaseapi-comarshalinterface
+
+customize marshaling 
+https://docs.microsoft.com/en-us/windows/win32/com/inter-object-communication
+
+- security, two forms of application security 
+    + activation security, specifies how new objects are created, how clients connect to new and existing objects, how certain public services, such as class table and running object table are secured 
+    
+    applied automatically by the Service Control Manager (SCM). will check against with registry 
+    
+    https://docs.microsoft.com/en-us/windows/win32/com/activation-security
+    + call security, specifies how security operates in an established connection between a client to a COM object 
+    
+    applied automatically or is enforced by the application.
+
+        * general functions 
+        
+        https://docs.microsoft.com/en-us/windows/desktop/api/combaseapi/nf-combaseapi-coinitializesecurity
+        
+        * interfaces on client proxies 
+        
+        https://docs.microsoft.com/en-us/windows/desktop/api/ObjIdl/nn-objidl-iclientsecurity
+        
+        * server-side functions
+        https://docs.microsoft.com/en-us/windows/win32/api/objidlbase/nn-objidlbase-iserversecurity
+
+
+the client queries the COM object for the IClientSecurity interface, which is implemented locally by the remoting layer
+
+the server may call the CoGetCallContext function to retrieve an IServerSecurity interface, which allows the server to check the client's authentication and to impersonate the client. 
+
+CoInitializeSecurity function to initialize the security layer and set the specified values as the security default. if process does not call, it will be called automatically during marshaled or unmarshaled.
+
+https://docs.microsoft.com/en-us/windows/win32/com/setting-processwide-security-with-coinitializesecurity
+
+
+## COM objects and interfaces 
+### interfaces and interface implementations 
+### interface pointers and interfaces 
+- An instance of an interface implementation is actually a pointer to an array of pointers to methods 
+
+- a client can call an interface method through its name, not its position in the array. 
+
+- A COM interface is not the same as a C++ class. The pure virtual definition carries no implementation.
+
+- A COM interface is not an object. It is simply a related group of functions and is the binary standard through which clients and objects communicate
+
+- COM interfaces are strongly typed. Every interface has its own interface identifier (a GUID), which eliminates the possibility of duplication
+
+- COM interfaces are immutable. You cannot define a new version of an old interface and give it the same identifier. Adding or removing methods of an interface or changing semantics creates a new interface, not a new version of an old interface.
+
+
+### IUnknown and interface inheritance 
+- Inheritance in COM does not mean code reuse. Because no implementations are associated with interfaces
+
+- a C++ pure-virtual base-class fashion and modified — either by adding new methods or by further qualifying the allowed usage of methods. There is no selective inheritance in COM.
+
+- important interface IUnknown, which contains three vital methods: QueryInterface, AddRef, and Release. All COM objects must implement the IUnknown interface
+
+- an object that supports aggregation, you would need to implement one set of IUnknown functions for all interfaces as well as a stand-alone IUnknown interface
+
+- a few interfaces that inherit their definitions from a second interface in addition to IUnknown, the majority simply inherit the IUnknown interface methods. 
+
+- aggregation requires an explicit implementation of IUnknown on the inner object and delegation of the IUnknown methods of any other interface to the outer object's IUnknown methods
+
+    + creating aggregable Objects
+    
+    The aggregable (or inner) object's implementation of QueryInterface, AddRef, and Release for its IUnknown interface controls the inner object's reference count, and this implementation must not delegate to the outer object's unknown (the controlling IUnknown).
+    
+    The aggregable (or inner) object's implementation of QueryInterface, AddRef, and Release for its other interfaces must delegate to the controlling IUnknown and must not directly affect the inner object's reference count.
+    
+    The inner IUnknown must implement QueryInterface only for the inner object
+    
+    The aggregable object must not call AddRef when holding a reference to the controlling IUnknown pointer
+
+```
+// CSomeObject is an aggregable object that implements 
+// IUnknown and ISomeInterface 
+class CSomeObject : public IUnknown 
+{ 
+    private: 
+        DWORD        m_cRef;         // Object reference count 
+        IUnknown*    m_pUnkOuter;    // Controlling IUnknown, no AddRef 
+ 
+        // Nested class to implement the ISomeInterface interface 
+        class CImpSomeInterface : public ISomeInterface 
+        { 
+            friend class CSomeObject ; 
+            private: 
+                DWORD    m_cRef;    // Interface ref-count, for debugging 
+                IUnknown*    m_pUnkOuter;    // Controlling IUnknown 
+            public: 
+                CImpSomeInterface() { m_cRef = 0;   }; 
+                ~ CImpSomeInterface(void) {}; 
+ 
+                // IUnknown members delegate to the outer unknown 
+                // IUnknown members do not control lifetime of object 
+                STDMETHODIMP     QueryInterface(REFIID riid, void** ppv) 
+                {    return m_pUnkOuter->QueryInterface(riid,ppv);   }; 
+ 
+                STDMETHODIMP_(DWORD) AddRef(void) 
+                {    return m_pUnkOuter->AddRef();   }; 
+ 
+                STDMETHODIMP_(DWORD) Release(void) 
+                {    return m_pUnkOuter->Release();   }; 
+ 
+                // ISomeInterface members 
+                STDMETHODIMP SomeMethod(void) 
+                {    return S_OK;   }; 
+        } ; 
+        
+        CImpSomeInterface m_ImpSomeInterface ; 
+        
+    public: 
+        CSomeObject(IUnknown * pUnkOuter) 
+        { 
+            m_cRef=0; 
+            // No AddRef necessary if non-NULL as we're aggregated. 
+            m_pUnkOuter=pUnkOuter; 
+            m_ImpSomeInterface.m_pUnkOuter=pUnkOuter; 
+        } ; 
+        
+        ~CSomeObject(void) {} ; 
+ 
+        // Static member function for creating new instances (don't use 
+        // new directly). Protects against outer objects asking for 
+        // interfaces other than IUnknown. 
+        static HRESULT Create(IUnknown* pUnkOuter, REFIID riid, void **ppv) 
+        { 
+            CSomeObject*        pObj; 
+            if (pUnkOuter != NULL && riid != IID_IUnknown) 
+                return CLASS_E_NOAGGREGATION; 
+                
+            pObj = new CSomeObject(pUnkOuter); 
+            if (pObj == NULL) 
+                return E_OUTOFMEMORY; 
+                
+            // Set up the right unknown for delegation (the non-
+            // aggregation case) 
+            if (pUnkOuter == NULL) 
+            {
+                pObj->m_pUnkOuter = (IUnknown*)pObj ; 
+                pObj->m_ImpSomeInterface.m_pUnkOuter = (IUnknown*)pObj;
+            }
+            
+            HRESULT hr; 
+            if (FAILED(hr = pObj->QueryInterface(riid, (void**)ppv))) 
+                delete pObj ; 
+                
+            return hr; 
+        } 
+ 
+        // Inner IUnknown members, non-delegating 
+        // Inner QueryInterface only controls inner object 
+        STDMETHODIMP QueryInterface(REFIID riid, void** ppv) 
+        { 
+            *ppv=NULL; 
+            if (riid == IID_IUnknown) 
+                *ppv=this; 
+            if (riid == IID_ISomeInterface) 
+                *ppv=&m_ImpSomeInterface; 
+            if (NULL==*ppv) 
+                return ResultFromScode(E_NOINTERFACE); 
+            ((IUnknown*)*ppv)->AddRef(); 
+            return NOERROR; 
+        } ; 
+        
+        STDMETHODIMP_(DWORD) AddRef(void) 
+        {    return ++m_cRef; }; 
+        
+        STDMETHODIMP_(DWORD) Release(void) 
+        { 
+            if (--m_cRef != 0) 
+                return m_cRef; 
+            delete this; 
+            return 0; 
+        }; 
+}; 
+```
+
+    + aggregating objects 
+    
+    creating inner object, the outer object must explicitly ask for its IUnknown
+    
+    the outer object must protect its implementation of Release from reentrancy with an artificial reference count around its destruction code 
+    
+    the outer object must call its controlling IUnknown Release method if it queries for a pointer to any of the inner object's interfaces. To free this pointer the outer object calls its controlling IUnknown AddRef method, followed by Release on the inner object's pointer 
+    
+    The outer object must not blindly delegate a query for any unrecognized interface to the inner object, unless that behavior is specifically the intention of the outer object.
+    
+```
+// Obtaining inner object interface pointer 
+pUnkInner->QueryInterface(IID_ISomeInterface, &pISomeInterface); 
+pUnkOuter->Release(); 
+
+// Releasing inner object interface pointer 
+pUnkOuter->AddRef(); 
+pISomeInterface->Release(); 
+```
+
+- The most common mechanism for object reuse in COM is containment/delegation. This type of reuse is a familiar concept found in most object-oriented languages and systems
+
+
+## Using and implementing IUnknown
+- client and server
+
+https://docs.microsoft.com/en-us/windows/win32/com/com-clients-and-servers
+
+- processes, threads and apartments 
+https://docs.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
+
+- QueryInterface, navigating in an object 
+
+QueryInterface to ask an object for an interface through which the client may invoke the desired operations
+
+QueryInterface returns a null pointer—an error—and the client has no pointer through which to call the desired functions
+
+The technology that supports this is the algorithm by which IIDs are allocated
+
+- rules for implementing QueryInterface 
+
+objects must have identity, a call to QueryInterface with IID_IUnknown must always return the same physical pointer value. 
+```
+IA * pA = (some function returning an IA *); 
+IB * pB = NULL; 
+HRESULT   hr; 
+hr = pA->QueryInterface(IID_IB, &pB); 
+
+pA->QueryInterface(IID_IA, ...);
+pB->QueryInterface(IID_IA, ...);
+
+IC * pC = NULL; 
+hr = pB->QueryInterface(IID_IC, &pC); 
+pA->QueryInterface(IID_IC, ...) 
+```
+
+the set of interfaces on an object instance must be static 
+
+it must be possible to query successful for any interface on an object from any other interface 
+
+the counter should be unsigned integer 
+
+
+### Managing object lifetimes through reference counting 
+- One way to ensure that an object is no longer needed is to depend entirely on an underlying communication channel to inform the system when all connections to a cross-process or cross-channel object have disappeared. 
+
+- AddRef increments the object's internal reference count.
+
+- Release first decrements the object's internal reference count, and then it checks whether the reference count has fallen to zero.
+
+-  COM does not require that an object return the same pointer when asked for the same interface multiple times. (The only exception to this is a query to IUnknown, which identifies an object to COM.)
+
+- rules for managing reference counts 
+
+From a COM client's perspective, reference counting is always done for each interface. Client should never assume an object uses the same counter for all interfaces
+
+default case is that AddRef must be called for every new copy of an interface pointer and Release must be called for every destruction of an interface pointer except
+    1. In-out parameters to functions. The caller must call AddRef on the parameter because it will be released when the out value is stored on top of it.
+    
+    2. Fetching a global variable.
+
+    3. A function that synthesizes an interface pointer using special internal knowledge rather than obtaining it from some other source must call AddRef initially on the newly synthesized pointer.
+
+    4. Retrieving a copy of an internally stored pointer. When a function retrieves a copy of a pointer that is stored internally by the object called
+    
+    5. In parameters to functions. The lifetime of the copy of an interface pointer passed as a parameter to a function is nested in that of the pointer used to initialize the value
+
+    6. Out parameters from functions, including return values. the out parameter does not need a separate reference count.
+
+    7. Local variables. A method implementation has control of the lifetimes of each of the pointer . can omit redundant AddRef/Release pairs 
+
+
+### Reusing objects 
+- containment/delegation 
+- aggregation 
+
+
+### The COM library 
+- Any process that uses COM must both initialize and uninitialize the COM library.
+
+a set of DLLs and EXEs (primarily Ole32.dll and Rpcss.exe) in Microsoft Windows, the COM library includes
+
+A small number of fundamental functions that facilitate the creation of COM applications, both client and server. 
+
+Implementation-locator services through which COM determines, from a unique class identifier (CLSID)
+
+Transparent remote procedure calls when an object is running in a local or remote server.
+
+A standard mechanism to allow an application to control how memory is allocated within its process, particularly memory that needs to be passed between cooperating objects
+
+- all COM threads of execution in clients and out-of-process servers must call either the CoInitialize or the CoInitializeEx function before calling any other COM function except memory allocation calls
+
+CoInitializeEx replaces the other function, adding a parameter that allows you to specify the threading model of the thread. either apartment-threaded or free-threaded
+
+CoInitialize simply sets the threading model to apartment-threaded.
+
+OLE compound document applications call the OleInitialize function, which calls CoInitializeEx. cannot be free-threaded
+
+In-process servers do not call the initialization functions because they are being loaded into a process. either InprocServer32 
+```
+Registers a 32-bit in-process server and specifies the threading model of the apartment the server can run in.
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID
+   {CLSID}
+      InprocServer32
+         (Default) = path
+         ThreadingModel = value
+         
+ThreadingModel:
+Apartment, single threaded 
+Both, single threaded or multithreaded 
+Free, multithreaded apartment
+Neutral, Neutral apartment
+not set to a value, the server is loaded into the first apartment that was initialized in the process. referred to as the main single-threaded apartment (STA)
+
+The InprocServer entry is needed only for backward compatibility. missing then cannot loaded in 16-bit app 
+```
+
+client must be a corresponding call to CoUninitialize or OLE client a corresponding call to OleUninitialize.
+
+In-process servers can assume the process already performed these steps 
+
+
+### Manage memory allocation 
+- both caller and called to have a compatible allocation and de-allocation policy. COM defines a universal convention for memory allocation
+
+- OLE memory allocator 
+
+Whenever ownership of an allocated chunk of memory is passed through a COM interface or between a client and the COM library, you must use this COM allocator to allocate the memory, thread-safe allocator
+
+CoGetMalloc provides a pointer to the OLE allocator, which is an implementation of the IMalloc interface
+
+helper functions CoTaskMemAlloc, CoTaskMemRealloc, and CoTaskMemFree, which wrap getting a pointer to the task memory allocator, calling the corresponding IMalloc method 
+
+- memory management rules 
+
+In-parameters must be allocated and freed by the caller
+
+Out-parameters must be allocated by the one called. freed by the caller using the standard COM task memory allocator.
+
+In/out-parameters are initially allocated by the caller, and then freed and reallocated by the one called
+
+All out pointer parameters must explicitly be set to NULL. These are usually passed in a pointer-to-pointer parameter but can also be passed as members of a structure that the caller allocates and the called code fills.
+
+Under error conditions, all in-out parameters must either be left alone by the code called or explicitly set 
+
+COM internally uses Remote Procedure Calls (RPC) to communicate between clients and servers. 
+https://docs.microsoft.com/en-us/windows/win32/rpc/server-stub-memory-management
+
+- debugging memory allocations 
+
+COM provides the IMallocSpy interface for developers to use to debug their memory allocations
+
+
+## Processes, threads, and apartments 
+- RPC, There is no difference to the caller between a call coming from a process on a remote machine
+
+- set a process's priority class attribute by calling the SetPriorityClass function
+
+set a thread's base priority with a call to SetThreadPriority.
+
+- the apartment and the COM threading architecture 
+
+
+
+
+
+
+
+
+
+
 
 
 
