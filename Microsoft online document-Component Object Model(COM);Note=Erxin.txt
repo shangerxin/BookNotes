@@ -471,7 +471,426 @@ set a thread's base priority with a call to SetThreadPriority.
 
 - the apartment and the COM threading architecture 
 
+multiple threads often causes performance problems. The key is to use multiple threads only if you are very sure of what you are doing
 
+all the COM objects in the process as divided into groups called apartments. 
+
+its methods can legally be directly called only by a thread that belongs to that apartment. other thread need to call must through a proxy 
+
+    + Single-threaded apartments consist of exactly one thread
+    
+    All method calls to a COM object in a single-threaded apartment are synchronized with the windows message queue for the single-threaded apartment's thread. 
+    
+    + Multithreaded apartments consist of one or more threads
+
+    an multithreaded apartment can receive method calls directly from any of the threads that belong to the multithreaded apartment. 
+
+    use a model called free-threading, the call is synchronized by the objects themselves.
+
+- A process can have zero or more single-threaded apartments
+
+zero or one multithreaded apartment.
+
+- Call parameters are marshaled between apartments, and COM handles the synchronization through messaging
+
+- multiple threads in a process to be free-threaded, all free threads reside in a single apartment
+
+all other apartments are single-threaded apartments
+
+- all calls to objects outside a process behave identically, arriving calls behave identically too
+
+- single-threaded object is called simultaneously by multiple free-threaded clients, the calls will be synchronized by COM by placing corresponding window messages in the server's message queue
+
+
+### Choosing the threading model 
+- An object that does extensive I/O might support free-threading to provide maximum response to clients by allowing interface calls during I/O latency.
+
+- an object that interacts with the user might support apartment threading to synchronize incoming COM calls with its window operations
+
+
+
+### Single threaded apartments 
+- Using single-threaded apartments (the apartment model process) offers a message-based paradigm for dealing with multiple objects running concurrently
+
+- Calls to objects in other threads must be made within the context of the owning thread
+
+- objects in different processes use to pass pointers across process boundaries. 
+
+The interprocess and interthread models are similar. 
+
+- rules 
+
+Every object should live on only one thread (within a single-threaded apartment).
+
+Initialize the COM library for each thread.
+
+Marshal all pointers to objects when passing them between apartments.
+
+must have a message loop
+
+DLL-based or in-process objects do not call the COM initialization functions; instead, they register their threading model with the ThreadingModel named-value under the InprocServer32 key in the registry. 
+
+- multiple objects can live on a single thread, no apartment model object can live on more than one thread.
+
+- a client process or out-of-process server must call CoInitialize, or call CoInitializeEx and specify COINIT_APARTMENTTHREADED for the dwCoInit parameter. 
+
+The main apartment is the thread that calls CoInitializeEx first
+
+- All calls to an object must be made on its thread (within its apartment). It is forbidden to call an object directly from another thread
+
+- The implication of this rule is that all pointers to objects must be marshaled when passed between apartments. 
+
+    + CoMarshalInterThreadInterfaceInStream marshals an interface into a stream object that is returned to the caller.
+
+    + CoGetInterfaceAndReleaseStream unmarshals an interface pointer from a stream object and releases it.
+    
+these functions wrap calls to CoMarshalInterface and CoUnmarshalInterface functions, which require the use of the MSHCTX_INPROC flag
+    
+- marshaling is accomplished automatically by COM.
+
+- where the application writer is passing interface pointers between apartments without using the normal COM mechanisms, the writer must handle the marshaling manually
+
+- If one apartment (Apartment 1) in a process has an interface pointer and another apartment (Apartment 2) requires its use, Apartment 1 must call CoMarshalInterThreadInterfaceInStream to marshal the interface. The stream that is created by this function is thread-safe and must be stored in a variable that is accessible by Apartment 2. Apartment 2 must pass this stream to CoGetInterfaceAndReleaseStream to unmarshal the interface and will get back a pointer to a proxy 
+
+- the MsgWaitForMultipleObjects function can be used to wait both for messages and for thread synchronization events.
+
+- COM creates a hidden window using the Windows class "OleMainThreadWndClass" in each single-threaded apartment. A call to an object is received as a window message to this hidden window. 
+
+- Single-threaded apartments can implement IMessageFilter to permit them to cancel calls or receive window messages when necessary or makes an ORPC call to another thread
+
+- The object can be reentered if one of its interface method implementations retrieves and dispatches messages or makes an ORPC call to another thread
+
+OLE does not prevent reentrancy on the same thread, but it can help provide thread safety. This is identical to the way in which a window procedure can be reentered if it retrieves and dispatches messages while processing a message.
+
+calling an out-of-process single-threaded apartment server that calls another single-threaded apartment server will allow the first server to be reentered. <- DOES THIS WILL CAUSE MESSAGE JAM?
+
+
+## Multithreaded apartments 
+- all the threads in the process that have been initialized as free-threaded reside in a single apartment.
+
+no need to marshal between threads
+
+need not retrieve and dispatch messages because COM does not use window messages
+
+- Calls to methods of objects in the multithreaded apartment can be run on any thread in the apartment. 
+
+- best advantage of multiprocessor hardware for cross-thread, cross-process, and cross-machine calling
+
+use of synchronization primitives such as event objects, critical sections, mutexes, or semaphores
+
+the object doesn't control the lifetime of the threads that are accessing it, no thread-specific state may be stored in the object (in thread local storage)
+
+- synchronization for multithreaded apartments 
+
+COM provides call synchronization for single-threaded apartments only
+
+Multithreaded apartments do not receive calls while making calls on the same thread 
+
+Multithreaded apartments cannot make input-synchronized calls
+
+Asynchronous calls are converted to synchronous calls in multithreaded apartments
+
+The message filter is not called for any thread in a multithreaded apartment.
+
+- To initialize a thread as free-threaded, call CoInitializeEx, specifying COINIT_MULTITHREADED
+
+- COM, through the RPC subsystem, creates a pool of threads in the server process and a client call can arraived at any time 
+
+- An out-of-process server must also implement synchronization in its class factory.
+
+- All threads belong to the same multithreaded apartment. Interface pointers are passed directly from thread to thread within a multithreaded apartment
+
+- The client thread will suspend when it makes a COM call to out-of-apartment objects and will resume when the call returns. 
+
+- Calls between processes are still handled by RPC 
+
+- Window synchronization primitives 
+
+    + Event objects provide a way of signaling one or more threads that an event has occurred. CreateEvent 
+    
+    https://docs.microsoft.com/en-us/windows/desktop/api/synchapi/nf-synchapi-createeventa
+    
+    + Critical sections are used for a section of code that requires exclusive access to some set of shared data before it can be executed. Only used by the threads within a single process. 
+
+    To ensure that no more than one thread at a time accesses shared data, a process's primary thread allocates a global CRITICAL_SECTION data structure and initializes its members
+
+    EnterCriticalSection
+
+    A thread attempting to enter a critical section calls EnterCriticalSection which checks to see whether the CRITICAL_SECTION data structure has been modified.
+    
+    A thread leaving a critical section calls LeaveCriticalSection, which resets the data structure. the system wakes one of the sleeping threads
+    
+    + Mutexes performs the same function as a critical section, except that the mutex is accessible to threads running in different processes. CreateMutex, ownership passes to other threads on a first-come, first-served basis.
+    
+    + Semaphores are used to maintain a reference count on some available resource. CreateSemaphore,  an initial resource count, and the maximum resource count. 
+    
+    A thread requesting a resource passes its semaphore handle in a call to the WaitForSingleObject function.
+    
+    The semaphore object polls the resource to determine whether it is available. If so, the semaphore decrements the resource count and wakes the waiting thread. zero, the thread remains asleep until another thread releases a resource
+    
+    
+## Single threaded and multithreaded communication 
+- one multithreaded apartment, containing all threads initialized as free-threaded, and one or more single-threaded apartments.
+    
+- Interface pointers must be marshaled between apartments but can be used without marshaling within an apartment. 
+    
+- Calls to objects in a single-threaded apartment will be synchronized by COM
+    
+- inter-apartment communication requires  CoMarshalInterThreadInterfaceInStream and CoGetInterfaceAndReleaseStream
+    
+    
+## In-Process Server Threading Issues 
+- an in-process server does not call CoInitialize, CoInitializeEx, or OleInitialize to mark its threading model
+    
+thread-aware DLL-based or in-process objects, you need to set the threading model in the registry
+    
+add the ThreadingModel value to the InprocServer32 key in the registry. The default value is single-threaded-per-process 
+
+- a client and an in-process object that use different threading models is exactly like the interaction between clients and out-of-process servers. 
+
+- an in-process object that supports the single-threaded model is called simultaneously by multiple threads of a client,
+    
+COM creates the object in the client's main apartment and requires all the other client apartments to access the object by using proxies
+    
+- if you design a custom interface on an in-process server, you should also provide the marshaling code for it 
+    
+- all of the DLL entry points (like DllGetClassObject and DllCanUnloadNow) and global data should always be accessed by the same apartment. such objects in the main apartment of the client, giving the main apartment direct access to the object's pointers.
+    
+Calls from the other apartments use interthread marshaling to go from the proxy to the stub in the main apartment
+    
+- a single-threaded in-process server, an object provided by an apartment model DLL must be accessed by the same client apartment from which it was created.
+    
+objects provided by this server can be created in multiple apartments of the client, so the server must implement its entry points (like DllGetClassObject and DllCanUnloadNow) for multithreaded use
+    
+- If the DLL provides only one instance of the class factory to create all the objects, the class factory implementation must also be designed for multithreaded use
+    
+If the DLL creates a new instance of the class factory each time DllGetClassObject is called, the class factory need not be thread-safe.
+    
+- Objects created by the class factory need not be thread-safe. Once created by a thread, the object is always accessed through that thread. calls to the object will be synchronized by COM 
+
+- in-process DLL ThreadingModel value is set to "Both", an object provided by this DLL can be created and used directly (without a proxy) in single-threaded or multithreaded client apartments. 
+    
+- CoCreateFreeThreadedMarshaler function. This function creates a free-threaded marshaling object that can be aggregated with an in-process server object. 
+    
+when the client marshals the object's interface to a different apartment in the same process. The client does not need to do any synchronization. 
+
+- An object provided by an in-process DLL that supports only free threading is a free-threaded object. It implements its own synchronization and can be accessed by multiple client threads at the same time. server does not marshal interfaces between threads. 
+
+single threaded apartments that create it will access it through a proxy 
+
+
+# Accessing interfaces across apartments 
+- any apartment in a process get access to an interface implemented on an object in any other apartment in the process. This is done through the IGlobalInterfaceTable interface. 
+
+    + register an interface as a global processwide interface 
+    + get a pointer to that interface from any other aparment through a cookie 
+    + revoke the global registration of an interface 
+
+- agile objects (free-threaded, marshaled objects) containing interface pointers to other objects.
+
+- global interface table is good for save process-wide variables and agile objects (free-threaded, marshaled objects). It guaranteeing that a valid proxy or directr pointer to the agile objects. 
+
+- The global interface table is not portable across process or machine boundaries. cannot be used in place of parameter-passing mechanism 
+
+
+
+# Greating the global interface table 
+- There is a single instance of the global interface table per process
+- create the global interface table object 
+
+```
+HRESULT hr;
+hr = CoCreateInstance(CLSID_StdGlobalInterfaceTable,
+                 NULL,
+                 CLSCTX_INPROC_SERVER,
+                 IID_IGlobalInterfaceTable,
+                 (void **)&gpGIT);
+if (hr != S_OK) {
+  exit(0); // Handle errors here.
+}
+```
+
+- all to the CoCreateInstance function, register the interface from the apartment in which it resides with a call to the RegisterInterfaceInGlobal method
+
+revoke the interface's global registration, any apartment can call the RevokeInterfaceFromGlobal method
+
+- using IGlobalInterfaceTable would be when you want to pass an interface pointer on an object in a single-threaded apartment (STA) to a worker thread in another apartment. Instead of marshal between threads.
+
+IGlobalInterfaceTable allows you simply to pass a cookie. register the interface in the global interface table, you get a cookie that you can use instead of passing the actual pointer. 
+
+- IGlobalInterfaceTable provides complete thread-safe functionality 
+
+
+# When to use the global interface table 
+- CoMarshalInterThreadInterfaceInStream function. It can also be used to pass an interface pointer from one thread to another thread in the same process.
+
+- Simplified the problems 
+    + An in-process agile object aggregates the free-threaded marshaler.
+    + This same agile object also holds (as member variables) interface pointers to other objects not agile or aggregate the free-threaded marshaler 
+
+if the outer object gets marshaled to another apartment and the application calls on it,. RPC_E_WRONG_THREAD. This error occurs because the inner interface is designed to be callable only from the apartment
+
+the outer object should call IGlobalInterfaceTable::RegisterInterfaceInGlobal on the inner interface and store the resulting cookie in its member instead of pointer
+
+call IGlobalInterfaceTable::GetInterfaceFromGlobal, use the returned interface pointer, and then release it. 
+
+outer object goes away, it should call IGlobalInterfaceTable::RevokeInterfaceFromGlobal to remove itself
+
+
+
+## COM clients and servers 
+- A COM client is whatever code or object gets a pointer to a COM server and uses its services by calling the methods
+
+- A COM server is any object that provides services to clients; these services are in the form of COM interface implementations
+
+- In-process servers are implemented in a dynamic linked library (DLL)
+
+- out-of-process servers are implemented in an executable file (EXE)
+
+- Distributed COM further allows objects to be packaged as service applications, synchronizing COM with the rich administrative and system-integration of windows 
+
+- DCOM is not separate;it is just COM with a longer wire. I
+
+
+## Getting a pointer to an object 
+- COM does not have a strict class model. four ways that a client can instantiate an interface on an object 
+
+Call a COM library function that creates an object of a predetermined type; return a pointer only one specific interface for a specific object class.
+
+Call a COM library function that can create an object based on a class identifier (CLSID) 
+
+Call a method of some interface that creates another object 
+
+Implement an object with an interface through which other objects pass their interface pointer to the client directly.
+
+- Creating an object of a predetermined type 
+
+ are numerous COM functions, such as CoGetMalloc, that return pointers to specific interface implementations. helper functions 
+ 
+- the function CoGetClassObject, which creates a class object and supplies a pointer to an interface that allows you to create instances of that class
+
+- typical way to create an enumerator instance and get a pointer to its interface is to call a method from another interface
+
+
+
+# Creating an object through a class object 
+- COM class is identified by a CLSID, a unique 128-bit GUID, which the server must register. 
+
+- all the CLSIDs for the servers installed on the system. This is a mapping between each CLSID and the location of the DLL or EXE that houses the code for that CLSID
+
+- distributed systems, COM provides registry entries that allow a remote server to register itself for use by a client. COM allows clients to override registry entries and to specify server locations
+
+- calls to activation functions other than CoGetClassObject (such as CoCreateInstanceEx) require that the server support IClassFactory.
+
+- create an instance of the server's object, it uses the desired object's CLSID in a call to CoGetClassObject. 
+
+- activating object instances is through the class moniker.  
+
+
+
+## Locating a remote object 
+- COM has added registry keys that permit a server to register the name of the machine on which it resides or the machine where an existing storage is located.
+
+- COM has replaced a previously reserved parameter of CoGetClassObject with a COSERVERINFO structure, which allows a client to specify the location of a server. 
+
+-  CoGetClassObject function is the CLSCTX enumeration
+
+
+
+## Instance creation helper functions 
+- the CoCreateInstance function. This function encapsulates the process of creating a class object
+
+- more specific OleCreate, the OLE compound document helper that creates a class object
+
+- four important new instance creation mechanisms 
+
+class monikers and IClassActivator 
+
+CoCreateInstanceEx 
+
+CoGetInstanceFromFile 
+
+CoGetInstanceFromIStorage
+
+-  A class moniker permits you to identify the class of an object
+
+ a file moniker, to indicate the location of the object
+
+
+
+## COM server responsibilities 
+- server must implementation of either the IClassFactory or IClassFactory2 interface
+
+- must register its CLSID in the system registry on the machine 
+
+- publishing its machine location to other systems on a network to allow clients to call it 
+
+- In-process servers should implement and export certain functions 
+
+
+### Implementing IClassFactory
+- IClassFactory contains two methods 
+
+CreateInstance. This method must create an uninitialized instance of the object and return a pointer to a requested interface on the object
+
+LockServer. This method just increments the reference count on the class object to ensure that the server stays in memory and does not shut down
+
+- responsible for its own licensing, COM defines IClassFactory2, which inherits its definition from IClassFactory. 
+
+
+### Licensing and IClassFactory2
+- The IClassFactory interface on a class object provides the basic object creation mechanism of COM. 
+
+- IClassFactory::CreateInstance method can allow or disallow object creation based on the existence of a machine license
+
+The GetLicInfo method fills a LICINFO structure with information describing the licensing behavior of the class factory
+
+The RequestLicKey method provides a license key for the component
+
+The CreateInstanceLic method creates an instance of the licensed component if the license key parameter (BSTRÂ bstrKey) is valid.
+
+the development tool could create a header (.h) file containing the BSTR license key, and then you would include that .h file in your client application.
+
+create the component with IClassFactory::CreateInstance or pass the run-time key to the CreateInstanceLic method
+
+
+
+### Registering COM servers 
+-  registering a class at installation 
+
+This information must be registered for all CLSIDs. Other information is optional. Tools such as Regsvr32 make it simple to write a setup program that registers servers at installation.
+
+
+run at a particular computer whenever an activation function is called for which a COSERVERINFO structure is not specified.
+
+The ActivateAtStorage capability provides a transparent way to allow clients to locate running objects
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AppID
+   {AppID_GUID}
+      RemoteServerName = name
+      
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AppID
+   {AppID_GUID}
+      ActivateAtStorage = value
+```
+
+    + two important keys in the registry: the CLSID and the AppID. 
+
+    + can also be installed as a service or run under a specific user account. For more information, see Installing as a Service Application.
+
+https://docs.microsoft.com/en-us/windows/win32/com/installing-as-a-service-application
+
+a server or ROT object that is not a service or running under a specific user account can be referred to as an "activate as activator" server 
+
+    + the security context and the window station/desktop of the client must match the server's. COM clients and servers should not change their window station or thread desktops after calling CoInitialize or CoInitializeEx
+    
+    +  in-process, a call to CoGetClassObject to create its class object is automatically passed by COM to the DllGetClassObject function
+    
+    + Classes in executables can specify that COM should execute their process and wait for the process to register their class object's IClassFactory interface through CoRegisterClassObject
+
+- registering a running EXE server 
+
+    + an executable (EXE) server is launched, it should call CoRegisterClassObject, which registers the CLSID for the server in what is called the class table
 
 
 
