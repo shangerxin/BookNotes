@@ -2211,15 +2211,512 @@ first access control entry (ACE) grants COM_RIGHTS_EXECUTE (0x1) only, while the
 ### The COM elevation moniker 
 - The COM elevation moniker allows applications that are running under user account control (UAC) to activate COM classes with elevated privileges.
 
+accomplish a specific and limited function that requires elevated privileges, such as changing the system date and time.
 
+no application compatibility 
 
+configure the COM client executable to require elevation, rather than activating the legacy application's class, the legacy CLSID iwll flow to server process 
+
+- not all flow compatible with elivation 
+
+Elevation does not flow from a client to a remote COM server.
+
+If an elevated COM class uses impersonation during a COM call, it might lose its elevated privileges
+
+If an elevated COM server registers a class in the running object table (ROT), the class will not be available to non-elevated clients.
+
+A process elevated by using the UAC mechanism does not load per-user classes during COM activations.  both by non-privileged and privileged accounts must be installed on HKEY_LOCAL_MACHINE, non-privileged used need install on HKEY_USERS 
+
+Drag and drop is not allowed from non-elevated to elevated applications
+
+- requirements 
+```
+HKEY_LOCAL_MACHINE\Software\Classes\CLSID
+   {CLSID}
+      LocalizedString = displayName
+```
+
+display by the UAC user interface 
+```
+HKEY_LOCAL_MACHINE\Software\Classes\CLSID
+   {CLSID}
+      Elevation
+         IconReference = applicationIcon
+```
+
+- elevation moniker supports the following run level 
+
+Elevation:Administrator!new:{guid}
+Elevation:Highest!new:{guid}
+
+- example code 
+
+```
+HRESULT CoCreateInstanceAsAdmin(HWND hwnd, REFCLSID rclsid, REFIID riid, __out void ** ppv)
+{
+    BIND_OPTS3 bo;
+    WCHAR  wszCLSID[50];
+    WCHAR  wszMonikerName[300];
+
+    StringFromGUID2(rclsid, wszCLSID, sizeof(wszCLSID)/sizeof(wszCLSID[0])); 
+    HRESULT hr = StringCchPrintf(wszMonikerName, sizeof(wszMonikerName)/sizeof(wszMonikerName[0]), L"Elevation:Administrator!new:%s", wszCLSID);
+    if (FAILED(hr))
+        return hr;
+    memset(&bo, 0, sizeof(bo));
+    bo.cbStruct = sizeof(bo);
+    bo.hwnd = hwnd;
+    bo.dwClassContext  = CLSCTX_LOCAL_SERVER;
+    return CoGetObject(wszMonikerName, &bo, riid, ppv);
+}
+```
+
+- over the shoulder (OTS) elevation 
+
+a client runs a COM server with an administrator's credentials rather than his or her own.
  
- 
+COM computes a security descriptor that allows only SELF, SYSTEM, and Builtin\Administrators to makes COM calls into the server. 
+
+CoInitializeSecurity, need to call explicitly in the server when OTS scenarios, specify an ACL that includes the INTERACTIVE group SID and SYSTEM.
+
+```
+BOOL GetAccessPermissionsForLUAServer(SECURITY_DESCRIPTOR **ppSD)
+{
+// Local call permissions to IU, SY
+    LPWSTR lpszSDDL = L"O:BAG:BAD:(A;;0x3;;;IU)(A;;0x3;;;SY)";
+    SECURITY_DESCRIPTOR *pSD;
+    *ppSD = NULL;
+
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(lpszSDDL, SDDL_REVISION_1, (PSECURITY_DESCRIPTOR *)&pSD, NULL))
+    {
+        *ppSD = pSD;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+// hKey is the HKCR\AppID\{GUID} key
+BOOL SetAccessPermissions(HKEY hkey, PSECURITY_DESCRIPTOR pSD)
+{
+    BOOL bResult = FALSE;
+    DWORD dwLen = GetSecurityDescriptorLength(pSD);
+    LONG lResult;
+    lResult = RegSetValueExA(hkey, 
+        "AccessPermission",
+        0,
+        REG_BINARY,
+        (BYTE*)pSD,
+        dwLen);
+    if (lResult != ERROR_SUCCESS) goto done;
+    bResult = TRUE;
+done:
+    return bResult;
+}
+```
+
+- COM permissions and mandatory accessl labels 
+
+label is specified in the system access control list (SACL) portion of the security descriptor. COM supports the SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP label. 
+
+```
+BOOL GetLaunchActPermissionsWithIL (SECURITY_DESCRIPTOR **ppSD)
+{
+// Allow World Local Launch/Activation permissions. Label the SD for LOW IL Execute UP
+    LPWSTR lpszSDDL = L"O:BAG:BAD:(A;;0xb;;;WD)S:(ML;;NX;;;LW)";
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(lpszSDDL, SDDL_REVISION_1, (PSECURITY_DESCRIPTOR *)&pSD, NULL))
+    {
+        *ppSD = pSD;
+        return TRUE;
+    }
+}
+
+BOOL SetLaunchActPermissions(HKEY hkey, PSECURITY_DESCRIPTOR pSD)
+{
+    
+    BOOL bResult = FALSE;
+    DWORD dwLen = GetSecurityDescriptorLength(pSD);
+    LONG lResult;
+    lResult = RegSetValueExA(hkey, 
+        "LaunchPermission",
+        0,
+        REG_BINARY,
+        (BYTE*)pSD,
+        dwLen);
+    if (lResult != ERROR_SUCCESS) goto done;
+    bResult = TRUE;
+done:
+    return bResult;
+};
+```
+
+- CoCreateInstance has changed in Windows Vista, to prevent Low IL clients from binding to COM servers by default. T
+
+- elevated servers and ROT registrations 
+
+running object table (ROT) and allow any client to access the registration, it must use the ROTFLAGS_ALLOWANYCLIENT flag
+
+"Activate As Activator" COM server cannot specify ROTFLAGS_ALLOWANYCLIENT because the DCOM service control manager (DCOMSCM) enforces a spoof check against this flag.
+
+```
+HKEY_LOCAL_MACHINE\Software\Classes\AppID
+   {APPID}
+      ROTFlags
+      
+ROTREGFLAGS_ALLOWANYCLIENT 0x1
+```
+
 ## Error handling in COM 
+- return a value of the type HRESULT. The HRESULT (for result handle) is a way of returning success
+
+- example 
+
+STG_E_MEDIUMFULL is returned when there is no space left on a hard disk. The STG prefix indicates the storage facility, the E indicates that the status code represents an error, and the MEDIUMFULL provides specific information
+
+
+### Structure of COM error code 
+
+S   R   C   N   r |     Facility    |   code 
+31 30   29              ...       16 15 .... 0
+
+high-order bit in the HRESULT or SCODE indicates whether the return value represents success or failure
+
+R, C, N and r are reserved 
+
+- common facility fields 
+
+FACILITY_DISPATCH 2 For late-binding IDispatch interface errors. 
+
+FACILITY_ITF      4 For most status codes returned from interface methods.
+
+FACILITY_NULL     0 For broadly applicable common status codes such as S_OK
+
+FACILITY_RPC      1 For status codes returned from remote procedure calls. 
+
+...
+
+
+### Codes in FACILITY_ITF 
+-  FACILITY_NULL and FACILITY_RPC have universal meaning because they are defined at a single source
+
+HRESULTs in FACILITY_ITF are determined by the function or interface
+
+two different interface might have different meanings 
+
+- All the COM-defined FACILITY_ITF codes have a code value in the range of 0x0000-0x01FF. recommanded only code values in the range of 0x0200-0xFFFF be used
+
+- E_UNEXPECTED is a specific error code that most developers will want to make universally legal.
+
+
+### Using marcos for error handling 
+- macros 
+
+MAKE_HRESULT, Returns an HRESULT given the severity bit, facility code
+
+MAKE_SCODE, Returns an SCODE given the severity bit, facility code, and error code
+
+HRESULT_CODE, Extracts the error code portion of the HRESULT.
+
+HRESULT_FACILITY, Extracts the facility code of the HRESULT.
+
+HRESULT_SEVERITY, Extracts the severity bit of the HRESULT.
+
+SCODE_CODE, Extracts the error code portion of the SCODE.
+
+SCODE_FACILITY, Extracts the facility code of the SCODE.
+
+SCODE_SEVERITY, Extracts the severity field of the SCODE.
+
+SUCCEEDED, Tests the severity bit of the SCODE or HRESULT. 
+
+FAILED, Tests the severity bit of the SCODE or HRESULT;
+
+IS_ERROR, Provides a generic test for errors on any status value. 
+
+HRESULT_FROM_WIN32, Maps a system error code to an HRESULT value. 
+
+HRESULT_FROM_NT, Maps an NT status value to an HRESULT value.
+
+
+### COM error handling in Java and Visual Basic 
+- three interfaces support for HRESULTs 
+ICreateErrorInfo
+	Sets error information.
+    
+IErrorInfo
+	Returns information from an error object.
+    
+ISupportErrorInfo
+	Identifies the object as supporting the IErrorInfo interface.
+
+- three functions 
+
+CreateErrorInfo
+	Creates an instance of a generic error object.
+    
+GetErrorInfo
+	Obtains the error information pointer set by the previous call to SetErrorInfo in the current logical thread.
+    
+SetErrorInfo
+	Sets the error information object for the current thread of execution.
+    
+- steps to return error information by performing the following the steps:
+
+Implement the ISupportErrorInfo interface.
+To create an instance of the generic error object, call the CreateErrorInfo function.
+To set its contents, use the ICreateErrorInfo methods.
+To associate the error object with the current logical thread, call the SetErrorInfo function.
+
+- retriving error information as follows:
+
+Check whether the returned value represents an error that the object is prepared to handle.
+
+Call QueryInterface to get a pointer to the ISupportErrorInfo interface. Then call ISupportErrorInfo::InterfaceSupportsErrorInfo to verify that the error was raised by the object that returned it and that the error object pertains to the current error and not to a previous call.
+
+To get a pointer to the error object, call the GetErrorInfo function.
+
+To retrieve information from the error object, use the IErrorInfo methods.
+
+- the GetErrorInfo function clears the error information and passes ownership of the error object to the caller,
+
+
+
+### Error handling strategies 
+- HRESULT Values, error codes have been changed to FACILITY_WIN32, and those that overlap remain in FACILITY_NULL. Common HRESULT values 
+
+E_ABORT
+	0x80004004
+	The operation was aborted because of an unspecified error.
+    
+E_ACCESSDENIED
+	0x80070005
+	A general access-denied error.
+    
+E_FAIL
+	0x80004005
+	An unspecified failure has occurred.
+    
+E_HANDLE
+	0x80070006
+	An invalid handle was used.
+    
+E_INVALIDARG
+	0x80070057
+	One or more arguments are invalid.
+    
+E_NOINTERFACE
+	0x80004002
+	The QueryInterface method did not recognize the requested interface. The interface is not supported.
+    
+E_NOTIMPL
+	0x80004001
+	The method is not implemented.
+    
+E_OUTOFMEMORY
+	0x8007000E
+	The method failed to allocate necessary memory.
+    
+E_PENDING
+	0x8000000A
+	The data necessary to complete the operation is not yet available.
+    
+E_POINTER
+	0x80004003
+	An invalid pointer was used.
+    
+E_UNEXPECTED
+	0x8000FFFF
+	A catastrophic failure has occurred.
+    
+S_FALSE
+	0x00000001
+	The method succeeded and returned the boolean value FALSE.
+    
+S_OK
+	0x00000000
+	The method succeeded. If a boolean return value is expected, the returned value is TRUE.
+
+- network errors, first four digits of the error code are 8007
+
+decode:
+
+$ net helpmsg <decimal_code>
+
+    + example, COM returns the error 8007054B, convert the 054B to decimal (1355). Then type the following:
+
+$ net helpmsg 1355
+
+
+
+### Handling unknown errors 
+- Applications that call interfaces should treat any unknown returned error code (as opposed to a success code) as synonymous with E_UNEXPECTED. 
+
+- example 
+
+```
+HRESULT hr; 
+hr = xxMethod(); 
+ 
+switch (GetScode(hr))  
+{ 
+    case NOERROR: 
+      // Method returned success. 
+      break; 
+ 
+    case x1: 
+      // Handle error x1 here.
+      break; 
+ 
+    case x2: 
+      // Handle error x2 here.
+      break; 
+ 
+    case E_UNEXPECTED: 
+    default: 
+      // Handle unexpected errors here. 
+      break; 
+} 
+```
+- error check 
+
+if (xxMethod() == NOERROR) 
+{
+    // Handle success here.
+} 
+else 
+{
+    // Handle failure here.
+} 
+
+
 
 ## COM handlers 
+- provide some "smart" code in the client address space that can optimize calls between a client and server
+
+- The OLE handler is a heavyweight DLL that provides important services for linking and embedding. 
+
+https://docs.microsoft.com/en-us/windows/win32/com/the-ole-handler
+
+- The lightweight client-side handler can be created for any purpose
+
+https://docs.microsoft.com/en-us/windows/win32/com/the-lightweight-client-side-handler
+
+- The OLE handler 
+
+    + the handler is loaded into the container's process space to act on behalf of a server as a sort of surrogate process. 
+    
+    + the application handler is implemented as an aggregate object composed of a new control object and the default handler
+
+    + a container requests something that the object handler cannot provide, the handler communicates with the server application using the COM out-of-process communication mechanism
+    
+    + OLE subsequently allowed in-process servers for compound documents, they had to create an embedding helper that implemented these extra interfaces
+
+    + create a new instance of the default handler, call OleCreateDefaultHandler. For some special circumstances, call OleCreateEmbeddingHelper
+
+- lightweight client side handler 
+
+    + proxy manager is the system-created object that implements the IMarshal interface
+    
+    + call CoGetStandardMarshal or CoGetStdMarshalEx
+    
+    + implements the IClientSecurity and IMultiQI interfaces on the object.
+    
+    + stream supplied by server have some potential uses 
+    
+    static data from server, regardless of particular interface being marshaled 
+    
+    per interface data from server 
+    
+    per interface helpers, client handler and delegating to standard proxy. client-side caching, read-ahead, write-behind, op-locking etc. 
+    
+    + As handlers, these are usable by more than one client. They differ from OLE handlers in that they cannot be created before the server is launched
+    
+- implementing and activating a handler with no extra server data 
+
+    1. To create an instance of handler, the server must implement IStdMarshalInfo but not IMarshal.
+    
+    COM calls this when it calls CoMarshalInterface for you and activates the handler on the client side
+    
+    2. Both server and handler call the CoGetStdMarshalEx function. This function creates a standard marshaler on each side( proxy manager on the client, stub manager on the server)
+    
+- server side structure, managed by the controlling identity object (implementing IUnknown) that the system implements when the handler calls CoGetStdMarshalEx
+    
+- client side structure, the handler is actually sandwiched between the proxy manager and the identity/controlling
+    
+The handler does not implement IMarshal but just returns IMarshal from the standard marshaler. Even if the handler does implement IMarshal, it will not get called during an unmarshal.
+
+- implmenting and activating a handler with extra data supplied by server 
+
+extra data in the packet for the handler to use, the server must implement both the IMarshal and the IStdMarshalInfo
+
+COM to CoUnmarshalInterface on the client side the ability to skip over any unread data and leave the stream in the appropriate position
+
+    + server side structures with extra data in stream. call from COM to CoUnmarshalInterface on the client side the ability to skip over any unread data and leave the stream in the appropriate position 
+
+    + client side with extra data in stream, the client-side COM call to CoUnmarshalInterface will create the identity and handler. The handler's UnmarshalInterface will be called for every unmarshal
+
+- delegation of queryinterface, proxy manager have to go through the IInternalUnknown interface. interfaces include IClientSecurity and IMultiQI. 
+
+
 
 ## DLL surrogates 
+- create DLL servers that can be loaded into a surrogate EXE process.
+- dll server in a surrogate process offers several possible benefits:
+
+    + Fault isolation and the ability to service multiple clients simultaneously.
+    + in distributed, server can serve remote clients 
+    + permit clients to help protect themselves from untrusted server code
+    +  provides the DLL with the surrogate's security.
+    
+COM provide default surrogate process, it can be customized 
+
+- DLL server requirements,  custom interfaces, you would have to ensure that marshaling code is available for those interfaces
+
+The DLL server surrogate runs in the same security context as the client, unless a RunAs value, set in the AppID registry section for the server.
+
+- Surrogate sharing 
+    + load other DLL servers into an existing surrogate 
+    
+    The DLL servers must have the same AppID value.
+
+    The security context of the DLL servers must be the same.
+    
+    + Same AppID key specifies that the DLL server can be loaded a surrogate by specifying the DllSurrogate value.
+    
+- registering the DLL server for surrogate activation 
+    
+There must be an AppID value specified under the CLSID key in the registry
+
+In an activation call, the CLSCTX_LOCAL_SERVER bit is set and the CLSID key does not specify LocalServer32, LocalServer, or LocalService.
+
+If other CLSCTX bits are set, the processing algorithmfor the in-process, local, or remote execution flags is followed
+    
+The CLSID key contains the InprocServer32 subkey.
+
+The proxy/stub DLL specified in the InprocServer32 key exists.
+
+The DllSurrogate value exists under the AppID key.
+
+    + activation functions:
+
+    CoGetClassObject
+    CoCreateInstanceEx
+    CoGetInstanceFromFile
+    CoGetInstanceFromIStorage
+    IMoniker::BindToObject
+
+    + When a RunAs value is specified, only one instance of the server is loaded to service all of the clients
+
+- using the system-supplied surrogate 
+
+the surrogate process is a mixed-threading model style pseudo-COM server. it ensure the DLL server is instantiated using the threading model specified in the registry 
+
+- writing a custom surrogate 
+
+
+
+
+
+
 
 ## Monikers 
 
