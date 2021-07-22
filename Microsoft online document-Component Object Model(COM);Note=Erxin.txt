@@ -4,6 +4,2713 @@ Microsoft online document-Component Object Model(COM);Note=Erxin
 # The component object model 
 - C, Java, and VBScript can be used to create and use COM objects.
 
+- caller can access only the interface member functions. Internal state is unavailable to a caller unless it is exposed in the interface.
+
+- Interfaces are strongly typed. Every interface has its own unique interface identifier, named an IID, globally unique identifier (GUID),
+
+- define a new interface with using the interface definition language (IDL)
+
+- The IDL supplied by Microsoft is based on simple extensions to DCE IDL, an industry standard for Remote Procedure Call (RPC)-based distributed computing
+
+- In addition, interfaces use only single inheritance
+
+- interface implementation In C++, a COM interface is modeled as an abstract base class, a C++ class that contains only pure virtual member functions
+
+- any programming language that supports the concept of function pointers to implement a COM interface
+
+- A COM class is identified by using a unique 128-bit Class ID (CLSID) that associates a class with a particular deployment in the file system, which for Windows is a DLL or EXE. A CLSID is a GUID
+
+- You obtain a new CLSID by using the CoCreateGuid function or by using a COM authoring tool
+
+- The lifetime of a COM object instance is controlled by its reference count
+
+The IUnknown member functions AddRef and Release control the count. 
+
+When the reference count reaches zero, the Release member function may free the instance
+
+- client/server model 
+
+    + client 
+The client is responsible for managing the lifetime of the instance by calling its Release function when the client has finished using it.
+
+A COM client is any caller that passes a CLSID to the system to request an instance of a COM object. create an instance is to call the COM function, CoCreateInstance
+
+To create multiple objects based on a single CLSID, call the CoGetClassObject function. 
+
+To connect to an object that is already created and running, call the GetActiveObject function.
+
+    + server 
+A server associates a CLSID with a COM class, houses the implementation of the class, implements a class factory for creating instances of the class, and provides for unloading the server.
+
+A COM server is not the same as the COM object that it provides to the system. implementation of the IClassFactory interface. 
+
+Clients can call the CreateInstance method to request a new instance of a COM object, but normally the CreateInstance is encapsulated in the CoCreateInstance
+
+- Service Control Manager, SCM ahndles the client request for an instance of a COM object 
+
+    1. A client requests an interface pointer to a COM object from the COM Library by calling a function such as CoCreateInstance with the CLSID of the COM object
+    
+    2. The COM Library queries the SCM to find the server that corresponds with the requested CLSID.
+
+    3. The SCM locates the server and requests the creation of the COM object from the class factory that is provided by the server.
+    
+    4. If successful, the COM Library returns an interface pointer to the client.
+    
+COM system connects a server object to a client, the client and object communicate directly.
+
+register a COM server with the host system, you can specify different ways for the server to be activated. 
+
+    + In-process: The SCM returns the file path of the DLL that contains the object server implementation. The COM Library loads the DLL and queries it for its class factory interface pointer
+
+    + Local: The SCM starts the local executable which registers a class factory on startup, and its interface pointer is available to the system and clients.
+
+    + Remote: The local SCM acquires a class factory interface pointer from the SCM that is running on a remote computer.
+
+- storage and stream objects, Storage and stream objects are sharable among processes 
+
+    + storage
+A storage object is conceptually similar to a directory in a file system. Each storage can contain any number of sub-storage objects and any number of streams. 
+
+Each storage has its own access rights. Through the IStorage interface, you can perform operations such as enumerating, moving, copying, renaming, creating, and deleting elements
+
+https://docs.microsoft.com/en-us/windows/desktop/Stg/storage-object-naming-conventions
+
+    + stream 
+    
+A stream object contains data and is conceptually similar to a single file in a file system. 
+Each stream has access rights and a single seek pointer. Through the IStream interface, you can read, write, seek, and perform other operations on the stream's underlying data
+
+- COM object can read and write itself to persistent storage 
+
+IPersistStorage: The COM object reads and writes its persistent state to a storage object. 
+
+IPersistStream: The COM object reads and writes its persistent state to a stream object.
+
+IPersistFile: The COM object reads and writes its persistent state directly to a file on the underlying system. no semantics for storages and streams 
+
+Streams can remain open for long periods of time without consuming file-system resources. 
+
+- data transfer, Uniform data transfer represents all data transfers by using the IDataObject interface. COM defines two data structures
+
+    + The FORMATETC structure represents a generalized clipboard format
+    
+    + STGMEDIUM structure represents the transfer medium as a memory handle
+
+The client creates a STGMEDIUM structure and passes it to the GetData method, and the data object returns the data in the provided STGMEDIUM structure
+
+COM handles data-change notifications by using an advise sink object, which implements the IAdviseSink interface.
+
+- remoting, COM enables remote and distributed computation. Interface remoting enables a member function to return an interface pointer to a COM object that is in a different process or on a different host computer. 
+
+client always call an in-process implement. if the COM is in-process the call is direct. if COM is out-of-process or remote, COM provides a proxy to forward the call using remote procedure call(RPC)
+
+a COM object always receives calls from a client through an in-process. if caller is out-of-process or remote. COM provides a stub implementation that receives the remote procedure call from the proxy in the client process.
+
+Marshaling is the procedure for packaging the call stack for transmission from proxy to stub. Unmarshaling is the unpackaging that occurs at the receiving end. 
+
+https://docs.microsoft.com/en-us/windows/desktop/api/combaseapi/nf-combaseapi-comarshalinterface
+
+customize marshaling 
+https://docs.microsoft.com/en-us/windows/win32/com/inter-object-communication
+
+- security, two forms of application security 
+    + activation security, specifies how new objects are created, how clients connect to new and existing objects, how certain public services, such as class table and running object table are secured 
+    
+    applied automatically by the Service Control Manager (SCM). will check against with registry 
+    
+    https://docs.microsoft.com/en-us/windows/win32/com/activation-security
+    + call security, specifies how security operates in an established connection between a client to a COM object 
+    
+    applied automatically or is enforced by the application.
+
+        * general functions 
+        
+        https://docs.microsoft.com/en-us/windows/desktop/api/combaseapi/nf-combaseapi-coinitializesecurity
+        
+        * interfaces on client proxies 
+        
+        https://docs.microsoft.com/en-us/windows/desktop/api/ObjIdl/nn-objidl-iclientsecurity
+        
+        * server-side functions
+        https://docs.microsoft.com/en-us/windows/win32/api/objidlbase/nn-objidlbase-iserversecurity
+
+
+the client queries the COM object for the IClientSecurity interface, which is implemented locally by the remoting layer
+
+the server may call the CoGetCallContext function to retrieve an IServerSecurity interface, which allows the server to check the client's authentication and to impersonate the client. 
+
+CoInitializeSecurity function to initialize the security layer and set the specified values as the security default. if process does not call, it will be called automatically during marshaled or unmarshaled.
+
+https://docs.microsoft.com/en-us/windows/win32/com/setting-processwide-security-with-coinitializesecurity
+
+
+## COM objects and interfaces 
+### interfaces and interface implementations 
+### interface pointers and interfaces 
+- An instance of an interface implementation is actually a pointer to an array of pointers to methods 
+
+- a client can call an interface method through its name, not its position in the array. 
+
+- A COM interface is not the same as a C++ class. The pure virtual definition carries no implementation.
+
+- A COM interface is not an object. It is simply a related group of functions and is the binary standard through which clients and objects communicate
+
+- COM interfaces are strongly typed. Every interface has its own interface identifier (a GUID), which eliminates the possibility of duplication
+
+- COM interfaces are immutable. You cannot define a new version of an old interface and give it the same identifier. Adding or removing methods of an interface or changing semantics creates a new interface, not a new version of an old interface.
+
+
+### IUnknown and interface inheritance 
+- Inheritance in COM does not mean code reuse. Because no implementations are associated with interfaces
+
+- a C++ pure-virtual base-class fashion and modified — either by adding new methods or by further qualifying the allowed usage of methods. There is no selective inheritance in COM.
+
+- important interface IUnknown, which contains three vital methods: QueryInterface, AddRef, and Release. All COM objects must implement the IUnknown interface
+
+- an object that supports aggregation, you would need to implement one set of IUnknown functions for all interfaces as well as a stand-alone IUnknown interface
+
+- a few interfaces that inherit their definitions from a second interface in addition to IUnknown, the majority simply inherit the IUnknown interface methods. 
+
+- aggregation requires an explicit implementation of IUnknown on the inner object and delegation of the IUnknown methods of any other interface to the outer object's IUnknown methods
+
+    + creating aggregable Objects
+    
+    The aggregable (or inner) object's implementation of QueryInterface, AddRef, and Release for its IUnknown interface controls the inner object's reference count, and this implementation must not delegate to the outer object's unknown (the controlling IUnknown).
+    
+    The aggregable (or inner) object's implementation of QueryInterface, AddRef, and Release for its other interfaces must delegate to the controlling IUnknown and must not directly affect the inner object's reference count.
+    
+    The inner IUnknown must implement QueryInterface only for the inner object
+    
+    The aggregable object must not call AddRef when holding a reference to the controlling IUnknown pointer
+
+```
+// CSomeObject is an aggregable object that implements 
+// IUnknown and ISomeInterface 
+class CSomeObject : public IUnknown 
+{ 
+    private: 
+        DWORD        m_cRef;         // Object reference count 
+        IUnknown*    m_pUnkOuter;    // Controlling IUnknown, no AddRef 
+ 
+        // Nested class to implement the ISomeInterface interface 
+        class CImpSomeInterface : public ISomeInterface 
+        { 
+            friend class CSomeObject ; 
+            private: 
+                DWORD    m_cRef;    // Interface ref-count, for debugging 
+                IUnknown*    m_pUnkOuter;    // Controlling IUnknown 
+            public: 
+                CImpSomeInterface() { m_cRef = 0;   }; 
+                ~ CImpSomeInterface(void) {}; 
+ 
+                // IUnknown members delegate to the outer unknown 
+                // IUnknown members do not control lifetime of object 
+                STDMETHODIMP     QueryInterface(REFIID riid, void** ppv) 
+                {    return m_pUnkOuter->QueryInterface(riid,ppv);   }; 
+ 
+                STDMETHODIMP_(DWORD) AddRef(void) 
+                {    return m_pUnkOuter->AddRef();   }; 
+ 
+                STDMETHODIMP_(DWORD) Release(void) 
+                {    return m_pUnkOuter->Release();   }; 
+ 
+                // ISomeInterface members 
+                STDMETHODIMP SomeMethod(void) 
+                {    return S_OK;   }; 
+        } ; 
+        
+        CImpSomeInterface m_ImpSomeInterface ; 
+        
+    public: 
+        CSomeObject(IUnknown * pUnkOuter) 
+        { 
+            m_cRef=0; 
+            // No AddRef necessary if non-NULL as we're aggregated. 
+            m_pUnkOuter=pUnkOuter; 
+            m_ImpSomeInterface.m_pUnkOuter=pUnkOuter; 
+        } ; 
+        
+        ~CSomeObject(void) {} ; 
+ 
+        // Static member function for creating new instances (don't use 
+        // new directly). Protects against outer objects asking for 
+        // interfaces other than IUnknown. 
+        static HRESULT Create(IUnknown* pUnkOuter, REFIID riid, void **ppv) 
+        { 
+            CSomeObject*        pObj; 
+            if (pUnkOuter != NULL && riid != IID_IUnknown) 
+                return CLASS_E_NOAGGREGATION; 
+                
+            pObj = new CSomeObject(pUnkOuter); 
+            if (pObj == NULL) 
+                return E_OUTOFMEMORY; 
+                
+            // Set up the right unknown for delegation (the non-
+            // aggregation case) 
+            if (pUnkOuter == NULL) 
+            {
+                pObj->m_pUnkOuter = (IUnknown*)pObj ; 
+                pObj->m_ImpSomeInterface.m_pUnkOuter = (IUnknown*)pObj;
+            }
+            
+            HRESULT hr; 
+            if (FAILED(hr = pObj->QueryInterface(riid, (void**)ppv))) 
+                delete pObj ; 
+                
+            return hr; 
+        } 
+ 
+        // Inner IUnknown members, non-delegating 
+        // Inner QueryInterface only controls inner object 
+        STDMETHODIMP QueryInterface(REFIID riid, void** ppv) 
+        { 
+            *ppv=NULL; 
+            if (riid == IID_IUnknown) 
+                *ppv=this; 
+            if (riid == IID_ISomeInterface) 
+                *ppv=&m_ImpSomeInterface; 
+            if (NULL==*ppv) 
+                return ResultFromScode(E_NOINTERFACE); 
+            ((IUnknown*)*ppv)->AddRef(); 
+            return NOERROR; 
+        } ; 
+        
+        STDMETHODIMP_(DWORD) AddRef(void) 
+        {    return ++m_cRef; }; 
+        
+        STDMETHODIMP_(DWORD) Release(void) 
+        { 
+            if (--m_cRef != 0) 
+                return m_cRef; 
+            delete this; 
+            return 0; 
+        }; 
+}; 
+```
+
+    + aggregating objects 
+    
+    creating inner object, the outer object must explicitly ask for its IUnknown
+    
+    the outer object must protect its implementation of Release from reentrancy with an artificial reference count around its destruction code 
+    
+    the outer object must call its controlling IUnknown Release method if it queries for a pointer to any of the inner object's interfaces. To free this pointer the outer object calls its controlling IUnknown AddRef method, followed by Release on the inner object's pointer 
+    
+    The outer object must not blindly delegate a query for any unrecognized interface to the inner object, unless that behavior is specifically the intention of the outer object.
+    
+```
+// Obtaining inner object interface pointer 
+pUnkInner->QueryInterface(IID_ISomeInterface, &pISomeInterface); 
+pUnkOuter->Release(); 
+
+// Releasing inner object interface pointer 
+pUnkOuter->AddRef(); 
+pISomeInterface->Release(); 
+```
+
+- The most common mechanism for object reuse in COM is containment/delegation. This type of reuse is a familiar concept found in most object-oriented languages and systems
+
+
+## Using and implementing IUnknown
+- client and server
+
+https://docs.microsoft.com/en-us/windows/win32/com/com-clients-and-servers
+
+- processes, threads and apartments 
+https://docs.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
+
+- QueryInterface, navigating in an object 
+
+QueryInterface to ask an object for an interface through which the client may invoke the desired operations
+
+QueryInterface returns a null pointer—an error—and the client has no pointer through which to call the desired functions
+
+The technology that supports this is the algorithm by which IIDs are allocated
+
+- rules for implementing QueryInterface 
+
+objects must have identity, a call to QueryInterface with IID_IUnknown must always return the same physical pointer value. 
+```
+IA * pA = (some function returning an IA *); 
+IB * pB = NULL; 
+HRESULT   hr; 
+hr = pA->QueryInterface(IID_IB, &pB); 
+
+pA->QueryInterface(IID_IA, ...);
+pB->QueryInterface(IID_IA, ...);
+
+IC * pC = NULL; 
+hr = pB->QueryInterface(IID_IC, &pC); 
+pA->QueryInterface(IID_IC, ...) 
+```
+
+the set of interfaces on an object instance must be static 
+
+it must be possible to query successful for any interface on an object from any other interface 
+
+the counter should be unsigned integer 
+
+
+### Managing object lifetimes through reference counting 
+- One way to ensure that an object is no longer needed is to depend entirely on an underlying communication channel to inform the system when all connections to a cross-process or cross-channel object have disappeared. 
+
+- AddRef increments the object's internal reference count.
+
+- Release first decrements the object's internal reference count, and then it checks whether the reference count has fallen to zero.
+
+-  COM does not require that an object return the same pointer when asked for the same interface multiple times. (The only exception to this is a query to IUnknown, which identifies an object to COM.)
+
+- rules for managing reference counts 
+
+From a COM client's perspective, reference counting is always done for each interface. Client should never assume an object uses the same counter for all interfaces
+
+default case is that AddRef must be called for every new copy of an interface pointer and Release must be called for every destruction of an interface pointer except
+    1. In-out parameters to functions. The caller must call AddRef on the parameter because it will be released when the out value is stored on top of it.
+    
+    2. Fetching a global variable.
+
+    3. A function that synthesizes an interface pointer using special internal knowledge rather than obtaining it from some other source must call AddRef initially on the newly synthesized pointer.
+
+    4. Retrieving a copy of an internally stored pointer. When a function retrieves a copy of a pointer that is stored internally by the object called
+    
+    5. In parameters to functions. The lifetime of the copy of an interface pointer passed as a parameter to a function is nested in that of the pointer used to initialize the value
+
+    6. Out parameters from functions, including return values. the out parameter does not need a separate reference count.
+
+    7. Local variables. A method implementation has control of the lifetimes of each of the pointer . can omit redundant AddRef/Release pairs 
+
+
+### Reusing objects 
+- containment/delegation 
+- aggregation 
+
+
+### The COM library 
+- Any process that uses COM must both initialize and uninitialize the COM library.
+
+a set of DLLs and EXEs (primarily Ole32.dll and Rpcss.exe) in Microsoft Windows, the COM library includes
+
+A small number of fundamental functions that facilitate the creation of COM applications, both client and server. 
+
+Implementation-locator services through which COM determines, from a unique class identifier (CLSID)
+
+Transparent remote procedure calls when an object is running in a local or remote server.
+
+A standard mechanism to allow an application to control how memory is allocated within its process, particularly memory that needs to be passed between cooperating objects
+
+- all COM threads of execution in clients and out-of-process servers must call either the CoInitialize or the CoInitializeEx function before calling any other COM function except memory allocation calls
+
+CoInitializeEx replaces the other function, adding a parameter that allows you to specify the threading model of the thread. either apartment-threaded or free-threaded
+
+CoInitialize simply sets the threading model to apartment-threaded.
+
+OLE compound document applications call the OleInitialize function, which calls CoInitializeEx. cannot be free-threaded
+
+In-process servers do not call the initialization functions because they are being loaded into a process. either InprocServer32 
+```
+Registers a 32-bit in-process server and specifies the threading model of the apartment the server can run in.
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID
+   {CLSID}
+      InprocServer32
+         (Default) = path
+         ThreadingModel = value
+         
+ThreadingModel:
+Apartment, single threaded 
+Both, single threaded or multithreaded 
+Free, multithreaded apartment
+Neutral, Neutral apartment
+not set to a value, the server is loaded into the first apartment that was initialized in the process. referred to as the main single-threaded apartment (STA)
+
+The InprocServer entry is needed only for backward compatibility. missing then cannot loaded in 16-bit app 
+```
+
+client must be a corresponding call to CoUninitialize or OLE client a corresponding call to OleUninitialize.
+
+In-process servers can assume the process already performed these steps 
+
+
+### Manage memory allocation 
+- both caller and called to have a compatible allocation and de-allocation policy. COM defines a universal convention for memory allocation
+
+- OLE memory allocator 
+
+Whenever ownership of an allocated chunk of memory is passed through a COM interface or between a client and the COM library, you must use this COM allocator to allocate the memory, thread-safe allocator
+
+CoGetMalloc provides a pointer to the OLE allocator, which is an implementation of the IMalloc interface
+
+helper functions CoTaskMemAlloc, CoTaskMemRealloc, and CoTaskMemFree, which wrap getting a pointer to the task memory allocator, calling the corresponding IMalloc method 
+
+- memory management rules 
+
+In-parameters must be allocated and freed by the caller
+
+Out-parameters must be allocated by the one called. freed by the caller using the standard COM task memory allocator.
+
+In/out-parameters are initially allocated by the caller, and then freed and reallocated by the one called
+
+All out pointer parameters must explicitly be set to NULL. These are usually passed in a pointer-to-pointer parameter but can also be passed as members of a structure that the caller allocates and the called code fills.
+
+Under error conditions, all in-out parameters must either be left alone by the code called or explicitly set 
+
+COM internally uses Remote Procedure Calls (RPC) to communicate between clients and servers. 
+https://docs.microsoft.com/en-us/windows/win32/rpc/server-stub-memory-management
+
+- debugging memory allocations 
+
+COM provides the IMallocSpy interface for developers to use to debug their memory allocations
+
+
+## Processes, threads, and apartments 
+- RPC, There is no difference to the caller between a call coming from a process on a remote machine
+
+- set a process's priority class attribute by calling the SetPriorityClass function
+
+set a thread's base priority with a call to SetThreadPriority.
+
+- the apartment and the COM threading architecture 
+
+multiple threads often causes performance problems. The key is to use multiple threads only if you are very sure of what you are doing
+
+all the COM objects in the process as divided into groups called apartments. 
+
+its methods can legally be directly called only by a thread that belongs to that apartment. other thread need to call must through a proxy 
+
+    + Single-threaded apartments consist of exactly one thread
+    
+    All method calls to a COM object in a single-threaded apartment are synchronized with the windows message queue for the single-threaded apartment's thread. 
+    
+    + Multithreaded apartments consist of one or more threads
+
+    an multithreaded apartment can receive method calls directly from any of the threads that belong to the multithreaded apartment. 
+
+    use a model called free-threading, the call is synchronized by the objects themselves.
+
+- A process can have zero or more single-threaded apartments
+
+zero or one multithreaded apartment.
+
+- Call parameters are marshaled between apartments, and COM handles the synchronization through messaging
+
+- multiple threads in a process to be free-threaded, all free threads reside in a single apartment
+
+all other apartments are single-threaded apartments
+
+- all calls to objects outside a process behave identically, arriving calls behave identically too
+
+- single-threaded object is called simultaneously by multiple free-threaded clients, the calls will be synchronized by COM by placing corresponding window messages in the server's message queue
+
+
+### Choosing the threading model 
+- An object that does extensive I/O might support free-threading to provide maximum response to clients by allowing interface calls during I/O latency.
+
+- an object that interacts with the user might support apartment threading to synchronize incoming COM calls with its window operations
+
+
+
+### Single threaded apartments 
+- Using single-threaded apartments (the apartment model process) offers a message-based paradigm for dealing with multiple objects running concurrently
+
+- Calls to objects in other threads must be made within the context of the owning thread
+
+- objects in different processes use to pass pointers across process boundaries. 
+
+The interprocess and interthread models are similar. 
+
+- rules 
+
+Every object should live on only one thread (within a single-threaded apartment).
+
+Initialize the COM library for each thread.
+
+Marshal all pointers to objects when passing them between apartments.
+
+must have a message loop
+
+DLL-based or in-process objects do not call the COM initialization functions; instead, they register their threading model with the ThreadingModel named-value under the InprocServer32 key in the registry. 
+
+- multiple objects can live on a single thread, no apartment model object can live on more than one thread.
+
+- a client process or out-of-process server must call CoInitialize, or call CoInitializeEx and specify COINIT_APARTMENTTHREADED for the dwCoInit parameter. 
+
+The main apartment is the thread that calls CoInitializeEx first
+
+- All calls to an object must be made on its thread (within its apartment). It is forbidden to call an object directly from another thread
+
+- The implication of this rule is that all pointers to objects must be marshaled when passed between apartments. 
+
+    + CoMarshalInterThreadInterfaceInStream marshals an interface into a stream object that is returned to the caller.
+
+    + CoGetInterfaceAndReleaseStream unmarshals an interface pointer from a stream object and releases it.
+    
+these functions wrap calls to CoMarshalInterface and CoUnmarshalInterface functions, which require the use of the MSHCTX_INPROC flag
+    
+- marshaling is accomplished automatically by COM.
+
+- where the application writer is passing interface pointers between apartments without using the normal COM mechanisms, the writer must handle the marshaling manually
+
+- If one apartment (Apartment 1) in a process has an interface pointer and another apartment (Apartment 2) requires its use, Apartment 1 must call CoMarshalInterThreadInterfaceInStream to marshal the interface. The stream that is created by this function is thread-safe and must be stored in a variable that is accessible by Apartment 2. Apartment 2 must pass this stream to CoGetInterfaceAndReleaseStream to unmarshal the interface and will get back a pointer to a proxy 
+
+- the MsgWaitForMultipleObjects function can be used to wait both for messages and for thread synchronization events.
+
+- COM creates a hidden window using the Windows class "OleMainThreadWndClass" in each single-threaded apartment. A call to an object is received as a window message to this hidden window. 
+
+- Single-threaded apartments can implement IMessageFilter to permit them to cancel calls or receive window messages when necessary or makes an ORPC call to another thread
+
+- The object can be reentered if one of its interface method implementations retrieves and dispatches messages or makes an ORPC call to another thread
+
+OLE does not prevent reentrancy on the same thread, but it can help provide thread safety. This is identical to the way in which a window procedure can be reentered if it retrieves and dispatches messages while processing a message.
+
+calling an out-of-process single-threaded apartment server that calls another single-threaded apartment server will allow the first server to be reentered. <- DOES THIS WILL CAUSE MESSAGE JAM?
+
+
+## Multithreaded apartments 
+- all the threads in the process that have been initialized as free-threaded reside in a single apartment.
+
+no need to marshal between threads
+
+need not retrieve and dispatch messages because COM does not use window messages
+
+- Calls to methods of objects in the multithreaded apartment can be run on any thread in the apartment. 
+
+- best advantage of multiprocessor hardware for cross-thread, cross-process, and cross-machine calling
+
+use of synchronization primitives such as event objects, critical sections, mutexes, or semaphores
+
+the object doesn't control the lifetime of the threads that are accessing it, no thread-specific state may be stored in the object (in thread local storage)
+
+- synchronization for multithreaded apartments 
+
+COM provides call synchronization for single-threaded apartments only
+
+Multithreaded apartments do not receive calls while making calls on the same thread 
+
+Multithreaded apartments cannot make input-synchronized calls
+
+Asynchronous calls are converted to synchronous calls in multithreaded apartments
+
+The message filter is not called for any thread in a multithreaded apartment.
+
+- To initialize a thread as free-threaded, call CoInitializeEx, specifying COINIT_MULTITHREADED
+
+- COM, through the RPC subsystem, creates a pool of threads in the server process and a client call can arraived at any time 
+
+- An out-of-process server must also implement synchronization in its class factory.
+
+- All threads belong to the same multithreaded apartment. Interface pointers are passed directly from thread to thread within a multithreaded apartment
+
+- The client thread will suspend when it makes a COM call to out-of-apartment objects and will resume when the call returns. 
+
+- Calls between processes are still handled by RPC 
+
+- Window synchronization primitives 
+
+    + Event objects provide a way of signaling one or more threads that an event has occurred. CreateEvent 
+    
+    https://docs.microsoft.com/en-us/windows/desktop/api/synchapi/nf-synchapi-createeventa
+    
+    + Critical sections are used for a section of code that requires exclusive access to some set of shared data before it can be executed. Only used by the threads within a single process. 
+
+    To ensure that no more than one thread at a time accesses shared data, a process's primary thread allocates a global CRITICAL_SECTION data structure and initializes its members
+
+    EnterCriticalSection
+
+    A thread attempting to enter a critical section calls EnterCriticalSection which checks to see whether the CRITICAL_SECTION data structure has been modified.
+    
+    A thread leaving a critical section calls LeaveCriticalSection, which resets the data structure. the system wakes one of the sleeping threads
+    
+    + Mutexes performs the same function as a critical section, except that the mutex is accessible to threads running in different processes. CreateMutex, ownership passes to other threads on a first-come, first-served basis.
+    
+    + Semaphores are used to maintain a reference count on some available resource. CreateSemaphore,  an initial resource count, and the maximum resource count. 
+    
+    A thread requesting a resource passes its semaphore handle in a call to the WaitForSingleObject function.
+    
+    The semaphore object polls the resource to determine whether it is available. If so, the semaphore decrements the resource count and wakes the waiting thread. zero, the thread remains asleep until another thread releases a resource
+    
+    
+## Single threaded and multithreaded communication 
+- one multithreaded apartment, containing all threads initialized as free-threaded, and one or more single-threaded apartments.
+    
+- Interface pointers must be marshaled between apartments but can be used without marshaling within an apartment. 
+    
+- Calls to objects in a single-threaded apartment will be synchronized by COM
+    
+- inter-apartment communication requires  CoMarshalInterThreadInterfaceInStream and CoGetInterfaceAndReleaseStream
+    
+    
+## In-Process Server Threading Issues 
+- an in-process server does not call CoInitialize, CoInitializeEx, or OleInitialize to mark its threading model
+    
+thread-aware DLL-based or in-process objects, you need to set the threading model in the registry
+    
+add the ThreadingModel value to the InprocServer32 key in the registry. The default value is single-threaded-per-process 
+
+- a client and an in-process object that use different threading models is exactly like the interaction between clients and out-of-process servers. 
+
+- an in-process object that supports the single-threaded model is called simultaneously by multiple threads of a client,
+    
+COM creates the object in the client's main apartment and requires all the other client apartments to access the object by using proxies
+    
+- if you design a custom interface on an in-process server, you should also provide the marshaling code for it 
+    
+- all of the DLL entry points (like DllGetClassObject and DllCanUnloadNow) and global data should always be accessed by the same apartment. such objects in the main apartment of the client, giving the main apartment direct access to the object's pointers.
+    
+Calls from the other apartments use interthread marshaling to go from the proxy to the stub in the main apartment
+    
+- a single-threaded in-process server, an object provided by an apartment model DLL must be accessed by the same client apartment from which it was created.
+    
+objects provided by this server can be created in multiple apartments of the client, so the server must implement its entry points (like DllGetClassObject and DllCanUnloadNow) for multithreaded use
+    
+- If the DLL provides only one instance of the class factory to create all the objects, the class factory implementation must also be designed for multithreaded use
+    
+If the DLL creates a new instance of the class factory each time DllGetClassObject is called, the class factory need not be thread-safe.
+    
+- Objects created by the class factory need not be thread-safe. Once created by a thread, the object is always accessed through that thread. calls to the object will be synchronized by COM 
+
+- in-process DLL ThreadingModel value is set to "Both", an object provided by this DLL can be created and used directly (without a proxy) in single-threaded or multithreaded client apartments. 
+    
+- CoCreateFreeThreadedMarshaler function. This function creates a free-threaded marshaling object that can be aggregated with an in-process server object. 
+    
+when the client marshals the object's interface to a different apartment in the same process. The client does not need to do any synchronization. 
+
+- An object provided by an in-process DLL that supports only free threading is a free-threaded object. It implements its own synchronization and can be accessed by multiple client threads at the same time. server does not marshal interfaces between threads. 
+
+single threaded apartments that create it will access it through a proxy 
+
+
+# Accessing interfaces across apartments 
+- any apartment in a process get access to an interface implemented on an object in any other apartment in the process. This is done through the IGlobalInterfaceTable interface. 
+
+    + register an interface as a global processwide interface 
+    + get a pointer to that interface from any other aparment through a cookie 
+    + revoke the global registration of an interface 
+
+- agile objects (free-threaded, marshaled objects) containing interface pointers to other objects.
+
+- global interface table is good for save process-wide variables and agile objects (free-threaded, marshaled objects). It guaranteeing that a valid proxy or directr pointer to the agile objects. 
+
+- The global interface table is not portable across process or machine boundaries. cannot be used in place of parameter-passing mechanism 
+
+
+
+# Greating the global interface table 
+- There is a single instance of the global interface table per process
+- create the global interface table object 
+
+```
+HRESULT hr;
+hr = CoCreateInstance(CLSID_StdGlobalInterfaceTable,
+                 NULL,
+                 CLSCTX_INPROC_SERVER,
+                 IID_IGlobalInterfaceTable,
+                 (void **)&gpGIT);
+if (hr != S_OK) {
+  exit(0); // Handle errors here.
+}
+```
+
+- all to the CoCreateInstance function, register the interface from the apartment in which it resides with a call to the RegisterInterfaceInGlobal method
+
+revoke the interface's global registration, any apartment can call the RevokeInterfaceFromGlobal method
+
+- using IGlobalInterfaceTable would be when you want to pass an interface pointer on an object in a single-threaded apartment (STA) to a worker thread in another apartment. Instead of marshal between threads.
+
+IGlobalInterfaceTable allows you simply to pass a cookie. register the interface in the global interface table, you get a cookie that you can use instead of passing the actual pointer. 
+
+- IGlobalInterfaceTable provides complete thread-safe functionality 
+
+
+# When to use the global interface table 
+- CoMarshalInterThreadInterfaceInStream function. It can also be used to pass an interface pointer from one thread to another thread in the same process.
+
+- Simplified the problems 
+    + An in-process agile object aggregates the free-threaded marshaler.
+    + This same agile object also holds (as member variables) interface pointers to other objects not agile or aggregate the free-threaded marshaler 
+
+if the outer object gets marshaled to another apartment and the application calls on it,. RPC_E_WRONG_THREAD. This error occurs because the inner interface is designed to be callable only from the apartment
+
+the outer object should call IGlobalInterfaceTable::RegisterInterfaceInGlobal on the inner interface and store the resulting cookie in its member instead of pointer
+
+call IGlobalInterfaceTable::GetInterfaceFromGlobal, use the returned interface pointer, and then release it. 
+
+outer object goes away, it should call IGlobalInterfaceTable::RevokeInterfaceFromGlobal to remove itself
+
+
+
+## COM clients and servers 
+- A COM client is whatever code or object gets a pointer to a COM server and uses its services by calling the methods
+
+- A COM server is any object that provides services to clients; these services are in the form of COM interface implementations
+
+- In-process servers are implemented in a dynamic linked library (DLL)
+
+- out-of-process servers are implemented in an executable file (EXE)
+
+- Distributed COM further allows objects to be packaged as service applications, synchronizing COM with the rich administrative and system-integration of windows 
+
+- DCOM is not separate;it is just COM with a longer wire. I
+
+
+## Getting a pointer to an object 
+- COM does not have a strict class model. four ways that a client can instantiate an interface on an object 
+
+Call a COM library function that creates an object of a predetermined type; return a pointer only one specific interface for a specific object class.
+
+Call a COM library function that can create an object based on a class identifier (CLSID) 
+
+Call a method of some interface that creates another object 
+
+Implement an object with an interface through which other objects pass their interface pointer to the client directly.
+
+- Creating an object of a predetermined type 
+
+ are numerous COM functions, such as CoGetMalloc, that return pointers to specific interface implementations. helper functions 
+ 
+- the function CoGetClassObject, which creates a class object and supplies a pointer to an interface that allows you to create instances of that class
+
+- typical way to create an enumerator instance and get a pointer to its interface is to call a method from another interface
+
+
+
+# Creating an object through a class object 
+- COM class is identified by a CLSID, a unique 128-bit GUID, which the server must register. 
+
+- all the CLSIDs for the servers installed on the system. This is a mapping between each CLSID and the location of the DLL or EXE that houses the code for that CLSID
+
+- distributed systems, COM provides registry entries that allow a remote server to register itself for use by a client. COM allows clients to override registry entries and to specify server locations
+
+- calls to activation functions other than CoGetClassObject (such as CoCreateInstanceEx) require that the server support IClassFactory.
+
+- create an instance of the server's object, it uses the desired object's CLSID in a call to CoGetClassObject. 
+
+- activating object instances is through the class moniker.  
+
+
+
+## Locating a remote object 
+- COM has added registry keys that permit a server to register the name of the machine on which it resides or the machine where an existing storage is located.
+
+- COM has replaced a previously reserved parameter of CoGetClassObject with a COSERVERINFO structure, which allows a client to specify the location of a server. 
+
+-  CoGetClassObject function is the CLSCTX enumeration
+
+
+
+## Instance creation helper functions 
+- the CoCreateInstance function. This function encapsulates the process of creating a class object
+
+- more specific OleCreate, the OLE compound document helper that creates a class object
+
+- four important new instance creation mechanisms 
+
+class monikers and IClassActivator 
+
+CoCreateInstanceEx 
+
+CoGetInstanceFromFile 
+
+CoGetInstanceFromIStorage
+
+-  A class moniker permits you to identify the class of an object
+
+ a file moniker, to indicate the location of the object
+
+
+
+## COM server responsibilities 
+- server must implementation of either the IClassFactory or IClassFactory2 interface
+
+- must register its CLSID in the system registry on the machine 
+
+- publishing its machine location to other systems on a network to allow clients to call it 
+
+- In-process servers should implement and export certain functions 
+
+
+### Implementing IClassFactory
+- IClassFactory contains two methods 
+
+CreateInstance. This method must create an uninitialized instance of the object and return a pointer to a requested interface on the object
+
+LockServer. This method just increments the reference count on the class object to ensure that the server stays in memory and does not shut down
+
+- responsible for its own licensing, COM defines IClassFactory2, which inherits its definition from IClassFactory. 
+
+
+### Licensing and IClassFactory2
+- The IClassFactory interface on a class object provides the basic object creation mechanism of COM. 
+
+- IClassFactory::CreateInstance method can allow or disallow object creation based on the existence of a machine license
+
+The GetLicInfo method fills a LICINFO structure with information describing the licensing behavior of the class factory
+
+The RequestLicKey method provides a license key for the component
+
+The CreateInstanceLic method creates an instance of the licensed component if the license key parameter (BSTRÂ bstrKey) is valid.
+
+the development tool could create a header (.h) file containing the BSTR license key, and then you would include that .h file in your client application.
+
+create the component with IClassFactory::CreateInstance or pass the run-time key to the CreateInstanceLic method
+
+
+
+### Registering COM servers 
+-  registering a class at installation 
+
+This information must be registered for all CLSIDs. Other information is optional. Tools such as Regsvr32 make it simple to write a setup program that registers servers at installation.
+
+
+run at a particular computer whenever an activation function is called for which a COSERVERINFO structure is not specified.
+
+The ActivateAtStorage capability provides a transparent way to allow clients to locate running objects
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AppID
+   {AppID_GUID}
+      RemoteServerName = name
+      
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AppID
+   {AppID_GUID}
+      ActivateAtStorage = value
+```
+
+    + two important keys in the registry: the CLSID and the AppID. 
+
+    + can also be installed as a service or run under a specific user account. For more information, see Installing as a Service Application.
+
+https://docs.microsoft.com/en-us/windows/win32/com/installing-as-a-service-application
+
+a server or ROT object that is not a service or running under a specific user account can be referred to as an "activate as activator" server 
+
+    + the security context and the window station/desktop of the client must match the server's. COM clients and servers should not change their window station or thread desktops after calling CoInitialize or CoInitializeEx
+    
+    +  in-process, a call to CoGetClassObject to create its class object is automatically passed by COM to the DllGetClassObject function
+    
+    + Classes in executables can specify that COM should execute their process and wait for the process to register their class object's IClassFactory interface through CoRegisterClassObject
+
+- registering a running EXE server 
+
+    + an executable (EXE) server is launched, it should call CoRegisterClassObject, which registers the CLSID for the server in what is called the class table
+
+    allows the service control manager (SCM) to determine that it is not necessary to launch the class again
+    
+    + he server for a class object should call CoRevokeClassObject to revoke the class object
+
+- registering objects in the ROT 
+
+a client asks a server to create an object instance, the server typically creates a moniker for the object and registers it in the running object table (ROT) IRunningObjectTable::Register 
+ 
+When the server calls CreateFileMoniker to create a file moniker to be registered in the ROT, servers should pass local file names in UNC format
+
+- self registration a server module can package its own registry operations, both registration and unregistration, into the module itself.
+
+    + DLL or EXE, should first include an "OleSelfRegister" string in the StringFileInfo section of its version information resource
+
+```
+VS_VERSION_INFO VERSIONINFO 
+ 
+ ... 
+ 
+ BEGIN 
+   BLOCK "StringFileInfo" 
+    BEGIN 
+#ifdef UNICODE 
+     BLOCK "040904B0" // Lang=US English, CharSet=Unicode 
+#else 
+     BLOCK "040904E4" // Lang=US English, CharSet=Windows Multilingual 
+#endif 
+      BEGIN 
+       ... 
+       VALUE "OLESelfRegister", "\0" 
+      END 
+ 
+   ... 
+ 
+   END 
+ 
+ ... 
+ 
+ END 
+```
+
+    + in a DLL module, the DLL must export the functions DllRegisterServer and DllUnregisterServer.
+
+    Any application want to instruct the server to register itself can  obtain a pointer to DllRegisterServer through the GetProcAddress function. Within DllRegisterServer, the DLL creates all its necessary registry entries, storing the correct path to the DLL for all InprocServer32 or InprocHandler32 entries
+
+    + remove the component from the system, it should unregister that component by calling DllUnregisterServer.
+
+    should not blindly remove all entries for its classes because other software may have stored additional entries, such as a TreatAs key.
+
+    +  register the server launches the EXE server with the command-line argument /RegServer or -RegServer (case-insensitive). If the application wishes to unregister the server, it launches the EXE with the command-line argument /UnregServer or -UnregServer. 
+
+    + The server must register the full path to the installation location of the DLL or EXE module for their respective InprocServer32, InprocHandler32, and LocalServer32 keys. The path can be obtain by GetModuleFileName 
+
+- installing as a service 
+
+    + a local server executable (EXE), a COM object may also package itself to run as a service application when activated by a local or remote client. run under a specific user account and window station.
+    
+    + An object written as a service is installed for use by COM by establishing a LocalService value under its AppID key and performing a standard service installation.
+    
+install an object as a service application 
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\AppID
+   {AppID_GUID}
+      LocalService = name
+```
+
+    + When a class is configured in this fashion, calls to CoRegisterClassObject with this CLSID will fail unless the process was launched by COM on behalf of an actual activation request
+
+    + The user name is taken from the RunAs named-value under the class's APPID key. If the user name is "Interactive User", the class code is run in the security context of the currently logged on user
+    
+    + If no RunAs then the password is retrieved from a hidden portion of the registry only to administrators 
+
+    the class code runs with its own desktop and window-station and does not share window handles, the clipboard, or other user interface elements
+    
+     + object when it marshals the IClassFactory interface and an implicit call to LockServer with FALSE when the client releases the IClassFactory interface. 
+
+it is not necessary to remote LockServer calls back to the server
+
+
+### Out-fo-process server implementation helpers 
+- prevent race conditions in server activation
+
+CoAddRefServerProcess, increments a global per-process reference count.
+
+CoReleaseServerProcess, decrements the global per-process reference count.
+
+CoSuspendClassObjects, 
+
+CoResumeClassObjects
+
+- A COM server that registers multiple classes typically calls CoRegisterClassObject with REGCLS_LOCAL_SERVER for each CLSID it supports. After it has done this for all classes, the server enters its message loop. 
+
+Single thread server will automatically block the request 
+
+- COM should call CoRegisterClassObject with REGCLS_LOCAL_SERVER | REGCLS_SUSPENDED for each different CLSID the server supports.
+
+ready to accept incoming activation requests, the server should make one call to CoResumeClassObjects. This function tells COM to inform the SCM it's ready 
+
+-  when the call CoRevokeClassObject and CoUninitialize.
+
+
+### GUI creation and optimizations
+- Server implementers generally obtain CLSIDs through the CoCreateGuid function. 
+
+- uuidgen utility using the -n and -x switches
+
+say 500. For example, if you were to type
+
+$ uuidgen -n500 -x > guids.txt
+
+
+## Persistent object state 
+- All persistent object interfaces are derived from IPersist
+
+IPersistStream
+IPersistStreamInit
+IPersistStorage
+IPersistFile
+IPersistMoniker
+IPersistMemory
+IPersistPropertyBag
+
+- several object types that allow support for different persistent object interfaces 
+
+Monikers
+	IPersistStream
+    
+OLE embeddable objects
+	IPersistStorage, IPersistFile
+    
+ActiveX controls
+	IPersistStreamInit, IPersistStorage, IPersistMemory, IPersistPropertyBag, IPersistMoniker
+    
+ActiveX document objects
+    IPersistStorage, IPersistFile
+
+- initializaing persistent objects 
+
+interfaces, IPersistStreamInit, IPersistStorage, IPersistMemory, and IPersistPropertyBag, allow clients to initialize objects to a "fresh" or "default" state which is different to newly created ones
+
+the initialization can be performed only when it is actually needed and clients can avoid initializing objects to the default state
+
+
+### Providing class information 
+- not all objects have a CLSID, although they still need to provide type information.
+
+outgoing interfaces on connectable objects. IProvideClassInfo
+
+query the object for IProvideClassInfo or IProvideClassInfo2
+
+calls the GetClassInfo method to get the type information
+
+- an outgoing interface is known at compile time to both the connectable object and the sink object; such is the case with IPropertyNotifySink.
+
+- IProvideClassInfo 
+    + The client enumerates the connection points and then, to obtain the IIDs of outgoing interfaces 
+    + The client queries the connectable object for one of the IProvideClassInfo interfaces
+    + calls methods in the IProvideClassInfo interfaces to get the type information 
+    + client creates a sink object supporting the outgoing interface
+    + client calls IConnectionPoint::Advise to connect its sink to the connection point.
+    
+    IProvideClassInfo::GetClassInfo
+    IProvideClassInfo2::GetGUID
+    
+
+
+### Inter-object communication 
+-  If the object is in-process, the call reaches it directly, with no intervening system-infrastructure code. 
+
+- If the object is out-of-process, the call first reaches what is called a "proxy" object provided either by COM or by the object
+
+generate the appropriate remote procedure call (or other communication mechanism in the case of custom generated proxies) to the other process or the other computer
+
+- This process of packaging pointers for transmission across process boundaries is called marshaling.
+
+- COM provides this capability by allowing an object implementor to support custom marshaling (also called IMarshal marshaling).
+
+- provide networkwide interoperability, COM, through language-independent interfaces
+
+- The double indirection of the vtbl structure means that the pointers in the table of function pointers do not need to point directly to the real implementation in the real object. This is the heart of process transparency.
+
+- The proxy object packages up the function parameters in some data packets and generates an RPC call to the local or remote object. That packet is picked up by a stub object in the server's process
+
+### Marshaling details 
+- marshaling an integer parameter involves simply copying the value into the message buffer. 
+
+- When a pointer is marshaled, the data that the pointer is pointing to is copied following rules 
+
+- standard COM-defined interfaces 
+    + the proxies and stubs for standard marshaling are in-process component objects which are loaded from a systemwide DLL Ole32.dll 
+    
+    + proxies and stub for standard marshaling are generated by the interface designer, typically with MIDL. These proxies and stubs are statically configured in the registry
+    
+    + An alternative to using MIDL to generate proxies and stubs for custom interfaces, a type library can be generated instead and the system provided
+    
+- Objects that implement custom marshaling must implement the IMarshal interface
+
+- component of interprocess communication 
+
+    + On the client side of the process boundary, the client's method call goes through the proxy and then onto the channel
+    
+    + The channel sends the buffer containing the marshaled parameters to the RPC run-time library, which transmits it across the process boundary. 
+
+
+### Proxy 
+- Typically, the proxy's role is to package the interface parameters for calls to methods in its object interfaces.
+
+- Each proxy also implements the IRpcProxyBuffer interface. Although the object interface represented by the proxy is public, the IRpcProxyBuffer implementation is private and is used internally within the proxy
+
+- structure of the proxy 
+
+    + IA1 and IA2. Each interface proxy implements IRpcProxyBuffer for internal communication between the aggregate pieces
+    
+    +  IRpcChannelBuffer interface, which is implemented by the channel. The channel in turn forwards the call to the RPC run-time library
+    
+    IUnknown <-> Proxy manager   |
+                 Interface Proxy | <--> Channle <---> RPC runtime 
+                 Interface Proxy |
+
+
+### Stub 
+- The stub manager keeps track of the available interface stubs.
+- The stub, like the proxy, unmarshal the parameters and code that calls one of the object's supported interfaces. 
+
+- difference between stub and proxy 
+
+    + stub represents the client in the object's address space.
+    
+    + The stub is not implemented as an aggregate object because there is no requirement that the client be viewed as a single unit
+    
+    + The interface stubs are private rather than public.
+    
+    + The interface stubs implement IRpcStubBuffer, not IRpcProxyBuffer.
+    
+    + the stub unpackages them after they have been marshaled and then packages the reply.
+    
+- structure of the stub 
+
+Server <-> IUknown Stub Manager <-> Channel  <-> RPC runtime 
+           Interface Stub 
+           Interface Stub 
+    
+
+### Channel 
+- transmitting all messages between client and object across the process boundary. 
+- Microsoft Interface Definition Language (MIDL) 
+- Interface Definition Language (IDL) 
+
+
+
+### Microsoft RPC 
+- goal of RPC is to provide transparent communication so that the client appears to be directly communicating with the server. Microsoft's implementation of RPC is compatible with the Open Software Foundation (OSF) Distributed Computing Environment (DCE) RPC.
+
+
+## Making anmd processing async call 
+- if a server object implements a synchronous interface named IMyInterface, there will be a call object that implements an asynchronous interface named AsyncIMyInterface.
+
+- server that support asynchronous calls implement the ICallFactory interface. This interface exposes a single method, CreateCall,
+
+- These methods attach the prefixes Begin_ and Finish_ to the name of the synchronous method. 
+
+an interface named ISimpleStream has a Read method, the AsyncISimpleStream interface will have a Begin_Read and a Finish_Read method.
+
+This proxy will marshal the Begin_ method as a synchronous call, the server will process the call synchronously, and the client can obtain the out parameters by calling the Finish_ method.
+
+between client and server is marshaled as if the call were synchronous
+
+-  client and server are in the same apartment, the server object will process whichever call the client makes. If a call object is not available, the client must explicitly obtain the synchronous interface
+
+
+### Making an asynchronous call 
+- To begin an asynchronous call
+
+Query the server object for the ICallFactory interface. If QueryInterface returns E_NOINTERFACE, the server object does not support
+
+Call ICallFactory::CreateCall to create a call object corresponding to the interface you want and release the ICallFactory
+
+query the call object for the asynchronous interface. optional 
+
+Call the appropriate Begin_ method.
+    
+- A call object can process only one asynchronous call at a time, second call Begin_ method will return RPC_E_CALL_PENDING.
+
+- If the client does not need the results of the Begin_ method, it can release the call object
+
+- server signals the call object that it is done. When the client is ready, it checks to see whether the call object has been signaled. 
+
+ISynchronize interface on the call object. The call object normally implements this interface by aggregating a system-supplied synchronization object
+
+- to complete an asynchronous call 
+
+Query the call object for the ISynchronize interface.
+
+Call ISynchronize::Wait.
+
+If Wait returns RPC_E_TIMEOUT, the Begin_ method is not finished processing. The client can continue with other work and call Wait again later. 
+
+If Wait returns S_OK, the Begin_ method has returned. Call the appropriate Finish_ method.
+
+no call is in progress, Finish_ will return RPC_E_CALL_COMPLETE.
+
+- the client is responsible for releasing the call object when the object is no longer needed.
+
+
+### Client security during an asynchronous call 
+- MIDL for objects that use standard marshaling implements the IClientSecurity interface. Clients can manage the security of marshaled calls by querying for IClientSecurity on the call object. 
+
+can obtaining or changing security settings 
+
+
+### Impersonation and asynchronous calls 
+- The server cannot impersonate the client after the server's call to ISynchronize::Signal completes, even if the Begin_ method has not yet completed
+
+- If the server impersonates the client before it calls Signal, the impersonation token will not be removed from the thread until the server calls IServerSecurity::RevertToSelf or until the server's call to Begin_ return
+
+
+### Canceling an asynchronous call 
+- ICancelMethodCalls is always available for marshaled calls
+
+must call Finish_ method to clean up, any further call will return RPC_E_CALL_PENDING.
+
+- to cancel 
+Query ICancelMethodCalls
+
+call ICancelMethodCalls::Cancel and then call Release to the interface pointer 
+
+call Finish_ method if needed 
+
+
+
+### Canceling method calls 
+- In COM, you can use the IMessageFilter interface to cancel a pending call that originates from a single-threaded apartment.
+
+- COM automatically provides a standard implementation of cancel objects for client objects and interfaces that use standard marshaling.
+
+
+
+### Call Synchronization 
+- COM provides call synchronization for single-threaded apartments only. 
+
+- COM calls processes fall into three categories 
+
+Synchronous calls, When making synchronous calls, the caller waits for the reply before continuing and can receive incoming messages while waiting. 
+
+Asynchronous notifications, COM uses PostMessage or high-level events to send asynchronous notifications, asynchronous methods of IAdviseSink:
+
+OnDataChange
+OnViewChange
+OnRename
+OnSave
+OnClose
+
+- COM is processing an asynchronous call, synchronous calls cannot be made. For example, a container application's implementation of OnDataChange cannot contain a call to IPersistStorage::Save.
+
+- following methods are input synchronized, making input-synchronized calls, the object called must complete the call before yielding control
+
+IOleWindow::GetWindow
+IOleInPlaceActiveObject::OnFrameWindowActivate
+IOleInPlaceActiveObject::OnDocWindowActivate
+IOleInPlaceActiveObject::ResizeBorder
+IOleInPlaceUIWindow::GetBorder
+IOleInPlaceUIWindow::RequestBorderSpace
+IOleInPlaceUIWindow::SetBorderSpace
+IOleInPlaceFrame::SetMenu
+IOleInPlaceFrame::SetStatusText
+IOleInPlaceObject::SetObjectRects
+
+- COM manages method calls by assigning an identifier called a logical thread ID. A new one is assigned when a user selects a menu command or when the application initiates a new COM operation 
+
+
+
+## Defining COM interfaces 
+- After you define an interface, describe it in Microsoft Interface Definition Language (MIDL), compile and register it, you use it just like any generic interface.
+
+- requires a development environment that includes a C/C++ compiler and the Midl.exe compiler.
+
+- steps to create interfaces 
+    + how you want to provide marshaling support for your interface, with type-library or proxy/stub dll 
+    
+    + describe the interface or interfaces in an interface definition (IDL) file.  an application configuration file (ACF)
+    
+    add a library statement that references the interfaces for which you want to generate 
+    
+    + MIDL compiler to generate a type library file and header file, or C-language proxy/stub files
+
+    + Depending on the marshaling method you chose, write a module definition (DEF) file, compile and link all the MIDL-generated files into a single proxy DLL, and register the interface in the system registry, or register the type library 
+
+- MIDL reference 
+
+https://docs.microsoft.com/en-us/windows/win32/midl/midl-start-page
+
+interface definition language (IDL) files and application configuration files (ACF) required for remote procedure call (RPC) interfaces and COM/DCOM interfaces.
+
+    + generate code optimized for a particular release.
+    $ midl <options> filename.idl 
+
+    command line reference 
+    https://docs.microsoft.com/en-us/windows/win32/midl/midl-command-line-reference
+    
+   
+   
+### Interface marshaling 
+- Write your own proxy/stub code that calls the COM channel in turn calls the RPC runtime 
+
+- Describe your interfaces in an interface definition language (IDL) file and use the MIDL compiler to generate a proxy/stub DLL
+
+- use MIDL to generate a type library, the system uses to provide marshaling support at run time. 
+
+
+
+### Anatomy of an IDL file 
+- example 
+```
+//
+// Example2.idl
+//
+
+import "example.idl","oaidl.idl"; 
+
+[
+uuid(a03d1422-b1ec-11d0-8c3a-00c04fc31d2f),
+helpstring("IFace3 interface"),
+pointer_default(unique);
+dual,
+oleautomation
+] 
+interface IFace3 : IDispatch
+{
+   HRESULT MethodD([in] BSTR OrderIn,
+                   [out, retval] * pTakeOut);
+}; //end IFace3 def
+
+[
+uuid(a03d1423-b1ec-11d0-8c3a-00c04fc31d2f),
+version(1.0),
+helpstring("Example Type Library"),
+] library ExampleLib
+{
+  importlib("stdole32.tlb");
+  interface IFace3;
+  [
+  uuid(a03d1424-b1ec-11d0-8c3a-00c04fc31d2f),
+  helpstring("Breakfast Component Class")
+  ] coclass BkfstComponent
+    {
+    [default]interface IFace1;
+    interfaceIFace2
+    }; //end coclass def
+
+[
+uuid(a03d1424-b1ec-11d0-8c3a-00c04fc31d2f),
+helpstring("IFace4 interface"),
+pointer_default(unique);
+dual,
+oleautomation
+] 
+interface IFace4 : IDispatch
+{
+[propput] HRESULT MethodD([in] BSTR OrderIn);
+[propget] HRESULT MethodE([out, retval] * pTakeOut);
+}; //end IFace4 def
+ 
+}; //end library def
+```
+
+The helpstring attribute is optional; you use it to briefly describe the object or to provide a status line. 
+
+The dual attribute on IFace3 creates an interface that is both a dispatch interface and a COM interface. Because it is derived from IDispatch, a dual interface supports Automation, which is what the oleautomation attribute specifies.
+
+The coclass statement defines an entirely new component class
+
+
+
+### MIDL Compilation 
+- MIDL compiler (Midl.exe) generates the files described in the following table
+*.h 
+*_p.c, proxy/stub file 
+*_i.c, interface ID file 
+2.tlb, a compund document file 
+*.c, contains the data you need to create a proxy/stub dll 
+
+- compiler options 
+https://docs.microsoft.com/en-us/windows/win32/com/midl-compiler-options
+
+/acf 
+
+/dlldata
+
+/env 
+
+/header, /h 
+
+/iid 
+
+/lcid 
+
+/no_format_opt 
+
+/Oi, /Oic, /Oif 
+
+/out 
+
+/proxy 
+
+/tlb 
+
+- loading and registering a type library 
+
+The Automation dynamic link library, Oleaut32.dll, provides several functions that you can call to load and register a type library. LoadTypeLibEx loads the library and creates the registry entries 
+
+```
+ITypeLib *pTypeLib;
+HRESULT hr;
+hr = LoadTypeLibEx("example.tlb", REGKIND_REGISTER, &pTypeLib);
+if(SUCCEEDED(hr))
+{
+    pTypeLib->Release();
+} else {
+    exit(0); // Handle errors here.
+}
+```
+
+
+### Building and registering a proxy dll 
+- choose proxy/stub marshaling,  the .c and .h files that MIDL generated must be compiled and linked to create a proxy DLL, and that DLL must be entered into the system registry
+
+    1. write a module define file 
+    
+```
+LIBRARY        example.dll
+DESCRIPTION    'generic proxy/stub DLL'
+EXPORTS        DllGetClassObject      @1 PRIVATE
+               DllCanUnloadNow        @2 PRIVATE
+               DllRegisterServer      @4 PRIVATE
+               DllUnregisterServer    @5 PRIVATE
+```
+alternatively you can specify these exported functions on the LINK command line of your makefile
+
+    2. Rpcproxy.h, which Dlldata.c includes, and default implementations are part of the RPC run-time library. COM uses these functions to create a class factory, unload DLLs, self register and unregister. nned to invoke the Cpreprocessor /D 
+    
+```
+example.h example.tlb example_p.c example_i.c dlldata.c : example.idl
+    midl example.idl
+dlldata.obj : dlldata.c
+    CL /c /DWIN32 /DREGISTER_PROXY_DLL dlldata.c
+example.obj : example_p.c
+    CL /c /DWIN32 /DREGISTER_PROXY_DLL example_p.c
+iids.obj : example_i.c
+PROXYSTUBOBJS = dlldata.obj example.obj iids.obj
+PROXYSTUBLIBS = kernel32.lib rpcndr.lib rpcns4.lib rpcrt4.lib uuid.lib
+proxy.dll : $(PROXYSTUBOBJS) example.def
+    link /dll /out:proxy.dll /def:example.def
+        $(PROXYSTUBOBJS) $(PROXYSTUBLIBS)
+    regsvr32 /s proxy.dll
+```
+    
+PROXY_CLSID=guid, PROXY_CLSID_IS=explicit value of guid, and ENTRY_PREFIX=prefix string. 
+
+- manually register the proxy dll 
+    
+```
+HKEY_CLASSES_ROOT
+   Interface
+      iid
+         (Default) = ICustomInterfaceName
+         ProxyStubClsid32 = {clsid}
+         
+         
+HKEY_CLASSES_ROOT
+   CLSID
+      clsid
+         (Default) = ICustomInterfaceName_PSFactory
+         InprocServer32 = proxstub.dll
+```
+
+
+### Interface design rules 
+- an object must implements the IUnknown 
+
+must have a unique interface identifier (IID).
+
+All interface methods must return an HRESULT value, then RPC can report errors 
+
+all string must be unicode 
+
+your data types must be remotable
+
+create your own marshaling and unmarshaling routines. Also, LPVOID, or void *, has no meaning on a remote computer. Use a pointer to IUnknown
+
+- RPC run time must know the exact size of the data. If, for example, a CHAR * parameter points to a buffer of characters rather than to a single character, the data cannot be correctly re-created. Use the syntax available with MIDL to accurately describe the data structures
+
+- proxies and stubs assume that all pointers are initialized
+
+allocate and free memory. Remember that, unless you explicitly tell a COM object not to free a data structure that was created during an out-of-process call, that structure will be destroyed when the call completes. 
+
+- defining your HRESULT return values so that you don't create error codes that conflict with COM-defined FACILITY_ITF codes
+
+- unchecked IDL file can arise for in-process servers that do not support multiple single-threaded apartments). A server that does not specify a threading model is implicitly single-threaded.
+
+first called CoInitialize or CoInitializeEx.
+
+which can result in a return of REGDB_E_IIDNOTREG in response to a call to QueryInterface).
+
+- COM makes cross-process and cross-network calls transparent to programs, it cannot make high-frequency and high-bandwidth calls efficient across address spaces.
+
+
+
+### Using a COM interface 
+- The client code is the user of the COM interface. To use any COM interface, custom or standard, a client must know its IID
+
+```
+void CustomRpt(char *pszObject) 
+{ 
+    HRESULT             hr; 
+    WCHAR               wszObject[128]; 
+    WCHAR               wszMsg[128] = {L"Your Message Here...\n"}; 
+    IMoniker            *pmkObject = NULL; 
+    IUnknown            *pIUnk = NULL; 
+    IPersistFile        *pIPersistFile = NULL; 
+    ICustomInterface    *pICustomInterface = NULL; 
+ 
+    // Create a wide-character version of the object's file name. 
+    StringCchPrintf(wszObject, 128, L"%hs", pszObject); 
+ 
+    // Get a file moniker for the object (a *.smp file). 
+    hr = CreateFileMoniker(wszObject, &pmkObject); 
+ 
+    if(FAILED(hr)) 
+    { 
+        printf("Client: CreateFileMoniker for Object failed"); 
+        return; 
+    } 
+ 
+    // BindMoniker is equivalent to calling CreateBindCtx() followed by 
+    // a call to BindToObject(). It has the net result of binding the 
+    // interface (specified by the IID) to the moniker. 
+ 
+    hr = BindMoniker(pmkObject, 0, IID_IUnknown, (void **)&pIUnk); 
+    if (FAILED(hr)) 
+    { 
+        printf("Client: BindMoniker failed (%x)\n", hr); 
+        return; 
+    } 
+ 
+    // Try a couple QueryInterface calls into the object code; first a 
+    // QueryInterface to IPersistFile... 
+ 
+    hr = pIUnk->QueryInterface(IID_IPersistFile, (void **)&pIPersistFile); 
+ 
+    if (FAILED(hr)) { 
+        printf("Client: QueryInterface IPersistFile failed (%x)\n", hr); 
+        pIUnk->Release(); 
+        return; 
+    } 
+ 
+    // Followed by a QueryInterface to ICustomInterface. 
+    hr = pIUnk->QueryInterface(IID_ICustomInterface, (void **)&pICustomInterface); 
+ 
+    if (FAILED(hr)) { 
+        printf("Client: QueryInterface failed (%x)\n", hr); 
+        pIUnk->Release(); 
+        pIPersistFile->Release(); 
+        return; 
+    } 
+ 
+    // CustomReport() is the object function that displays the time and 
+    // date information on the object. 
+    hr = pICustomInterface->CustomReport(); 
+ 
+    if (FAILED(hr)) 
+    { 
+        printf("Client: pICustomInterface->CustomReport failed (%x)\n", hr); 
+        pIUnk->Release(); 
+        pIPersistFile->Release(); 
+        return; 
+    } 
+ 
+    // Clean up resources by calling release on each of the interfaces. 
+    pIPersistFile->Release(); 
+    pICustomInterface->Release(); 
+    pIUnk->Release(); 
+    return; 
+} 
+```
+
+
+## Registering COM applications 
+- Any Windows-based program can add information to the registry and read information back from the registry.
+
+- registry hierarchy 
+
+The registry is structured as a hierarchy of keys, subkeys, and named values or single default values. 
+
+- classes and servers 
+
+COM first consults HKEY_CURRENT_USER\Software\Classes before looking under HKEY_CLASSES_ROOT
+
+HKEY_CLASSES_ROOT\CLSID and keeps per-user class information under HKEY_CURRENT_USER\Software\Classes\CLSID
+
+COM servers support self-registration
+
+    DllRegisterServer
+    DllUnregisterServer
+
+- classifying components 
+
+A component category is a set of interfaces that have been assigned a GUID named CATID. 
+
+The Component Categories Manager object implements this interface. See ICatRegister and ICatInformation
+
+Component Categories Manager, a COM object with a CLSID of CLSID_StdComponentCategoriesMgr. This COM object provides the following interfaces:
+
+ICatInformation, provides methods for obtaining information abou tthe categories implemented or required by a certain class 
+ICatRegister, provides methods for registering and unregistering component category information 
+
+- Using OleView, OleView provides a higher-level view of the information contained in the registry. 
+
+- registering components, the following types must be added into the registry usually through a setup 
+
+    + server applications 
+    + container/server appliations 
+    + container applications that allow linking to embedded objects 
+    
+register COM library (DLL) information and application-specific information.
+
+key names are not case sensitive
+
+register and unregister a component:
+
+    RegOpenKeyEx
+    RegCreateKeyEx
+    RegSetValueEx
+    RegEnumKeyEx
+    RegDeleteKey
+    RegCloseKey
+    
+Applications that back up or restore system state including system files and registry hives should use the Volume Shadow Copy Service 
+    
+- checking registration 
+
+Whether the CLSIDs are present in the registry.  no OLE 2-related information 
+
+Whether the path containing server entries (LocalServer and LocalServer32, InprocServer and InprocServer32, and DefaultIcon) points to the location at which the application is currently installed.
+
+- unknown  user types 
+
+adding the following registry key:
+
+HKEY_LOCAL_MACHINES\SOFTWARE\Microsoft\OLE2\UnknownUserType = usertype
+
+IOleObject::GetUserType examines the registry by calling OleRegGetUserType
+
+- COM registry keys 
+AppID, Groups the configuration options (a set of named values) for one or more distributed COM objects 
+
+CLSID, egister a CLSID for each supported class of objects.
+
+ProgID, A programmatic identifier (ProgID) is a registry entry that can be associated with a CLSID. The ProgID key maps a user-friendly string to a CLSID
+
+VersionIndependentProgID, Associates a ProgID with a CLSID. It is used to determine the latest version of an object application. 
+
+file_extension, Associates a file name extension with a ProgID.
+Information contained in the file name extension key is used by both the system and file monikers. 
+
+Inteface, an interface name with an interface identifier (IID). It maps IIDs to information specific to an interface. 
+
+Ole, Controls default launch and access permissions for distributed COM objects as well as call-level security capabilities. CoInitializeSecurity 
+
+
+
+## Security in COM 
+- COM security relies on authentication
+
+- two main types of security in COM: activation security and call security. Activation security determines whether a client can launch a server at all
+
+call security to control access to a server's objects.
+
+- Kerberos v5 authentication protocol and the Schannel security package.
+
+- Dcomcnfg.exe to set the registry or by calling CoInitializeSecurity. Two primary interfaces
+
+IClientSecurity and IServerSecurity
+
+
+### Determining your security needs 
+- disabling DCOM altogether (COM between remote computers). 
+
+- NTLMSSP works well for many applications but does not provide the more robust security offered by other packages
+
+
+
+### COM security defaults 
+- COM chooses either the Kerberos v5 protocol or NTLMSSP, with the Kerberos protocol being the default choice. 
+
+- system identifies a caller through user name and password and automatically creates an identification token
+
+- If the LegacyAuthenticationLevel named value exists and if its value has been set, that value is used. Otherwise, the authentication level is set at connect (RPC_C_AUTHN_LEVEL_CONNECT).
+
+The AuthenticationLevel value can also be set under the AppID key.
+
+- If the LegacyImpersonationLevel named value exists and if its value has been set, that value is used. Otherwise, the impersonation level is set to identify (RPC_C_IMP_LEVEL_IDENTIFY)
+
+Identify level means that the server can obtain the client's identity. The server can impersonate the client for access control list (ACL) checking but cannot access system objects as the client
+
+- If the AccessPermission named value under AppID exists and has been set, that value is used. 
+
+Otherwise, COM checks for a DefaultAccessPermission entry. If present, that value is used.
+
+If not present, COM constructs an ACL grants permission to the server identify and the local system 
+
+- If the SRPTrustLevel named value under AppID exists and has been set, that value is used. Otherwise, the Software Restriction Policy (SRP) trust level is set to Disallowed (SAFER_LEVELID_DISALLOWED)
+
+means the application is run in a constrainted environment
+
+
+### Activation security 
+- SCM checks the request against activation-security information stored within its registry.
+
+- the identity of the client, activation examines the cloaking flag set in the client's call to CoInitializeSecurity. If the cloaking flag is set (for either dynamic or static cloaking), the thread token is used
+otherwise the process token is used 
+
+https://docs.microsoft.com/en-us/windows/desktop/api/wtypesbase/ns-wtypesbase-coauthinfo
+
+https://docs.microsoft.com/en-us/windows/win32/api/objidlbase/ns-objidlbase-coserverinfo
+
+
+
+### Security values 
+- Authentication Level describes how to help control the amount of protection for communication between COM objects
+
+from lowest level security protection to highest:
+
+None (RPC_C_AUTHN_LEVEL_NONE)
+
+authentication level can be set only if the authentication service level is RPC_C_AUTHN_NONE.
+
+Default (RPC_C_AUTHN_LEVEL_DEFAULT)
+
+Connect (RPC_C_AUTHN_LEVEL_CONNECT)
+
+The normal authentication handshake occurs between the client and server
+
+Call (RPC_C_AUTHN_LEVEL_CALL)
+
+Only the headers of the beginning of each call are signed.
+
+Packet (RPC_C_AUTHN_LEVEL_PKT)
+
+The header of each packet is signed but not encrypted. 
+
+Packet Integrity (RPC_C_AUTHN_LEVEL_PKT_INTEGRITY)
+
+Packet Privacy (RPC_C_AUTHN_LEVEL_PKT_PRIVACY)
+
+Each data packet is signed and encrypted. 
+
+- Delegation and Impersonation explains how cloaking affects the identity presented to the server during impersonation 
+
+In client/server scenarios, it is common for one server to call another server to accomplish some task on a client's behalf. called delegation 
+
+- The server, acting as a client, can also enable cloaking to mask its own identity and project the client's identity in calls to other COM
+
+A ---------------------> B ---| machine boundary | --> C 
+set impersontantion    no cloaking                  caller is B
+                       impersonates A
+                       
+set impersontaion      set cloaking                 caller is A 
+                       impersonates A
+
+- Application Identity identifies and explains the identities your application can use
+
+- prevent a client from obtaining unauthorized access to information in these files, the server can impersonate the client before accessing the files
+
+OpenProcessToken 
+OpenThreadToken 
+
+- there are four impersonation levels: anonymous, identify, impersonate, and delegate. 
+
+anonymous (RPC_C_IMP_LEVEL_ANONYMOUS)
+only supported over the local interprocess communication transport.
+
+identify (RPC_C_IMP_LEVEL_IDENTIFY)
+default level, The server can obtain the client's identity, and the server can impersonate the client to do ACL checks.
+
+impersonate (RPC_C_IMP_LEVEL_IMPERSONATE)
+The server can impersonate the client's security context while acting on behalf of the client. 
+
+delegate (RPC_C_IMP_LEVEL_DELEGATE)
+the server (whether local or remote) can impersonate the client's security context while acting on behalf of the client. the client's credentials can be passed to any number of computers 
+
+    + requirements 
+    the client must set impersontation level to RPC_C_IMP_LEVEL_DELEGATE 
+    the client account must not be marked cannot be delegated in active directory service 
+    the server account must be marked with trusted for delegation in active directory service 
+    the computer hosting the client the server and any downstream must all be running in a domain 
+    
+- two ways to set the impersonation level 
+    + client can set it processwide, through a call to CoInitializeSecurity
+    
+    + set proxy-level security on an interface of a remote object through a call to IClientSecurity::SetBlanket 
+    
+    + NTLMSSP supports cross-thread and cross-process delegate-level impersonation, but not cross-computer. 
+    
+    the Kerberos protocol supports delegate-level impersonation across computer boundaries
+    
+    Schannel does not support any impersonation at the delegate level. 
+
+- cloaking 
+
+    + When cloaking is set, the intermediate server masks its own identity and presents the client's identity to the server that it calls on the client's behalf
+    
+    + Cloaking is not supported by the Schannel security provider.
+    
+    + types of cloaking 
+    
+    static cloaking (EOAC_STATIC_CLOAKING), the server sees the thread token from the first call from a client to the server.
+    
+    proxy identity was previously set during a call to CoSetProxyBlanket, that proxy identity is used. 
+    
+    With dynamic cloaking (EOAC_DYNAMIC_CLOAKING), on each call the current thread token (if there is a thread token) is used to determine the client's identity. 
+    
+    + how cloaking affects client identity, check details from 
+    
+https://docs.microsoft.com/en-us/windows/win32/com/cloaking
+
+- application identity 
+    + set application identity using Dcomcnfg.exe, see Setting Processwide Security Using DCOMCNFG.
+    
+    + interactive user, If the server has a graphical user interface (GUI) that the client needs to see, you should use interactive user for the server's identity
+    
+     the client application can use the session moniker to reference an object provided by the server in a session that does not match the client identity.
+    
+    COM server exposes interfaces that are not controlled by COM, such as TCP ports, named pipes, LPC ports, shared memory sections, and so on, these could be used by the launching user to influence the server
+    
+    COM objects are free to set their own access permissions. If the object sets access permissions, either in its AppID registration or by calling CoInitializeSecurity, to allow the launching user access
+
+    + launching user, default for the application 
+
+    When the launching user is chosen for the application's identity, each client account gets a new instance of the server and each server gets its own window station
+    
+    finite limits on resource consumption. Also, any GUI the server displays will not be seen by the client
+    
+    + specified user, the user's password) is the preferred identity for COM servers. the server should not have a GUI. otherwise the other user call to the server will not see the GUI 
+    
+    server has a primary token and can access remote resources where a server that has the launching-user identity might not be able to
+    
+    Running as a fixed user account is more secure
+    
+    + service identity, run as a service. You can set service accounts by choosing the Services option from the Control Panel. 
+    
+
+- Software Restriction Policy explains how to help protect your system  from unknown and possibly dangerous code. 
+
+only in a constrained environment (often called a sandbox) without user security sensitive privileges 
+
+    + The SRP configuration of individual COM applications is done through the SRPTrustLevel value in the application's AppID key in the registry. 
+    
+    + two other SRP properties determine how the SRP is used for all COM applications. If SRPRunningObjectChecks is enabled
+    
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Ole
+   SRPRunningObjectChecks = value
+```
+    values of {N, n, NO, No, no} indicate that attempts to connect to running objects are not screened for compatible SRP trust levels.
+    
+    if not set cannot have a less stringent SRP trust level than the client object. the running object cannot have a Disallowed trust level if the client object has an Unrestricted trust level.
+    
+- Reference Tracking explains how you can ensure that objects are not released too early
+
+COM keeps track of per-user reference counts so that a user can call Release only on objects that the user previously called AddRef on.
+
+client set reference tracking for a process by passing the EOAC_SECURE_REFS capability flag in a call to CoInitializeSecurity
+
+enable or disable reference tracking for all applications on a computer by using Dcomcnfg.exe.
+
+if reference tracking is enabled. IUnknown always uses default security settings. In this case, calls to CoSetProxyBlanket on IUnknown will fail.
+
+
+
+### Setting security for COM 
+- system-wide security settings, because this will affect all COM server applications that do not set their own process-wide security
+
+- registry values for system wide security. named values that affect system-wide security defaults are as follows:
+
+    DefaultLaunchPermission
+    DefaultAccessPermission
+    LegacyAuthenticationLevel
+    LegacyImpersonationLevel
+    LegacySecureReferences
+    SRPRunningObjectChecks
+    SRPActivateAsActivatorChecks
+
+- setting system wide default authentication level 
+
+run Dcomcnfg.exe 
+
+choose default properties tab 
+
+choose None for the Default Authentication Level 
+
+    + more https://docs.microsoft.com/en-us/windows/win32/com/setting-machine-wide-security-using-dcomcnfg
+    
+#### Setting process wide security 
+- set an application's authentication level
+
+On the Applications property page in Dcomcnfg.exe
+
+On the General page, select an authentication level other than (None) from the Authentication Level list box.
+
+    + more 
+    https://docs.microsoft.com/en-us/windows/win32/com/setting-processwide-security-using-dcomcnfg
+ 
+
+#### Setting process wide security through the registry 
+- decide to set process-wide security in the registry under the AppID key, be aware that there are two named values under the AppID key that you can set without having administrator permissions:
+
+    AccessPermission
+    AuthenticationLevel
+
+
+
+#### Setting security at the interface proxy level
+- the IClientSecurity interface allow the client to change the security settings associated with calls to a particular interface by controlling the security settings
+
+
+ 
+### Turning off security 
+- client specifies an authentication level of RPC_C_AUTHN_LEVEL_NONE in the COAUTHINFO structure, authentication is not attempted. 
+
+control activation security by specifying a COAUTHINFO structure, which is a member of the COSERVERINFO structure
+
+if there is a NULL DACL or an ACL that allows access to Everyone server is launched.
+
+- The server must specify Everyone for Default Launch Permissions.
+
+Dcomcnfg.exe.
+
+Security property page, click the Use Custom Launch Permissions 
+
+Registry Value Permissions dialog box, click the Add button.
+
+
+### Turning off call security 
+-  call security: One involves using Dcomcnfg.exe to modify the registry, and the other requires calls to CoInitializeSecurity.
+
+Run Dcomcnfg.exe.
+On the Applications page, select the application that represents the server. Click the Properties button (or double-click the selected application).
+Click the General tab.
+From the Default Authentication Level list box, select (None).
+Click the Apply button to apply changes
+
+
+### Server-side security 
+- security information about a caller or impersonate the caller by using the methods of IServerSecurity. An implementation of IServerSecurity is supplied by COM on the context
+
+call CoGetCallContext to obtain a pointer to the IServerSecurity interface
+
+if needed. The IServerSecurity object is valid on any thread in the apartment until the call represented
+
+- A security blanket is a group of values that describe the security settings that apply to all proxies in a process or to just a particular interface proxy
+
+    Authentication service
+    Authorization service
+    Principal name
+    Authentication level
+    Impersonation level
+    Authentication identity
+    Capabilities
+    An access control list (ACL) (servers only)
+
+client and the server can each call CoInitializeSecurity to specify their respective security blankets
+
+When a proxy is created, COM uses the values specified by the server's security blanket and the client's security blanket to negotiate a default security blanket
+
+For the authentication level, COM chooses the higher of the authentication levels specified by the client and the server. The impersonation level and the capabilities chosen by COM are the ones specified by the client
+
+client can override the security settings for the proxy by calling IClientSecurity::SetBlanket.
+
+
+### COM and security packages 
+- Windows supports NTLMSSP (LAN Manager Security Support Provider),
+
+ the Kerberos v5 authentication protocol, 
+ 
+ and the Schannel security package, which provides the PCT 1.0, SSL 2.0, SSL 3.0, and TLS 1.0 protocols.
+
+ Also supported is Snego, which checks for available security packages and selects the most appropriate one.
+
+- security packages 
+
+server/client                               security pacakge support 
+neither can get the name of other                   none 
+client can authenticate the server                  schannel 
+
+client not discover the server, 
+server can get user id of client                    NTLMSSP
+
+Mutual authentication:                              NTLMSSP (locally), 
+Both the client and server can know the name of the other, 
+if permission is granted                            Kerberos v5 
+                                                    protocol, 
+                                                    and Schannel    
+
+- NTLMSSP, NTLMSSP, whose authentication service identifier is RPC_C_AUTHN_WINNT, is a security support provider that is available on all versions of DCOM.
+
+NTLM works both locally and across computers.
+
+NTLM never actually transmits the user's password to the server during authentication. server cannot impersontation can only access local resources
+
+With NTLM, the client's identity is represented by a domain name, user name, and a password or token. 
+When a server calls CoQueryClientBlanket, the client's domain name and user name are returned. 
+
+when a server calls CoImpersonateClient, the client's token is returned. when there is not trust between client and server, if has a local account with the same name and password as the client will be used to present the client. 
+
+NTLM supports mutual authentication cross-thread and cross-process (locally only). 
+
+client specifies the principal name of the server in the form domain\user in a call to IClientSecurity::SetBlanket, the server's identity must match that principal name
+
+If the client specifies NULL, the server's identity will not be checked.
+
+- Kerberos v5 protocol, The Kerberos v5 authentication protocol has an authentication service identifier of RPC_C_AUTHN_GSS_KERBEROS. The Kerberos protocol defines how clients interact with a network authentication service and was standardized by the Internet Engineering Task Force (IETF)
+
+Key Distribution Center (KDC),  the Kerberos protocol uses the domain name, user name, and password to represent the client's identity. The initial Kerberos ticket obtained from the KDC when the user logs on base on user's password hash 
+
+the initial ticket for the user is sent to the KDC along with a request for a ticket for the specified server. That session ticket is added to the cache, and it can be used to connect to the same server until the ticket expires.
+
+a server calls CoQueryClientBlanket using the Kerberos protocol, the client's domain name and user name are returned. When a server calls CoImpersonateClient, the client's token is returned. These behaviors are the same as when using NTLM.
+
+The Kerberos protocol works across computer boundaries. The client and server computers must both be in domains, and those domains must have a trust relationship
+
+The Kerberos protocol requires mutual authentication and supports it remotely. The client must specify the principal name of the server, and the server's identity must match that principal name exactly.
+
+With the Kerberos protocol, the impersonation levels identify, impersonate, and delegate can be used. When a server calls CoImpersonateClient, the token returned is valid off the computer for some time period between 5 minutes and 8 hours. 
+
+- Schannel, The Secure Channel (Schannel) security package, whose authentication service identifier is RPC_C_AUTHN_GSS_SCHANNEL, supports the following public-key based protocols: SSL (Secure Sockets Layer) versions 2.0 and 3.0, Transport Layer Security (TLS) 1.0, and Private Communication Technology (PCT) 1.0. TLS 1.0 is a standardized
+
+DCOM automatically negotiates the best protocol, depending on the client and server capabilities.
+
+    + when to use TLS 
+    
+TLS is the only security option available when servers need to prove their identity to anonymous clients.
+
+TLS requires that all servers prove their identity to clients. Additionally, TLS provides the option of having clients prove their identity to servers. 
+
+TLS is the best choice
+
+public key infrastructure (PKI), which uses public/private key pairs for enabling data encryption and establishing data integrity, and uses X.509 certificates for authentication.
+
+Kerberos protocol, this is done through tickets obtained from the Key Distribution Center (KDC). This requires that everyone using the Kerberos protocol be registered with the KDC
+ 
+https://docs.microsoft.com/en-us/windows/desktop/SecAuthN/tls-handshake-protocol
+
+    + X.509 certificates, CA? Because the CA itself holds an X.509 certificate that has been signed by a higher-level CA. This chain of certificate signatures continues until it reaches a root CA, which is a CA that signs its own certificates.
+    
+    + client certificates 
+    
+    SSL 3.0 and TLS 1.0 also include support for the transmission of a client's certificate
+    
+    + using TLS in COM 
+    
+    If COM negotiates TLS as the authentication service on a proxy, COM will set the impersonation level to impersonate regardless of the process default.
+    
+    the client must provide an X.509 certificate to the server and the server must have that certificate mapped to a particular user account on the server.
+    https://www.microsoft.com/isapi/redir.dll?prd=windows2000&sbp=technicallibrary&ar=security&sba=mappingcertificates
+    
+    TLS does not support cloaking. If a cloaking flag and TLS are specified in a CoInitializeSecurity or a IClientSecurity::SetBlanket call, E_INVALIDARG will be returned.
+    
+    TLS does not work with the authentication level set to None. The handshake between the client and server examines the authentication level set by each and chooses the higher security setting for the connection.
+    
+    set by calling CoInitializeSecurity and CoSetProxyBlanket. 
+    
+    + How a server sets the security blanket 
+    
+    use TLS, it must specify Schannel (RPC_C_AUTHN_GSS_SCHANNEL) as an authentication service in the asAuthSvc parameter of CoInitializeSecurity.
+    
+    the server should specify only Schannel as an authentication service when it calls CoInitializeSecurity. The server cannot change the security blanket after it has called CoInitializeSecurity.
+    
+    when a server calls CoInitializeSecurity:
+        1. pVoid should be either a pointer to an IAccessControl object or a pointer to a SECURITY_DESCRIPTOR. It should not be NULL or a pointer to an AppID
+        
+        2. cAuthSvc cannot be 0 or -1. COM servers never chooses Schannel when cAuthSvcis -1.
+        
+        3. asAuthSvc must specify Schannel as a possible authentication service. 
+        
+        SOLE_AUTHENTICATION_SERVICE parameters for the Schannel member of the SOLE_AUTHENTICATION_LIST
+        
+        dwAuthnSvc must be RPC_C_AUTHN_GSS_SCHANNEL.
+        dwAuthzSvc should be RPC_C_AUTHZ_NONE. Currently, it is ignored.
+        pPrincipalName must be a pointer to a CERT_CONTEXT, cast as a pointer to OLECHAR, which represents the server's X.509 certificate.
+        
+        4. dwAuthnLevel indicates the minimum authentication level that will be accepted from clients for a successful connection. It cannot be RPC_C_AUTHN_LEVEL_NONE.
+        
+        6 dwCapabilities should not have the EOAC_APPID flag set. The EOAC_ACCESS_CONTROL flag should be set if pVoid points to an IAccessControl object; it should not be set if pVoid points to a SECURITY_DESCRIPTOR. 
+
+    + how a client sets the security blanket 
+    
+    a client wants to use TLS but change the security blanket after calling CoInitializeSecurity, it must call either CoSetProxyBlanket or IClientSecurity::SetBlanket with parameters similar to those used in the call to CoInitializeSecurity
+    
+    ...
+    
+    https://docs.microsoft.com/en-us/windows/win32/com/schannel
+    
+    example client changes the security blanket 
+```
+void ClientChangesSecurity ()
+{
+  HCRYPTPROV                   provider           = 0;
+  HCERTSTORE                   cert_store         = NULL;
+  PCCERT_CONTEXT               client_cert        = NULL;
+  PCCERT_CONTEXT               server_cert        = NULL;
+  WCHAR                        *server_princ_name = NULL;
+  ISecret                      *pSecret           = NULL;
+  MULTI_QI                     server_instance;
+  COSERVERINFO                 server_machine;
+  SOLE_AUTHENTICATION_LIST     auth_list;
+  SOLE_AUTHENTICATION_INFO     auth_info[1];
+
+
+
+  // Specify all the authentication info. 
+  // The client is willing to connect using SChannel,
+  //   with no client certificate.
+  auth_list.cAuthInfo     = 1;
+  auth_list.aAuthInfo     = auth_info;
+  auth_info[0].dwAuthnSvc = RPC_C_AUTHN_GSS_SCHANNEL;
+  auth_info[0].dwAuthzSvc = RPC_C_AUTHZ_NONE;
+  auth_info[0].pAuthInfo  = NULL;  // No certificate
+
+  // Initialize client security with no client certificate.
+  CoInitializeSecurity( NULL, -1, NULL, NULL,
+                        RPC_C_AUTHN_LEVEL_PKT,
+                        RPC_C_IMP_LEVEL_IMPERSONATE, &auth_list,
+                        EOAC_NONE, NULL );
+  
+  // Specify info for the proxy.
+  server_instance = {&IID_ISecret, NULL, S_OK};
+  server_machine  = {0, L"ServerMachineName", NULL, 0};
+  
+  // Create a proxy.
+  CoCreateInstanceEx( CLSID_Secret, NULL, CLSCTX_REMOTE_SERVER, 
+                      &server_machine, 1, &server_instance);
+  pSecret = (ISecret *) server_instance.pItf;
+
+  //** The client obtained the server's certificate during the handshake.
+  //** The server requests a certificate from the client.
+
+  // Get the default certificate provider.
+  CryptAcquireContext( &provider, NULL, NULL, PROV_RSA_SCHANNEL, 0 );
+
+  // Open the certificate store.
+  cert_store = CertOpenSystemStore( provider, L"my" );
+
+  // Find the client's certificate.
+  client_cert = 
+    CertFindCertificateInStore( cert_store,
+                                X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                                0,
+                                CERT_FIND_SUBJECT_STR,
+                                L"ClientName",  // Use the principal name
+                                NULL );
+
+  // Find the fullsic principal name of the server.
+  RpcCertGeneratePrincipalName( server_cert, RPC_C_FULL_CERT_CHAIN, 
+                                &server_princ_name );
+
+  // Change the client's security: 
+  // Increase the authentication level and attach a certificate.
+  CoSetProxyBlanket( pSecret, RPC_C_AUTHN_GSS_SCHANNEL,
+                     RPC_C_AUTHZ_NONE,
+                     server_princ_name, RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
+                     RPC_C_IMP_LEVEL_IMPERSONATE, 
+                     (RPC_AUTH_IDENTITY_HANDLE *) client_cert,
+                     EOAC_NONE );
+
+  cleanup:
+  if (server_princ_name != NULL)
+    RpcStringFree( &server_princ_name );
+  if (client_cert != NULL)
+    CertFreeCertificateContext(client_cert);
+  if (server_cert != NULL)
+    CertFreeCertificateContext(server_cert);
+  if (cert_store != NULL)
+    CertCloseStore( cert_store, CERT_CLOSE_STORE_CHECK_FLAG );
+  if (provider != 0 )
+    CryptReleaseContext( provider, 0 );
+  if (pSecret != NULL)
+    pSecret->Release();
+  CoUninitialize();
+}
+```
+- snego, whose authentication service identifier is RPC_C_AUTHN_GSS_NEGOTIATE, does not actually provide authentication services itself. Instead, it takes a list of authentication services and negotiates a service that will work between the client and server
+    
+To use Snego, both the client and the server must specify Snego as the authentication service. The server specifies RPC_C_AUTHN_GSS_NEGOTIATE as the dwAuthnSvc member of one of the SOLE_AUTHENTICATION_SERVICE structures in the asAuthSvc array parameter that is passed to CoInitializeSecurity. The client can specify Snego by calling CoSetProxyBlanket and passing RPC_C_AUTHN_GSS_NEGOTIATE as the dwAuthnSvc parameter
+
+
+
+### DCOM security enhancements in windows xp service pack 2 and windows server 2003 
+-  Distributed Component Object Model (DCOM) allows applications to be distributed across locations that make the most sense to you and to the application.
+
+https://docs.microsoft.com/en-us/windows/win32/com/dcom-security-enhancements-in-windows-xp-service-pack-2-and-windows-server-2003-service-pack-1
+
+### Access control list for COM 
+-  the Distributed Component Object Model (DCOM). One of these enhancements is more specific access rights for use in access control lists (ACLs)
+
+COM_RIGHTS_EXECUTE 1
+COM_RIGHTS_EXECUTE_LOCAL 2
+COM_RIGHTS_EXECUTE_REMOTE 4
+COM_RIGHTS_ACTIVATE_LOCAL 8
+COM_RIGHTS_ACTIVATE_REMOTE 16
+
+https://docs.microsoft.com/en-us/windows/win32/com/access-control-lists-for-com
+
+first access control entry (ACE) grants COM_RIGHTS_EXECUTE (0x1) only, while the second ACE grants COM_RIGHTS_EXECUTE, COM_RIGHTS_EXECUTE_LOCAL, and COM_RIGHTS_ACTIVATE_LOCAL (0xb), and the third grants COM_RIGHTS_EXECUTE and COM_RIGHTS_ACTIVATE_LOCAL (0x9).
+
+
+
+### The COM elevation moniker 
+- The COM elevation moniker allows applications that are running under user account control (UAC) to activate COM classes with elevated privileges.
+
+accomplish a specific and limited function that requires elevated privileges, such as changing the system date and time.
+
+no application compatibility 
+
+configure the COM client executable to require elevation, rather than activating the legacy application's class, the legacy CLSID iwll flow to server process 
+
+- not all flow compatible with elivation 
+
+Elevation does not flow from a client to a remote COM server.
+
+If an elevated COM class uses impersonation during a COM call, it might lose its elevated privileges
+
+If an elevated COM server registers a class in the running object table (ROT), the class will not be available to non-elevated clients.
+
+A process elevated by using the UAC mechanism does not load per-user classes during COM activations.  both by non-privileged and privileged accounts must be installed on HKEY_LOCAL_MACHINE, non-privileged used need install on HKEY_USERS 
+
+Drag and drop is not allowed from non-elevated to elevated applications
+
+- requirements 
+```
+HKEY_LOCAL_MACHINE\Software\Classes\CLSID
+   {CLSID}
+      LocalizedString = displayName
+```
+
+display by the UAC user interface 
+```
+HKEY_LOCAL_MACHINE\Software\Classes\CLSID
+   {CLSID}
+      Elevation
+         IconReference = applicationIcon
+```
+
+- elevation moniker supports the following run level 
+
+Elevation:Administrator!new:{guid}
+Elevation:Highest!new:{guid}
+
+- example code 
+
+```
+HRESULT CoCreateInstanceAsAdmin(HWND hwnd, REFCLSID rclsid, REFIID riid, __out void ** ppv)
+{
+    BIND_OPTS3 bo;
+    WCHAR  wszCLSID[50];
+    WCHAR  wszMonikerName[300];
+
+    StringFromGUID2(rclsid, wszCLSID, sizeof(wszCLSID)/sizeof(wszCLSID[0])); 
+    HRESULT hr = StringCchPrintf(wszMonikerName, sizeof(wszMonikerName)/sizeof(wszMonikerName[0]), L"Elevation:Administrator!new:%s", wszCLSID);
+    if (FAILED(hr))
+        return hr;
+    memset(&bo, 0, sizeof(bo));
+    bo.cbStruct = sizeof(bo);
+    bo.hwnd = hwnd;
+    bo.dwClassContext  = CLSCTX_LOCAL_SERVER;
+    return CoGetObject(wszMonikerName, &bo, riid, ppv);
+}
+```
+
+- over the shoulder (OTS) elevation 
+
+a client runs a COM server with an administrator's credentials rather than his or her own.
+ 
+COM computes a security descriptor that allows only SELF, SYSTEM, and Builtin\Administrators to makes COM calls into the server. 
+
+CoInitializeSecurity, need to call explicitly in the server when OTS scenarios, specify an ACL that includes the INTERACTIVE group SID and SYSTEM.
+
+```
+BOOL GetAccessPermissionsForLUAServer(SECURITY_DESCRIPTOR **ppSD)
+{
+// Local call permissions to IU, SY
+    LPWSTR lpszSDDL = L"O:BAG:BAD:(A;;0x3;;;IU)(A;;0x3;;;SY)";
+    SECURITY_DESCRIPTOR *pSD;
+    *ppSD = NULL;
+
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(lpszSDDL, SDDL_REVISION_1, (PSECURITY_DESCRIPTOR *)&pSD, NULL))
+    {
+        *ppSD = pSD;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+// hKey is the HKCR\AppID\{GUID} key
+BOOL SetAccessPermissions(HKEY hkey, PSECURITY_DESCRIPTOR pSD)
+{
+    BOOL bResult = FALSE;
+    DWORD dwLen = GetSecurityDescriptorLength(pSD);
+    LONG lResult;
+    lResult = RegSetValueExA(hkey, 
+        "AccessPermission",
+        0,
+        REG_BINARY,
+        (BYTE*)pSD,
+        dwLen);
+    if (lResult != ERROR_SUCCESS) goto done;
+    bResult = TRUE;
+done:
+    return bResult;
+}
+```
+
+- COM permissions and mandatory accessl labels 
+
+label is specified in the system access control list (SACL) portion of the security descriptor. COM supports the SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP label. 
+
+```
+BOOL GetLaunchActPermissionsWithIL (SECURITY_DESCRIPTOR **ppSD)
+{
+// Allow World Local Launch/Activation permissions. Label the SD for LOW IL Execute UP
+    LPWSTR lpszSDDL = L"O:BAG:BAD:(A;;0xb;;;WD)S:(ML;;NX;;;LW)";
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(lpszSDDL, SDDL_REVISION_1, (PSECURITY_DESCRIPTOR *)&pSD, NULL))
+    {
+        *ppSD = pSD;
+        return TRUE;
+    }
+}
+
+BOOL SetLaunchActPermissions(HKEY hkey, PSECURITY_DESCRIPTOR pSD)
+{
+    
+    BOOL bResult = FALSE;
+    DWORD dwLen = GetSecurityDescriptorLength(pSD);
+    LONG lResult;
+    lResult = RegSetValueExA(hkey, 
+        "LaunchPermission",
+        0,
+        REG_BINARY,
+        (BYTE*)pSD,
+        dwLen);
+    if (lResult != ERROR_SUCCESS) goto done;
+    bResult = TRUE;
+done:
+    return bResult;
+};
+```
+
+- CoCreateInstance has changed in Windows Vista, to prevent Low IL clients from binding to COM servers by default. T
+
+- elevated servers and ROT registrations 
+
+running object table (ROT) and allow any client to access the registration, it must use the ROTFLAGS_ALLOWANYCLIENT flag
+
+"Activate As Activator" COM server cannot specify ROTFLAGS_ALLOWANYCLIENT because the DCOM service control manager (DCOMSCM) enforces a spoof check against this flag.
+
+```
+HKEY_LOCAL_MACHINE\Software\Classes\AppID
+   {APPID}
+      ROTFlags
+      
+ROTREGFLAGS_ALLOWANYCLIENT 0x1
+```
+
+## Error handling in COM 
+- return a value of the type HRESULT. The HRESULT (for result handle) is a way of returning success
+
+- example 
+
+STG_E_MEDIUMFULL is returned when there is no space left on a hard disk. The STG prefix indicates the storage facility, the E indicates that the status code represents an error, and the MEDIUMFULL provides specific information
+
+
+### Structure of COM error code 
+
+S   R   C   N   r |     Facility    |   code 
+31 30   29              ...       16 15 .... 0
+
+high-order bit in the HRESULT or SCODE indicates whether the return value represents success or failure
+
+R, C, N and r are reserved 
+
+- common facility fields 
+
+FACILITY_DISPATCH 2 For late-binding IDispatch interface errors. 
+
+FACILITY_ITF      4 For most status codes returned from interface methods.
+
+FACILITY_NULL     0 For broadly applicable common status codes such as S_OK
+
+FACILITY_RPC      1 For status codes returned from remote procedure calls. 
+
+...
+
+
+### Codes in FACILITY_ITF 
+-  FACILITY_NULL and FACILITY_RPC have universal meaning because they are defined at a single source
+
+HRESULTs in FACILITY_ITF are determined by the function or interface
+
+two different interface might have different meanings 
+
+- All the COM-defined FACILITY_ITF codes have a code value in the range of 0x0000-0x01FF. recommanded only code values in the range of 0x0200-0xFFFF be used
+
+- E_UNEXPECTED is a specific error code that most developers will want to make universally legal.
+
+
+### Using marcos for error handling 
+- macros 
+
+MAKE_HRESULT, Returns an HRESULT given the severity bit, facility code
+
+MAKE_SCODE, Returns an SCODE given the severity bit, facility code, and error code
+
+HRESULT_CODE, Extracts the error code portion of the HRESULT.
+
+HRESULT_FACILITY, Extracts the facility code of the HRESULT.
+
+HRESULT_SEVERITY, Extracts the severity bit of the HRESULT.
+
+SCODE_CODE, Extracts the error code portion of the SCODE.
+
+SCODE_FACILITY, Extracts the facility code of the SCODE.
+
+SCODE_SEVERITY, Extracts the severity field of the SCODE.
+
+SUCCEEDED, Tests the severity bit of the SCODE or HRESULT. 
+
+FAILED, Tests the severity bit of the SCODE or HRESULT;
+
+IS_ERROR, Provides a generic test for errors on any status value. 
+
+HRESULT_FROM_WIN32, Maps a system error code to an HRESULT value. 
+
+HRESULT_FROM_NT, Maps an NT status value to an HRESULT value.
+
+
+### COM error handling in Java and Visual Basic 
+- three interfaces support for HRESULTs 
+ICreateErrorInfo
+	Sets error information.
+    
+IErrorInfo
+	Returns information from an error object.
+    
+ISupportErrorInfo
+	Identifies the object as supporting the IErrorInfo interface.
+
+- three functions 
+
+CreateErrorInfo
+	Creates an instance of a generic error object.
+    
+GetErrorInfo
+	Obtains the error information pointer set by the previous call to SetErrorInfo in the current logical thread.
+    
+SetErrorInfo
+	Sets the error information object for the current thread of execution.
+    
+- steps to return error information by performing the following the steps:
+
+Implement the ISupportErrorInfo interface.
+To create an instance of the generic error object, call the CreateErrorInfo function.
+To set its contents, use the ICreateErrorInfo methods.
+To associate the error object with the current logical thread, call the SetErrorInfo function.
+
+- retriving error information as follows:
+
+Check whether the returned value represents an error that the object is prepared to handle.
+
+Call QueryInterface to get a pointer to the ISupportErrorInfo interface. Then call ISupportErrorInfo::InterfaceSupportsErrorInfo to verify that the error was raised by the object that returned it and that the error object pertains to the current error and not to a previous call.
+
+To get a pointer to the error object, call the GetErrorInfo function.
+
+To retrieve information from the error object, use the IErrorInfo methods.
+
+- the GetErrorInfo function clears the error information and passes ownership of the error object to the caller,
+
+
+
+### Error handling strategies 
+- HRESULT Values, error codes have been changed to FACILITY_WIN32, and those that overlap remain in FACILITY_NULL. Common HRESULT values 
+
+E_ABORT
+	0x80004004
+	The operation was aborted because of an unspecified error.
+    
+E_ACCESSDENIED
+	0x80070005
+	A general access-denied error.
+    
+E_FAIL
+	0x80004005
+	An unspecified failure has occurred.
+    
+E_HANDLE
+	0x80070006
+	An invalid handle was used.
+    
+E_INVALIDARG
+	0x80070057
+	One or more arguments are invalid.
+    
+E_NOINTERFACE
+	0x80004002
+	The QueryInterface method did not recognize the requested interface. The interface is not supported.
+    
+E_NOTIMPL
+	0x80004001
+	The method is not implemented.
+    
+E_OUTOFMEMORY
+	0x8007000E
+	The method failed to allocate necessary memory.
+    
+E_PENDING
+	0x8000000A
+	The data necessary to complete the operation is not yet available.
+    
+E_POINTER
+	0x80004003
+	An invalid pointer was used.
+    
+E_UNEXPECTED
+	0x8000FFFF
+	A catastrophic failure has occurred.
+    
+S_FALSE
+	0x00000001
+	The method succeeded and returned the boolean value FALSE.
+    
+S_OK
+	0x00000000
+	The method succeeded. If a boolean return value is expected, the returned value is TRUE.
+
+- network errors, first four digits of the error code are 8007
+
+decode:
+
+$ net helpmsg <decimal_code>
+
+    + example, COM returns the error 8007054B, convert the 054B to decimal (1355). Then type the following:
+
+$ net helpmsg 1355
+
+
+
+### Handling unknown errors 
+- Applications that call interfaces should treat any unknown returned error code (as opposed to a success code) as synonymous with E_UNEXPECTED. 
+
+- example 
+
+```
+HRESULT hr; 
+hr = xxMethod(); 
+ 
+switch (GetScode(hr))  
+{ 
+    case NOERROR: 
+      // Method returned success. 
+      break; 
+ 
+    case x1: 
+      // Handle error x1 here.
+      break; 
+ 
+    case x2: 
+      // Handle error x2 here.
+      break; 
+ 
+    case E_UNEXPECTED: 
+    default: 
+      // Handle unexpected errors here. 
+      break; 
+} 
+```
+- error check 
+
+if (xxMethod() == NOERROR) 
+{
+    // Handle success here.
+} 
+else 
+{
+    // Handle failure here.
+} 
+
+
+
+## COM handlers 
+- provide some "smart" code in the client address space that can optimize calls between a client and server
+
+- The OLE handler is a heavyweight DLL that provides important services for linking and embedding. 
+
+https://docs.microsoft.com/en-us/windows/win32/com/the-ole-handler
+
+- The lightweight client-side handler can be created for any purpose
+
+https://docs.microsoft.com/en-us/windows/win32/com/the-lightweight-client-side-handler
+
+- The OLE handler 
+
+    + the handler is loaded into the container's process space to act on behalf of a server as a sort of surrogate process. 
+    
+    + the application handler is implemented as an aggregate object composed of a new control object and the default handler
+
+    + a container requests something that the object handler cannot provide, the handler communicates with the server application using the COM out-of-process communication mechanism
+    
+    + OLE subsequently allowed in-process servers for compound documents, they had to create an embedding helper that implemented these extra interfaces
+
+    + create a new instance of the default handler, call OleCreateDefaultHandler. For some special circumstances, call OleCreateEmbeddingHelper
+
+- lightweight client side handler 
+
+    + proxy manager is the system-created object that implements the IMarshal interface
+    
+    + call CoGetStandardMarshal or CoGetStdMarshalEx
+    
+    + implements the IClientSecurity and IMultiQI interfaces on the object.
+    
+    + stream supplied by server have some potential uses 
+    
+    static data from server, regardless of particular interface being marshaled 
+    
+    per interface data from server 
+    
+    per interface helpers, client handler and delegating to standard proxy. client-side caching, read-ahead, write-behind, op-locking etc. 
+    
+    + As handlers, these are usable by more than one client. They differ from OLE handlers in that they cannot be created before the server is launched
+    
+- implementing and activating a handler with no extra server data 
+
+    1. To create an instance of handler, the server must implement IStdMarshalInfo but not IMarshal.
+    
+    COM calls this when it calls CoMarshalInterface for you and activates the handler on the client side
+    
+    2. Both server and handler call the CoGetStdMarshalEx function. This function creates a standard marshaler on each side( proxy manager on the client, stub manager on the server)
+    
+- server side structure, managed by the controlling identity object (implementing IUnknown) that the system implements when the handler calls CoGetStdMarshalEx
+    
+- client side structure, the handler is actually sandwiched between the proxy manager and the identity/controlling
+    
+The handler does not implement IMarshal but just returns IMarshal from the standard marshaler. Even if the handler does implement IMarshal, it will not get called during an unmarshal.
+
+- implmenting and activating a handler with extra data supplied by server 
+
+extra data in the packet for the handler to use, the server must implement both the IMarshal and the IStdMarshalInfo
+
+COM to CoUnmarshalInterface on the client side the ability to skip over any unread data and leave the stream in the appropriate position
+
+    + server side structures with extra data in stream. call from COM to CoUnmarshalInterface on the client side the ability to skip over any unread data and leave the stream in the appropriate position 
+
+    + client side with extra data in stream, the client-side COM call to CoUnmarshalInterface will create the identity and handler. The handler's UnmarshalInterface will be called for every unmarshal
+
+- delegation of queryinterface, proxy manager have to go through the IInternalUnknown interface. interfaces include IClientSecurity and IMultiQI. 
+
+
+
+## DLL surrogates 
+- create DLL servers that can be loaded into a surrogate EXE process.
+- dll server in a surrogate process offers several possible benefits:
+
+    + Fault isolation and the ability to service multiple clients simultaneously.
+    + in distributed, server can serve remote clients 
+    + permit clients to help protect themselves from untrusted server code
+    +  provides the DLL with the surrogate's security.
+    
+COM provide default surrogate process, it can be customized 
+
+- DLL server requirements,  custom interfaces, you would have to ensure that marshaling code is available for those interfaces
+
+The DLL server surrogate runs in the same security context as the client, unless a RunAs value, set in the AppID registry section for the server.
+
+- Surrogate sharing 
+    + load other DLL servers into an existing surrogate 
+    
+    The DLL servers must have the same AppID value.
+
+    The security context of the DLL servers must be the same.
+    
+    + Same AppID key specifies that the DLL server can be loaded a surrogate by specifying the DllSurrogate value.
+    
+- registering the DLL server for surrogate activation 
+    
+There must be an AppID value specified under the CLSID key in the registry
+
+In an activation call, the CLSCTX_LOCAL_SERVER bit is set and the CLSID key does not specify LocalServer32, LocalServer, or LocalService.
+
+If other CLSCTX bits are set, the processing algorithmfor the in-process, local, or remote execution flags is followed
+    
+The CLSID key contains the InprocServer32 subkey.
+
+The proxy/stub DLL specified in the InprocServer32 key exists.
+
+The DllSurrogate value exists under the AppID key.
+
+    + activation functions:
+
+    CoGetClassObject
+    CoCreateInstanceEx
+    CoGetInstanceFromFile
+    CoGetInstanceFromIStorage
+    IMoniker::BindToObject
+
+    + When a RunAs value is specified, only one instance of the server is loaded to service all of the clients
+
+- using the system-supplied surrogate 
+
+the surrogate process is a mixed-threading model style pseudo-COM server. it ensure the DLL server is instantiated using the threading model specified in the registry 
+
+- writing a custom surrogate 
 
 
 
@@ -11,13 +2718,85 @@ Microsoft online document-Component Object Model(COM);Note=Erxin
 
 
 
+## Monikers 
+
+## Events in COM and Connectable Objects 
+
+## Component categories manager implementation 
+
+
+## OLE and data transfer 
+
+## Controls and property pages 
+
+## COM language translations 
+
+## COM glossary 
+https://docs.microsoft.com/en-us/windows/win32/com/com-glossary
 
 
 
+# DCOM 
 
 
+# System services 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/system-services
+
+- traditionally services 
+
+The Component Object Model (COM).
+DCOM
+File compression.
+Dynamic-link libraries.
+Memory management.
+Power management.
+The creation and coordination of multiple threads of execution..
+The development of service applications.
+Windows messaging.
+Obtaining Windows system information.
+The Help API.
+Distributed Transaction Coordinator
+Microsoft.Dtc.PowerShell.Diagnostics
+Microsoft.MsDtcManagement.Commands
+Interprocess Communications
+Kernel Transaction Manager
+MultiPoint Services
+Operation Recorder
+Processes and Threads
+Remote Desktop Services
+Services
+Synchronization
+Windows Desktop Sharing
+Windows Notification Framework
+Windows Subsystem for Linux
+Windows System Information
+
+- windows API index 
+https://docs.microsoft.com/en-us/windows/win32/apiindex/windows-api-list
+
+- windows uwp namespaces 
+https://docs.microsoft.com/en-us/uwp/api/
 
 
+- interprocess communications 
+    + IP supported by windows 
+
+    Clipboard
+    COM
+    Data Copy
+    DDE
+    File Mapping
+    Mailslots
+    Pipes
+    RPC
+    Windows Sockets
+
+    + mailslots 
+    
+    + network dynamic data exchange,  network DDE 
+    
+    + pipes 
 
 
 
