@@ -191,7 +191,927 @@ In COM+, a context is defined as set of run-time properties associated with one 
 
 In COM+, every COM object is associated with precisely one context as it runs
 
+every context resides within precisely one COM apartment. 
 
+Multiple objects can run within the same context
+
+multiple contexts can reside within the same apartment. 
+
+unconfigured components that do not use COM+ services, the context is ignore 
+
+
+
+# COM+ Contexts 
+- programmatic interaction with context properties 
+
+associated ObjectContext object that keeps track of its properties
+
+accessed ObjectContext, you can call methods on the IObjectContext interface 
+
+calling IObjectContext::SetComplete has the effect of setting the transaction consistency bit to "consistent" and the JIT-activation done bit to "done" 
+
+IObjectContext, other specialized interfaces providing access to context properties are IObjectContextInfo, IContextState, and IObjectContextActivity.
+
+ISecurityCallContext also accesses context properties. You can use IGetSecurityCallContext::GetSecurityCallContext to obtain ISecurityCallContext
+
+- Understanding 
+
+Context activation, or the initialization of an object in an appropriate context.
+    
+    Interception, or what COM+ does on calls across a context boundary.
+
+- MTS context wrappers. The purpose they served—providing automatic services by trapping creation requests
+
+use the SafeRef function. In MTS, SafeRef was used to obtain a reference 
+
+- Context activation 
+
+In COM+, every COM object is created with an associated context. This is called activation. 
+
+calling CoCreateInstance
+
+object pooling, an object is activated without being created from scratch
+
+- flowing of context properties 
+
+COM+ has to compare the context of the caller with the configuration of the called component and then decide where to activate the downstream component 
+
+COM+ looks it up in the COM+ class registration database, which is optimized for extremely fast run-time lookups
+
+the configuration is consistent with the context of the caller and the component can be activated within the caller's context
+
+when downstream component cannot be activated within the caller's context, it is activated in its own context in an appropriate apartment
+
+- ignored context properties,  These properties are fundamentally ignored when context is flowed. Or if a component uses only process-level access checking, its security context property is ignored
+
+- forcing activation in the caller's context 
+
+an object cannot be activated in its own context by selecting the Must be activated in callers context option on the Activation tab of the component Properties page, using the Component Services administrative tool
+
+    + reference
+    https://docs.microsoft.com/en-us/windows/win32/cossdk/enforcing-activation-in-the-caller-s-context
+
+    + COM+ activates an instance of the component in a context 
+    
+    The object is activated in the creator's context if possible.
+    
+    cannot be activated in the caller's context, CoCreateInstance fails or activation fails if it requires its own context; CO_E_ATTEMPT_TO_CREATE_OUTSIDE_CLIENT_CONTEXT is returned.
+
+- default context, it is for unconfigured components—that is, COM components not installed in COM+ applications and not registered in the COM+ class registration database. 
+
+If unconfigured components have a compatible threading model, they are activated in the caller's context. Otherwise, they are activated in a default context 
+
+- hooking activation, implementing IObjectControl::Activate and IObjectControl::Deactivate, you can hook activation and deactivation together to perform special initialization in the new context
+
+
+- interception of cross context calls  
+
+in global variables—you should always use CoMarshalInterface and CoUnmarshalInterface, translate an object reference into a proxy usable in a different context. 
+
+insist that the object that cannot be marshaled be activated only in the context of its caller and never in its own context, must be activated in caller's context option in Activation tab of component properties page 
+
+- COM+ threading models 
+
+An apartment is a collection of contexts contained in a process, a
+
+{process 
+    {apartment
+        {activity 
+            {context}
+            {context}
+        }
+    }
+}
+
+calls across apartments (out-of-process) are indirect and require proxy and stub code. Apartments allow for objects with different synchronization and reentrancy properties and have two categories: single-threaded and multithreaded
+
+a single-threaded apartment (STA) execute on the particular thread in which they were created. rely on the Microsoft Windows message queue
+
+Objects in a multithreaded apartment (MTA) execute on any thread and allow any number of methods to occur simultaneously. MTAs support reentrance implicitly.
+
+COM+ classes are marked with a ThreadingModel property that allows COM+ to create the object in the proper apartment. CoCreateInstance uses ThreadingModel property 
+
+Threads must call CoInitializeEx before they can use COM+
+
+The main thread apartment is determined to be the first STA called by CoInitializeEx. This is usually associated with the main thread of a process. CoInitializeEx indicates the type of apartment by flags 
+
+    + COINIT_MULTITHREADED—Locates the thread in the single multithreaded apartment.
+    
+    + COINIT_APARTMENTTHREADED—Places the thread into a new STA.
+    
+- Threading model attribute 
+    + apartment types 
+
+    Main Thread Apartment
+    Single Thread Apartment
+    Free Thread Apartment
+    Neutral Apartment
+    Any Apartment
+
+    + Component Services administrative tool to view the threading-model
+
+    + do not specify threading model for a component, COM+ use main therad apartment, which is the default 
+    
+    + programming model for apartments in COM+.
+
+Model 	Apartment 	Free 	Both 	Neutral 	Not Specified
+stnm     cp           mp     cp      np         mtp
+stm      cp           mp     cp      np         cp
+mt       hstp         mp     mp      np         mtp 
+n(on st) hstp(for t)  mp     np      np         mtp 
+n(on mt) hstp         mp     np      np         mtp 
+
+stnm, single threaded not main 
+cp, current apartment 
+mp, multithreaded apartment 
+np, neutral apartment 
+mtp, main threaded apartment 
+mt, multithreaded 
+n(on st), netural (on STA thread) 
+n(on mt), neutral (on MTA thread)
+hstp, host single threaded apartment 
+hstp(for t), host single threaded apartment for this thread 
+
+- neutral apartments 
+
+it is the preferred model for COM+ for components with no user interfaces 
+
+implement because they must deal with interlocking access
+
+```
+HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID
+   {CLSID}
+      InprocServer32
+         ThreadingModel = Neutral
+```
+
+In neutral apartments, objects follow the guidelines for multithreaded apartments but can execute on any kind of thread. object's context is received without causing a thread switch.
+
+Each process can have only one neutral apartment. 
+
+- Components that have user interfaces should continue to use single-threaded apartments as the preferred model
+
+
+# COM+ Services primier 
+- illustrates a fundamental aspect of COM+ services:
+
+Step 1: Creating a Transactional Component
+Step 2: Extending a Transaction Across Multiple Components
+Step 3: Reusing Components
+
+- creating a transactional component 
+
+COM+ automatically starts a transaction and enlists the database (resource manager) in that transaction
+
+{client} -> {transaction boundary {updateAuthorAddress}<-> {sql server}}
+
+COM+ application and installing the application, the transaction attribute must be set to Required, which guarantees that COM+ creates each UpdateAuthorAddress object in a transaction. 
+
+    + sample 
+https://docs.microsoft.com/en-us/windows/win32/cossdk/step-2--extending-a-transaction-across-multiple-components
+
+- extending a transaction across components 
+
+The second component, ValidateAuthorAddress, validates the author's address and returns the results to its caller, UpdateAuthorAddress.
+
+{client} -> {transaction boundary {updateAuthorAddress}<-> {sql server}}
+                                    |               A
+                                    V               |
+                                    {ValidateAuthorAddress}
+
+COM+ doesn't count the votes until it deactivates the root object
+
+    + Setting a component's transaction attribute to Supported can result in the new object being created in the calling object's transaction
+    
+    + All objects participating in the same transaction share a common transaction identifier
+    
+    + Each object in a transaction votes independently of other objects. COM+ count the votes when root object is deactivated
+    
+    + The IContextState and IObjectContext interfaces provide methods and that produce similar voting results 
+    
+    vote between commit and abort until COM+ deactivates the object 
+
+IContextState combination methods 	IObjectContext equivalent method
+SetMyTransactionVote txVote = TxCommit
+SetDeactivateOnReturn bDeactivate = True        SetComplete
+
+    + COM+ sets an object's vote to the equivalent of EnableCommit unless the component votes explicitly
+    
+    + Voting explicitly can reduce the overall duration of the transaction
+
+- Reusing components 
+
+COM+ provided transaction processing, JIT activation, and concurrency protection
+ 
+COM+ always makes the first object created in the transaction the root object
+
+
+
+# COM+ Services 
+- Application pooling
+
+ allows single-threaded processes to scale and can also help you recover from failures in single processes
+ 
+- concepts, single threaded processes to scale, help recover from failures 
+
+ICOMAdminCatalog2 interface support application pooling.
+
+Library applications have the recycling and pooling properties of their host process.
+
+ConcurrentApps property of the COMAdminCatalogObject object in the Applications collection
+
+ConcurrentApps is an integer value that specifies the maximum number of simultaneous Dllhost processes, set by administration tool or programmatically 
+
+ConcurrentApps property is set to 1, which is the default value, pooling service is disabled 
+
+- application pooling tasks 
+
+Library applications have the recycling and pooling properties of their host process.
+
+steps 
+    + In the console tree of the Component Services administrative tool, right-click the COM+ application
+    
+    + On the Pooling & Recycling tab, under Application Pooling, enter a value for Pool Size, it is the number of instances of app 
+
+set with visual basic code 
+```
+Function SetMyApplicationPooling( _
+  strApplicationName As String, _
+  lngPoolValue As Long _
+) As Boolean  ' Return False if any errors occur.
+
+    SetMyApplicationPooling = False  ' Initialize the function.
+    On Error GoTo My_Error_Handler  ' Initialize error handling.
+
+    Dim objCatalog As COMAdmin.COMAdminCatalog
+    Dim objAppCollection As COMAdmin.COMAdminCatalogCollection
+    Dim objApplication As COMAdmin.COMAdminCatalogObject
+    Set objCatalog = CreateObject("COMAdmin.COMAdminCatalog")
+    Set objAppCollection = objCatalog.GetCollection("Applications")
+    objAppCollection.Populate 
+    For Each objApplication in objAppCollection
+        If objApplication.Name = strApplicationName Then
+            objApplication.Value("ConcurrentApps") = lngPoolValue
+            MsgBox strApplicationName & _
+              " pooling value set to " & lngPoolValue
+            Exit For
+        End If
+    Next
+    objAppCollection.SaveChanges
+
+    Set objApplication = Nothing
+    Set objAppCollection = Nothing
+    Set objCatalog = Nothing
+    SetMyApplicationPooling = True  ' Successful end to procedure
+    Exit Function
+
+My_Error_Handler:  ' Replace with specific error handling.
+    MsgBox "Error # " & Err.Number & " (Hex: " & Hex(Err.Number) _
+      & ")" & vbNewLine & Err.Description
+    Set objApplication = Nothing
+    Set objAppCollection = Nothing
+    Set objCatalog = Nothing
+End Function
+```
+
+C++ set the application pool 
+```
+#include <windows.h>
+#include <stdio.h>
+#import "C:\WINDOWS\system32\Com\ComAdmin.dll"
+#include "ComAdmin.h"
+#include "StrSafe.h"  // For the StringCchLengthW function
+
+BOOL SetMyApplicationPooling (OLECHAR* szMyApp, LONG lPool) {
+    IUnknown * pUnknown = NULL;
+    ICOMAdminCatalog * pCatalog = NULL;
+    ICatalogCollection * pAppColl = NULL;
+    ICatalogObject * pApplication = NULL;
+    HRESULT hr = S_OK;
+    BSTR bstrMyApp = NULL;
+    unsigned int uMaxLen = 255;  // Maximum length of szMyApp
+    LCID lLan = 1024;// Use the default language for comparing strings.
+
+try {
+    // Test the input pool value.
+    if ((lPool < 1) || (lPool > 1048576)) throw(E_INVALIDARG);
+    
+    // Test the input szMyApp to make sure it's OK to use.
+    hr = StringCchLengthW(szMyApp, uMaxLen, NULL);
+    if (FAILED (hr)) throw(hr);
+    
+    // Convert szMyApp to a BSTR.
+    bstrMyApp = SysAllocString(szMyApp);
+
+    // Create a COMAdminCatalog object and get its IUnknown.
+    hr = CoCreateInstance(CLSID_COMAdminCatalog, NULL, 
+      CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&pUnknown);
+    if (FAILED (hr)) throw(hr);
+
+    // Get the ICOMAdminCatalog interface.
+   hr = pUnknown->QueryInterface(IID_ICOMAdminCatalog, 
+      (void**)&pCatalog); 
+    if (FAILED (hr)) throw(hr);
+
+    // Get an interface to the Applications collection.
+    hr = pCatalog->GetCollection(L"Applications", (IDispatch**)&pAppColl);
+    if (FAILED (hr)) throw(hr);
+
+    // Populate all of the Applications collection.
+    hr = pAppColl->Populate();
+    if (FAILED (hr)) throw(hr);
+
+    // Get the number of applications in the collection.
+    LONG lCount = -1;
+    hr = pAppColl->get_Count(&lCount);
+    if (FAILED (hr)) throw(hr);
+
+    // Iterate through each application in the collection.
+    VARIANT varName;
+    VariantInit(&varName);
+    for (LONG lIdx = 0; lIdx < lCount; lIdx++) {
+        hr = pAppColl->get_Item(lIdx, (IDispatch**)&pApplication);
+        if (FAILED (hr)) throw(hr);
+
+        // Get the Name value of each application.
+       hr = pApplication->get_Name(&varName);
+        if (FAILED (hr)) throw(hr);
+
+        // Compare the application name to bstrMyApp.
+        hr = VarBstrCmp(varName.bstrVal, bstrMyApp, lLan, NULL);
+        if (FAILED (hr)) throw(hr);
+        if (VARCMP_EQ == hr) {  // The strings are equal.
+            // Set the new pooling value.
+            VARIANT varPool;
+            VariantInit(&varPool);
+            varPool.vt = VT_I4;  // Tell the VARIANT it's holding a LONG.
+            varPool.lVal = lPool;
+            hr = pApplication->put_Value(L"ConcurrentApps", varPool);
+            if (FAILED (hr)) throw(hr);
+            printf("%S pooling value set to %ld.\n", bstrMyApp, lPool);
+            break;
+        }
+    }
+    LONG lNum;
+    hr = pAppColl->SaveChanges(&lNum);
+    if (FAILED (hr)) throw(hr);
+
+    // Clean up.
+    SysFreeString(bstrMyApp);
+    pUnknown->Release();
+    pUnknown = NULL;
+    pApplication->Release();
+    pApplication = NULL;
+    pAppColl->Release();
+    pAppColl = NULL;
+    pCatalog->Release();
+    pCatalog = NULL;
+    return (TRUE);
+}  // Try
+
+catch(HRESULT hr) {  // Replace with specific error handling.
+    printf("Error # %#x: ", hr);
+    ErrorDescription(hr);
+    SysFreeString(bstrMyApp);
+    if (NULL != pUnknown) pUnknown>Release();
+    pUnknown = NULL;
+    if (NULL != pApplication) pApplication->Release();
+    pApplication = NULL;
+    if (NULL != pAppColl) pAppColl->Release();
+    pAppColl = NULL;
+    if (NULL != pCatalog) pCatalog->Release();
+    pCatalog = NULL;
+    return (FALSE);
+}catch(...) {
+    printf("An unexpected exception occurred.\n");
+    throw;
+}
+}  // SetMyApplicationPooling
+```
+
+- COM+ application recycling 
+
+a simple solution to gracefully shut down a process associated with an application and restart it
+
+Dllhost process services all future object requests, which leaves the old Dllhost to finish servicing the remaining object requests. The old Dllhost process is shut down when it detects the release of all external references to objects in the process or when the expiration time-out value is reached. 
+
+cannot recycle a COM+ application that has been configured to run as a Windows service
+
+COM+ Administrative SDK. You can recycle processes based on several criteria,  COMAdminCatalogObject object in the Applications collection:
+
+    + RecycleLifetimeLimit, maxium number of minutes a process can run 
+    + RecyleMemoryLimit 
+    + RecycleCallLimit
+    + RecycleActivationLimit 
+    
+COM+ application recycling tasks, right-click the COM+ server application you want to be recycled and then click Properties
+
+- COM+ application running as service applications 
+
+the Queued Components listeners can be started automatically if they are configured as a service.
+If your application needs to perform privileged operations, the application can run as the local system account.
+If other services need to be marked as dependent, Component Services provides that option. 
+
+    + starting an application manually, it acts like a DLL host with the security settings of a service. The service will be started up manually when activated and shut down automatically when it times out.
+    
+    + configuring a COM+ server application as a service application 
+    
+    the system services can be marked as dependent and will not start the application until the system services have been started in the specified order.
+    
+- service configurations 
+    
+the system services can be marked as dependent and will not start the application until the system services have been started in the specified order
+    
+- COM+ service application tasks 
+    
+A COM+ server application can be created as a service to start either automatically during the system startup or manually by activations
+    
+    + Component Services administrative tool
+    
+    + right click COM+ service app then click properties 
+    
+    + configure an app run as service 
+    administrative tool 
+    right-click com+ server app 
+    properties, click activation 
+    activation type check run application as NT service 
+    click setup new service button 
+    startup type, select automatic or manual 
+    a particular error, select Ignore, Normal, Severe, or Critical in the Error Handling box
+    (option) set service dependencies 
+    allowed to interact with the desktop, check the Allow service to interact with desktop
+    click create 
+    assign service to a user account 
+    
+    + reference 
+    https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731901(v=ws.11)?redirectedfrom=MSDN
+    component service administration
+    
+- 4 way to open  Component Services administrative tool
+    + run 
+    dcomcnfg
+    
+    + start menu dcomcnfg 
+    
+    + command prompt 
+    $ dcomcnfg.exe 
+    
+- open program and features 
+$ appwiz.cpl 
+
+- COM+ compensating resource manager 
+COM+ Compensating Resource Manager (CRM) provides a quick and easy way to integrate application resources with Microsoft Distributed Transaction Coordinator (DTC) transactions
+
+CRM is a alternative to dev a full Microsoft Transaction Services (MTS) resource manager. consists of two components 
+    + CRM worker, always requires a transaction. write log 
+    + CRM Compensator. This component is created by the CRM infrastructure at the completion of the transaction
+
+COM+ CRM provides atomicity with transactional notifications, and durability with the CRM log, but does not provide isolation of resources
+
+    + three interface types for the basic CRM functions
+    ICrmLogControl is implemented on the CRM clerk and is used by the CRM Worker to write log 
+    
+    ICrmCompensator and ICrmCompensatorVariants are implemented on the CRM Compensator. These interfaces are used to deliver transaction outcome notifications and their associated log 
+    
+    The COM+ CRM monitoring interfaces are used for monitoring the CRMs within a particular server application
+
+- COM+ CRM security considerations 
+
+COM+ creates the CRM compensator component and calls the ICrmCompensator interface. 
+
+the system administrator can use role-based security to restrict the CRM Compensator component
+
+- the CRM worker first obtains the ICrmLogControl interface, which allows the CRM worker to write records to the durable log
+
+the ICrmLogControl::RegisterCompensator method. After this method is called, the CRM Compensator is created by the CRM infrastructure
+
+write records to the CRM log using ICrmLogControl. The CRM worker must write ahead; that is, it must write a record to the log describing an action before it actually performs 
+
+    + WriteLogRecordVariants, writing a structured log record 
+    + WriteLogRecord, writing an unstructured log record 
+    
+use the ICrmLogControl::ForceLog method instead to guarantee that all writes done
+
+finished writing and forcing records to the log, it must release ICrmLogControl. When the transaction completes
+
+implements either the ICrmCompensator interface or the ICrmCompensatorVariants interface. These interfaces are used to pass the unstructured (Visual C++) or structured (Visual Basic) records to the CRM Compensator
+
+a CRM Compensator uses the abort notification to reverse the action that was performed by the CRM worker
+
+the CRM Compensator needs to clean up that state if the transaction commits.
+
+ the CRM log file created for the server application is based on the AppId (a GUID) of the server application
+
+CRM log file is placed in the same directory as the DTC log file (normally your %SystemRoot%\winnt\system32\DtcLog
+
+location of the CRM log files can be changed using the COM+ administration SDK
+
+ main factor to consider is whether a specific CRM cares which node of the cluster it is operating on
+
+- COM+ CRM registry settings 
+
+All CRM registry settings are under HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\COM3\CRM. Create the CRM key under the COM3 key
+
+VTRACE1, DEWORD, enables debug trace messages 
+IgnoreCompensatorErrors, DWORD, allows the CRM infrastructure to ignore all errors returned from CRM compoensators 
+
+CheckpointIntervalInSec, checkpoint interval in seconds 
+
+InitialLogFileSizeInKB, CRM log file size in kilobytes 
+
+RecoveryTraceEnabled, recovery trace is a text file 
+
+- Troubleshooting the COM+ CRM 
+
+Event log 
+
+Exceptions from the CRM compensator 
+
+Recovery trace 
+
+Trying to run the CRM not enabled 
+
+Trying to run CRMs in client processes 
+
+Recovery in process 
+
+Security on CRM log file 
+
+In-doubt transactions, DTC transaction might go into the in-doubt state; that is, the DTC cannot determine the transaction outcome
+
+Creation and release of CRM compensator
+
+- Design suggestions for developing a COM+ CRM 
+
+suggest steps 
+    + set the VTRACE1 registry flag 
+    + check CRM interfaces
+    
+    https://docs.microsoft.com/en-us/windows/win32/cossdk/com--crm-interfaces
+    
+    implement base on your requirements 
+    
+    + develop CRM worker first, log records 
+    
+    + debug CRM compensator 
+    
+    + develop the real CRM compensator and replace the debug compensator with real CRM compensator 
+    
+    + delete the CRM log in each time 
+    
+    + considerations 
+    write ahead before doing action 
+    isolation 
+    recovery in progress 
+    error handling 
+    recovery time 
+    idempotence, actions that CRM compensator must be idempotent 
+    initiation of recovery 
+
+- COM+ CRM monitoring interface 
+
+ICrmMonitor
+	Using ICrmMonitor::GetClerks, a snapshot can be obtained of the current set of active CRM clerks 
+
+ICrmMonitorClerks
+	Using this interface, the clerk collection object can be browsed for information about the state of the clerk collection
+
+ICrmMonitorLogRecords
+	This interface can be used to query the current state of the transaction, to find out how many log records this CRM clerk has written
+
+- COM+ CRM interfaces 
+
+ICrmCompensator 	This interface delivers unstructured log records in Visual C++.
+
+ICrmCompensatorVariants 	This interface delivers structured log records to the CRM Compensator when using Visual Basic.
+
+ICrmFormatLogRecords 	This interface converts the log records to viewable format so that they can be presented using a generic monitoring tool.
+
+ICrmLogControl 	This interface is used by the CRM Worker and CRM Compensator to write records to the log and make them durable.
+
+ICrmMonitor 	This interface captures a snapshot of the current state of a CRM and holds a specific CRM clerk.
+
+ICrmMonitorClerks 	This interface obtains information about the state of clerks.
+
+ICrmMonitorLogRecords 	This interface monitors the individual log records maintained by a specific CRM clerk for a given transaction.
+
+- COM+ compensating resource manager tasks 
+
+CRM Worker, transaction = requiredsync = yesJIT = yesthreading model = Both
+
+CRM Compensator, transaction = disabledsync = disabledJIT = nothreading model = Both
+
+    + configuring COM+ CRM components 
+
+
+- COM+ events 
+
+Subscribers can query this store and select the events that they want to hear about
+
+- COM+ events concepts, COM+ events service maintains subscription data in the COM+ catalog
+
+COM+ Events service uses an event class object to manage the connection between publisher and subscriber. 
+
+calling CoCreateInstance or the Microsoft Visual Basic CreateObject method and requesting the event interface
+
+provide a self-registering DLL that exports the DllRegisterServer and DllUnregisterServer functions. The DllRegisterServer function registers a COM class, and the DllUnregisterServer function unregisters the component
+
+Event class objects,  methods of the ICOMAdminCatalog::InstallEventClass or ICOMAdminCatalog::InstallMultipleEventClasses interfaces from administration tool or programmatically 
+
+COM+ Events service uses type library marshaling. this bring some restrictions on event class interfaces, marshaler does not support the MIDL attributes size_is and length_is etc.
+
+publication attributes with properties 
+    + EventCLSID. A unique identifier that specifies the CLSID of the component.
+    + EventClassName. A unique identifier that specifies the PROGID of the component.
+    + TypeLibrary. Provides a list of interfaces offered by the event class object. There is no need to implement the firing interfaces specified in the type library.
+
+- Event subscriptions 
+
+Component Services administrative tool or programmatically by using the ICOMAdminCatalog::InstallComponent 
+
+The SubscriptionsForComponent collection is used to add, delete, or change information pertaining to subscriptions
+
+use the Add method to add an entry to the collection.
+
+To set up the various properties of the subscription object, use the Value property. 
+
+To save the changes, use SaveChanges on the SubscriptionsForComponent collection object.
+
+Subscriptions specify the following information 
+    + Identity and location of the subscriber
+    + Delivery method
+    + Event methods to deliver
+    + Event class object and PublisherID property of an event class component from which the subscriber wants to receive events
+    
+three types of subscriptions 
+
+    + persistent 
+    
+    Specify the subscriber object by the SubscriberMoniker property of the subscription
+    
+    Subscriber objects created by a persistent subscription are always released after each event call.
+    
+    + transient 
+    
+    transient subscriptions, you can use the TransientSubscriptions collection
+    
+    transient subscription, see Registering a Transient Subscription
+    
+    + per user 
+
+    deliver events only when the subscriber is logged on to the event system's computer.
+    
+    To receive meta-events from the event system, applications must create a subscription that resides on the event system's computer and that specifies the firing interface ID (IID_IEventObjectChange)
+    
+COM+ events does not support a distributed event store. A subscriber must subscribe to an event on each computer from which it wants to receive notification. 
+register the event class object and subscriptions on a central computer and instantiate this event class object from the remote computers. 
+Delivery of events is provided either by DCOM or by the COM+ queued components service.
+publisher can implement a publisher filter to control subscribers 
+
+- filtering events in COM+ 
+
+The filter criteria string recognizes relational operators for checking equality (=, ==, !, !=, ~, ~=, <>), nested parentheses, and logical keywords AND, OR, or NOT
+
+publisher filter invokes IFiringControl::FireSubscription
+
+- The COM+ queued components service can be used to make the publisher and subscriber processing time independent by queuing the publisher's message and later replaying it to the subscriber
+
+The recorder batches all method invocations into a message, and then the player invokes those methods in order when the message is processed
+
+    + two places
+    
+    Between the publisher and event object
+    Between the event object and subscriber
+
+deliver asynchronous event, sets SubscriberMoniker as follows: "queue:/new:/{12345678-1234-1234-1234-123456789012}".
+
+- COM+ events security considerations 
+
+select Packet Privacy as the Authentication Level for Calls setting
+
+use role-based security to help ensure that callers of your event class object's methods have appropriate
+
+- COM+ events tasks 
+    + steps to use COM+ events 
+    
+    register an event class 
+    
+    registering a subscription 
+    
+    registering a transient subscription 
+    
+    publishing an event 
+    
+    creating a publisher filter 
+
+- registering an event class with administration tool 
+    + create a new COM+ app 
+    + open the applicatio nfolder and select components 
+    + on action, click New 
+    + instal new event class(es)
+    + enter the path to the event class component DLL 
+    + click OK 
+
+- registering a subscription 
+
+    + after register event in COM+ catalog, then we can add subscribers 
+    + create new com+ app, installing the subscriber component 
+    + right click subscriptions folder to enable COM+ new subscription wizard  
+    + enter the name for subscription 
+    + enable subscription 
+    + click ok 
+
+- registering a transient subscription 
+
+transient subscriptions are tied to a particular object and are stored only in the event system
+
+Transient subscriptions can be more efficient than persistent subscriptions, but you must manage their object life cycles.
+
+it can not set with administration tool, need to use administrative interfaces 
+
+    + VB 
+    
+```
+Public Function CreateTransientSubscription( _
+  ByVal clsid As String, ByVal objref As Object) As String 
+    Dim oCOMAdminCatalog As COMAdmin.COMAdminCatalog
+    Dim oTSCol As COMAdminCatalogCollection
+    Dim oSubscription As ICatalogObject
+    Dim objvar As Variant
+    On Error GoTo CreateTransientSubscriptionError
+    Set oCOMAdminCatalog = CreateObject("COMAdmin.COMAdminCatalog")
+    'Gets the TransientSubscriptions collection
+    Set oTSCol = oCOMAdminCatalog.GetCollection( _
+      "TransientSubscriptions")
+    Set oSubscription = oTSCol.Add
+    Set objvar = objref
+    oSubscription.Value("SubscriberInterface") = objref
+    oSubscription.Value("EventCLSID") = clsid
+    oSubscription.Value("Name") = "TransientSubscription"
+    oTSCol.SaveChanges
+    CreateTransientSubscription = oSubscription.Value("ID")
+    Set oSubscription = Nothing
+    Set oTSCol = Nothing
+    Set oCOMAdminCatalog = Nothing
+    Set objvar = Nothing
+    Exit Function
+CreateTransientSubscriptionError:
+    CreateTransientSubscription = ""
+    Err.Raise Err.Number, "[CreateTransientSubscription]" & _
+      Err.Source, Err.Description
+End Function
+```
+
+CreateTransientSubscription function returns a string, which is a GUID that can be used as a handle or a cookie to revoke the subscription
+
+call the Remove method of COMAdminCatalogCollection on the TransientSubscriptions collection, passing in the index corresponding to the subscription with the GUID
+
+- publishing an event 
+
+calling CoCreateInstance or the Microsoft Visual Basic CreateObject method using EventClassID or EventClassName as an argument
+
+The event system then publishes events on the event class CLSID_EventObjectChange with the interface ID IID_IEventObjectChange.
+
+- creating a publisher filter 
+
+using IEventControl::SetPublisherFilter
+
+ compose the event object with the COM+ queued components service, the preferred method is to use the MultiPublisherFilterCLSID property in the event class to set publisher filter 
+
+You can also use SetPublisherFilter. 
+
+The publisher filter objects must support either IPublisherFilter or IMultiInterfacePublisherFilter, depending on whether you have a single firing interface or multiple firing interfaces. The Initialize method is called by event class object immediately after creating the filter 
+
+COM+ Events tries to invoke two methods on the filter. First it calls IPublisherFilter::PrepareToFire and passes an IFiringControl interface pointer to the filter. It will Query the filter object for the event interface, if it supports, it invokes a method on it. 
+
+- COM+ instrumentation concepts 
+
+build your own COM+ event management and logging programs when you want to display various performance metrics for your COM+ components.
+
+Visual Studio Analyzer (VSA) format when you are upgrading MTS packages that are receiving MTS events
+
+implement the COM+ instrumentation interfaces to receive notifications
+
+a loosely coupled events (LCE) system that stores event information from different publishers 
+
+when you subscribe to a COM+ instrumentation interface or method, you can specify properties for the subscription in the COMSVCSEVENTINFO structure, such as the application ID (guidApp member) or the process ID (dwPid member)
+
+- COM+ instrumentation interfaces 
+
+using COM+ Events, a loosely coupled events (LCE) system that stores event information from different publishers in an event store in the COM+ catalog
+
+IComActivityEvents 
+IComAppEvents 
+IComApp2Events
+IComCRMEvents 
+IComExceptionEvents 
+IComIdentityEvents 
+IComInstanceEvents
+IComINstance2Events 
+IComMethodEvents 
+ICommeMethod2Events
+IComObjectPoolEvents
+IComObjectPool2Evets
+IComObjectPoolEvents2
+IComQCEvents 
+IComResourceEvents 
+IComSecurityEvents 
+IComThreadEvents
+IComTrackingInfoCollection
+IComTrackingInfoEvents 
+IComTrackingInfoObject
+IComTrackingInfoProperties 
+IComTransactionEvents 
+IComTransaction2Events 
+IComUserEvent 
+ISystemAppEventData
+
+- COM+ Just-in-time activation 
+
+    + concepts 
+    
+    The just-in-time (JIT) activation service enables COM+ to deactivate an object while a client still holds an active reference to that object. The next time the client calls a method on the object, which the client believes to be still active, the COM+ JIT activation service reactivates the object transparently to the client
+        * client is simplied 
+        * improved performance 
+        * server saved memory 
+    
+    Enabling JIT Activation for a Component.
+        https://docs.microsoft.com/en-us/windows/win32/cossdk/transactions-and-com--jit-activation
+        
+        component is enabled for JIT activation, synchronization is automatically set to required
+        
+    deactivation an object based on the status of the doneness bit 
+        * set true, COM+ deactivates the object when the current method call returns.
+        * set to false, remain active 
+        
+        * following ways:
+        Using IContextState
+        Using IObjectContext
+        Using the auto-done property
+    
+    using the auto done property, configure a method such that the object is automatically deactivated on method return
+    
+        * If SUCCEEDS(hr), it is as though you called SetComplete.
+        * If FAILED(hr), it is as though you called SetAbort.
+
+    COM+ calls IObjectControl::Deactivate when it deactivates the object and IObjectControl::Activate when it reactivates it.
+    
+    transactions and COM+ JIT activation 
+    
+    Statelessness. You would not hold state that would violate transaction
+    
+    using COM+ Object Pooling. By pooling objects that are JIT activated, you can dedicate a certain amount of memory to hold a certain number of objects
+    
+    + tasks 
+    
+    enable JIT activation for a component 
+        * administrative tool, right-click the component that you want to configure and then click Properties.
+        
+        * activation tab 
+        * enable just in time activation 
+    
+    setting the done bit following ways:
+
+        * Using IContextState,  IContextState::SetDeactivateOnReturn to set the done, IContextState::GetDeactivateOnReturn to get the current status
+        * Using IObjectContext, SetComplete, SetAbort, EnableCommit, DisableCommit
+        * Using the auto-done property
+
+    enabling auto-done for a method 
+        * administrative tool, right-click the method that you want to configure and then click Properties.
+        
+        * general tab 
+        
+        * select the Automatically deactivate this object when this method returns check box
+    
+    enforcing activation in the default context 
+    
+        * choose to activate a configured component in the default context
+        
+        * resources by limiting the number of contexts
+        
+        * limiting the number of cross-context calls
+        
+        * import older COM applications into COM+ and run them without a problem. 
+        
+        old COM objects may require pass reference within apartment without marshaling, in administration tool mark all the classes in the application as Must be activated in the default context. to shift to COM+
+        
+        * in administration tool can set enforce activation in default context in property tab
+        
+        any COM object don't required COM+ services will be good to activate in default context 
+    
+    the following occurs when COM+ activates an instance of the component in a context:
+
+        * The object is activated in the creator's context if possible.
+        * Object activation fails if it requires its own context; CO_E_ATTEMPT_TO_CREATE_OUTSIDE_CLIENT_CONTEXT is returned.
+
+    
+- COM+ lowe memory activation gates
+
+If the percentage of virtual memory available to the application falls below a fixed threshold, the activation fails before the object is created. 
+
+    + concepts 
+    
+    + tasks 
 
 
 
