@@ -1110,8 +1110,322 @@ ISystemAppEventData
 If the percentage of virtual memory available to the application falls below a fixed threshold, the activation fails before the object is created. 
 
     + concepts 
+    multithreaded apartment (MTA) and a free-threaded object need locking
+    
+    eliminate the need to use locking by setting the synchronization attribute for a component
+    
+    COM+ proactively monitors memory load in the system and ensures that a reasonable amount of memory is available before executing user code
+    
+    COM+ low memory activation gates tasks 
+    + tasks 
+
+- COM+ object constructor strings 
+
+COM+ object constructor strings support generic programming. They enable you to write a single component with a degree of generality 
+
+should not be used to store security-sensitive information.
+    + concepts 
+    elies on object constructor strings, using IObjectConstruct, and recompile it to produce several customizable components each with a distinct CLSID
+    
+    COM+ calls the IObjectConstruct::Construct method that it implements. 
+    
+    the constructor string by using IObjectConstructString. Empty strings can be valid entries.
     
     + tasks 
+        * administration tool 
+        * Enable object construction check box.
+        * In the Constructor string box, enter the construction string (for example, DSN=AccountingServer)
+        
+    example 
+    
+    ```
+    Implements IObjectConstruct
+    Private Sub IObjectConstruct_Construct( ByVal pCtorObj As Object )
+        Dim strConstructorString As String
+        strConstructorString = pCtorObj.ConstructString
+         Parse and use strConstructorString here. 
+    End Sub
+    ```
+
+- COM+ object pooling 
+    + concepts 
+    
+    configure a component to have instances of itself kept active in a pool, ready to be used by any client that requests the component.
+    
+    Pooled objects can implement IObjectControl to control how they are reused.
+    IObjectControl::Activate 
+    IObjectControl::CanBePooled 
+    IObjectControl::Deactivate 
+    
+    + how object pooling works 
+    
+    it can be reused and should return an appropriate value for IObjectControl::CanBePooled.
+    
+    object to do some small unit of work, pushing or pulling data, and then the object will call IObjectContext::SetComplete or IObjectContext::SetAbort and return.
+
+    objects must support aggregation—that is, they must support being created by invoking CoCreateInstance with a non-NULL pUnkOuter argument
+
+    + Components developed with Microsoft Visual Basic 6.0 and earlier cannot be pooled 
+
+    Poolable objects that participate in transactions must manually enlist managed resources. 
+
+    + turning off automatic enlistment 
+
+    Auto-enlistment is sometimes coupled with connection pooling, as with ODBC, and sometimes not, as with OLE DB. You might need to ensure that auto-enlistment is off
+
+    + client requesting an object has an associated transaction, If an object with transaction affinity is found, it is returned to the client; otherwise, an object from the general pool is returned
+
+    + Controlling object lifetime and state with IObjectControl
+
+    + tasks 
+    
+    consider, minimul size, maximum size, creation timeout 
+    
+    administration tool can set these values 
+    
+    + monitoring object statistics
+
+    To enable object statistics for the component, under Activation Context, select the Component supports events and statistics
+
+- COM+ partitions 
+
+COM+ partitions service to install different versions of a COM+ application on a computer and run them simultaneously.
+
+administrative tools can manage COM+ partitions 
+
+    + concepts 
+    it's necessary to use different versions or configurations of an application on the same computer, COM+ partitions can avoid conflicts 
+    
+    + implementation 
+    
+    an administrator can create a partition using the Component Services administrative tool. local partition can server local user only. Within Active directory can server domain
+    
+    After a partition is created and a COM+ application is installed into it, the administrator can assign that partition as a default partition for one or more users on that server
+
+    + partitions and active directory 
+
+    Created in Active Directory, partition sets allow users in a domain to access COM+ applications throughout the domain
+
+    specific user or organizational unit (OU) is assigned, or mapped, to a partition set
+
+    To make COM+ applications available to domain users, an administrator must perform tasks both on the domain controller and server where COM+ installed 
+
+    + domain controller 
+    
+    administrative tool or programmatically by using the Active Directory Services Interface (ADSI).
+    
+    + COM+ application server 
+    
+    creates a new partition, specifying the same partition name and partition ID (GUID) as that of the partition that was created within Active Directory on the domain controller. The COM+ Partitions folder within the Component Services administrative tool
+
+    + Mapping user identities and OUs to partition sets 
+    Ensures that applications are available to the appropriate users in the domain
+    
+    Helps COM+ in determining the partition in which an application is located
+    
+    Establishes a user's right to access a particular application
+
+    + The global partition, A global partition is automatically created when COM+ is installed. The global partition is designed to contain system-wide applications to all users or domain 
+    
+    must be marked as public, not private, components.
+    
+    + partition properties 
+    Partition name 
+    
+    Partition id 
+    
+    Description 
+    
+    Disable deletion 
+    
+    Disable changes 
+    
+    + Registering and activating components in partitions 
+    
+    the partitions service allows an administrator to copy applications or components from one partition into another
+     
+    a component is copied, all associated partition properties are copied with it, except the application's identity or any of the members of a role
+    
+    client calls  CoCreateInstance or CoGetObject function
+        * locates the partition in which the component resides 
+        * locates the correct component within that partition 
+    
+    + locating partition dependes on 
+    parameters 
+    component is activated is local or remote 
+    the internal use of the partition cache 
+    
+        * calling program, whether the function call includes a partition moniker, which consists of a partition ID and a CLSID, or includes a CLSID only
+        
+        CoGetObject or GetObject Parition moniker(includes partition ID and CLSID) uses the partition ID specified in the partition moniker 
+        CoCreateInstance CLSID Uses either the partition ID of the user identity's default partition or the partition ID added to the context 
+        
+        * using partition monikers 
+        
+        A partition moniker is used within code to explicitly specify the partition of the activated component. 
+        
+        moniker is used to locate the partition, the activation occurs from that partition
+        ```
+        HRESULT CoGetObject(
+          L"partition:partitionGUID/new:clsid",
+          pBindOptions,
+          IID_IUnknown,
+          (void**)&pIUnknown);
+        ```
+        
+        ```
+        // Create CLSID1 configured in the Production partition.
+        HRESULT hr = CoGetObject(
+            L"partition:{35056070-D5B7-4b59-9FBF-0D23417F6937}/new:CLSID1",
+            pBindOptions, IID_IUnknown, (void**)&pIUnknown);
+        ```
+        
+        ```vb
+        GetObject("partition:partitionGUID/new:CLSID") As Object
+        ```
+        
+        partition moniker is being used as an argument 
+        ```
+        Dim objCLSID1 As Object
+        Set objCLSID1 = GetObject( _
+           "partition:{35056070-D5B7-4b59-9FBF-0D23417F6937}/new:CLSID1")
+            "partition:{35056070-D5B7-4b59-9FBF-0D23417F6937}/new:CLSID1")
+        ```
+        
+        * use of partition ids and object context
+        
+        partition id is added to the context, ensures that after a chain of activations has begun, the partition ID remains the same unless it is changed explicitly
+        
+        * local and remote activation 
+        
+        exist on another computer, the partition properties are marshaled to the other computer 
+        
+        * partition cache 
+        minimize network traffic resulting from frequent lookups of user-to-partition-set mapping in Active Directory
+        
+        made in Active Directory between user identities or OUs and their partition set, COM+ will check local first then check Activate directory 
+        
+clients call -> read cache -> user to partition mapping -y-> found 
+                                |                                 A
+                                no                                |
+                                |                                 |
+                                V                                 |
+                                Read Active Directory             |
+                                |                                 |
+                                V                                 |
+                                User to partition                 |
+                    +---------> mapping found                     |
+                    |           |                                 |
+                    |           V                                 |
+                    |           Move up                           |
+                    |           One OU level                      |
+                    |           |                                 |
+                    |           V                                 |
+                    |           read cache                        |
+                    |           |                                 |
+                    |           V                                 |
+                    +--no------- OU to partion                    |
+                                mapping found?                    |
+                                |                                 |
+                                Yes ------------------------------+
+
+        * locating a component for activation 
+        
+        partition for component located ?
+        |
+        V 
+        is in same app -yes-> active 
+        |
+        no 
+        |
+        V 
+        search partition for public version -yes-> active 
+        |
+        no 
+        |
+        V
+        search global -yes-> active 
+        |
+        no 
+        |
+        V
+        activation failed 
+
+    + COM+ queued components and partitions
+
+a queued component within a partition is executed, the message is queued and the component is eventually executed within the component's partition
+
+the queued components service uses the same queue for any queued components that share the same application name such as multiple instances 
+
+activate a non-queued component applies to a queued component, as follows:
+
+    1. a moniker and a partition id is included
+    
+    2. no moniker then use the parition id of the object's context 
+    
+    3. none of above use the mapping with active directory 
+
+    + application design restrictions 
+
+    app design to prevents multiple instances of the application from being installed on a computer can not use partition feature 
+    
+        * On a computer without partitions, this registry key is typically computer/CLSID
+
+        * on a computer with partitions, this registry key is computer/partition ID/application ID/CLSID
+        
+    global resources such as shared memory, data files, and registry entries. can cause problem in multiple instances 
+    
+    type libraries 
+    
+        * marshaling data between components when functon calls 
+        * helping COM+ queued components and COM+ events 
+        * providing the correct information within vb editor 
+        
+    + COM+ partitions tasks win2k+
+        
+        * creating and configuring com+ paritions with ICOMAdminCatalog2 interface on the COMAdminCatalog class
+    CurrentParition property 
+    CurrentParitionID 
+    CurrentParitionName 
+    FlushPartitionCache 
+    GetPartitionID 
+    GetPartitionName 
+    GlobalPartitionID 
+    
+    COM+ administration collections 
+    https://docs.microsoft.com/en-us/windows/win32/cossdk/com--administration-collections
+    
+    Partitions 
+    PartitionUsers 
+    RolesForPartition 
+    UsersInPartitionRole 
+    
+    Properties of other COM+ administration collections
+    PartitionID on ApplicationInstances
+    AppPartitionID on Applications 
+    PartitionDescription, PartitionID, and PartitionName properties on the FilesForImport collection
+    DSPartitionLookupEnabled, LocalPartitionLookupEnabled, and PartitionsEnabled properties on the LocalComputer collection
+    EventClassPartitionID and SubscriberPartitionID properties on the SubscriptionsForComponent collection
+    EventClassPartitionID and SubscriberPartitionID properties on the TransientSubscriptions collection
+
+        * Managing local paritions 
+```
+Sub CreatePartition (PartitonGuid, PartitionName)
+   Set cat = CreateObject("COMAdmin.COMAdminCatalog")
+   Set collPartitions = cat.GetCollection("Partitions")
+   collPartitions.Populate
+   Set part = collPartitions.Add
+   ' If you don't specify a partition GUID, one is created for you.
+   ' Otherwise, you can specify one this way:
+   part.Value("ID") = PartitonGuid
+   part.Value("Name") = PartitionName
+   collPartitions.SaveChanges
+   Set part = Nothing
+   Set collPartitions = Nothing
+   Set cat = Nothing
+End Sub
+```
+        * managing partitions within active directory 
 
 
 
