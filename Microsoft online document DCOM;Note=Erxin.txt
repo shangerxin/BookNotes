@@ -1427,7 +1427,649 @@ End Sub
 ```
         * managing partitions within active directory 
 
+        Active Directory Users and Computers administrative tool, you can manage COM+ partitions programmatically through Active Directory System Interface (ADSI)
+        
+        create new COM+ partitions with active direction for your domain 
+        
+        create com+ partition sets within active directory and map them to your newly created COM+ partitions 
+        
+        configure your active directory partition on your local machine 
+        
+        install your COM+ application in the appropriate com+ partitions 
+ 
+        ADSI are as follows:
+        DS_USERPARTITIONSETLINK_NAME
+        DS_PARTITIONLINK_NAME
+        DS_OBJECTID_NAME
+        DS_DEFAULTPARTITIONLINK_NAME
+        DS_USERLINK_NAME
+        DS_PARTITIONSET_NAME
+        DS_PARTITION_NAME
+        
+        * setting administrator rights for a partition 
+       Component Services administrative tool, administrative roles can be assigned to users by expanding the Roles folder 
+        
+        * grouping applications into partitions 
+        
+        an application can be installed into one or more partitions 
+        
+        only one instance of a given component can exist in an application 
+        
+        * public and private components 
+        
+        app can be installed in multiple partitions 
+        
+        only one instance of a component can exist in an app 
+        
+        A server application, Public and private.
+        
+        A library application, Public only
+        
+        app in the global partition, Public only
+        
+        * collecting partition metrics, an application service provider (ASP) might want to charge a customer for its resource usage.
+        
+        * partition cache, cache stores user-to-partition mappings and is designed to avoid repetitive Active Directory access
+        
+- COM+ quequed components 
 
+    + concepts
+benefits of queued processing 
+
+COM+ queued components service separates the transaction into activities that must be completed now and those that can be completed at a later time
+
+queued components service allows the server component to operate independently of the client
+
+        * architecture 
+
+        COM+ queued componenets service consists 
+
+        Recorder (for the client or send side)
+        Listener (for the server or receive side)
+        Player (for the server or receive side)
+        
+        Client -> {Recorder} -> {Queue} -> {Listener} -> {Player} -> {Server}
+        
+        recorder marshals the client's security context into the message and records all of the client's method calls. as a proxy 
+        
+        listener retrieves the message from the queue and passes it to the queued components player
+        
+        player unmarshals the client's security context at the server side and then invokes the server component and makes the same method calls
+        
+        * A transaction is a series of modifications of a data store
+        
+        * queued components security 
+        
+        supports role-based security semantics
+        
+        discover the role membership of their caller (ISecurityCallContext::IsCallerInRole) or a specific user (ISecurityCallContext::IsUserInRole)
+        
+        Message Queuing authenticates the message sender identity. When the caller identity and the message sender identity are the same
+        
+        COM+ queued components does not support impersonation-style security
+        
+        * developing queued components 
+        
+        COM+ queued components service, you must have the Message Queuing service already installed
+        
+        messaging constraints
+        1. must contain input parameters only 
+        2. must return no application specific results 
+        
+        the client passes the object to the recorder. The recorder marshals the object into a Message Queuing message and passes it to the listener. After the listener picks up the message and passes it to the player, the player must reinstantiate the object to dispatch it to the method call
+        
+        COM+ does not provide pass-by-value semantics for standard COM objects, the recorder and player need help from the component to marshal and unmarshal the object.
+        
+        * vb persistable objects,  IPersistStream and can be passed as parameters to queued component method calls. 
+
+        object's IPersistStream interface or calling the IPersistStreamInit::InitNew, or IPersistStream::Load 
+        
+        ADO Recordset or OLE DB rowset objects between components allows one component to process the results of queries executed by another component
+        
+        * security limitations in workgroup mode 
+        
+        message queuing workgroup configuration does not permit queued components support application security. administration tool should configure by selecting Do not authenticate messages on the Queuing tab for the COM+ application's Properties dialog
+        
+        * threading considerations 
+        
+        COM+ queued components recorder is capable of running in the process's multithreaded apartment (MTA) or in a single-threaded apartment (STA). When the recorder is run in the STA, COM+ requires that each apartment containing objects must have a Message Queuing queue to handle calls
+        
+        This means that the thread's work function must have a message loop. When a queued component is instantiated, the interface pointer returned is always a proxy interface pointer which point to the recorder
+         
+        If you are using primitives to synchronize the threads, consider using MsgWaitForMultipleObjects instead of other synchronization functions
+        
+        * receiving a response 
+        client applications should not block while waiting for a response from a queued request. 
+        
+        queued component that runs on a server is for the client to pass the called method a notification object. A notification object is an instance of a queued component that runs on the client. 
+        
+        * queued components errors 
+        
+        The COM+ queued components service handles poison messages by using a series of retry queues. After several retries, the message is moved to a final resting queue. Messages stay in the resting queue until they are moved manually by using the queued components message mover utility.
+        
+        server side error, listener and player work together, when play back failed, listener 
+        1. dequeues the message 
+        2. instantiates the objects 
+        3. suffers a rollback 
+        4. puts the message back on top of the queue,
+
+        there are severn queues for each app 
+        
+        normal input, name of the queue is appliation name 
+        first retry queue, queue is named ApplicationName_0. 
+        second retry queue
+        third 
+        forth 
+        fifth
+        application specific final resting queue, This queue is named ApplicationName_DeadQueue. 
+        
+        * COM+ events are issued in 
+        a transaction aborts 
+        a message is moved from one queue to another 
+        when a message is deposited onto the final resting queue 
+        
+        * server side exception handling 
+        messge is moved to retry queues 
+        final retry on the last retry queue fails 
+        retrieves the target component from the message and checks for an exception class 
+        run-time isntantiates the exception class 
+        runtime queries IPlayBackControl on the exception class 
+        runtime plays back all property and method calls to the exception class 
+        if steps 4 through 6 do not succeed the run-time omves the message onto the application specific final resting queue 
+        
+        * client-side errors 
+        
+        message cannot be moved from client to server. In this case, the message is moved to the client-side dead letter queue.
+        
+        an instance of the exception class and calls QueryInterface to request IPlaybackControl. If this is successful, the dead letter queue monitor invokes IPlaybackControl::FinalClientRetry.
+        
+        * persistent client-side failures 
+        
+        the ProgID or the CLSID of a component implementing IPlaybackControl. The queued components service has a dead letter queue
+        
+        Message queuing fails to deliver a message to the server puts the message onto the Xact dead letter queue 
+        The dead letter queue listenr(DLQL) finds a message on the Xact dead letter queue 
+        THe DLQL retrieves the target component CLSID from the message and check an exception class 
+        The DLQL queries for IPlaybackControl for exception class 
+        THe DLQL calls IPlayBackControl::FinalClientRetry 
+        The DLQL play back all property and method calls 
+        The DLQL deletes the message if the exception handler completes 
+        
+        intervene the process, use the message mover utility, see Handling Errors.
+        
+    + tasks 
+    
+        * creating queuable components 
+        
+         administrative tool, under Component Services, open the COM+ Applications
+         
+         check box labeled Queued
+         
+        * creating component queues 
+         administration tool 
+         Activate the check box labeled Queued – This application can be reached by MSMQ queues.
+         
+        * use the administration tool to control authentication and activating 
+         
+         ICOMAdminCatalog::StartApplication example.
+         
+        * handling errors in queued components 
+         
+        The message mover utility is an Automation object that can be invoked with a VBScript.
+        
+        use in vb add a reference to COM+ services type library 
+        ```vb
+        Function MyMessageMover( _
+          strSource As String, _
+          strDest As String _
+        ) As Boolean  ' Return False if any errors occur.
+
+            MyMessageMover = False  ' Initialize the function.
+            On Error GoTo My_Error_Handler  ' Initialize error handling.
+
+            Dim lngMovedMessages As Long
+            Dim objMessageMover As COMSVCSLib.MessageMover
+            Set objMessageMover = CreateObject("QC.MessageMover")
+            objMessageMover.SourcePath = strSource
+            objMessageMover.DestPath = strDest
+            lngMovedMessages = objMessageMover.MoveMessages
+
+            MsgBox lngMovedMessages & " messages moved from " & _
+              strSource & " to " & strDest
+
+            MyMessageMover = True  ' Successful end to procedure
+            Set objMessageMover = Nothing
+            Exit Function
+
+        My_Error_Handler:  ' Replace with specific error handling.
+            MsgBox "Error # " & Err.Number & " (Hex: " & Hex(Err.Number) _
+              & ")" & vbNewLine & Err.Description
+            Set objMessageMover = Nothing
+            lngMovedMessages = -1
+        End Function
+        
+        Sub Main()
+          ' Replace AppName with the name of a COM+ application.
+          If Not MyMessageMover(".\private$\AppName_deadqueue", ".\AppName") Then
+              MsgBox "MyMessageMover failed."
+          End If
+        End Sub
+
+        ```
+        
+        use the MessageMover object, you must have Message Queuing installed on your computer and the application specified by AppName must have queuing enabled
+        
+        ```
+        #include <windows.h>
+        #include <stdio.h>
+        #import "C:\WINDOWS\system32\ComSvcs.dll"
+        #include "ComSvcs.h"
+        #include "StrSafe.h"  
+
+        BOOL MyMessageMover (OLECHAR* szSource, OLECHAR* szDest) {
+            IUnknown * pUnknown = NULL;
+            IMessageMover * pMover = NULL;
+            HRESULT hr = S_OK;
+            BSTR bstrSource = NULL;
+            BSTR bstrDest = NULL;
+            unsigned int uMaxLen = 255;  // Maximum length of szMyApp
+
+        try {
+            // Test the input strings to make sure they're OK to use.
+            hr = StringCchLengthW(szSource, uMaxLen, NULL);
+            if (FAILED (hr)) throw(hr);
+            hr = StringCchLengthW(szDest, uMaxLen, NULL);
+            if (FAILED (hr)) throw(hr);
+            
+            // Convert the input strings to BSTRs.
+            bstrSource = SysAllocString(szSource);
+            bstrDest = SysAllocString(szDest);
+
+            // Create a MessageMover object and get its IUnknown.
+            hr = CoCreateInstance(CLSID_MessageMover, NULL, 
+              CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&pUnknown);
+            if (FAILED (hr)) throw(hr);    
+
+            // Get the IMessageMover interface.
+            hr = pUnknown->QueryInterface(IID_IMessageMover, (void**)&pMover); 
+            if (FAILED (hr)) throw(hr);
+
+            // Put the source and destination files.
+            hr = pMover->put_SourcePath(bstrSource);
+            if (FAILED (hr)) throw(hr);
+            hr = pMover->put_DestPath(bstrDest);
+            if (FAILED (hr)) throw(hr);
+
+            // Move the messages.
+            LONG lCount = -1;
+            hr = pMover->MoveMessages(&lCount);
+            if (FAILED (hr)) throw(hr);
+            printf("%ld messages moved from %S to %S.\n", 
+              lCount, bstrSource, bstrDest);
+
+            // Clean up.
+            SysFreeString(bstrDest);
+            SysFreeString(bstrSource);
+            pUnknown->Release();
+            pUnknown = NULL;
+            pMover->Release();
+            pMover = NULL;
+            return (TRUE);
+        }  // try
+
+        catch(HRESULT hr) {  // Replace with specific error handling.
+            printf("Error # %#x: ", hr);
+            ErrorDescription(hr);
+            SysFreeString(bstrDest);
+            SysFreeString(bstrSource);
+            if (NULL != pUnknown) pUnknown->Release();
+            pUnknown = NULL;
+            if (NULL != pMover) pMover->Release();
+            pMover = NULL;
+            return (FALSE);
+        }catch(...) {
+            printf("An unexpected exception occurred.\n");
+            throw;
+        }        
+        }  // MyMessageMover        
+        #include <windows.h>
+        #include <stdio.h>
+        #import "C:\WINDOWS\system32\ComSvcs.dll"
+        #include "ComSvcs.h"
+        #include "StrSafe.h"  
+
+        BOOL MyMessageMover (OLECHAR* szSource, OLECHAR* szDest) {
+            IUnknown * pUnknown = NULL;
+            IMessageMover * pMover = NULL;
+            HRESULT hr = S_OK;
+            BSTR bstrSource = NULL;
+            BSTR bstrDest = NULL;
+            unsigned int uMaxLen = 255;  // Maximum length of szMyApp
+
+        try {
+            // Test the input strings to make sure they're OK to use.
+            hr = StringCchLengthW(szSource, uMaxLen, NULL);
+            if (FAILED (hr)) throw(hr);
+            hr = StringCchLengthW(szDest, uMaxLen, NULL);
+            if (FAILED (hr)) throw(hr);
+            
+            // Convert the input strings to BSTRs.
+            bstrSource = SysAllocString(szSource);
+            bstrDest = SysAllocString(szDest);
+
+            // Create a MessageMover object and get its IUnknown.
+            hr = CoCreateInstance(CLSID_MessageMover, NULL, 
+              CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&pUnknown);
+            if (FAILED (hr)) throw(hr);    
+
+            // Get the IMessageMover interface.
+            hr = pUnknown->QueryInterface(IID_IMessageMover, (void**)&pMover); 
+            if (FAILED (hr)) throw(hr);
+
+            // Put the source and destination files.
+            hr = pMover->put_SourcePath(bstrSource);
+            if (FAILED (hr)) throw(hr);
+            hr = pMover->put_DestPath(bstrDest);
+            if (FAILED (hr)) throw(hr);
+
+            // Move the messages.
+            LONG lCount = -1;
+            hr = pMover->MoveMessages(&lCount);
+            if (FAILED (hr)) throw(hr);
+            printf("%ld messages moved from %S to %S.\n", 
+              lCount, bstrSource, bstrDest);
+
+            // Clean up.
+            SysFreeString(bstrDest);
+            SysFreeString(bstrSource);
+            pUnknown->Release();
+            pUnknown = NULL;
+            pMover->Release();
+            pMover = NULL;
+            return (TRUE);
+        }  // try
+
+        catch(HRESULT hr) {  // Replace with specific error handling.
+            printf("Error # %#x: ", hr);
+            ErrorDescription(hr);
+            SysFreeString(bstrDest);
+            SysFreeString(bstrSource);
+            if (NULL != pUnknown) pUnknown->Release();
+            pUnknown = NULL;
+            if (NULL != pMover) pMover->Release();
+            pMover = NULL;
+            return (FALSE);
+        }catch(...) {
+            printf("An unexpected exception occurred.\n");
+            throw;
+        }        
+        }  // MyMessageMover    
+
+        //call the myMessageMover
+        #include <windows.h>
+        #include <stdio.h>
+
+        #define _WIN32_DCOM  // To use CoInitializeEx()
+
+        void main() 
+        {
+            HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+            if (FAILED (hr)) {
+                printf("CoInitializeEx failed: Error # %#x\n", hr);
+                exit(0);  // Replace with specific error handling.
+            }
+            if (! MyMessageMover(L".\\private$\\AppName_deadqueue", 
+              L".\\AppName"))
+                printf("MyMessageMover failed.\n");
+            CoUninitialize();
+        }        
+        ```
+        
+        * using the queue moniker 
+        
+         queue moniker is used to activate a queued component programmatically.
+         
+         ```vb
+         Set objMyQC = GetObject ("queue:/new:QCShip.Ship")
+         Set objMyQC = GetObject ("queue:/new:{812DF40E-BD88-11D0-8A6D-00C04FC340EE}")
+         Set objMyQC = GetObject ("queue:/new:812DF40E-BD88-11D0-8A6D-00C04FC340EE")
+         ```
+         
+         ```cpp
+        hr = CoGetObject (
+              L"queue:/new:QCShip.Ship",
+              NULL, IID_IShip, (void**)&pShip);
+              
+        hr = CoGetObject (
+          L"queue:/new:{812DF40E-BD88-11D0-8A6D-00C04FC340EE}", 
+          NULL, IID_IShip, (void**)&pShip);      
+          
+        hr = CoGetObject (
+          L"queue:/new:812DF40E-BD88-11D0-8A6D-00C04FC340EE",
+          NULL, IID_IShip, (void**)&pShip);
+         ```
+         
+        queue moniker parameters:
+        computer name 
+        queue name 
+        path name 
+        format name
+        
+        The complete set of COM+ Administrative SDK functions is available by using COM objects
+        
+        
+- COM+ resource dispenser service 
+    + concepts 
+    The application process achieves high performance by using a minimum number of frequently used resources.
+    
+    dispenser manager provided by COM+ tracks resource dispensers and coordinates among them. It implements two interfaces: IDispenserManager and IHolder
+    
+    Distributed Transaction Coordinator (DTC) transaction. This implies use of either an internal or an external
+    
+    resource dispenser might be a DLL that is accessed by the application through an import library (or using the LoadLibrary and GetProcAddress functions)
+    
+    the COM+ context, and controls the inventory statistics manager. (For more information, see COM+ Dispenser Manager.) The resource dispenser first calls the GetDispenserManager function and then calls the IDispenserManager::RegisterDispenser method, passing the IDispenserDriver pointer
+    
+    dispenser manager provides resource pooling for the resource dispensers 
+    
+    dispenser manager uses the inventory statistics manager to manage pool resource inventory levels. 
+    
+    dispenser manager polls each holder, a component created by the dispenser manager that lists the resource inventory for each resource dispenser, every 10 seconds to allow it to readjust its resource inventory
+    
+        * COM resource dispenser thread types 
+        Apartment thread(STA)
+        Free thread(MTA)
+        Non-COM thread 
+        
+        If a resource dispenser is not a COM object, it must be able to handle calls arriving from any thread at any time. If a resource dispenser is a COM object, the COM object should be registered with a threading model of Both. This allows STA or MTA threads
+        
+        * pool resource states available to COM+ resource dispenser 
+        
+        unenlisted inventory, not use by an object and not enlisted in a transaction 
+        
+        resources in enlisted inventory, not in use by an object but is enlisted in a transaction in enlisted inventory 
+        
+        reousrce in unlisted use
+        
+        resources in enlisted inventory, COM+ notifies the dispenser manager that the transaction is complete 
+        
+        in unenlisted use, non transaction this resource in unenlisted use 
+        
+        in enlisted use, run in a transaction 
+        
+        * enlisting a resource in a transaction 
+        resource dispenser must be able to enlist in an OLE transaction with the Distributed Transaction Coordinator (DTC)
+        
+        * resource dispenser resource allocation process 
+        
+        dispenser allocates a resource from its holder
+        
+        The resource dispenser calls the holder's IHolder::AllocResource method, passing this RESTYPID.
+        
+        a new resource is created by calling IDispenserDriver::CreateResource.
+        
+        a new resource is created by calling IDispenserDriver::CreateResource.
+        
+        The AllocResource method call returns to the resource dispenser 
+        
+        * tracking non allocated resources 
+        
+        dispenser manager can track a resource that is not inventoried, based on knowledge of the object's lifetime. When a tracked, non-allocated resource is freed
+        
+        * automatic resource reclamation 
+        
+        COM+ notifies the dispenser manager each time an object's lifetime ends. The dispenser manager then notifies each registered resource dispenser's Holder
+        
+        * following types are used in the resource dispenser interfaces.
+        
+        RESTYPID, DWORD identifies a type of resource
+        
+        RESID, DWORD identifies a perticular resource 
+        
+        SRESID, unicode string version of RESID 
+        
+        TRANSID, identifies a transaction 
+        
+        TIMEINSECS, how along a resource can be inactive 
+        
+        * COM+ resource dispenser interfaces
+        
+        IDispenserDriver, This interface is called by the resource dispenser holder to create
+        
+        IDispenserManager, Resource dispensers use this interface to connect to the dispenser manager.
+        
+        IHolder, This interface is used to prepare and handle resources.
+    + tasks 
+
+    implementing a COM+ resouce dispenser 
+    
+    1. Decide on RESTYPID format that categorizes
+    
+    2. Use the Mtxdm.h and Mtxdm.lib header file and library
+    
+    3. Build a DLL that implements the IDispenserDriver interface and the API 
+    
+    4. In the startup (DllMain or first call to the dispenser API), call the GetDispenserManager function, IDispenserManager interface
+    
+    5. Call IDispenserManager::RegisterDispenser, passing a pointer to your implementation of IDispenserDriver.
+    
+    6. Store this pointer so that you can call IHolder::AllocResource and IHolder::FreeResource.
+    
+    7. make calls to AllocResource and FreeResource. calling back to your CreateResource method
+    
+- COM+ security 
+
+    + concepts 
+    
+    Programmatic role-based security
+
+    Impersonation to use a client's identity to access a protected resource.
+    
+    Auditing features based on security call context information
+    
+    COM+ provides authentication services. While these services are actually provided at a more fundamental level by COM 
+    
+    COM+ provides facilities to enable various levels of impersonation. Impersonation is configured administratively
+    
+    A software restriction policy provides a way to run untrusted
+    
+    Security Policy administrative tool, which enables administrators to configure trust levels for individual files. 
+    
+    COM+ provides a way to specify the software restriction policy for each server application so that they do not need to depend on the restriction policy of the dllhost.exe file
+    
+    description of factors to consider for library applications, see Library Application Security.
+    
+    COM+ applications are typically middle-tier applications; that is, they move information between clients and back-end resources such as databases. 
+    
+    application is deployed, the system administrator can populate the role with actual users and user groups.
+    
+    COM+ library applications are hosted by other processes, there is a security boundary between the library application and the hosting process. 
+    
+    COM+ library applications, you must select component-level security if you want to use roles.
+    
+    use the ISecurityCallContext interface to access security call contex
+    
+    Security call context is passed along every time a security boundary is crossed
+    
+    every automatic service provided by COM+, automatic role checking is based on properties included on the object context. 
+    
+    a SecurityCallContext object
+    
+    COM, you cannot call CoInitializeSecurity from a component that is part of a COM+ application because CoInitializeSecurity is called by the surrogate that the COM+ application runs in
+    
+    checking role membership call the ISecurityCallContext::IsCallerInRole method
+    
+    ```
+    ISecurityCallContext* pSecCtx;
+    VARIANT_BOOL bIsInRole;
+
+    HRESULT hr = CoGetCallContext(IID_ISecurityCallContext, (void**)&pSecCtx);
+    if (FAILED(hr)) throw(hr);
+    if (NULL == pSecCtx) { 
+        // No security call context is available.
+        // Display an error message and return.
+        return E_FAIL;
+    }
+    hr = pSecCtx->IsCallerInRole(myRole, &bIsInRole);
+    return hr;
+    ```
+    
+    checking role based security is enabled, using the ISecurityCallContext::IsSecurityEnabled method available from the security call context object,
+    
+```
+ISecurityCallContext* pSecCtx;
+VARIANT_BOOL bIsEnabled;
+
+HRESULT hr1 = CoGetCallContext(IID_ISecurityCallContext, (void**)&pSecCtx);
+if (FAILED(hr1)) throw(hr1);
+if (NULL == pSecCtx) {
+    // Display error message.
+    return E_FAIL;
+}
+
+HRESULT hr2 = pSecCtx->IsSecurityEnabled(&bIsEnabled);
+return hr2;
+```
+
+    accessing security call context information:
+    SecurityCallContext Collection
+    SecurityCallers Collection
+    SecurityIdentity Collection
+    
+        * client authentication 
+        
+        choose from several authentication levels that provide varying degrees of security, ranging from no authentication to encryption of every packet and all method 
+        
+        never specify authentication level, COM+ calls CoInitializeSecurity for you, and this can be called only once per process.
+        
+        https://docs.microsoft.com/en-us/windows/win32/cossdk/client-side-requirements-for-impersonation
+        
+        https://docs.microsoft.com/en-us/windows/win32/cossdk/server-side-requirements-for-impersonation
+        
+        impersonation, delegation, which is the impersonation of clients over the network, the client and server user accounts must be properly configured in the Active Directory Service
+        https://docs.microsoft.com/en-us/windows/desktop/com/delegation-and-impersonation
+        
+        * cloaking, the server's cloaking capability largely determines how impersonation will behave
+    + tasks 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
 
 # Window 32 API reference 
 https://docs.microsoft.com/en-us/windows/win32/api/
