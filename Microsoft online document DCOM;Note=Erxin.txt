@@ -2050,27 +2050,1089 @@ return hr2;
         https://docs.microsoft.com/en-us/windows/desktop/com/delegation-and-impersonation
         
         * cloaking, the server's cloaking capability largely determines how impersonation will behave
+        
+        * negotiation of authentication level 
+        
+        Per client machine, with the machine-wide COM authentication level set by using either DCOMCNFG or the Component Services administrative tool.
+        
+        Per client process programmatically, with CoInitializeSecurity
+        
+        At any point programmatically, using CoSetProxyBlanket
+        
+        * authentication steps 
+        authentication level is chosen as MAX 
+        
+        negotiation of authentication protocol 
+        
+        server authentication protocol 
+        
+        optionally client authenticates server identity 
+        
+        method calls are communicated with chosen level of authentication 
+        
+        * client impersanation and delegation 
+        Impersonation is the ability of a thread to execute in a security context different from that of the process owning the thread. 
+        
+        The server identity must be marked as "Trusted for delegation" in the Active Directory Service.
+        
+        The client identity must NOT be marked as "Account is sensitive and cannot be delegated" in the Active Directory Service
+        
+        the server's cloaking capability largely determines how impersonation will behave.
+        
+        the authority the client explicitly grants the server through an impersonation level and the server's ability to mask its own identity when making calls on the client's behalf. This latter capability is known as cloaking.
+        
+        * performance impact to impersonation 
+        
+        Impersonation can significantly affect performance and scaling. It is generally more expensive to impersonate a client on a call than to make the call directly.
+        
+        The computational overhead of passing around identity in complicated patterns, particularly dynamic clocking 
+        
+        The general complexity of enforcing redundant security checking in numerous places
+        
+        Resources such as database connections, when opened impersonating a client, cannot be reused across multiple clients
+        
+        * Queued components do not support impersonation, the token will be unavailable, recorder -> listener -> player, Role-based security still applies, however, and programmatic security using the ISecurityCallContext interface will work.
+        
+        * client side requirements for impersonation 
+        
+        The client can indicate the impersonation level programmatically, using either CoSetProxyBlanket—equivalent to IClientSecurity::SetBlanket or CoInitializeSecurity, which can be called once per process
+        
+        * server side requirements for impersonation 
+        
+        The server performs impersonation programmatically. It explicitly assumes the client's security credentials by using CoImpersonateClient
+        
+        the server can revert to its own process token using CoRevertToSelf.
+        
+        * Cloaking
+        
+        Impersonation with static cloaking. presented once to a downstream server on a call using CoSetProxyBlanket, setting the original client identity once on the proxy
+        
+        Impersonation with dynamic cloaking. The original client identity is discovered as the server thread token on each method call to the downstream server. 
+        
+        * Using the software restriction policy in COM+ 
+        
+        Unrestricted and Disallowed. all COM+ applications. If SRPRunningObjectChecks is enabled, attempts to connect to running objects
+        
+        HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Ole
+            SRPRunningObjectChecks = value
+            
+        * library application security 
+        
+        Library applications run under the client process security token, only as much privilege as the client has
+        
+        Library applications do not control process-level security.
+        
+        can be configured to either participate or not participate in host process authentication, by enabling or disabling authentication
+        
+        Library applications cannot set an impersonation level
+        
+        * Configuring security for library applications 
+        
+        Authentication is enabled, and role-based security is used.
+        {host process 
+        -----------------
+        process level authentication 
+        --------------------------
+        {library application 
+            |
+            V
+            {check for role membership 
+                  |
+                  V
+                {   }        
+            }
+        }
+        }
+        
+        Authentication is enabled, and role-based security is not used. role membership is not checked at the library application level. 
+        any caller of the library application that makes call
+        {host process 
+        -----------------
+        process level authentication 
+        --------------------------
+        {library application 
+            |
+            V
+            {
+                  |
+                  V
+                {   }        
+            }
+        }
+        }
+        
+        
+        Authentication is disabled, and role-based security is used. In this scenario, security checks are being done at the process level but callers to the library application are unauthenticated. 
+        This scenario enables you to effectively turn off process security and still have an appropriate level access checks using role-based security.
+        {host process 
+        ----------------------                                  
+        process level authentication                            |
+        -------------------------                               |
+        {library application   |       call to library app are unauthenticated
+                              |                                 |
+                              V                                 V
+        { check for role membership 
+                |
+                V                       
+            {       }                                         {    }  
+        }
+        }
+        }
+        
+        
+        Authentication is disabled, and role-based security is not used. security checks are still done at the process level but, as in the preceding scenario, callers of the library application always pass this security check. 
+        This scenario should be chosen when your COM object needs to receive unauthenticated callbacks, as might be the case with an ActiveX control hosted by Internet Explorer
+        
+        {host process 
+        ----------------------                                  
+        process level authentication                            |
+        -------------------------                               |
+        {library application   |       call to library app are unauthenticated
+                              |                                 |
+                              V                                 V
+        { 
+                |
+                V                       
+            {       }                                         {    }  
+        }
+        }
+        }
+        
+        * multi tier application security 
+        
+        At the database? At the middle tier? In the components? Somewhere else? Everywhere? As security mechanisms increase in number and complexity
+        
+        enforce detailed security in the COM+ application at the middle tier. 
+        1. It enables connection pooling among all clients
+        2. It generally optimizes data access
+        3. It can minimize the logic overhead for enforcing security,
+        4. It can provide great flexibility in a security policy
+        
+        * enforcing security at database 
+        Impersonating the client can be much slower than making the call directly
+        
+        database connection made under a specific user identity cannot be pooled
+        
+        it a scaling bottleneck
+        
+        * trusted scenario using microsoft sql server roles 
+        Connections can be opened that are specific to a particular database role
+        
     + tasks 
 
+        * configure role based security 
 
+        * enabling access checks for an application 
 
+        Component Services administrative tool
+        https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731901(v=ws.11)?redirectedfrom=MSDN
 
+        Microsoft Distributed Transaction Coordinator (DTC) service to be running.
 
+        * configuring role based security 
+        
+        Security level
+        1. Perform access checks only at the process level
+        2. Perform access checks at the process and component level
+        
+        * defining roles for an application 
+         console tree of the Component Services administrative tool, locate the COM+ application to which you want to add the role.
+         
+         assign a Windows group to a security role
 
+        In the console tree of the Component Services administrative tool, Locate the role to which you want to add the user account or group.
+        
+        Users folder in the role, point to New, and then click User.
+        
+        * setting authentication level for a server application 
+        
+        administration tool 
+        security tab 
+        levels:
+        None 
+        Connect, authenticates credentials only when the connection is made 
+        Call, authenticates credentials at the beginning of every call 
+        Packet, authenticates credentials and verifies that all call data is received 
+        Packet integrity, authenticates credentials and verifies call data has been modified 
+        Packet privacy, authenticates credentials and encrypt the packet 
+        
+        * Enablling authentication for a library application with administration tool 
+        
+        Impersonation level box, select the appropriate level. 
+        Anonymous 
+        Identify, server can obtain the client's identity and impersonate client 
+        Impersonate, server can impersonate the client, server and client on the same computer then the server can access network otherwise can only impersonate client to access local resource 
+        Delgate, the server can impersonate the client while acting on its behalf, the client's credentials can be passed 
+        
+        * configuring the software restriction policy 
+        
+        on the security tab, software Restriction Policy, select the Apply software restriction policy check box; this enables you to set the trust level.
+        Disallowed, the application is disallowed from using the full privileges of the user 
+        Unrestricted, the application unrestricted access to the user's privileges 
+        
+- COM+ services without components 
 
+COM+ without needing to build a component to contain the methods that call those services. This feature is intended for advanced Visual C++ developers who are concerned about performance.
 
+    + concepts, tasks 
+    
+    COM+ 1.5, IIS had to create shim objects solely to be able to use COM+ transaction services in ASP pages. The performance costs that come from creating those objects include storing the configuration data in both the IIS metabase and the COM+ registration database (RegDB) 
+    
+    O(n2), making the implementation of new services extremely difficult.
+    
+    The CServiceConfig class implements the interfaces needed to configure the different services while providing the flexibility to support multiple services
+    
+    CoCreateActivity function, which applies the services to all of the work submitted via the activity that is created by the function
+    
+    they can also be used by embedding the work that uses the services between calls to the CoEnterServiceDomain and CoLeaveServiceDomain functions.
+    
+    the CServiceConfig object is needed.
+    
+    CServiceConfig class is used to configure the COM+ services that can be used without components. 
+    
+    IServiceInheritanceConfig 
+    IServiceCOMTIIntrinsicsConfig 
+    IServiceIISIntrinsicsConfig 
+    IServiceSxSConfig 
+    IServiceSYnchronizationConfig 
+    IServiceTrackerConfig 
+    IServiceTransactionConfig 
+    
+    configure a CServiceConfig object to use COM+ transactions.
+    ```
+    // Create a CServiceConfig object.
+    HRESULT hr = CoCreateInstance(CLSID_CServiceConfig, NULL, CLSCTX_INPROC_SERVER, 
+      IID_IUnknown, (void**)&pUnknownCSC);
+    if (FAILED(hr)) throw(hr);
 
+    // Query for the IServiceInheritanceConfig interface.
+    hr = pUnknownCSC->QueryInterface(IID_IServiceInheritanceConfig, 
+      (void**)&pInheritanceConfig);
+    if (FAILED(hr)) throw(hr);
 
+    // Inherit the current context before using transactions.
+    hr = pInheritanceConfig->ContainingContextTreatment(CSC_Inherit);
+    if (FAILED(hr)) throw(hr);
 
+    // Query for the IServiceTransactionConfig interface.
+    hr = pUnknownCSC->QueryInterface(IID_IServiceTransactionConfig, 
+      (void**)&pTransactionConfig);
+    if (FAILED(hr)) throw(hr);
 
+    // Configure transactions to always create a new one.
+    hr = pTransactionConfig->ConfigureTransaction(CSC_NewTransaction);
+    if (FAILED(hr)) throw(hr);
 
+    // Set the isolation level of the transactions to ReadCommitted.
+    hr = pTransactionConfig->IsolationLevel( 
+      COMAdminTxIsolationLevelReadCommitted);
+    if (FAILED(hr)) throw(hr);
 
+    // Set the transaction time-out to 1 minute.
+    hr = pTransactionConfig->TransactionTimeout(60);
+    if (FAILED(hr)) throw(hr);
+    ```
+    
+    CoCreateActivity function is used to submit batch work to the COM+ system. 
+    IServiceActivity interface of that object. 
+    the SynchronousCall or AsynchronousCall methods of IServiceActivity, respectively. A pointer to an IServiceCall interface
+    batch work is implemented by the developer in the OnCall method of the IServiceCall interface
+    
+    CoEnterServiceDomain and CoLeaveServiceDomain are used together to surround an area of code that runs
+    
+    the CServiceConfig object that is passed in to CoEnterServiceDomain. The code that is surrounded by CoEnterServiceDomain and CoLeaveServiceDomain
+    ```
+    // A CServiceConfig object was created as follows:
+    // hr = CoCreateInstance(CLSID_CServiceConfig, NULL, CLSCTX_INPROC_SERVER, 
+    //   IID_IUnknown, (void**)&pUnknownCSC);
 
+    // Enter the Service Domain.
+    HRESULT hr = CoEnterServiceDomain(pUnknownCSC);
+    if (FAILED(hr)) throw(hr);
 
+    // Do the work that uses COM+ services here.
+    //DoMyWork();
 
+    // Leave the Service Domain.
+    CoLeaveServiceDomain(NULL);
+    ```
+
+- COM+ shared property manager 
+
+the shared property manager (SPM). The SPM is a resource dispenser that you can use to share state among multiple objects
+
+    + concepts 
+    The SPM also implements locks and semaphores to help protect shared properties from simultaneous access
+    
+    instantiate the SharedPropertyGroupManager, SharedPropertyGroup, and SharedProperty objects from COM+ components rather than from a base client
+    
+    shared porperty groups 
+    ISharedPropertyGroupManager
+        CreatePropertyGroup 
+        get_Group
+        get_NewEnum 
+            ISharedPropertyGroup 
+            CreateProperty 
+            CreatePropertyByPosition 
+            get_Property 
+            get_PropertyByPosition 
+                ISharedProperty 
+                get_Value 
+                put_Value 
+    
+    ISharedPropertyGroupManager is used to create shared property groups
+    ISharedPropertyGroup is used to create and access the shared properties in a shared property group. 
+    ISharedProperty is used to set or retrieve the value of a shared property. 
+    
+    + tasks 
+    
+    COM+ Shared Property Manager, see ISharedProperty::put_Value. This C++ sample shows how to create a shared property group
+
+- COM+ SOAP service 
+
+administrative tool, you can expose a COM+ application as an XML web service. You can also transparently use an XML web service
+
+using COM+ to expose your configured COM components as XML web services.
+https://www.w3.org/TR/SOAP/
+
+```
+POST /StockQuote HTTP/1.1
+Host: www.stockquoteserver.com
+Content-Type: text/xml; "charset=utf-8"
+Content-Length: nnnn
+SOAPAction: "Some-URI"
+
+<SOAP-ENV:Envelope
+xmlns:SOAP-ENV="https://schemas.xmlsoap.org/soap/envelope/"
+SOAP-ENV:encodingStyle="https://schemas.xmlsoap.org/soap/encoding/">
+<SOAP-ENV:Body>
+<m:GetLastTradePrice xmlns:m="Some-URI">
+<symbol>DIS</symbol>
+</m:GetLastTradePrice>
+</SOAP-ENV:Body>
+</SOAP-ENV:Envelope>
+```
+
+COM+ provides two ways for you to access and use a remote XML web service
+
+    1. The well-known object (WKO) mode can be used to access any XML web service
+    2. The client-activated object (CAO) mode can be used only to access XML web services 
+    
+By default, unencrypted SOAP communications are received at the HTTP port (80) and encrypted SOAP communications are received at the HTTPS port (443). 
+
+    + convert a security SOAP to unsecure SOAP 
+
+    IIS) administration tool.
+    
+    Locate the virtual directory for the application and open the Properties dialog box.
+    
+    Check Enable default content page on the Documents tab.
+    
+    From the Directory Security tab click Edit under Anonymous access and authentication control.
+    
+    Check Anonymous access to enable anonymous access and click OK.
+    Click Edit under Secure communications.
+    
+    Uncheck the Require secure channel (SSL) checkbox
+    
+    + tasks 
+        * Create XML web services 
+        * Securing XML web services 
+        * accessing XML web services in WKO mode 
+        * accessing XML web services in CAO mode 
+        * exporting a SOAP-enabled application 
+        * importing a SOAP-enabled application 
+    
+- COM+ synchronization 
+
+XML web service, and choose Properties.
+
+Click the Activation tab in the properties dialog.
+
+Select the Uses SOAP check box.
+
+You can also configure IIS to require the communications with the caller take place over a secure channel established using the Secure Sockets Layer (SSL) 
+
+    + context menu of my computyer > manage 
+    +  Services and Applications and Internet Information Service, locate the icon corresponding to the virtual root directory for your XML web service
+    + Directory Security tab of the properties dialog, locate Authentication and access control 
+    + Authentication Methods dialog box, under Authenticated access
+    + On the Directory Security tab of the properties dialog, locate Authentication and access controland click the corresponding Edit button. Select the Enable anonymous access check box. Click OK.
+
+    + XML Web Service publishes a WSDL description of its syntax. a WSDL description of its syntax. Just create an instance of the component by using the soap:wsdl=URL moniker, where URL is the URL of the WSDL description of the XML web service you want to access. 
+    
+    well-known object (WKO) mode of accessing XML web services.
+
+```
+Set Obj = GetObject("soap:wsdl=https://servername/vroot/progID.soap?WSDL")
+output = Obj.Method(input)
+```
+
+```
+HRESULT hr = CoGetObject(
+     L"soap:wsdl=https://servername/vroot/progID.soap?WSDL",
+     pBindOptions,
+     IID_IUnknown,
+     (void**)&pIUnknown);
+if (FAILED(hr)) throw(hr);
+```
+
+    run-time generation and the lack of persistent connections in WKO mode results in significantly reduced performance in comparison to CAO mode.
+
+- Accessing XML web services in CAO mode 
+
+client-activated object (CAO) mode, which avoids the run-time generation of a proxy and increases performance by using persistent connections
+
+The application's components can then be instantiated on the client just like the components of local applications—for example, using GetObject and CoCreateInstance.
+
+COM+ application that has been exposed as an XML web service in CAO mode.
+```
+Set Obj = GetObject("progID")
+output = Obj.Method(input)
+```
+
+```
+HRESULT hr = CoCreateInstance(
+     CLSID_CObject,  // CLSID of the server component
+     NULL,
+     pBindOptions,
+     IID_IUnknown,
+     (void**)&pIUnknown);
+if (FAILED(hr)) throw(hr);
+```
+
+- exporting a SOAP enabled application 
+
+ import it into the client for which you want to access the corresponding XML web service.
+
+    + component services administrative tool 
+    under component services > com+ applications 
+    
+    choose Export. The COM+ Application Export Wizard appears
+     
+    Enter the full path and filename for the application file to be created, enter the full path and filename for the MSI
+
+    Export As, select the Application Proxy – Install on other machines to enable access to this machine radio button
+    
+    + import XML SOAP enabled application 
+    
+    COM+ Applications folder, and then choose New. The COM+ Application Install Wizard appears.
+    
+    COM+ Application Install Wizard, click Install pre-built application(s).
+    
+    Browse the network to locate or specify the network path of the MSI file
+    
+- COM+ sychronization 
+
+background and task information about the COM+ synchronization service.
+    
+    + concepts 
+    
+    synchronization is not required when you have a single threaded apartment(STA)
+    
+    important when you haver a multithreaded apartment(MTA) and a free threaded objects had to handle locking 
+    
+    synchronization has
+    1. allows one caller to enter the component at a time 
+    2. prohibits flow across process or across computer 
+    3. flows from component to component within a process 
+    4. allows reentrancy from the same caller 
+    
+    Synchronization determines which activity will contain an object, objects can reside in     
+    1. Creator's activity
+    2. New activity
+    3. No activity
+
+    COM+ ensures concurrency by a series of locks for each activity. COM+ manages access to all objects across activities by a nested series of calls chained throughout the network.
+    
+    synchronization settings:
+    Disabled
+    Not Supported
+    Supported
+    Required
+    Requires New
+
+    synchronization is required if the COM+ just-in-time (JIT) activation service is enabled
+    
+    synchronization attributes 
+    disabled 
+    not supported 
+    supported 
+    required , COM+ ensures all objects created from the component will be synchronized 
+    requires new, COM+ initiates a new synchronization which distinct caller's. this setting allows you to make outside calls to an instance of your component more efficiently it is more expensive 
+    
+    share the same synchronization boundary. If client A calls the creator object and client B calls your object, the second call will have to wait until the first call is completed. If you set Requires New, your object is created in a separate synchronization boundary. In this case, calls from other objects can be processed at the same time. 
+    
+    + synchronization dependencies 
+    
+    COM+ synchronization attribute 
+    Disabled 
+    Not Supported 
+    Supported 
+    Required 
+    Requires New 
+    
+    + tasks 
+    
+    administration tool, Concurrency tab. Under Synchronization support, click the option button adjacent to the value 
+    
+- COM+ tracking 
+
+important differences between these services
+
+instrumentation                 COM+ tracking 
+fine grained data               aggregated data 
+event subscribers               metrics are calculated automatically by the COM+ 
+event trigger                   tracking data can retrieve at any time 
+event based subscription        event based and polling on a COM local server 
+
+tracker server, a component of the system application. Components in COM+ library applications and services without components (SWC) contexts also support tracking
+ 
+COM+ updates statistics for a tracked process when certain events occur in the process, such as the creation of an object or the completion of a method call.
+
+tracking data can register a subscription for the IComTrackingInfoEvents event interface
+
+every three seconds, the tracker server calls each subscriber's IComTrackingInfoEvents::OnNewTrackingInfo method, sending the most recent tracking data in the form of a collection object.
+
+use the IGetAppTrackerData interface of the tracker server.
+
+- COM+ transactions, If a single operation in the series fails during the exchange, the entire exchange fails. 
+
+    + concepts 
+    
+    ACID properties, atomic, consistent, isolated and durable properties 
+    Configuring transactions describes the transaction and attribute values 
+    Configuring tasnaction isolation levels 
+    Managing automatic transactions in COM+ 
+    Using non-transactional components ina  transaction 
+    
+    A transaction must execute exactly once and must be atomic
+    A transaction must preserve the consistency of data
+    A transaction must be a unit of isolation
+    A transaction must be recoverable and therefore must have durability
+    
+    transaction attributes 
+    Disabled 
+    Not supported 
+    Supported 
+    Required 
+    Requires New 
+    
+    + transaction boundaries 
+    
+    A transaction has a beginning, an end, and occurs exactly once. During its execution, a transaction may call on a resource, such as a database or queue, to accomplish one or more tasks.
+    
+    The first object in a transaction boundary is special to the transaction and is called the root object of the transaction.
+    
+    + mapping transactions 
+    
+    By mapping transactions, you can determine the best setting for each component you write. 
+    
+    In the illustration, the client creates Object 1, which requires a transaction. Because no transaction exists, COM+ creates Transaction 1 and places Object 1 in it as the root object. Object 1 creates Object 2, which supports transactions and is therefore placed in Transaction 1. Object 2 creates Object 3, which does not support transactions and therefore is placed outside all transactions. Object 2 also creates Object 4, which requires a transaction and is therefore placed in Transaction 1. Object 3 creates Object 5, which supports transactions. However, because Object 5 is created by an object that does not exist within a transaction, it also is placed outside all transactions. Object 4 creates Object 6, which requires a new transaction, so COM+ creates Transaction 2 and places Object 6 in it as the root object. Object 6 creates Object 7, which supports transactions and is therefore placed in Transaction 2.
+    
+    client->{transaction 1 {obj1 root}->{obj2 supported}}
+                                            |
+                                            V
+                                            {obj3 not support}
+                                            |
+                                            V
+                                            {obj 5 support}
+    
+    + configuring transaction isolation levels 
+    
+    experienced developers can increase concurrency to improve performance and scalability.
+    
+    transaction isolation levels.
+    Serialized 
+    Repeatable 
+    Read committed 
+    Read uncommitted 
+    Any, Any isolation level is supported. 
+    
+    + managing automatic transactions in COM+ 
+    
+    COM+ creates a context object, sets both the JIT activation and Synchronization attributes to Required, and sets the consistent and done flags to True and False
+    
+    COM+ communicates with the Distributed Transaction Coordinator (DTC) to begin a transaction.
+    
+    The DTC generates a transaction identifier and passes it back to COM+. 
+    
+    When the client creates the object, COM+ activates it within the transaction boundary
+    
+    + end a transaction 
+    The root object of the transaction completes its work and COM+ releases it
+    
+    The client releases the root object. Without a reference, the root object deactivates and the transaction attempts to commit.
+    
+    The transaction exceeds its time-out threshold. The transaction aborts automatically if not committed within the transaction time-out period, The default transaction time-out period is 60 seconds.
+    
+    + consistent and done flags 
+    
+    Each context object also contains a consistent flag and a done flag. 
+    
+    The done flag determines the duration of a transaction. When a method call returns, COM+ inspects the done flag.
+    
+    The consistent flag casts a vote to commit or abort the transaction in which it executes, and the done flag finalizes the vote. 
+    
+    + speeding transactions by notify the root object 
+    task successfully, it should set its consistent and done flags to True by calling the IObjectContext::SetComplete method
+    
+    calling the IObjectContext::SetAbort method. By calling the SetAbort method, an object returns control to its caller
+    
+    ```
+    Sub MyObjMethod1()
+      On Error GoTo MyObjMethod1_err
+      Dim ObjCtx As ObjectContext
+      Dim InteriorObj1 As Cinterior  ' Cinterior is a user-defined object.
+
+      Set ObjCtx = GetObjectContext()
+      Set InteriorObj1 = CreateObject ("MyDll.Cinterior")
+      InteriorObj1.Method1
+      ' If the call completed successfully, then...
+      ObjCtx.SetComplete
+    Exit Sub
+      MyObjMethod1_err:
+      ' Doom the transaction and exit.
+      ObjCtx.SetAbort
+      ' Pass the message back to client.
+      Err.Raise Err.Number, , Err.Description
+    End Sub
+    ```
+    + terminating an automatic transaction by calling SetComplete 
+
+calling the IObjectContext::SetComplete method, which is exposed through both the IObjectContext interface and the ObjectContext object
+
+    + limitations of the transaction context object 
+
+transaction context object, the application logic that combines the work of multiple objects into a single transaction
+
+COM+ must be available on the non-transactional client computer.
+
+    + bring your own transaction (BYOT)
+
+allows a component to be created with or to inherit an external transaction.
+
+YOT transactions include the ICreateWithTransactionEx interface and the ICreateWithTipTransactionEx interface. 
+
+    + tasks 
+    
+    Transactions tab. Under Transaction support, select the option for the value you want. The default value for all components is Not Supported.
+
+    Transaction Isolation Level
+
+    Options tab. Under Transaction Timeout, enter the transaction time-out in seconds
+
+    either the IObjectContext or the IContextState interfaces. The strategies used by these two interfaces differ significantly. IObjectContext has four methods 
     
     
+    
+# General tasks 
+-  the Component Services administrative tool generates a single .msi file, which contains the following
 
+- administrative tool generates a single .msi file, which contains the following:
+
+    Windows Installer tables with COM registration information (see the Windows Installer documentation for details).
+    An .apl file containing the application's attributes. (This is an internal file; the format of this file is not documented.)
+    DLLs and type libraries that describe the interfaces implemented by the COM+ application's classes.
+
+- deloying applications proxies 
+
+including proxy/stub DLLs and type libraries for DCOM/QC interface remoting. This subset is called an application proxy
+
+Application proxies generated by COM+ are Windows Installer installation packages. After installation, the application proxies appear in the client computer's Add/Remove Programs
+
+    + information 
+
+    Class identity information (CLSIDs and ProgIDs). An application proxy supports up to two ProgIDs.
+    Application identity and relation of classes to applications (AppID).
+    Location information per application (Remote Server Name).
+    Marshaling information for all the interfaces exposed by the application (for example, type libraries and proxy/stubs).
+    MSMQ queue names and identifiers (if the queued components service is enabled for the application).
+    Class, interface, and method attributes, excluding role information.
+    Application attributes.
+
+    + install on os 
+    
+    application proxies can be installed on any operating system that supports DCOM (and Windows Installer). On computers that aren't running COM+, only the subset of information required for DCOM remoting is installed
+
+    (using the HKEY_CLASSES_ROOT, APPID/CLSID keys)
+
+- COM+ catalog 
+
+COM+ catalog uses two different stores, as follows:
+
+    1. The COM+ registration database
+    2. The Windows registry (HKEY_CLASSES_ROOT)
+
+- split registration 
+
+the basic COM aspect of the registration is stored in the Windows registry  
+
+new services and attributes (for example, queued components) are stored in the COM+ registration database.
+
+    + transactional updates to the catalog 
+    
+    When you invoke the COM+ Administration Library from a transactional component, the updates to the COM+ registration database will take place within the calling component's transaction boundary.
+    
+- the COMREPL replication utility 
+    
+COMREPL is a utility that will replicate the COM+ catalog from a given source computer to one or more target computers. 
+
+Microsoft Internet Information Services (IIS) has a similar utility (IISSync), which makes use of COMREPL to replicate IIS and COM+ configuration
+
+    + use COMREPL 
+    
+    %windir%\system32\Com to the default environment path
+    
+    $ COMREPL sourceComputer targetComputerList [/n [/v]]
+    sourceComputer, name of the source 
+    targetComputerList, separated by space 
+    /n suppresses confirmation prompt before starting replication 
+    /v echoes log file output to the console 
+
+    all target computers must already have COM+ installed
+    The user must pass role checks for the system application
+    No local machine accounts that may be used
+    The target computer(s) must be online
+    The user is responsible for replicating all non-COM+ data
+    Clusters can participate in replication, COMREPL replicates only to named computers
+    
+    + what gets replicated 
+    
+        * COM+ setup program are not repliated 
+
+    System application
+    COM+ utilities
+    COM+ QC Dead Letter Queue Listener
+
+        * these application are not replicated 
+    
+    IIS in-process applications
+    IIS utilities
+    All applications created for isolated or pooled virtual roots
+    
+        * computer list in the computer folders in administration tool will not be replicated 
+        
+        * properties of LocalComputer are replicated 
+TransactionTimeout
+ResourcePoolingEnabled
+DCOMEnabled
+DefaultAuthenticationLevel
+DefaultImpersonationLevel
+SecurityTrackingEnabled
+CISEnabled
+SecureReferencesEnabled
+InternetPortsListed
+DeafultToInternetPorts
+Ports
+RpcProxyEnabl
+
+        * LocalComputer collection properties are not replicated 
+
+    Description
+    ApplicationProxyRSN
+    IsRouter
+
+        * replication phases 
+        
+        To separate work done to prepare the source from work
+        To delay modification of the target until all data has been acquired
+        
+        prepare phase, Exports all the installed applications locally on the source computer. 
+        
+        copy phase 
+        
+        install phase 
+        
+    + file mangement, transfer of application files, COMREPL automatically manages sets of file system folders on the source and target
+    
+    + logging and error reporting 
+    
+    COMREPL generates a log file containing status and error messages. 
+    
+    in %systemdir%\com\replication\ComRepl.log.
+    
+     in the event log on source or target computers.
+
+- Debugging COM+ applications 
+
+configure Visual C++ project or the Component Services administrative tool to launch the debugger
+
+use the COM+ Launch in debugger setting. You will find this in the Component Services administrative tool as a check box on the Advanced tab of the COM+ application Properties
+
+change the transaction time-out setting on the Options tab of the My Computer Properties window.
+
+    + To enable RPC debugging in Visual C++
+
+    In Visual C++, on the Tools menu, click Options.
+
+    In the Options dialog box, on the Debug tab, select the OLE RPC debugging and Just-in time debugging check boxes.
+
+    Click OK.
+
+    + To enable a server application component to launch the Visual C++ debugger
+
+    On the Project menu, click Settings.
+
+    In the Project Settings dialog box, in the Settings For box, select Win32 Debug.
+
+    On the Debug tab, in the Category box, select General.
+
+    In the Executable for debug session box, enter the fully qualified path for Dllhost.exe, followed by an argument specifying the application ID of the COM+ application containing the component.
+    
+    ```
+    C:\Winnt\System32\Dllhost.exe /ProcessID:{applicationID}
+    ```
+    
+    + To enable library application debugging with Visual C++
+
+    In Visual C++, on the Project menu, click Settings.
+
+    In the Project Settings dialog box, in the Settings For box, click Win32 Debug.
+
+    On the Debug tab, in the Category box, click Additional DLLs.
+
+    In the Modules list, add the component DLLs in your library application. This allows you to set breakpoints before your DLL is actually loaded.
+
+    Click OK.
+
+    + debugging without visual C++ 
+    
+    To specify a debugger from the Component Services administrative tool
+
+    In the console tree, select the COM+ library application containing the components you wish to debug.
+
+    Right-click the application, and then click Properties.
+
+    In the application's Properties dialog box, click the Advanced tab.
+
+    Under Debugging, select the Launch in debugger check box.
+
+    In the Debugger path box, enter path to the debugger you want to use. You can also click Browse to locate the debugger. Following is an example: C:\Winnt\System32\Ntsd.exe.
+
+    Click OK.
+    
+    + debugging component in VB 
+
+        * To debug a Visual Basic component in the Visual C++ environment
+
+        In Visual Basic 6.0, open the Visual Basic project that you want to debug.
+
+        On the File menu, click Make YourProject.dll.
+
+        In the Make Project dialog box, click Options.
+
+        In the Project Properties dialog box, on the Compile tab, click Compile to Native Code and No Optimization and select the Create Symbolic Debug Info check box.
+
+        Click OK, and then click OK again to compile your project.
+
+        Move the compiled DLL to the location where COM+ applications are normally installed.
+        
+        Start Visual C++.
+
+        On the File menu, click Open Workspace.
+
+        In the Open Workspace dialog box, set Files of Type to All files(*.*), select your compiled component, and click Open.
+
+        From the File menu, click Open (not Open Workspace) and open the Visual Basic module (.bas), form (.frm), or class (.cls) that you want to debug.
+
+        On the Project menu, click Settings.
+
+        In the Project Settings dialog box, on the Debug tab, select General in the Category box.
+
+        In the Executable for debug session box, enter the fully qualified path for Dllhost.exe
+        ```
+        Following is an example: C:\Winnt\System32\Dllhost.exe /ProcessID:{}.
+        ```
+        
+        Click OK 
+        
+        * COM+ visual basic debugging support contrasted with MTS 
+        
+        Debugging multiple components—In COM+, you can debug scenarios in which a client running in one instance of the IDE makes calls to any number of DLLs running in another as a project group.
+        
+        Debugging Limitations on Class_Initialize and Class_Terminate Events—With COM+, you can put code in the Class_Initialize and Class_Terminate events of a COM+ application
+        
+        Although it is no longer needed as a workaround, you can still implement the IObjectControl interface and use its Activate and Deactivate methods
+        
+        Watching MTS Objects—With COM+, you can add watches for object variables returned by COM+
+        
+        ```
+        Dim obj As Object
+        Set obj = CreateObject("MyApp.MyClass")
+        obj.Test  'Call the user-defined subroutine named Test.
+        Set obj = Nothing
+        ```
+- Handling errors in COM+ 
+
+keep in mind as you develop components for COM+.
+
+    1. Return an HRESULT value for all methods in all component interfaces.  COM+ uses HRESULT values to report on any errors in making function calls or interface method calls
+    
+    https://docs.microsoft.com/en-us/windows/desktop/com/structure-of-com-error-codes
+
+    2. Initiate the ErrorInfo collection object by whatever means your development tool provides.
+
+    Your component must implement the ISupportErrorInfo Automation interface to advertise its support for the ErrorInfo collection
+
+    IErrorInfo Automation interface to retrieve the error information. Visual Basic programmers have easy access to the ErrorInfo collection object
+
+    3. Use transactions to manage shared resource failures. Automatic transactions can significantly reduce the amount of error-handling code
+
+    4. Raise errors explicitly. Avoid letting error information leave an object unless the object explicitly raises the error.
+
+    5. Use the FACILITY_ITF range of errors to report interface-specific errors. Interface-specific errors should be in the FACILITY_ITF range of errors
+    
+    ```
+    const HRESULT ERROR_NUMBER = MAKE_HRESULT (SEVERITY_ERROR, FACILITY_ITF, 10);
+    ```
+    
+    + how COM+ modifies return values 
+    
+    returns an HRESULT value indicating success (such as S_OK, S_FALSE, or NOERROR), COM+ sometimes converts the HRESULT into a COM+ error code before it returns to the caller.
+    
+    returns S_OK after calling IObjectContext::SetComplete, if the object is the root of a transaction that fails to commit, the HRESULT is converted to CONTEXT_E_ABORTED.
+    
+    When COM+ converts an HRESULT value, it clears all of the method's output parameters. Returned references are released, and the values of the returned object pointers are set to NULL.
+    
+    + fault isolation and failfast policy 
+    
+    COM+ assumes that the entire process has been corrupted, and the process is immediately terminated to prevent it from spreading potentially corrupted information to other processes
+    
+    COM+ does not allow exceptions to propagate outside of a context. If an exception occurs while executing within a COM+ context and the application doesn't catch the exception before returning from the context
+    
+    inspect the Event Viewer application log for details on any failfast action or serious application errors.
+    
+    + finding the source of an error 
+    
+    the application error is caused by COM+, you can interpret the error message viewing the Winerror.h file or by using the Microsoft Visual C++ error utility.
+    
+    You should first refer to the application log in the Event Viewer to check the application associated with the event message. 
+    
+    + interpreting error codes 
+    
+    For a list of system-defined HRESULT values, see the header file Winerror.h included with the Windows SDK
+    
+    ```
+    #include <stdio.h>
+    #include <windows.h>
+    #include <tchar.h>
+
+    void ErrorDescription(HRESULT hr) 
+    { 
+         if(FACILITY_WINDOWS == HRESULT_FACILITY(hr)) 
+             hr = HRESULT_CODE(hr); 
+         TCHAR* szErrMsg; 
+
+         if(FormatMessage( 
+           FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM, 
+           NULL, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), 
+           (LPTSTR)&szErrMsg, 0, NULL) != 0) 
+         { 
+             _tprintf(TEXT("%s"), szErrMsg); 
+             LocalFree(szErrMsg); 
+         } else 
+             _tprintf( TEXT("[Could not find a description for error # %#x.]\n"), hr); 
+    }
+    ```
+    
+    error code reference 
+    https://docs.microsoft.com/en-us/windows/win32/cossdk/interpreting-error-codes
+    
+    COMADMIN_E_ALREADYINSTALLED, The object is already registered.
+    ...
+
+    + troubleshooting 
+    Distributed Transaction Coordinator (DTC) is running on all servers.
+    Check network communication
+    Make sure that SQL and DTC are located on the same computer 
+    Set the transaction time-out to a higher number than the default 60 seconds
+    Make sure that your ODBC drivers are thread-safe
+    If you have difficulty getting an application to work over several servers, reboot the client
+    
+- Automating COM+ administration 
+
+Component Services Administration (COMAdmin) Library, to automate all tasks in the administration of COM+ applications and services
+
+    + do the following:
+
+    Create and configure COM+ applications.
+    Install and export existing COM+ applications.
+    Manage installed COM+ applications.
+    Manage and configure services.
+    Remotely administer Component Services on a different machine.
+
+    + can do the following:
+
+    Write scripts to perform routine administrative tasks.
+    Write scripts to automate processes in the development of COM+ applications.
+    Develop general-purpose tools for administering and monitoring Component Services.
+    Develop setup executables to install and deploy your COM+ application.
+
+    + reference classes and interfaces 
+    
+    COMAdminCatalog
+    COMAdminCatalogCollection
+    COMAdminCatalogObject
+    ICOMAdminCatalog
+    ICOMAdminCatalog2
+    ICatalogCollection
+    ICatalogObject
+
+    + overview of the COMAdmin objects 
+
+
+- Designing COM+ application 
+- Conversion of MTS packages to COM+ applications 
+
+
+
+
+
+
+
+# Windows shell 
+https://docs.microsoft.com/en-us/windows/win32/shell/shell-entry
+
+# Window 32 api reference 
+https://docs.microsoft.com/en-us/windows/win32/api/
+
+
+# Window document for previous versions 
+https://docs.microsoft.com/en-us/previous-versions/windows/
+- Window IT Pro 
+- Window Servers 
+- Windows embedded 
+- Windows app development 
+https://docs.microsoft.com/en-us/previous-versions/visualstudio/windows-sdk/ms717358(v=vs.110)
+
+preivous win8 etc. 
+- Windows hardware 
+- Internet explorer 
+- Game development 
+- Silverlight 
+
+# Extending explorer with band object 
+https://www.codeproject.com/Articles/2219/Extending-Explorer-with-Band-Objects-using-NET-and
+
+
+
+# Edge document 
+https://docs.microsoft.com/en-us/microsoft-edge/
+
+
+# Internet explorer reference 
+https://docs.microsoft.com/en-us/previous-versions/windows/internet-explorer/
+
+
+
+
+# COM+ reference 
+https://docs.microsoft.com/en-us/windows/win32/cossdk/com--reference
+    
+    
+    
+    
 # Window 32 API reference 
 https://docs.microsoft.com/en-us/windows/win32/api/
 
