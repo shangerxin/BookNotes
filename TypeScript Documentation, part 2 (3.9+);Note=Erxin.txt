@@ -558,6 +558,285 @@ function copyOwner(pet?: Animal) {
 
 
 # TypeScript 4.2 
+- smarter type alias 
+type BasicPrimitive = number | string | boolean;
+
+- leanding/middle reset elements in tuple 
+// A tuple that stores a pair of numbers
+let a: [number, number] = [1, 2];
+// A tuple that stores a string, a number, and a boolean
+let b: [string, number, boolean] = ["hello", 42, true];
+
+// A tuple that has either one or two strings.
+let c: [string, string?] = ["hello"];
+
+let bar: [boolean, ...string[], boolean];
+ 
+bar = [true, false];
+bar = [true, "some text", false];
+
+interface Clown {
+  /*...*/
+}
+interface Joker {
+  /*...*/
+}
+let StealersWheel: [...Clown[], "me", ...Joker[]];
+
+non-trailing rest elements 
+declare function doStuff(...args: [...names: string[], shouldCapitalize: boolean]): void;
+
+- stricter check for in operator 
+
+"foo" in 42;  //error 
+
+with compiler option --noPropertyAccessFromIndexSignature
+
+- abstract construct signatures 
+abstract class Shape {
+  abstract getArea(): number;
+}
+ 
+ 
+interface HasArea {
+    getArea(): number;
+}
+// Works!
+let Ctor: abstract new () => HasArea = Shape;
+ 
+- understand your project structure with, --explainFiles 
+
+# Forward output to a text file
+tsc --explainFiles > expanation.txt
+
+- improved uncalled function checks in logical expressions, --strictNullChecks 
+
+function shouldDisplayElement(element: Element) {
+  // ...
+  return true;
+}
+function getVisibleItems(elements: Element[]) {
+  return elements.filter((e) => shouldDisplayElement && e.children.length);
+  //                          ~~~~~~~~~~~~~~~~~~~~
+  // This condition will always return true since the function is always defined.
+  // Did you mean to call it instead.
+}
+
+- destructured variables can be explicitly marked as unused 
+
+let [_first, second] = getValues();
+
+_first, first undercore is intended to unused 
+
+- relaxed rules between optional properties and string 
+
+const movieWatchCount: { [key: string]: number } = {};
+ 
+function watchMovie(title: string) {
+  movieWatchCount[title] = (movieWatchCount[title] ?? 0) + 1;
+}
+
+- .d.ts extensions can not be used in import paths 
+
+// must be changed something like
+//   - "./foo"
+//   - "./foo.js"
+import { Foo } from "./foo.d.ts"
+
+- reverting template literal inference 
+
+declare const yourName: string;
+// 'bar' is constant.
+// It has type '`hello ${string}`'.
+const bar = `hello ${yourName}`;
+// 'baz' is mutable.
+// It has type 'string'.
+let baz = `hello ${yourName}`;
+
+
+
+# TypeScript 4.3 
+- Separate write types on properties 
+
+
+class Thing {
+  #size = 0;
+ 
+  get size(): number {
+    return this.#size;
+  }
+ 
+  set size(value: string | number | boolean) {
+    let num = Number(value);
+ 
+    // Don't allow NaN and stuff.
+    if (!Number.isFinite(num)) {
+      this.#size = 0;
+      return;
+    }
+ 
+    this.#size = num;
+  }
+}
+
+// Now valid!
+interface Thing {
+    get size(): number
+    set size(value: number | string | boolean);
+}
+
+- override and the --noImplicitOverride 
+
+class SomeComponent {
+  show() {
+    // ...
+  }
+  hide() {
+    // ...
+  }
+}
+class SpecializedComponent extends SomeComponent {
+    override show() {
+        // ...
+    }
+    override hide() {
+        // ...
+    }
+}
+
+- template string type improvements 
+
+declare function foo<V extends string>(arg: `*${V}*`): V;
+
+function test<T extends string>(s: string, n: number, b: boolean, t: T) {
+    let x1 = foo("*hello*");            // "hello"
+    let x2 = foo("**hello**");          // "*hello*"
+    let x3 = foo(`*${s}*` as const);    // string
+    let x4 = foo(`*${n}*` as const);    // `${number}`
+    let x5 = foo(`*${b}*` as const);    // "true" | "false"
+    let x6 = foo(`*${t}*` as const);    // `${T}`
+    let x7 = foo(`**${s}**` as const);  // `*${string}*`
+}
+
+- ecmascript #private class elements 
+
+class Foo {
+  #someMethod() {
+    //...
+  }
+  get #someValue() {
+    return 100;
+  }
+  publicMethod() {
+    // These work.
+    // We can access private-named members inside this class.
+    this.#someMethod();
+    return this.#someValue;
+  }
+}
+
+new Foo().#someMethod();
+//        ~~~~~~~~~~~
+// error!
+// Property '#someMethod' is not accessible
+// outside class 'Foo' because it has a private identifier.
+new Foo().#someValue;
+//        ~~~~~~~~~~
+// error!
+// Property '#someValue' is not accessible
+// outside class 'Foo' because it has a private identifier.
+
+- contextual narrowing for generics 
+
+function makeUnique<T>(
+  collection: Set<T> | T[],
+  comparer: (x: T, y: T) => number
+): Set<T> | T[] {
+  // Early bail-out if we have a Set.
+  // We assume the elements are already unique.
+  if (collection instanceof Set) {
+    return collection;
+    //     ~~~~~~~~~~
+    // error: Type 'Set<T>' is not assignable to type 'C'.
+    //          'Set<T>' is assignable to the constraint of type 'C', but
+    //          'C' could be instantiated with a different subtype of constraint 'Set<T> | T[]'.
+  }
+  // ...
+  return collection;
+  //     ~~~~~~~~~~
+  // error: Type 'T[]' is not assignable to type 'C'.
+  //          'T[]' is assignable to the constraint of type 'C', but
+  //          'C' could be instantiated with a different subtype of constraint 'Set<T> | T[]'.
+}
+
+- true promise checks 
+
+async function foo(): Promise<boolean> {
+  return false;
+}
+async function bar(): Promise<string> {
+  if (foo()) {
+    //  ~~~~~
+    // Error!
+    // This condition will always return true since
+    // this 'Promise<boolean>' appears to always be defined.
+    // Did you forget to use 'await'?
+    return "true";
+  }
+  return "false";
+}
+
+- static index signatures 
+class Foo {
+  static hello = "hello";
+  static world = 1234;
+  static [propName: string]: string | number | undefined;
+}
+// Valid.
+Foo["whatever"] = 42;
+// Has type 'string | number | undefined'
+let x = Foo["something"];
+
+- .tsbuildinfo files that are generated as part of --incremental
+
+- lazier --incremental and --watch improved 
+- editor support @link tags, and will try to resolve declarations that they link to
+- go to definition on non-javascript file paths 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
