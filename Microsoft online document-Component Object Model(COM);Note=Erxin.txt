@@ -319,6 +319,8 @@ https://docs.microsoft.com/en-us/windows/win32/com/com-clients-and-servers
 - processes, threads and apartments 
 https://docs.microsoft.com/en-us/windows/win32/com/processes--threads--and-apartments
 
+https://www.codeproject.com/articles/9190/understanding-the-com-single-threaded-apartment-pa
+
 - QueryInterface, navigating in an object 
 
 QueryInterface to ask an object for an interface through which the client may invoke the desired operations
@@ -2712,31 +2714,1670 @@ the surrogate process is a mixed-threading model style pseudo-COM server. it ens
 
 - writing a custom surrogate 
 
+If an in-process DLL contains code that depends on being in the same process as the client, the DLL server will not function correctly if it is running in the system surrogate. 
 
+an in-process DLL contains code that depends on being in the same process as the client, the DLL server will not function correctly if it is running in the system surrogate. custom surrogate can use a special DLL to deal with this. 
 
+A custom surrogate might be tailored to load only apartment DLLs for reasons of efficiency or to accept a command-line argument
 
+A custom surrogate could take extra command-line parameters, system does not 
+
+The system surrogate calls CoInitializeSecurity and tells it to use any existing security settings under the AppID. A custom surrogate could use another security context 
+
+Interfaces that aren't remotable (such as those for recent OCXs) will not work with the system surrogate. A custom surrogate could wrap DLL's interfaces with its own implementation use proxy/stub with remotable IDL to allow the interface to be remoted 
+
+    + main surrogate thread could perform 
+    Call CoInitializeEx to intialize the thread and set the threading model 
+    
+    the server to be able to use the security settings in the AppID registry key, call CoInitializeSecurity with the EOAC_APPID capability. otherwise legacy settings will be used 
+    
+    Call CoRegisterSurrogate to register the surrogate interface to COM
+
+    Call ISurrogate::LoadDllServer for the requested CLSID.
+    
+    Put main thread in a loop to call CoFreeUnusedLibraries periodically.
+    
+    When COM calls ISurrogate::FreeSurrogate, revoke all class factories and exit.
+    
+- A surrogate process must implement the ISurrogate interface. This interface should be registered when a new surrogate is started and after calling CoInitializeEx. 
+
+COM calls: LoadDllServer, to dynamically load new DLL servers into existing surrogates
+    + To implement LoadDllServer, COM calls with a load request, must first create a class factory object that supports IUnknown, IClassFactory, and IMarshal, and then call CoRegisterClassObject to register the object as the class factory for the requested CLSID.
+ 
+    it's a generic class facotry 
+```
+STDMETHODIMP CSurrogateFactory::CreateInstance(
+  IUnknown* pUnkOuter, 
+  REFIID iid, 
+  void** ppv)
+{
+    void* pcf;
+    HRESULT hr;
+ 
+    hr = CoGetClassObject(clsid, CLSCTX_INPROC_SERVER, NULL, IID_IClassFactory, &pcf);
+    if ( FAILED(hr) )
+        return hr;
+    hr = ((IClassFactory*)pcf)->CreateInstance(pUnkOuter, iid, ppv);
+    ((IClassFactory*)pcf)->Release();
+    return hr;
+}
+
+STDMETHODIMP CSurrogateFactory::MarshalInterface(
+  IStream *pStm,  
+  REFIID riid, void *pv, 
+  WORD dwDestContext, 
+  void *pvDestContext, 
+  DWORD mshlflags )
+{   
+    void * pCF = NULL;
+    HRESULT hr;
+ 
+    hr = CoGetClassObject(clsid, CLSCTX_INPROC_SERVER, NULL, riid, &pCF);
+    if ( FAILED(hr) )
+        return hr;   
+    hr = CoMarshalInterface(pStm, riid, (IUnknown*)pCF, dwDestContext, pvDestContext,  mshlflags);
+    ((IUnknown*)pCF)->Release();
+    return S_OK;
+}
+ 
+```
+    
+-  surrogate that houses a DLL server must publish the DLL server's class object(s) with a call to CoRegisterClassObject. All class factories for DLL surrogates should be registered as REGCLS_SURROGATE. REGCLS_SINGLUSE and REGCLS_MULTIPLEUSE should not be used for DLL servers loaded into surrogates
+
+FreeSurrogate to free 
 
 
 
 ## Monikers 
+- provides services allowing a component to obtain a pointer to the object identified by the moniker. This process is referred to as binding. 
+
+implement the IMoniker interface and are generally implemented in DLLs as component objects. 
+
+There are two ways of viewing the use of monikers: 
+
+    + as a moniker client, a component that uses a moniker to get a pointer to another object; 
+    
+    + as a moniker provider, a component that supplies monikers identifying its objects to moniker clients
+
+- OLE uses monikers to connect to and activate objects, whether they are in the same machine or across a network.
+
+
+
+
+### Moniker clients 
+- OLE compound documents, when the end user creates a linked item (either using Insert Object dialog, the clipboard, or drag-and drop), a moniker is embedded as part of the linked item. 
+
+an object that implements the IMoniker interface, you can use that to get a moniker
+
+- a moniker client, all monikers look the same. A moniker client simply calls IMoniker::BindToObject on a moniker and gets an interface pointer to the object that the moniker identifies
+
+BindToObject will return a pointer to that object. BindToObject will find it in memory or run the server 
+
+
+### Moniker providers 
+- tasks 
+on request create a moniker that identifies an object 
+can be bound when called IMoniker::BindToObject 
+
+- OLE moniker implementation 
+
+file monikers 
+composite monikers 
+item monikers 
+anti-monikers 
+pointer monikers 
+class monikers 
+asynchronous monikers 
+URL monikers 
+
+- file moniker
+
+The source of the object named by the moniker must provide an implementation of the IPersistFile interface to support binding a file moniker
+
+    + example a file moniker point to an excel may be called BindToObject to load a file into the spreadsheet 
+    
+OLE offers moniker providers the helper function CreateFileMoniker that creates a file moniker object and returns its pointer to the provider.
+
+- Composite monikers 
+
+A composite moniker is a moniker that is a composition of other monikers and can determine the relation between the parts.
+
+monikers provide the ability to join multiple namespaces. The file system defines a common namespace for objects stored as files because all applications understand a file system path name.
+
+client simply calls IMoniker::BindToObject on the moniker, and the moniker code handles the rest. A call to IMoniker::GetDisplayName on a composite creates a name using the concatenation of all the individual monikers' display names.
+
+Moniker clients should call IMoniker::ComposeWith to create a composite on moniker with another. OLE provides the CreateGenericComposite function to facilitate this.
+
+- Item monikers 
+
+An item moniker is useful primarily when concatenated, or composed, with another moniker, one that identifies the container
+
+an item moniker is meaningful only to a particular container. it is different from file moniker 
+
+a file and item moniker must not only implement IPersistFile, to facilitate binding the file moniker, but also IOleItemContainer to facilitate resolving the name of the item moniker 
+
+OLE provides the helper function CreateItemMoniker. This function creates an item moniker object 
+
+- Anti monikers 
+
+inverse of the moniker that it is composed onto, effectively canceling that moniker
+
+use an anti-moniker to remove one or more entries from a composite moniker.
+
+COM defines the named CreateAntiMoniker function, which returns an anti-moniker. implement the IMoniker::Inverse method.
+
+call IMoniker::Enum on the composite moniker, specifying FALSE as the first parameter. call Inverse on that moniker. The moniker returned by Inverse is what you need to remove the last piece of the composite
+
+- Pointer moniker 
+
+pointer moniker can exist only in the active or running state.  cannot be saved to persistent storage.
+
+Pointer monikers allow objects that exist only in the active or running state to participate in moniker operations and be used by moniker clients. calling the IMoniker::Save method returns an error
+
+use the CreatePointerMoniker function if you need to use a pointer moniker.
+
+- class moniker 
+
+identified directly with CLSIDs to functions such as CoCreateInstance or CoGetClassObject 
+
+IClassActivator simply gives access to the class object and instances of the class through IClassActivator::GetClassObject. Class monikers may be identified through IMoniker::IsSystemMoniker, which returns MKSYS_CLASSMONIKER in pdwMksys.
+
+
+
+### Asynchronous monikers 
+- standard OLE monikers are synchronous 
+
+- asynchronous and synchronous monikers 
+
+Clients typically create standard monikers by calling functions such as CreateFileMoniker, CreateItemMoniker, or CreatePointerMoniker or, because they are can be saved to persistent storage
+
+OleSaveToStream and OleLoadFromStream. Monikers may also be obtained from a container object by calling the IBindHost::CreateMoniker method.
+
+Clients create bind contexts by calling the CreateBindCtx function and then pass the bind context calls to IMoniker::BindToStorage or IMoniker::BindToObject.
+
+- asynchronous behavior, the client implements the IBindStatusCallback interface on a bind-status-callback object and calls either the RegisterBindStatusCallback function or the CreateAsyncBindCtx function to register this interface with the bind context
+
+The moniker passes a pointer to its IBinding interface in a call to the IBindStatusCallback::OnStartBinding method. The client tells the asynchronous moniker how it wants to bind on return from the moniker's call to IBindStatusCallback::GetBindInfo 
+
+{client provided {bind status callback}} ---> {moniker-provided {binding} {Async moniker }}
+A                                                   A
+|                                                   |
+V                                                   |
+{Sytem provided {bind context}}<--------------------+
+
+- async and sync binding 
+
+client check moniker IsAsyncMoniker 
+
+    + async 
+
+subsequent calls to IMoniker::BindToStorage or IMoniker::BindToObject, the moniker returns MK_S_ASYNCHRONOUS in place of the object pointer
+
+client should wait to receive the requested object or storage during implementation of IBindStatusCallback::OnDataAvailable and IBindStatusCallBack::OnObjectAvailable.
+
+progress notification through IBindStatusCallback::OnProgress, data availability notification through OnDataAvailable
+
+    + sync 
+    
+client desires synchronous operation and does not wish to receive any progress notifications or callbacks, it can request an asynchronous moniker to behave synchronously by not implementing IBindStatusCallback
+
+- async and sync storage 
+
+Asynchronous monikers may also return an Asynchronous Storage object in the IBindStatusCallback::OnDataAvailable notification.
+
+A client can choose between two modes for the storage: blocking and nonblocking.
+
+client can choose async and sync by set the BINDF_ASYNCSTORAGE flag in the grfBINDF value returned to IBindStatusCallback::GetBindInfo.
+
+- Data pull model and data push model 
+
+a data-pull and data-push model for driving an asynchronous IMoniker::BindToStorage operation 
+
+the client drives the bind operation and the moniker provides data to the client only as it is read. In other words, after the first call to IBindStatusCallback::OnDataAvailable, the moniker does not provide any data to the client unless the client has consumed all of the data
+
+clients that choose the data-pull model must make sure to read this data in a timely manner.
+
+    + COM interface or function call returns a buffer (string or other) to its client, the client is responsible for freeing the memory by calling CoTaskMemFree.
+    
+    + COM interface or function requires a buffer from its client, the client must allocate that buffer using CoTaskMemAlloc and the callee must free it
+
+
+### URL monikers 
+-  the MkParseDisplayName function and the IParseDisplayName and IMoniker interfaces, as well as printable names through the IMoniker::GetDisplayName method
+
+URL moniker does not currently support asynchronous storage.
+
+URL Monikers hold reference with (IMoniker::BindToStorage or IMoniker::BindToObject). 
+
+async call client can implement the IBindStatusCallback interface, and register with RegisterBindStatusCallback function. the interface will be received on call IBindStatusCallback::OnStartBinding.
+
+the client through IBindStatusCallback::QueryInterface, allowing the client to provide protocol-specific information
+
+- callback sync
+
+the client's IEnumFORMATETC and IBindStatusCallback interfaces are called only on their proper threads.  as long each thread that calls IMoniker::BindToStorage and IMoniker::BindToObject has a message queue.
+
+async moniker use WinSock or WinInet. Accordingly, a URL moniker manages all the downloads for any given caller's thread, using IBinding 
+
+
+
+### Media type negotiation 
+- exchange of messages in a simple, flexible format called Multipurpose Internet Mail Extensions (MIME), subtype (such as "text/plain" or "text/HTML")
+
+Edit/Paste or queries for formats when receiving an IDataObject pointer during a drag-and-drop operation
+
+    + client specifies up-front the media types it supports, in order of greatest fidelity, and the server responds with the best available format.
+
+- BindToStorage operations. To support media-type negotiation, a client implements the IEnumFORMATETC interface and calls the RegisterFormatEnumerator function to register it with the bind context
+
+```
+FORMATETC fmtetc;
+fmtetc.cfFormat = RegisterClipboardFormat(CF_MIME_POSTSCRIPT);
+. . .
+```
+
+- URL moniker, RegisterMediaTypes, CreateFormatEnumerator, RegisterFormatEnumerator, and RevokeFormatEnumerator MIME negotiation
+
+RegisterMediaTypeClass, FindMediaTypeClass, GetClassFileOrMime, and UrlMkSetSessionOption
+
+
+### URL moniker functions 
+- functions are as follows:
+
+    CreateURLMoniker
+    IsValidURL
+    RegisterMediaTypes
+    CreateFormatEnumerator
+    RegisterFormatEnumerator
+    RevokeFormatEnumerator
+    RegisterMediaTypeClass
+    FindMediaTypeClass
+    GetClassFileOrMime
+    UrlMkSetSessionOption
+
+- an ActiveX control, you should use IBindHost::CreateMoniker instead of CreateURLMoniker.
+
+
 
 ## Events in COM and Connectable Objects 
+- With COM, server objects can use COM events to fire events without any information about what objects will be notified
+
+- IUnknown::QueryInterface method. Clients call the methods of an incoming interface on the object, and the object performs desired actions on behalf of the client.
+
+- the outgoing interfaces on a sink object that the client creates. The object then calls methods of the outgoing interface on the sink object to notify the client of changes in the object, to trigger events in the client
+
+    + example
+    
+     the button object calls IButtonSink::OnClick on the client's sink object when the user clicks the button on the screen. The button control defines the outgoing interface. 
+     a client of the button to handle the event, the client implmenent on a sink object and then connect that sink to the button control.
+
+there are several kinds of sink interfaces, ex. IAdviseSink may be used by objects to notify clients of data and view changes in the object
+
+- architecture of connectable objects 
+
+    + Connectable object. Implements the IConnectionPointContainer interface; creates at least one connection point object, defines an outgoing interface for a client 
+
+    + Client. Queries the object for IConnectionPointContainer to determine whether the object is connectable; creates a sink object implement the ougoing inteface defined by connectable object 
+    
+    + Sink object. Implements the outgoing interface to establish the connection 
+    
+    + Connection point object implement the IConnectionPoint inteface and manages connections with client's sink 
+    
+    
+sink may means sink into the client to let the server callback 
+
+{client {sink }} <-----> {Connectable object {connection point for outgoing}}
+
+steps 
+    1. The client queries for IConnectionPointContainer on the object to determine whether the object is connectable
+    
+    2. IConnectionPointContainer::FindConnectionPoint 
+    
+     
+    IConnectionPointContainer::EnumConnectionPoints. 
+     
+    There are a few additional steps if required IConnectionPointContainer::EnumConnectionPoints. This method returns an IEnumConnectionPoints interface pointer for a separate enumerator object. Through IEnumConnectionPoints::Next, the client can obtain IConnectionPoint interface pointers 
+     
+    3. client call IConnectionPoint::Advise, establish a connection between its sink interface and the object's connection point.
+    
+    object's connection point holds a pointer to the outgoing interface on the sink.
+    
+    4. The code inside Advise calls QueryInterface on the interface pointer that is passed in, asking for the specific interface identifier
+    
+    5. The object calls methods on the sink's interface as needed
+    
+    6. client calls members in sink IConnectionPoint::Unadvise to terminate the connection 
+    
+    Then the client calls IConnectionPoint::Release to free its hold on the connection point 
+    
+    call IConnectionPointContainer::Release to free its hold on the main connectable object.
+
+- multicasting, IConnectionPointContainer to enumerate the connection points within the connectable object. 
+
+The other is created by a method in IConnectionPoint to enumerate the connections currently established to that connection point. 
+
+One connection point can support multiple connected sink interfaces
+
+each of these are separate objects with IUnknown 
+
+- A client using these objects is always responsible for releasing all reference counts it owns
+
+
+
+### Connectable object interfaces 
+- interfaces 
+
+    IConnectionPointContainer on the connectable object
+    IConnectionPoint on the connection point object
+    IEnumConnectionPoints on an enumerator object
+    IEnumConnections on an enumerator object
+
+- standard enumerators for the types IConnectionPoint * and CONNECTDATA.
+
+- optionally support IProvideClassInfo and IProvideClassInfo2 to provide enough information to a client
+
+
+
+### Using IConnectionPointContainer 
+- A connectable object implements IConnectionPointContainer
+- the connectable object manages a connection point sub-object, which itself implements IConnectionPoint
+
+hence the naming of IConnectionPointContainer and IConnectionPoint.
+
+-  IConnectionPoint:
+
+First, IConnectionPoint::GetConnectionInterface retrieves the outgoing interface IID
+
+client can navigate from the connection point back to the connectable object's IConnectionPointContainer
+
+Third, the most interesting methods for the client are IConnectionPoint::Advise and IConnectionPoint::Unadvise. When a client wishes to connect its own sink object to the connectable object, the client passes the sink's IUnknown pointer to Advise 
+
+Finally, a client can ask a connection point to enumerate all the connections to it that exist through IConnectionPoint::EnumConnections
+
+- IProvideClassInfo, A connectable object can offer the IProvideClassInfo and IProvideClassInfo2 interfaces so that its clients can easily examine its type information
+
+type information, the attribute source marks an interface or dispinterface listed under a coclass as an outgoing interface
+
+
 
 ## Component categories manager implementation 
+- Insert Object dialog box used in OLE compound documents and the Insert Control dialog box used in OLE controls. 
+- a subkey to the HKEY_CLASSES_ROOT\CLSID\{...} registry key 
+
+- using a human readable name, a unique number (CATID) is assigned to each category.
+
+    + Categories are indicated by using CATIDs that are globally unique identifiers. component must provide 
+
+    Under the Components subkey of the HKEY_CLASSES_ROOT\CLSID registry key, two separate subkeys, 
+    
+    "Implemented Categories" 
+    
+    "Required Categories", were developed.
+
+- Categorizing by component capabilities 
+
+    + example OLE document embedding 
+    
+```
+HKEY_CLASSES_ROOT\Component Categories\{40FC6ED3-2438-11cf-A3DB-080036F12502}
+   (Default) = ""
+   409 = "Embeddable Objects"
+```
+
+Because a single component can support a wide range of functionality, components can belong to multiple component categories.
+
+- categorizing by container capabilities 
+
+Categorizing by container capabilities is accomplished by an additional registry key within the component's CLSID
+
+```
+;The CLSID for "Simple Frame Control" is {123456FF-ABCD-4321-0101-00000000000C}HKEY_CASSES_ROOT\CLSID\{12346FF-ABCD-4321-0101-00000000000C}\Implemented Categories
+;The CATID for "Control" is {40FC6ED4-2438-11cf-A3DB-080036F12502} HKEY_CLASSES_ROOT\CLSID\{123456FF-ABCD-4321-0101-00000000000C}Implemented Categories\{40FC6ED4-2438-11cf-A3DB-080036F12502}
+```
+
+- The component categories manager COM object provides the following interfaces:
+
+    ICatInformation
+    ICatRegister
+
+    + ICatInformation provides methods for obtaining information about the categories implemented or required by a certain class
+    
+    + ICatRegister provides methods for registering and unregistering component category information in the registry. 
+    
+- Default classes and assocaitions, default class is selected whenever a category is required 
+
+```
+HKEY_CLASSES_ROOT\CLSID
+   {catid}
+      TreatAs
+          = default clsid
+```
+
+To use the default class for a component category, use CoCreateInstance or CoGetClassObject, specifying the CATID for the CLSID parameter.
+
+- Defining component categories 
+
+a category's semantics should not be modified after being installed
+
+the future component release should introducing a new category identifier with revised semantics.
+
+do not use same GUID for an interface identifiers (IID) AND component category identifiers (CATID) although they are in different namespaces
+
+- associating icons with a category 
+
+associate an icon with a component category, create a key for the category's CATID and populate that key with a DefaultIcon subkey
+
+```
+HKEY_CLASSES_ROOT\CLSID\{...catid...}\DefaultIcon = "c:\hello\icons.dll,1"
+```
+ DefaultIcon key can be either an EXE or a DLL file(resource only dll)
+
+    + example 
+
+create a key in HKEY_CLASSES_ROOT\CLSID for the category's CATID and populate that key with a ToolBoxBitmap32 subkey    
+```
+HKEY_CLASSES_ROOT\CLSID\{...catid...}\ToolBoxBitmap32 = "c:\goodbye\mycomponent.dll,42"
+```
 
 
 ## OLE and data transfer 
+- Component Object Model (COM) to transfer data between applications
+
+- A compound document object is essentially a COM object that can be embedded in, or linked to, an existing document.
+
+IOleObject, IOleLink, and IViewObject2, that provide special features
+
+must implement the IPersistStorage or, optionally, IPersistStream interfaces to manage its own storage
+
+- Containers and servers, an OLE application can be container or server or both 
+
+OLE server applications also differ in whether they are implemented as in-process servers or local servers. 
+
+    + OLE container applications provide users with the ability to create, edit, save, and retrieve compound documents. 
+    
+    + OLE server applications provide users with the means to create documents and other data representations that can be contained as either links or embeddings in container applications
+
+- linking and embedding 
+    + linking 
+
+The compound document contains only a reference, or link, to the actual data stored at the link source,
+
+Activating a link runs the link source's server application, which the user requires in order to edit or otherwise manipulate the link data.
+
+    + An embedded object is physically stored in the compound document,
+    
+    embedded objects can be activated in place
+    
+- object handlers 
+
+communication between container and server must occur across process boundaries
+
+
+OLE relies on a surrogate object loaded into the container's process space to act on behalf of a local server application, this is object handler
+
+a container requests something that the object handler cannot provide, the handler communicates with the server application using COM's out-of-process communication mechanism
+
+    + a custom handler that either replaces the default handler or uses it to provide certain default behaviors
+    
+    + object handler is a DLL containing several interacting components. 
+    
+    linked object, which keeps track of the name and location of the link source.
+    
+    + cache contains information sufficient for the handler, OLE provides an implementation of the cache used by OLE's default object handler and the link object.
+    
+    + The default handler, an implementation provided by OLE, is used by most applications as the handler.
+    
+    + Combination application/default handlers are also known as in-process handlers. 
+    
+    The remoting handler is used for objects that are not assigned a CLSID in the system registry or that have no specified handler
+    
+- in-process servers 
+
+an in-process server — a DLL running in the process space of the container application — rather than as a local server — an EXE running in its own process space
+
+OLE server application is implemented as an in-process server, a separate object handler is not required because the server itself lives in the client's process space. 
+
+the server is able to manage the object in a running state while the handler cannot
+
+- In-process servers are faster than local servers for several reasons. First, because they are smaller and run in the process space of the container application. 
+
+communication does not rely on remote procedure call 
+
+- OLE application as a local server rather than an in-process server? 
+
+Security. Only a local server has its address space isolated from that of the client
+    
+Granularity. A local server can host multiple instances of its object across many different clients
+
+Compatibility. If you choose to implement an in-process server, you relinquish compatibility with OLE 1,
+
+Inability to support links. An in-process server cannot serve as a link source. 
+
+- Linked objects and monikers 
+
+The linked object acts like an in-process server. 
+
+A linked object's handler is made up of two main components: 
+the handler component 
+the linking component.
+
+The linking components controller supports source naming through the use of monikers, and binding, the process of locating and running the link source.
+
+user add a link object the container loads an instance of the linking component into memory, along with the object handler. The linking component supplies interfaces — most notably IOleLink
+
+the link's data is saved with the link source, not with the container. embeded object's data is stored with container 
+
+- Notifications (COM)
+
+A container registers to receive notifications by setting up an advisory connection to an object of interest. 
+
+    + types of notifications 
+
+compound document, data, and view. 
+
+    + how notification works 
+object application and flow to the container by way of the object handler.
+
+linked object intercepts the notifications from the object handler and notifies the container
+ 
+OleAdviseHolder for compound document notifications and the DataAdviseHolder for data notifications.
+
+Notification frequency can be compared with the rate at which an application repaints. 
+ 
+- Compound document interfaces 
+IOleClientSite
+IAdviseSink
+
+IMessageFilter
+ 
+    + linking to embedded objects 
+IOleItemContainer
+IPersistFile
+IClassFactory
+
+    + in-place activation 
+
+IOleInPlaceSite
+IOleInPlaceFrame
+IOleInPlaceObject
+
+    + drag and drop 
+   
+IDropSource
+IDropTarget
+IDataObject
+
+    + objects provided by out-of-process versus in-process servers 
+    
+feature         ole server      Object(Out of processes)    Object(in-process)
+behaviors       IClassFactory   IOleObject                  IOleObject
+                                IDataObject                 IDataObject
+                                IPersistStorage             IPersistStorage
+                                                            IViewObject2
+                                                            IOleCache2
+
+MessageFilter   IMessageFilter 
+
+Linking         IOleItemContainer                           IOleLink 
+                IPersistFile                               IExternalConnection
+                
+In-place active                 IOleInplaceObject
+                                IOleInPlaceActiveObject
+                                
+Drag and drop   IDropSource 
+                IDropTarget
+                IDataObject
+
+- Object states 
+
+three states: passive, loaded, or running
+
+passive, The compound-document object exists only in storage, either on disk or in a database
+
+loaded, The object's data structures created by the object handler are in the container's memory.
+
+running, The objects that control remoting have been created and the OLE server application is running. 
+
+- Implementing in place activation 
+
+In-place activation begins with the object in response to an IOleObject::DoVerb call from its container. 
+
+in-place-activation-object server either as an in-process server (DLL) or a local server (EXE)
+
+- creating linked and embedded objects from existing data 
+
+OLE server and container applications is built on uniform data transfer, as described in Data Transfer.
+
+implement IDataObject in order to make their data available for transfers using either the clipboard or drag and drop. 
+
+- view caching
+
+implement the IDataObject, IViewObject2, and IOleCache interfaces.
+
+IDataObject enables an OLE container application to get data from and send data 
+
+IViewObject2,  an object to draw itself on a device context
+
+each container's implementation of IAdviseSink::OnViewChange to let them know that the new presentations were available.
+
+IOleCache interface in order to let the handler know what capabilities it should cache
+
+IStorage instance of the embedded object
+
+- data transfer 
+
+as a piece of text copied to the clipboard, have IDataObject as their sole interface
+
+	IDataObject, IDropSource, IDropTarget, DoDragDrop (or the equivalent)
+
+    Clipboard API, https://docs.microsoft.com/en-us/windows/win32/dataxchg/clipboard
+
+    OleSetClipboard function to pass a data-object pointer to OLE
+    
+    obtained this pointer, the destination calls IDataObject::EnumFormatEtc to learn formats are available
+    
+    receiving application requests the data with a call to IDataObject::GetData
+    
+- formats and transfer data 
+    
+OLE container application, passes the FORMATETC structure as an argument in calls to IDataObject
+
+Windows clipboard format identifier, so the STGMEDIUM structure is an improvement of the global memory handle used to transfer the data.
+
+- Drag and drop 
+
+Drag and drop provides exactly the same functionality as the OLE clipboard copy and paste
+
+IDropSource, IDropTarget, DoDragDrop
+
+three types of feedback can be displayed
+    + Source feedback 
+    + Pointer feedback 
+    + Target feedback 
+    
+- drag source responsible for 
+
+providing data IDataObjewct, IDropSource 
+Generating pointer and source feedback, the SetCursor function
+Determining when the drag operation has been canceled or a drop eration has occurred 
+Performing any action on the original data 
+
+- Data notification 
+
+COM's mechanism for handling asynchronous notifications of this type is an object called an advise sink. COM implement IAdviseSink. 
+
+Consumers of data implement the IAdviseSink. They register to receive notifications by handing a pointer to the data object 
+
+methods:
+OnDataChange
+OnViewChange
+OnRename 
+OnSave 
+OnClose
+
+take advantage of the advise sink, a data source must implement IDataObject::DAdvise, IDataObject::DUnadvise, and IDataObject::EnumDAdvise
+
 
 ## Controls and property pages 
+- describe ActiveX controls, standard property pages
+
+A control is essentially a COM object that exposes the IUnknown interface
+
+support licensing through IClassFactory2 and self-registration.
+
+connectable objects so that the control can communicate with its client. 
+
+dragged and dropped within a container with help from their container. See IOleInPlaceObjectWindowless::GetDropTarget for more information 
+
+Compound documents, A control can be an in-place active object that can be embedded in a containing client
+
+Property pages, Controls can provide property pages so end users can view and change the control's propertie
+
+OLE automation, Controls can provide programmability through OLE automation so clients can take advantage of the control's features through a programming language 
+
+Persistent storage, A control can implement one or more of several persistence interfaces to support persistence of its state. 
+
+Font and picture objects, Controls can use these system provided objects to provide a visual representation of themselves within the client. 
+
+including IFont and IFontDisp. A font object can be created with OleCreateFontIndirect. including IPicture and IPictureDisp. A picture object can be created using OleCreatePictureIndirect a stream with OleLoadPicture.
+
+controls technology: IOleControl, IOleControlSite, ISimpleFrameSite, and OleTranslateColor. 
+
+
+
+
+### ActiveX control architecture
+-  ActiveX controls are used to provide the building blocks for creating user interfaces in applications
+
+A control can be embedded within its container client to support some user interface activity within the client.
+
+By activating the control using a keyboard or mouse, the end user initiates some action in the client application
+
+The client also typically provides a programming language through which the end user can initiate actions provided by the control's properties and methods
+
+Properties and methods
+
+    Like any OLE object, a control can provide much of its functionality through a set of incoming interfaces with properties and methods.
+
+Events
+
+    In addition to providing properties and methods, an ActiveX control can also provide outgoing interfaces to notify its client of events.
+
+Visual representation
+
+    A control can support positioning and displaying itself within its container.
+    
+Keyboard handling
+
+    A control can respond to keyboard accelerators 
+    
+Persistence
+
+    A control can save its state. The client manages the persistence of its embedded controls.
+    
+Registration and licensing
+
+    A control typically supports self-registration and creates a set of registry entries
+    
+- ActiveX Controls interfaces 
+    
+ActiveX controls technology specifies the IOleControl and IOleControlSite interfaces for client-control communication. ISimpleFrameSite 
+
+```
+interface IOleControl : IUnknown 
+  { 
+    HRESULT GetControlInfo([out] CONTROLINFO *pCI); 
+    HRESULT OnMnemonic([in] LPMSG pMsg); 
+    HRESULT OnAmbientPropertyChange([in] DISPID dispID); 
+    HRESULT FreezeEvents([in] BOOL bFreeze); 
+  } 
+ 
+interface IOleControlSite : IUnknown 
+  { 
+    HRESULT OnControlInfoChanged(void); 
+    HRESULT LockInPlaceActive([in] BOOL fLock); 
+    HRESULT GetExtendedControl([out] IDispatch **ppDisp); 
+    HRESULT TransformCoords([in-out] POINTL *pptlHimetric, [in-out] POINTF *pptfContainer, [in] DWORD dwFlags); 
+    HRESULT TranslateAccelerator([in] LPMSG pMsg, [in] DWORD grfModifiers); 
+    HRESULT OnFocus([in] BOOL fGotFocus); 
+    HRESULT ShowPropertyFrame(void); 
+  } 
+ 
+interface ISimpleFrameSite : IUnknown 
+  { 
+    HRESULT PreMessageFilter([in] HWND hWnd, [in] UINT msg, [in] WPARAM wp, [in] LPARAM lp, 
+        [out] LRESULT *plResult, [out] DWORD *pdwCookie); 
+    HRESULT PostMessageFilter([in] HWND hWnd, [in] UINT msg, [in] WPARAM wp, [in] LPARAM lp, 
+        [out] LRESULT *plResult, [in] DWORD dwCookie); 
+  }
+```
+
+- all the container requirements. It can delegate most of the interface calls from its contained controls to the container that manages the simple frame. 
+
+deal with Windows messages that potentially come from controls within it, ISimpleFrameSite, 
+
+PreMessageFilter processes the message first; 
+
+PostMessageFilter is called after the simple frame has processed the message itself. 
+
+- Properties and methods 
+
+A control exposes properties and methods through OLE automation. Property change notifications 
+    + property pages a control can display its properties, independent of its container
+
+    + By supporting OLEIVERB_PROPERTIES, the Properties item is displayed on the container's menu. 
+    
+    + Per property browsing supports a container that can display the control's properties
+    
+    + property change notification, a control can notify a client that its properties have change, allowing the client to take any necessary actions
+    
+- Control properties 
+
+    These are exposed by the container through a control client site to provide environmental values
+
+    IDispatch implemented on a container's site object. The container calls the control's IOleControl::OnAmbientPropertyChange
+
+    The container supports an extended control through its client site method IOleControlSite::GetExtendedControl. 
+    
+    A container can also choose to show property pages for its extended controls in addition to those pages that a control would normally specify through ISpecifyPropertyPages
+    
+    The control calls IOleControlSite::ShowPropertyFrame to do this.
+    
+- OLE defines a set of standard DISPIDs for all three kinds of properties: control, ambient, and extended.
+
+BackColor, ForeColor, FillColor, BorderColor
+
+BackStyle, FillStyle, ...
+
+Font,
+
+Caption, Text 
+
+Enabled 
+
+Window 
+
+TabStop 
+
+    + Ambient property 
+    
+BackColor, ForeColor 
+
+Font 
+
+LocalID 
+
+UserMode 
+
+UIDead 
+
+MessageReflect 
+
+SupportsMnemnoics 
+
+ShowGrabHandlers 
+
+DisplayAsDefault 
+
+    + Extended property 
+Name
+
+Visible 
+
+Parent 
+
+Default, cancel 
+
+- Standard font object 
+
+- Standard picture object 
+
+- Control methods 
+
+support: Refresh, DoClick, and AboutBox.
+
+- Control events 
+
+Request events. A control requests
+
+Before events. A control notifies its client hat it is going to do something by calling a method
+
+After events. A control notifies its client that it has just done something by calling a method 
+
+Do events. A control triggers a do event to allow its client to override the control's action 
+
+- IOleControl::FreezeEvents method, when called with TRUE, tells a control whether the container will bother handling events from the control until FreezeEvents
+
+- Visual Representation 
+
+A control calls its client's IOleClientSite::RequestNewObjectLayout method to tell its container that it wants to change its size
+
+the control's IOleObject::GetExtent to get the new size and calls IOleInPlaceObject::SetObjectRects 
+    
+support only IPersistStream or IPersistStreamInit do not support caching through IOleCache2 because 
+
+use the HIMETRIC type for its coordinates. 
+
+The container provides a site object with the IOleControlSite::TransformCoords method.
+
+call IOleControlSite::LockInPlaceActive in the container's site object to prevent the container from attempting to demote the control out of the in-place active state
+
+- Keyboard handling for controls 
+
+The IOleControl::GetControlInfo and IOleControl::OnMnemonic methods and the IOleControlSite::OnControlInfoChanged method handle a control's keyboard mnemonics.
+
+CONTROLINFO structure describes a control's mnemonic accelerators
+
+the control calls IOleControlSite::OnFocus to tell the container of such changes.
+
+To give a container the opportunity to process the keystroke before the control, the control calls IOleControlSite::TranslateAccelerator
+ 
+- Persistence 
+
+the IPersistStreamInit interface supports stream-based persistence of the control's state. IPersistStreamInit is a replacement for IPersistStream 
+
+include: IPersistStorage, IPersistMemory, IPersistPropertyBag, IPersistMoniker. The control implementer must decide what kinds of persistence are most important
+
+a client can check the OLEMISC_SETCLIENTSITEFIRST flag to determine if the control supports getting its client site and ambient properties before loading its persistent state
+
+- Registration and licensing 
+
+```
+HKEY_CLASSES_ROOT
+   CLSID
+      {control_CLSID}
+         ProgID = <identifier>
+         InprocServer32 = <filename>.dll
+         *DefaultIcon = <filename>.<ext>,resourceID
+         *ToolboxBitmap32 = <filename>.<ext>,resourceID
+         *Control
+         verb
+            *n = &Properties...
+         *MiscStatus = 0
+         TypeLib = {object_typelibID}
+         *Version = version_number
+```
+
+Controls should have a Properties verb, OLEIVERB_PROPERTIES, along with any other verbs they support. 
+
+A control defines the MiscStatus key to describe itself to potential containers. 
+
+OLEMISC enumeration values for more information. The client can obtain this information by calling IOleObject::GetMiscStatus 
+
+
+
+### Property pages and property sheets 
+- OLE model for working with property pages 
+
+Each property page is managed by an in-process object that implements either IPropertyPage or IPropertyPage2
+
+implementing ISpecifyPropertyPages. Through this interface the caller can obtain a list of CLSIDs
+
+Any piece of code (client or object) that wants to display an object's property sheet passes the object's IUnknown pointer. CLSIDs to OleCreatePropertyFrame or OleCreatePropertyFrameIndirect, which creates the tabbed-dialog box.
+
+using CoCreateInstance on each CLSID. The property frame obtains at least an IPropertyPage pointer for each page. each site implements IPropertyPageSite and this pointer is passed to each page. 
+
+each page queries for the appropriate interface pointer and passes new property values to the objects in whatever way is desired
+
+property browsing through the IPerPropertyBrowsing interface permitting the object to specify which property should receive initial focus 
+
+```
+interface ISpecifyPropertyPages : IUnknown 
+  { 
+    HRESULT GetPages([out] CAUUID *pPages); 
+  }; 
+ 
+ 
+interface IPropertyPage : IUnknown 
+  { 
+    HRESULT SetPageSite([in] IPropertyPageSite *pPageSite); 
+    HRESULT Activate([in] HWND hWndParent, [in] LPCRECT prc 
+        , [in] BOOL bModal); 
+    HRESULT Deactivate(void); 
+    HRESULT GetPageInfo([out] PROPPAGEINFO *pPageInfo); 
+    HRESULT SetObjects([in] ULONG cObjects 
+        , [in, max_is(cObjects)] IUnknown **ppunk); 
+    HRESULT Show([in] UINT nCmdShow); 
+    HRESULT Move([in] LPCRECT prc); 
+    HRESULT IsPageDirty(void); 
+    HRESULT Apply(void); 
+    HRESULT Help([in] LPCOLESTR pszHelpDir); 
+    HRESULT TranslateAccelerator([in] LPMSG pMsg); 
+  } 
+ 
+interface IPropertyPageSite : IUnknown 
+  { 
+    HRESULT OnStatusChange([in] DWORD dwFlags); 
+    HRESULT GetLocaleID([out] LCID *pLocaleID); 
+    HRESULT GetPageContainer([out] IUnknown **ppUnk); 
+    HRESULT TranslateAccelerator([in] LPMSG pMsg); 
+  }
+```
+
+ISpecifyPropertyPages::GetPages method returns a counted array of UUID (GUID) values each of which describe the CLSID of a property page
+
+invokes the property sheet with OleCreatePropertyFrame or OleCreatePropertyFrameIndirect passes this array
+
+caller passes the IUnknown pointers to the affected objects
+
+IPropertyPageSite for each page it will load. 
+
+    + property page interface 
+    GetLocalID to retrieve current language 
+    Ask process keystrokes TranslateAccelerator
+    Notify frame OnStatusChange
+    Obtain an interface pointer GetPageContainer 
+
+obtain each page's IPropertyPage interface.
+
+    + IPropertyPage2
+```
+interface IPerPropertyBrowsing : IUnknown 
+  { 
+    HRESULT GetDisplayString([in] DISPID dispID, [out] BSTR *pbstr); 
+    HRESULT MapPropertyToPage([in] DISPID dispID, [out] CLSID *pclsid); 
+    HRESULT GetPredefinedStrings([in] DISPID dispID, [out] CALPOLESTR *pcaStringsOut, [out] CADWORD *pcaCookiesOut); 
+    HRESULT GetPredefinedValue([in] DISPID dispID, [in] DWORD dwCookie, [out] VARIANT *pvarOut); 
+  } 
+ 
+interface IPropertyPage2 : IPropertyPage 
+  { 
+    HRESULT EditProperty([in] DISPID dispID); 
+  } 
+ 
+```
+redefined strings (GetPredefinedStrings) and values (GetPredefinedValue) as well as a display string
+
+- Data binding through IPropertyNotifySink
+
+The IPropertyNotifySink is a standard notification interface that supports bindable and request-edit properties
+
+```
+interface IPropertyNotifySink : IUnknown 
+  { 
+    HRESULT OnChanged([in] DISPID dispID); 
+    HRESULT OnRequestEdit([in] DISPID dispID); 
+  }
+```
+
+
+### ActiveX Control and Control Container Guidlines 
+- An ActiveX control container must be able to host a minimal ActiveX control; it will also support a number of additional interfaces as specified in Containers
+
+A container should not expect a control to support anything more than the IUnknown interface
+
+- OLE programs should use QueryInterface to acquire interface pointers
+- ActiveX controls must support self-registration by implementing the DllRegisterServer and DllUnregisterServer functions. ActiveX controls must register all of the standard registry entries
+
+- ActiveX controls should also register the ToolBoxBitmap32 registry key
+
+- Support for an interface 
+
+IOleObject
+IOleInplaceObject
+IOleInPlaceActiveObject
+IOleControl 
+IDataObject
+IViewObject2
+IDispatch, indicates the control has either a custom methods or custom properties 
+IConnectionPointContainer 
+IProvideClassInfo 
+IProvideClassInfo2
+ISpecifyPropertyPage 
+IperPropertyBrowsing 
+IPersistStream 
+IPersistStreamInit 
+IPersistMemory 
+IPersistStorage 
+IPersistMoniker 
+IPersistPropertyBag 
+IOleCache 
+IOleCache2 
+IExternalConnection 
+IRunnableObject
+
+- Optional methods, listed here must be fully implemented if the interface is supported.
+
+https://docs.microsoft.com/en-us/windows/win32/com/optional-methods-in-control-interfaces
+
+- Events in controls
+
+expose or fire any events and thus the control does not require IConnectionPointContainer.
+
+- Property pages 
+
+- Ambient properties for controls 
+LocalID 
+UserMode 
+UIDead 
+ShowGrabHandles 
+SHowHatching 
+DisplayAsDefault
+
+both IOleControl (for OnAmbientPropertyChange as a minimum) as well as IOleObject (for SetClientSite and GetClientSite).
+
+- Using the container's functionality 
+IOleClientSite
+IOleInPlaceSite
+IAdviseSink
+IOleControlSite 
+IDispatch
+IPropertyNotifySink 
+IOleInPlaceUIWindow 
+
+- ActiveX control container is an OLE container that supports the following additional features 
+
+    Embedded objects from in-process servers
+    In-place activation
+    OLEMISC_ACTIVATEWHENVISIBLE
+    Event handling
+
+    IOleClientSite 
+    
+    IOleInPlaceSite 
+    
+    IOleControlSite 
+    
+    IDispatch 
+    GetTypeInfoCount, non standard ambient properties 
+    GetTypeInfo, non-standard ambient properties 
+    GetIDsOfNames, non-standard ambient properties 
+
+    IOleInPlaceFrame 
+    ContextSensitiveHelp 
+    GetBorder 
+    RequestBorderSpace 
+    InsertMenus 
+    SetMenu 
+    RemoveMenus 
+    SetStatusText 
+    EnableModeless 
+    TranslateAccelerator 
+    
+    IOleContainer 
+
+- miscellaneous status bits support 
+
+https://docs.microsoft.com/en-us/windows/win32/com/miscellaneous-status-bits-support
+
+- Keyboard handling in controls 
+
+    Support for OLEMISC_ACTSLIKELABEL and OLEMISC_ACTSLIKEBUTTON status bits.
+    Implementing the DisplayAsDefault ambient property (if it exists, it can return FALSE).
+    Implementing tab handling, including tab order.
+
+https://docs.microsoft.com/en-us/windows/win32/com/keyboard-handling-in-controls
+
+- Storge interfaces 
+
+implement IPersistStorage, IPersistStream, or IPersistStreamInit. Optionally, a container can support any other persistence interfaces such as IPersistMemory, IPersistPropertyBag, and IPersistMoniker
+
+- Ambient Properties 
+LocalID 
+UserModel , container have different user and run environment 
+DisplayAsDefault, a default button in container 
+
+-  extended properties, then it must support the following minimal set:
+
+    Visible
+    Parent
+    Default
+    Cancel
+
+- Message reflection, ActiveX control container supports message reflection. 
+- Automatic clipping
+
+Because a control may not support any interface other than IUnknown, a container has to degrade gracefully
+
+
+
+### Component categories 
+- the specification for component categories includes APIs for manipulation of the component category registry keys
+
+- categories may be available.
+
+    ISimpleFrameSite control containment.
+    Simple Databinding through the IPropertyNotifySink interface.
+    Advanced Databinding (as supported by the additional databinding interfaces of VB4.0).
+    Visual Basic private interfaces - IVBFormat, IVBGetControl
+    Internet aware controls.
+    Windowless controls.
+
+- ActiveX control that is capable of containing other controls. A group box that contains a collection of radio buttons is an example of a container control
+
+Container controls should set the OLEMISC_SIMPLEFRAME status bit, and should call its container's ISimpleFrameSite implementation. 
+
+ActiveX supports container controls must implement ISimpleFrameSite.
+
+- ActiveX controls architecture defines a data-binding mechanism, whereby an ActiveX control can specify that one or more of its properties are bindable
+
+- Visual Basic private interfaces 
+
+Visual Basic environment when formatting data.
+
+CATID - {02496840-3AC4-11cf-87B9-00AA006C8166} CATID_VBFormat
+
+The IVBGetControl interface allows a control to enumerate other controls on the VB form.
+
+CATID - {02496841-3AC4-11cf-87B9-00AA006C8166} CATID_VBGetControl
+
+Two additional private interfaces, IGetVBAObject and IGetOleObject, are described here even though they do not define component categories
+
+    + Gets access to an OLE control on a Visual Basic container. IGetOleObject 
+    
+    IGetOleObject::GetOleObject
+
+    + Gets access to the IVBFormat interface. IGetVBAObject
+    
+    IGetVBAObject::GetObject
+    
+    + VBFormat interface inherits from the IUnknown interface. IVBFormat also has these types of members:
+    
+    IVBFormat::Format
+    
+    + IVBGetControl access to all the controls on a Visual Basic container.
+    
+    IVBGetControl::EnumControls
+
+    Enumerates the controls on the form.
+    
+    + Internet-Aware Objects
+https://docs.microsoft.com/en-us/windows/win32/com/internet-aware-objects
+
+CATID_RequiresDataPathHost
+	0de86a50-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToMoniker
+	0de86a51-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToStorage
+	0de86a52-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToStreamInit
+	0de86a53-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToStream
+	0de86a54-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToMemory
+	0de86a55-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToFile
+	0de86a56-2baa-11cf-a229-00aa003d7352
+CATID_PersistsToPropertyBag
+	0de86a57-2baa-11cf-a229-00aa003d7352
+    
+    + windowless controls, Windowless controls are designed to be compatible with older control containers by creating their own window in that situation
+    
+    + Categorizing DCOM proxies and stubs 
+    
+    DCOM marshals references to objects by constructing OBJREFs that contain CLSIDs. These CLSIDs are vulnerable to security attacks because arbitrary DLLs can be loaded during marshaling.
+    
+    specified when calling CoInitializeSecurity (see EOLE_AUTHENTICATION_CAPABILITIES). Setting this flag helps protect server security when using DCOM becaus
+    
+    CLSIDs that are implemented in ole32.dll, comadmin.dll, comsvcs.dll, or es.dll, or that implement the CATID_MARSHALER
+    
+- General guidlines, ActiveX Control and ActiveX Control container developers to help maintain good 
+
+    Overloading IPropertyNotifySink
+    Container-Specific Private Interfaces
+    Multi-Threaded Issues, The apartment model requires that interface pointers are marshaled (using CoMarshalInterface, and CoUnmarshalInterface) when passed between threads
+    
+    Event Freezing,  calling IOleControl::FreezeEvents with TRUE. It can unfreeze the events by calling FreezeEvents with FALSE. Queue up only relevant or important events and fire them after the container has called FreezeEvents with FALSE
+    
+    Container Controls, ActiveX controls architecture specifies the ISimpleFrameSite interface to enable container controls. 
+    
+    WS_GROUP and WS_TABSTOP Flags in Controls
+    
+    Multiple Controls in One DLL, A single .ocx DLL can container any number of ActiveX controls,
+    The IOleContainer::EnumObjects Method
+    Enhanced Metafiles, An enhanced metafile DC is used in exactly the same way as a standard metafile DC
+    
+    Licensing
+    Dual Interfaces
+    IPropertyBag and IPersistPropertyBag, IPropertyBag and IPersistPropertyBag optimize save as text mechanisms
+
+- Event coordinate translation 
+- Standard DISPIDS 
+
+A number of standard dispids have been defined for the controls specification.
+
+Mousepointer property identifies standard mouse icons.
+0
+	(Default) Shape determined by the object.
+1
+	Arrow
+2
+	Cross (cross-hair pointer)
+3
+	I Beam
+4
+	Icon (small square within a square)
+5
+	Size (four-pointed arrow pointing north, south, east, and west)
+...
+    
+https://docs.microsoft.com/en-us/windows/win32/com/standard-dispids
+
+
 
 ## COM language translations 
+- cripting languages and environments.
+
+    Syntax Differences
+    Data Type Conversions
+    IDL Files
+    Translating COM Object Syntax for Programming Languages
+    Scripting with COM Objects
+
+- syntax different to use COM in different languages 
+
+ VBScript, all variables are of the same data type, Variant
+ 
+- Data type conversions 
+
+https://docs.microsoft.com/en-us/windows/win32/com/data-type-conversions
+
+- IDL files,  interface definition language (IDL) files and application configuration files (ACF) for MIDL, including reference pages for IDL
+
+In C++ and Java, a developer building a COM object creates an IDL file that the MIDL compiler then processes to create a type library or header and proxy files, or both. A type library is a binary file that describes the COM object or COM interface
+
+- C++ 
+
+    OLE-COM Object Viewer
+    MIDL compiler
+    MkTypLib
+    
+    + add ActiveX to C++ project 
+   
+
+    On the Project menu, click Add to Project. A shortcut menu appears.
+    
+    Click Components and Controls. The Components and Controls Gallery dialog box appears.
+    
+    Click the component to add to your project. Visual C++ displays a dialog box from which you can select a subset of the component's classes to add to your project.
+    
+    Click to select the check boxes of the classes you want to add, and click OK.
+    
+    + MIDL compiler 
+    
+    https://docs.microsoft.com/en-us/windows/win32/midl/midl-and-com
+    
+    The interface proxy file (U_p.c) is a C file that contains routines equivalent to those in the client stub and server stub files of an object (COM) interface
+    
+    ompiled in the mixed mode (/Os), and equivalent interpreter data when compiled in the interpreter mode (/Oi)
+    
+    + MkTypLib Command-Line Tool, obsolete
+    
+    + The OLE-COM object viewer, Oleview.exe, is an application supplied with Visual C++
+
+
+- Visual Basic 
+
+Visual Basic Object Browser
+
+    + Automation variant types.
+Visual Basic data type 	VARTYPE equivalent
+Integer                 16 bit, signed, VT_I2
+    
+Long                    32 bit, signed, VT_I4
+Date                    VT_DATE
+Currency                VT_CY
+Object                  *VT_DISPATCH
+String                  VT_BSTR
+Boolean                 VT_BOOL
+Currency                VT_DECIMAL
+Single                  VT_R4
+Double                  VT_R8
+Decimal                 VT_DECIMAL
+Byte                    VT_DECIMAL
+Variant                 VT_VARIANT
+
+    + control into a Visual Basic project
+
+    On the Project menu, click Components.
+    Click to select the check box next to the component you want to add. If the component is not listed, locate the .dll or .ocx file using Browse.
+    Click OK.
+    
+    + make a Visual Basic reference to a component
+
+    On the Project menu, click References.
+    Click to select the check box next to the component you want to add. If the component is not listed, locate the .dll or .ocx file using Browse.
+    Click OK.
+
+    + COM object in the Object Browser:
+
+    On the View menu, click Object Browser.
+
+    Open the Object Browser and select the name of the type library from the Project/Library
+
+
+- Java 
+
+JActiveX, The JActiveX command-line application is a component of Visual J++ 6.0. 
+
+Java Type Library Wizard, The Java Type Library Wizard is a component of Visual J++ 5.0.  
+
+JavaTLB, JavaTLB is a component of Visual J++ 5.0. JavaTLB is a command-line application that generates class files for a COM object.
+
+- marshaling OLE data types 
+
+BSTR data type in remote procedure calls, import the wtypes.idl file into your interface definition (IDL)
+ 
+use other Automation data types, such as VARIANT and SAFEARRAY, or types that use those types (for example, DISPPARAMS and EXCEPINFO), import the objidl.idl file into your IDL file
+ 
+use OLE data types (such as CLIPFORMAT, SNB, STGMEDIUM, ASYNC_STGMEDIUM), or system handles (such as HMETAFILE_PICT, HENHMETAFILE, HMETAFILE, HBITMAP, HPALETTE, and HGLOBAL), import the objidl.idl file into your interface definition file
+
+OLE handles are also defined with the [wire_marshal] attribute, but only as handles within a computer since they cannot be used in remote procedure calls 
+
+- Microsoft Interface Definition Language (MIDL) now includes the complete Object Definition Language (ODL) syntax. This allows you to use the 32-bit MIDL compiler 
+
+https://docs.microsoft.com/en-us/windows/win32/midl/using-the-midl-compiler-2
+
+- Scripting with COM 
+
+    + Embedding COM Objects in Web Pages
+    create a COM object instance in a webpage, you can use an OBJECT tag. Alternatively, if your scripting language provides a native way to create COM objects
+    
+```
+<OBJECT 
+  ID = vid 
+  CLASSID = "clsid:31263EC0-2957-11CF-A1E5-00AA9EC79700" 
+  BORDER = 0 
+  VSPACE = 0 
+  HSPACE = 0 
+  ALIGN = TOP 
+  HEIGHT = 100% 
+  WIDTH = 100%
+>
+</OBJECT>
+
+<SCRIPT LANGUAGE = "VBScript">
+  Dim objXL
+  Set objXL = CreateObject("Excel.Application")
+</SCRIPT>
+ 
+<SCRIPT LANGUAGE = "JScript">
+  var objXL = new ActiveXObject("Excel.Application");
+</SCRIPT>
+```
+    
+    + Using COM Objects in Active Server Pages,  Active Server Pages (ASP) applications. To do so, you must first create an instance of the object either by using the OBJECT tag or by calling the CreateObject
+    
+```
+<OBJECT 
+RUNAT=SERVER 
+ID=MyAds 
+CLASSID="Clsid:1621F7C0-60AC-11CF-9427-444553540000">
+</OBJECT> 
+
+<% 
+  Set MyAds = Server.CreateObject("MSWC.AdRotator") 
+%>
+ 
+```
+    
+    + Using COM Objects in Windows Script Host, Windows desktop (WScript.exe); the other runs scripts from the command prompt (CScript.exe).
+    
+$ cscript "c:\\sample scripts\\chart.vbs"
+```VB
+Dim objXL
+Set objXL = CreateObject("Excel.Application")
+```
+
+```JScript
+var objXL = new ActiveXObject("Excel.Application");
+```
+
+    + Scripting COM Objects in Custom Applications, Independent software vendors (ISVs) can also license Microsoft scripting engines for use in their applications.
+
+
+
 
 ## COM glossary 
 https://docs.microsoft.com/en-us/windows/win32/com/com-glossary
 
 
 
-# DCOM 
+## Reference 
+- Constants 
+https://docs.microsoft.com/en-us/windows/win32/com/constants
+
+    + Access Flags
+    + Authentication Level Constants
+    + Authentication Service Constants
+    + Authorization Constants
+    + COM Error Codes
+    https://docs.microsoft.com/en-us/windows/win32/com/com-error-codes
+
+    COM Error Codes (Generic)
+    COM Error Codes (XACT, SCHED, OLE)
+    COM Error Codes (STG, RPC)
+    COM Error Codes (Security and Setup)
+    COM Error Codes (COMADMIN, FILTER, GRAPHICS)
+    COM Error Codes (TPM, PLA, FVE)
+    COM Error Codes (FWP, WS, NDIS, HyperV)
+    COM Error Codes (VOLMGR, BCD, VHD, SDIAG)
+    COM Error Codes (WPN, MBN, P2P, Bluetooth)
+    COM Error Codes (UI, Audio, DirectX, Codec)
+    
+    + Impersonation Level Constants
+
+
+- Enumerations 
+https://docs.microsoft.com/en-us/windows/win32/com/enumerations
+
+    APTTYPE
+    APTTYPEQUALIFIER
+    BIND_FLAGS
+    BINDSPEED
+    BSCO_OPTION
+    CALLFRAME_COPY
+    CALLFRAME_FREE
+    CALLFRAME_WALK
+    CALLTYPE
+    CLSCTX
+    CO_MARSHALING_CONTEXT_ATTRIBUTES
+    COINIT
+    COMSD
+    COWAIT_FLAGS
+    EOC_ChangeType
+    EOLE_AUTHENTICATION_CAPABILITIES
+    EXTCONN
+    GLOBALOPT_PROPERTIES
+    GLOBALOPT_UNMARSHALING_POLICY_VALUES
+    MKRREDUCE
+    MKSYS
+    MSHCTX
+    MSHLFLAGS
+    PENDINGMSG
+    PENDINGTYPE
+    RECORD_READING_POLICY
+    REGCLS
+    SERVERCALL
+    THDTYPE
+    TYSPEC
+
+
+- Interfaces 
+https://docs.microsoft.com/en-us/windows/win32/com/interfaces
+
+IAccessibilityDockingService 
+IAccessibilityDockingServiceCallback 
+IAccessControl 
+IAgileObject 
+IBindCtx
+IBlockingLock 
+ICallFactory 
+ICallFrame
+ICallFrameEvents
+ICallFrameWalker 
+ICallIndirect
+ICallInterpreceptor 
+ICallUnmarshal
+ICancelMethodCalls 
+ICatInformation 
+ICatRegistry
+IClassActivator
+IClassFactory
+IClassFactory2
+IClientSecurity 
+IComThreadingInfo 
+IConnectionPoint 
+IConnectionPointContainer 
+IContext
+IContextCallback 
+IContinueCallback 
+IEnumCATEGORYINFO
+IEnumConnectionPoints 
+IEnumConnections 
+IEnumContextProps 
+IEnumGUID 
+IEnumString 
+IEnumUnknown
+IEventProperty
+IEventPublisher
+IExternalConnection
+IFlastRundown
+IFileBasedLogInit
+IForegroundTransfer 
+IGlobalInterfaceTable 
+IGlobalOptions 
+IInitializeSpy
+IInternalUnknown 
+ILog 
+IMalloc 
+IMallocSpy
+IMarshal 
+IMarshalStream
+IMessageDispatcher 
+IMessageFilter 
+IMoniker 
+IMultiQI
+INoMarshal
+IObjContext 
+IOleItemContainer 
+IOrpcDebugNotify 
+IParseDisplayName 
+IPersist 
+IPersistFile 
+IPersistStorage 
+IPersistStream 
+IPersistStreamInit 
+IPipeByte 
+IPipeDouble 
+IPipeLong 
+IProcesssInitControl
+IProcessLock 
+IProcessNotify
+IProvideClassInfo 
+IprovdeClassInfo2
+IprovdeMultipleClassInfo 
+IPSFactoryBuffer 
+IROTData 
+IRpcChannelBuffer 
+IRpcOptions 
+IRpcProxyBuffer 
+IRpcStubBuffer 
+IRunnableObject 
+IRunningObjectTable 
+IServerSecurity 
+IStdMarshalInfo 
+ISurrogate 
+ISurrogateService 
+ISynchronize 
+ISynchronizeContainer 
+ISynchronizeEvent 
+ISynchronizeHandle 
+IUnknown  
+
+
+- Macros 
+https://docs.microsoft.com/en-us/windows/win32/com/macros
+
+    FAILED
+    HRESULT_CODE
+    HRESULT_FACILITY
+    HRESULT_FROM_NT
+    HRESULT_FROM_WIN32
+    HRESULT_SEVERITY
+    IS_ERROR
+    MAKE_HRESULT
+    MAKE_SCODE
+    OLESTR
+    SCODE_CODE
+    SCODE_FACILITY
+    SCODE_SEVERITY
+    SUCCEEDED
+
+- Registry Entries 
+
+    HKEY_LOCAL_MACHINE\SOFTWARE\Classes
+    HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Ole
+    HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion
+
+https://docs.microsoft.com/en-us/windows/win32/com/registry-entries
+
+- Structures 
+https://docs.microsoft.com/en-us/windows/win32/com/structures
+
+- Functions 
+https://docs.microsoft.com/en-us/windows/win32/com/functions
+
 
 
 # System services 
@@ -2799,11 +4440,88 @@ https://docs.microsoft.com/en-us/uwp/api/
     + pipes 
 
 
+# Window sessions, stations and desktop 
+- reference 
+https://brianbondy.com/blog/100/understanding-windows-at-a-deeper-level-sessions-window-stations-and-desktops
 
+- session relative to several process 
 
+session0 in previous window 7 is interactive, combined window service and application together 
 
+session0 become only for window service after vista 
 
+-  Session contains a collection of Window Stations, a clipboard, and more. Each Window station has a name unique to the Session it belongs to
 
+But across Sessions two Window Stations can share a name but they are completely distinct
 
+- a Window Station as a security boundary. Once a Window Station is created, you cannot change the Session that it belongs to.
 
+Each process belongs to a single Window Station but unlike Sessions vs. Processes, a single process can change its Window Station after startup time.
 
+Window Stations: GetProcessWindowStation, SetProcessWindowStation, CreateWindowStation, and OpenWindowStation.
+
+Window Station called Winsta0 for every session. WinSta0 is the only Window Station that can display a user interface and receive user input, it uses the keyboard, mouse and display.
+
+Once a process sets its Window Station it can then access things inside that Window Station such as Desktops, and the clipboard.
+
+A process can create new Window stations with the Win32 API CreateWindowStation
+
+Each Window Station contains a collection of Desktops. A Desktop is loaded into kernel memory space and is a logical display surface. GUI object allocate here
+
+- Desktop belongs to a single Session and also a single Window Station.
+
+Only one Desktop at a time can be active (displayed) per Session. And by definition it must belong to WinSta0, called the input Desktop
+
+get a handle to the active Desktop within ones own Session by calling OpenInputDesktop
+
+    + WinSta0 has 3 Desktops loaded:
+
+    Winlogon (the logon screen)
+    Default (the user Desktop)
+    ScreenSaver
+
+    + 4th Desktop on Vista and higher called the “Secure Desktop” which is used by default in UAC prompts.
+
+    + As far as NT services go, each NT service that has credentials specified will create its own Window Station and Desktop.
+    
+    +  deal with Desktops:
+
+    To set a Desktop for a thread you can call SetThreadDesktop
+    A process can create a new Desktop by calling CreateDesktopEx, when a new Desktop is created it will be assigned into the Window Station associated with the calling process.
+
+-  a little mysterious checkbox that appears in the property page of each of your services called “Allow services to interact with Desktop”.
+
+- Windows Handles
+
+Windows inside the Windows OS are children of Desktop objects.
+
+- Communication across Sessions
+
+Depending on the type of communication, inter-Session communication is possible.
+
+Things like pipes, global events, and sockets allow you to communicate across Sessions.
+
+Windows Messages, and local events do not allow you to communicate across Sessions.
+
+    + display GUI cross session 
+    
+    The proper way to display a GUI for service code now is to do some kind of inter-Session communication such as a pipe and have the GUI program
+    
+    second way display a GUI from a service is to simply launch the process within another user’s Session inside Winsta0 and the Default Desktop.
+
+- Windows messages are not possible across Desktops. Windows messages are only possible within the same Desktop
+
+Windows Hooks which allow you to monitor and get notifications for any message from another process can only be installed at a Desktop Level.
+
+Win323 API EnumDesktopWindows to enumerate these Desktop windows
+
+- circumvent all security in windows, actually possible to do anything you want in Windows in any Session, Window Station, or Desktop. The solution is to build a service running on your computer running as the Local System Account.
+
+this service is running elevated via a manifest file, it can obtain the token and linked token of any process in any Session, and start a helper program within that same token to do anything it wishes to. Probably how Window Task Manager works 
+
+- reference 
+https://brianbondy.com/
+
+https://docs.microsoft.com/en-us/archive/msdn-magazine/2000/march/security-briefs-exploring-handle-security-in-windows
+
+https://techcommunity.microsoft.com/t5/ask-the-performance-team/bg-p/AskPerf
