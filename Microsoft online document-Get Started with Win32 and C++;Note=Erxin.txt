@@ -1,3 +1,2978 @@
 Microsoft online document-Get Started with Win32 and C++;Note=Erxin
 
+# Reference 
+https://docs.microsoft.com/en-us/windows/win32/
+
+
+# Get started 
+- a first-class development experience without depending on a managed runtime environment like .NET and WinRT (for UWP apps for Windows 10). 
+
+- C++/WinRT is an entirely standard modern C++17 language projection enables you to easily consume Windows Runtime APIs 
+
+    + Visual studio 
+    
+    new projects, you can install the C++/WinRT Visual Studio Extension (VSIX) and use one of the C++/WinRT project templates
+     
+    existing Windows desktop application projects, you can install the Microsoft.Windows.CppWinRT NuGet package
+    
+- coding convention 
+
+filled with strange type definitions like DWORD_PTR and LPRECT, and variables have names like hWnd and pwsz (called Hungarian notation).
+
+- integer types 
+
+Data type 	Size 	Signed?
+BYTE 	8 bits 	Unsigned
+DWORD 	32 bits 	Unsigned
+INT32 	32 bits 	Signed
+INT64 	64 bits 	Signed
+LONG 	32 bits 	Signed
+LONGLONG 	64 bits 	Signed
+UINT32 	32 bits 	Unsigned
+UINT64 	64 bits 	Unsigned
+ULONG 	32 bits 	Unsigned
+ULONGLONG 	64 bits 	Unsigned
+WORD 	16 bits 	Unsigned
+
+- boolean 
+
+#define FALSE    0 
+#define TRUE     1
+
+two values for use with BOOL
+
+// Right way.
+BOOL result = SomeFunctionThatReturnsBoolean();
+if (result) 
+{ 
+    ...
+}
+
+// Wrong!
+if (result == TRUE) 
+{
+    ... 
+}
+
+BOOL is NOT interchangeable with the C++ bool type.
+
+- pointer types 
+
+form pointer-to-X. These usually have the prefix P- or LP- in the name. For example, LPRECT is a pointer to a RECT, where RECT is a structure
+
+
+P stands for "pointer" and LP stands for "long pointer". Long pointers (also called far pointers) are a holdover from 16-bit Windows where needed to address memory ranges outside the current segment. today is NO distinction
+
+```
+RECT*  rect;  // Pointer to a RECT structure.
+LPRECT rect;  // The same
+PRECT  rect;  // Also the same.
+```
+
+- pointer precision types 
+
+size of a pointer—that is, 32 bits wide in 32-bit applications, and 64 bits wide in 64-bit applications, determined at compile time. 
+
+```
+
+    DWORD_PTR
+    INT_PTR
+    LONG_PTR
+    ULONG_PTR
+    UINT_PTR
+
+```
+
+- working with strings 
+
+encoded as a 16-bit value. UTF-16 characters are called wide characters
+
+built-in data type wchar_t for wide characters
+
+```
+typedef wchar_t WCHAR;
+wchar_t a = L'a';
+wchar_t *str = L"hello";
+```
+
+- typedefs 
+
+CHAR 	                char
+PSTR or LPSTR 	        char*
+PCSTR or LPCSTR 	    const char*
+PWSTR or LPWSTR 	    wchar_t*
+PCWSTR or LPCWSTR 	    const wchar_t*
+
+- unicode and ansi functions 
+
+SetWindowTextA takes an ANSI string.
+SetWindowTextW takes a Unicode string.
+
+
+#ifdef UNICODE
+#define SetWindowText  SetWindowTextW
+#else
+#define SetWindowText  SetWindowTextA
+#endif
+
+- TCHARs
+
+TCHAR 	wchar_t 	char
+TEXT("x") 	L"x" 	"x"
+
+- The TEXT and TCHAR macros are less useful today, because all applications should use Unicode. 
+
+Microsoft C run-time libraries define a similar set of macros. For example, _tcslen resolves to strlen if _UNICODE is undefined; otherwise it resolves to wcslen
+
+Some headers use the preprocessor symbol UNICODE, others use _UNICODE with an underscore prefix. VC set both 
+
+- what is a window 
+
+the control and the application window can communicate with each other.
+
+    + window 
+
+    Occupies a certain portion of the screen.
+    May or may not be visible at a given moment.
+    Knows how to draw itself.
+    Responds to events from the user or the operating system.
+
+- parent windows and owner windows 
+
+The application window is the parent of the control window. The parent window provides the coordinate system used for positioning a child window. child window can not appear outside the borders of its parent. 
+
+an application window and a modal dialog window. An owned window always appears in front of its owner window. 
+
+- Windows are objects—they have both code and data—but they are not C++ classes.
+
+The data type for window handles is HWND
+
+Window handles are returned by the functions that create windows: CreateWindow and CreateWindowEx.
+
+```
+BOOL MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
+```
+
+handles are not pointers
+
+- Windows program includes an entry-point function that is named either WinMain or wWinMain. 
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow);
+
+hInstance is something called a "handle to an instance" or "handle to a module."
+
+hPrevInstance has no meaning. It was used in 16-bit Windows, but is now always zero.
+
+pCmdLine contains the command-line arguments as a Unicode string.
+
+nCmdShow is a flag that says whether the main application window will be minimized, maximized, or shown normally.
+
+To get a Unicode copy of the command-line arguments, call the GetCommandLine function. 
+
+argv-style array, pass this string to CommandLineToArgvW.
+
+    + create a empty window 
+```
+INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+    PSTR lpCmdLine, INT nCmdShow)
+{
+    return 0;
+}
+```
+
+
+# Module 1 window program 
+- when create a empty project cpp 
+
+the default subsystem is console, we need to modify it from the project configuration Linker > System > Subsystem
+
+if it is not work, we need also open the project file as text and search _CONSOLE and replace it to WINDOW
+
+- sample 
+```
+#ifndef UNICODE
+#define UNICODE
+#endif 
+
+#include <Windows.h>
+
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
+{
+    // Register the window class.
+    const wchar_t CLASS_NAME[] = L"Sample Window Class";
+
+    WNDCLASS wc = { };
+
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+
+    RegisterClass(&wc);
+
+    HWND hWnd = CreateWindowEx(
+        0,                              // Optional window styles.
+        CLASS_NAME,                     // Window class
+        L"Learn to Program Windows",    // Window text
+        WS_OVERLAPPEDWINDOW,            // Window style
+
+        // Size and position
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+
+        NULL,       // Parent window    
+        NULL,       // Menu
+        hInstance,  // Instance handle
+        NULL        // Additional application data
+    );
+
+
+    if (hWnd == NULL)
+    {
+        return 0;
+    }
+
+    ShowWindow(hWnd, nCmdShow);
+    UpdateWindow(hWnd);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    return (int)msg.wParam;
+}
+
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+```
+
+- The code inside the while loop drives this process. Each time the program calls the DispatchMessage function, it indirectly causes Windows to invoke the WindowProc
+
+- window messages 
+    + events from the user 
+    + events from the operation system 
+    
+#define WM_LBUTTONDOWN    0x0201
+
+    + pull a mesasge from the queue, the message queue can not be manipulate directly 
+```
+MSG msg;
+GetMessage(&msg, NULL, 0, 0);
+```
+the MSG structure contains information about the message
+
+pass directly to two function 
+```
+TranslateMessage(&msg); 
+DispatchMessage(&msg);
+```
+
+The TranslateMessage function is related to keyboard input. It translates keystrokes (key down, key up) into characters. 
+
+The DispatchMessage function tells the operating system to call the window procedure of the window that is the target of the message.
+
+    + use click left button 
+
+    The operating system puts a WM_LBUTTONDOWN message on the message queue.
+    
+    Your program calls the GetMessage function.
+    
+    GetMessage pulls the WM_LBUTTONDOWN message from the queue and fills in the MSG structure.
+    
+    Your program calls the TranslateMessage and DispatchMessage functions.
+    
+    Inside DispatchMessage, the operating system calls your window procedure.
+    
+    Your window procedure can either respond to the message or ignore it.
+
+    + simplified loop 
+
+```
+MSG msg = { };
+while (GetMessage(&msg, NULL, 0, 0) > 0)
+{
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+}
+```
+
+- window procedure 
+
+```
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_SIZE:
+        {
+            int width = LOWORD(lParam);  // Macro to get the low-order word.
+            int height = HIWORD(lParam); // Macro to get the high-order word.
+
+            // Respond to the message:
+            OnSize(hwnd, (UINT)wParam, width, height);
+        }
+        break;
+    }
+}
+
+void OnSize(HWND hwnd, UINT flag, int width, int height)
+{
+    // Handle resizing
+}
+```
+
+- painting the window 
+
+operating system will notify you that you must repaint a portion of the window. When this occurs, the operating system sends the window a WM_PAINT message.
+
+you clear the update region, which tells the operating system that it does not need to send another WM_PAINT message until something changes
+
+    + demo 
+```
+switch (uMsg)
+{
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+
+        // All painting occurs here, between BeginPaint and EndPaint.
+
+        FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
+
+        EndPaint(hwnd, &ps);
+    }
+    return 0;
+}
+```
+
+rcPaint member of PAINTSTRUCT. This update region is defined relative to the client area:
+
+```
+FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
+```
+
+- close the window 
+
+```
+case WM_CLOSE:
+    if (MessageBox(hwnd, L"Really quit?", L"My application", MB_OKCANCEL) == IDOK)
+    {
+        DestroyWindow(hwnd);
+    }
+    // Else: User canceled. Do nothing.
+    return 0;
+```
+
+    + typical flow 
+    WM_CLOSE -> prompt confirm? -yes-> DestroyWindow -> WM_DESTROY -> PostQuitMessage -> WM_QUIT -> Exit wWinMain
+
+- managing 
+
+The CreateWindowEx function provides a way to pass any data structure to a window
+
+    + sends the two messages to your window procedure 
+
+    WM_NCCREATE
+    WM_CREATE
+
+    + CreateWindowEx 
+    
+```
+StateInfo *pState = new (std::nothrow) StateInfo;
+
+if (pState == NULL)
+{
+    return 0;
+}
+
+// Initialize the structure members (not shown).
+
+HWND hwnd = CreateWindowEx(
+    0,                              // Optional window styles.
+    CLASS_NAME,                     // Window class
+    L"Learn to Program Windows",    // Window text
+    WS_OVERLAPPEDWINDOW,            // Window style
+
+    // Size and position
+    CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+
+    NULL,       // Parent window    
+    NULL,       // Menu
+    hInstance,  // Instance handle
+    pState      // Additional application data
+    );
+```
+
+WM_CREATE -> CREATESTRUCT -> StateInfo
+
+CREATESTRUCT *pCreate = reinterpret_cast<CREATESTRUCT*>(lParam);
+
+pState = reinterpret_cast<StateInfo*>(pCreate->lpCreateParams);
+
+SetWindowLongPtr function and pass in the pointer to your data structure.
+
+
+
+# Module 2 Using COM in your windows based program 
+- rely on COM, such as the following:
+
+    Graphics (Direct2D)
+    Text (DirectWrite)
+    The Windows Shell
+    The Ribbon control
+    UI animation
+
+- cpp an interface is a pure virtual class contains only pure virtual methods 
+
+```
+// The following is not actual COM.
+
+// Pseudo-C++:
+
+interface IDrawable
+{
+    void Draw();
+};
+
+class Shape : public IDrawable
+{
+public:
+    virtual void Draw();    // Override Draw and provide implementation.
+};
+
+class Bitmap : public IDrawable
+{
+public:
+    virtual void Draw();    // Override Draw and provide implementation.
+};
+```
+
+- a COM interface is defined using a language called Interface Definition Language (IDL)
+
+```
+// An interface for serialization.
+class ISerializable
+{
+public:
+    virtual void Load(PCWSTR filename) = 0;    // Load from file.
+    virtual void Save(PCWSTR filename) = 0;    // Save to file.
+};
+
+// Declarations of drawable object types.
+
+class Shape : public IDrawable
+{
+    ...
+};
+
+class Bitmap : public IDrawable, public ISerializable
+{
+    ...
+};
+```
+
+- Initializing the COM library 
+```
+HRESULT CoInitializeEx(LPVOID pvReserved, DWORD dwCoInit);
+
+HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+```
+
+COINIT_APARTMENTTHREADED 	Apartment threaded.
+
+COINIT_MULTITHREADED 	Multithreaded.
+
+a thread that creates a window should use the COINIT_APARTMENTTHREADED flag, and other threads should use COINIT_MULTITHREADED. 
+
+- For every successful call to CoInitializeEx, you must call CoUninitialize before the thread exits
+```
+CoUninitialize();
+```
+
+- Error Codes in COM 
+
+Success codes: 0x0–0x7FFFFFFF.
+Error codes: 0x80000000–0xFFFFFFFF.
+
+COM methods return An HRESULT is a 32-bit integer. The high-order bit of the HRESULT signals success or failure. 
+
+```
+HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | 
+    COINIT_DISABLE_OLE1DDE);
+
+if (SUCCEEDED(hr))
+{
+    // The function succeeded.
+}
+else
+{
+    // Handle the error.
+}
+```
+
+- Creating an object in COM 
+
+```
+// Not an actual Windows function. 
+
+HRESULT CreateShape(IDrawable** ppShape);
+
+IDrawable *pShape;
+
+HRESULT hr = CreateShape(&pShape);
+if (SUCCEEDED(hr))
+{
+    // Use the Shape object.
+}
+else
+{
+    // An error occurred.
+}
+```
+
+- CoCreateInstance: A Generic Way to Create Objects
+
+-  the Shapes library might declare two GUID constants:
+
+- The execution context specifies whether the object runs in the same process as the application; in a different process on the same computer; or on a remote computer.
+
+CLSCTX_INPROC_SERVER 	Same process.
+CLSCTX_LOCAL_SERVER 	Different process, same computer.
+CLSCTX_REMOTE_SERVER 	Different computer.
+CLSCTX_ALL 	Use the most efficient option that the object supports. (The ranking, from most efficient to least efficient, is: in-process, out-of-process, and cross-computer.)
+
+- Because CoCreateInstance is a generic mechanism, this parameter cannot be strongly typed. Instead, the data type is void**
+
+- Example open dialog box 
+
+```
+#include <windows.h>
+#include <shobjidl.h> 
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow)
+{
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | 
+        COINIT_DISABLE_OLE1DDE);
+    if (SUCCEEDED(hr))
+    {
+        IFileOpenDialog *pFileOpen;
+
+        // Create the FileOpenDialog object.
+        hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, 
+                IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+
+        if (SUCCEEDED(hr))
+        {
+            // Show the Open dialog box.
+            hr = pFileOpen->Show(NULL);
+
+            // Get the file name from the dialog box.
+            if (SUCCEEDED(hr))
+            {
+                IShellItem *pItem;
+                hr = pFileOpen->GetResult(&pItem);
+                if (SUCCEEDED(hr))
+                {
+                    PWSTR pszFilePath;
+                    hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+                    // Display the file name to the user.
+                    if (SUCCEEDED(hr))
+                    {
+                        MessageBoxW(NULL, pszFilePath, L"File Path", MB_OK);
+                        CoTaskMemFree(pszFilePath);
+                    }
+                    pItem->Release();
+                }
+            }
+            pFileOpen->Release();
+        }
+        CoUninitialize();
+    }
+    return 0;
+}
+```
+
+    + basic outline of the code 
+
+    Call CoInitializeEx to initialize the COM library.
+    Call CoCreateInstance to create the Common Item Dialog object and get a pointer to the object's IFileOpenDialog interface.
+    Call the object's Show method, which shows the dialog box to the user. This method blocks until the user dismisses the dialog box.
+    Call the object's GetResult method. This method returns a pointer to a second COM object, called a Shell item object. The Shell item, which implements the IShellItem interface, represents the file that the user selected.
+    Call the Shell item's GetDisplayName method. This method gets the file path, in the form of a string.
+    Show a message box that displays the file path.
+    Call CoUninitialize to uninitialize the COM library.
+
+- managing the lifetime of an object 
+
+IUnknown interface defines three methods:
+
+    QueryInterface
+    AddRef
+    Release
+
+
+- asking an object for an interface 
+
+the object also implements an interface named IFileDialogCustomize.
+
+the object implements the IFileOpenDialog interface.
+
+every COM interface must inherit, directly or indirectly, from the IUnknown interface
+
+QueryInterface as a language-independent version of the dynamic_cast keyword in C++.
+
+```
+HRESULT QueryInterface(REFIID riid, void **ppvObject);
+```
+riid is the GUID that identifies the interface you are asking for, REFIID is a typedef for const GUID& 
+
+The ppvObject parameter receives a pointer to the interface. The data type of this parameter is void**
+
+```
+hr = pFileOpen->QueryInterface(IID_IFileDialogCustomize, 
+    reinterpret_cast<void**>(&pCustom));
+if (SUCCEEDED(hr))
+{
+    // Use the interface. (Not shown.)
+    // ...
+
+    pCustom->Release();
+}
+else
+{
+    // Handle the error.
+}
+```
+
+- memory allocation in COM 
+
+freeing memory on the heap.
+
+The CoTaskMemAlloc function allocates a block of memory.
+The CoTaskMemFree function frees a block of memory that was allocated with CoTaskMemAlloc.
+
+```
+PWSTR pszFilePath;
+hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+if (SUCCEEDED(hr))
+{
+    // ...
+    CoTaskMemFree(pszFilePath);
+}
+```
+
+CoTaskMemAlloc is a uniform of malloc and new to prevent call free and delete seperatelly 
+
+- COM coding practices 
+
+    + __uuidof operator 
+    
+    unresolved external symbol "struct _GUID const IID_IDrawable", error means that a GUID constant was declared with external linkage (extern), and the linker could not find the definition of the constant. 
+    
+    a GUID constant is usually exported from a static library file.
+
+    you can avoid the need to link a static library by using the __uuidof operator. This operator is a Microsoft language extension. It returns a GUID value from an expression. expression can be an interface type name, a class name, or an interface pointer
+    
+    ```
+    IFileOpenDialog *pFileOpen;
+    hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, CLSCTX_ALL, 
+        __uuidof(pFileOpen), reinterpret_cast<void**>(&pFileOpen));
+    ```
+
+    + The GUID value is associated with the type name by declaring __declspec(uuid( ... )) in the header. 
+    
+    + the IID_PPV_ARGS macro 
+    
+```
+// Wrong!
+
+IFileOpenDialog *pFileOpen;
+
+hr = CoCreateInstance(
+    __uuidof(FileOpenDialog), 
+    NULL, 
+    CLSCTX_ALL, 
+    __uuidof(IFileDialogCustomize),       // The IID does not match the pointer type!
+    reinterpret_cast<void**>(&pFileOpen)  // Coerce to void**.
+    );
+```
+
+    + A vtable (virtual method table) is a table of function pointers. The vtable is how COM binds a method call to its implementation at run time
+    
+    + IID_PPV_ARGS, helps to avoid class error, automatically inserts __uuidof(IFileOpenDialog) for the interface identifier, so it is guaranteed to match the pointer type
+    
+    IID_PPV_ARGS(&pFileOpen)
+    
+        * wrong example 
+    ```
+    // Wrong!
+
+    IFileOpenDialog *pFileOpen;
+
+    hr = CoCreateInstance(
+        __uuidof(FileOpenDialog), 
+        NULL, 
+        CLSCTX_ALL, 
+        __uuidof(IFileDialogCustomize),       // The IID does not match the pointer type!
+        reinterpret_cast<void**>(&pFileOpen)  // Coerce to void**.
+        );
+    ```
+    
+        * right 
+    ```
+    // Right.
+    IFileOpenDialog *pFileOpen;
+    hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, CLSCTX_ALL, 
+        IID_PPV_ARGS(&pFileOpen));
+    ```
+    
+    + safe release pattern 
+    ```
+    template <class T> void SafeRelease(T **ppT)
+    {
+        if (*ppT)
+        {
+            (*ppT)->Release();
+            *ppT = NULL;
+        }
+    }
+    ```
+        * error pattern 
+    Failing to release an interface pointer when you are done using it.
+    Calling Release with an invalid pointer. 
+    Dereferencing an interface pointer after Release is called. 
+    
+        * safe release 
+    Checks whether the pointer is NULL.
+    Calls Release if the pointer is not NULL.
+    Sets the pointer to NULL.
+
+    
+    ```
+    void UseSafeRelease()
+    {
+        IFileOpenDialog *pFileOpen = NULL;
+
+        HRESULT hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, 
+            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpen));
+        if (SUCCEEDED(hr))
+        {
+            // Use the object.
+        }
+        SafeRelease(&pFileOpen);
+    }
+    ```
+    
+        * smart pointers can help you do two things
+        
+        Initialize every interface pointer to NULL
+        
+        Call SafeRelease before each pointer goes out of scope
+    
+```
+// Warning: This example is not complete.
+
+template <class T>
+class SmartPointer
+{
+    T* ptr;
+
+ public:
+    SmartPointer(T *p) : ptr(p) { }
+    ~SmartPointer()
+    {
+        if (ptr) { ptr->Release(); }
+    }
+};
+```
+
+        a smart pointer class as part of the Active Template Library (ATL).
+        
+         ATL smart pointer class is named CComPtr. (There is also a CComQIPtr class, which is not discussed here.)
+         
+```
+#include <windows.h>
+#include <shobjidl.h> 
+#include <atlbase.h> // Contains the declaration of CComPtr.
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR pCmdLine, int nCmdShow)
+{
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | 
+        COINIT_DISABLE_OLE1DDE);
+    if (SUCCEEDED(hr))
+    {
+        CComPtr<IFileOpenDialog> pFileOpen;
+
+        // Create the FileOpenDialog object.
+        hr = pFileOpen.CoCreateInstance(__uuidof(FileOpenDialog));
+        if (SUCCEEDED(hr))
+        {
+            // Show the Open dialog box.
+            hr = pFileOpen->Show(NULL);
+
+            // Get the file name from the dialog box.
+            if (SUCCEEDED(hr))
+            {
+                CComPtr<IShellItem> pItem;
+                hr = pFileOpen->GetResult(&pItem);
+                if (SUCCEEDED(hr))
+                {
+                    PWSTR pszFilePath;
+                    hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+
+                    // Display the file name to the user.
+                    if (SUCCEEDED(hr))
+                    {
+                        MessageBox(NULL, pszFilePath, L"File Path", MB_OK);
+                        CoTaskMemFree(pszFilePath);
+                    }
+                }
+
+                // pItem goes out of scope.
+            }
+
+            // pFileOpen goes out of scope.
+        }
+        CoUninitialize();
+    }
+    return 0;
+}
+```
+
+```
+hr = pFileOpen.CoCreateInstance(__uuidof(FileOpenDialog));
+```
+
+- error handling in COM 
+E_ACCESSDENIED 	    0x80070005 	Access denied.
+E_FAIL 	            0x80004005 	Unspecified error.
+E_INVALIDARG 	    0x80070057 	Invalid parameter value.
+E_OUTOFMEMORY 	    0x8007000E 	Out of memory.
+E_POINTER 	        0x80004003 	NULL was passed incorrectly for a pointer value.
+E_UNEXPECTED 	    0x8000FFFF 	Unexpected condition.
+S_OK 	            0x0 	    Success.
+S_FALSE 	        0x1 	    Success.
+
+
+// Wrong.
+HRESULT hr = SomeFunction();
+if (hr != S_OK)
+{
+    printf("Error!\n"); // Bad. hr might be another success code.
+}
+
+// Right.
+HRESULT hr = SomeFunction();
+if (FAILED(hr))
+{
+    printf("Error!\n"); 
+}
+
+    + error handling pattern 
+    every function return HRESULT, check the return value before proceeding
+    Release resources after they are used.
+    Do not attempt to access invalid or uninitialized resources
+    Do not try to use a resource after you release it.
+    
+        * nested if, hard to read.
+```
+HRESULT ShowDialog()
+{
+    IFileOpenDialog *pFileOpen;
+
+    HRESULT hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, 
+        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpen));
+    if (SUCCEEDED(hr))
+    {
+        hr = pFileOpen->Show(NULL);
+        if (SUCCEEDED(hr))
+        {
+            IShellItem *pItem;
+            hr = pFileOpen->GetResult(&pItem);
+            if (SUCCEEDED(hr))
+            {
+                // Use pItem (not shown). 
+                pItem->Release();
+            }
+        }
+        pFileOpen->Release();
+    }
+    return hr;
+}
+```
+
+        * cascading ifs 
+```
+HRESULT ShowDialog()
+{
+    IFileOpenDialog *pFileOpen = NULL;
+    IShellItem *pItem = NULL;
+
+    HRESULT hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, 
+        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpen));
+
+    if (SUCCEEDED(hr))
+    {
+        hr = pFileOpen->Show(NULL);
+    }
+    if (SUCCEEDED(hr))
+    {
+        hr = pFileOpen->GetResult(&pItem);
+    }
+    if (SUCCEEDED(hr))
+    {
+        // Use pItem (not shown).
+    }
+
+    // Clean up.
+    SafeRelease(&pItem);
+    SafeRelease(&pFileOpen);
+    return hr;
+}
+```
+initialize NULL pointer, uses the SafeRelease function; smart pointers are also a good choice.
+
+disadvantage:
+Errors inside a loop require a special case.
+If a call fails, the function makes multiple unneeded error checks,
+
+        * jump on fail 
+
+```
+HRESULT ShowDialog()
+{
+    IFileOpenDialog *pFileOpen = NULL;
+    IShellItem *pItem = NULL;
+
+    HRESULT hr = CoCreateInstance(__uuidof(FileOpenDialog), NULL, 
+        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpen));
+    if (FAILED(hr))
+    {
+        goto done;
+    }
+
+    hr = pFileOpen->Show(NULL);
+    if (FAILED(hr))
+    {
+        goto done;
+    }
+
+    hr = pFileOpen->GetResult(&pItem);
+    if (FAILED(hr))
+    {
+        goto done;
+    }
+
+    // Use pItem (not shown).
+
+done:
+    // Clean up.
+    SafeRelease(&pItem);
+    SafeRelease(&pFileOpen);
+    return hr;
+}
+```
+
+        * throw on fail 
+```
+#include <comdef.h>  // Declares _com_error
+
+inline void throw_if_fail(HRESULT hr)
+{
+    if (FAILED(hr))
+    {
+        throw _com_error(hr);
+    }
+}
+
+void ShowDialog()
+{
+    try
+    {
+        CComPtr<IFileOpenDialog> pFileOpen;
+        throw_if_fail(CoCreateInstance(__uuidof(FileOpenDialog), NULL, 
+            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pFileOpen)));
+
+        throw_if_fail(pFileOpen->Show(NULL));
+
+        CComPtr<IShellItem> pItem;
+        throw_if_fail(pFileOpen->GetResult(&pItem));
+
+        // Use pItem (not shown).
+    }
+    catch (_com_error err)
+    {
+        // Handle error.
+    }
+}
+```
+
+uses the CComPtr class to manage interface pointers. Generally, if your code throws exceptions, you should follow the RAII (Resource Acquisition is Initialization) pattern. 
+
+disadvantage:
+Requires C++ objects to manage resources such as memory or file handles.
+Requires a good understanding of how to write exception-safe code.
+
+
+
+# Windows graphics 
+- C++/COM API for graphics 
+
+Graphics Device Interface (GDI) is the original graphics interface for Windows. GDI 
+
+GDI+ was introduced in Windows XP as a successor to GDI. The GDI+ library is accessed through a set of C++ classes that wrap flat C functions, .net using System.Drawing 
+
+Direct3D supports 3-D graphics.
+
+Direct2D is a modern API for 2-D graphics, the successor to both GDI and GDI+.
+
+DirectWrite is a text layout and rasterization engine. You can use either GDI or Direct2D
+
+DirectX Graphics Infrastructure (DXGI) performs low-level tasks, such as presenting frames for output. Most applications do not use DXGI directly. It is a intermediate layer between driver and Direct3D 
+
+- GDI supports hardware acceleration for certain operations, many GDI operations are bound to the CPU. Direct2D is layered on top of Direct3D, and takes full advantage of hardware acceleration 
+
+- transparency and anti-aliasing 
+
+Direct2D supports fully hardware-accelerated alpha-blending (transparency), performed by the CPU, so it does not benefit from hardware acceleration.
+
+Hardware-accelerated alpha-blending also enables anti-aliasing. 
+
+GDI+ supports anti-aliasing, it is applied by the CPU, so the performance is not as good as Direct2D.
+
+- Direct2D supports vector graphics. 
+
+- Desktop window manager 
+
+Before Windows Vista, a Windows program would draw directly to the screen. In other words, the program would write directly to the memory buffer. This can cause a trail when the program is not write correctly. The trail is caused because both windows paint to the same area of memory. 
+
+program1 -> window1 
+program2 -> window2 
+
+DWM provides several advantages over the old graphics architecture, window draws to an offscreen memory buffer, also called an offscreen surface. The DWM then composites these surfaces to the screen
+
+program1 -> DWM -> window1
+program2 ->     -> window2
+
+    + advantage of DWM 
+    Fewer repaint messages.
+    Reduced artifacts. 
+    visual effect
+    Alternative views. The DWM can use the offscreen surfaces in various interesting ways
+    
+- retained mode versus immediate mode. Graphics APIs can be divided into retained-mode APIs and immediate-mode APIs. 
+    
+    + Direct2D is an immediate-mode API. 
+    
+    each time a new frame is drawn the app directly issues the drawing commands 
+    
+    + Windows Presentation Foundation (WPF) is an example of a retained-mode API.
+    
+    it is declarative, build a scenesuch as shapes and lines -> library stores a model of scene in memory -> To draw a frame,library transform scene into a set of drawing commands -> make a change by application issues a commadn to update the scene 
+    
+- first direct2d program 
+
+```
+#include <windows.h>
+#include <d2d1.h>
+#pragma comment(lib, "d2d1")
+
+#include "basewin.h"
+
+template <class T> void SafeRelease(T **ppT)
+{
+    if (*ppT)
+    {
+        (*ppT)->Release();
+        *ppT = NULL;
+    }
+}
+
+class MainWindow : public BaseWindow<MainWindow>
+{
+    ID2D1Factory            *pFactory;
+    ID2D1HwndRenderTarget   *pRenderTarget;
+    ID2D1SolidColorBrush    *pBrush;
+    D2D1_ELLIPSE            ellipse;
+
+    void    CalculateLayout();
+    HRESULT CreateGraphicsResources();
+    void    DiscardGraphicsResources();
+    void    OnPaint();
+    void    Resize();
+
+public:
+
+    MainWindow() : pFactory(NULL), pRenderTarget(NULL), pBrush(NULL)
+    {
+    }
+
+    PCWSTR  ClassName() const { return L"Circle Window Class"; }
+    LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+};
+
+// Recalculate drawing layout when the size of the window changes.
+
+void MainWindow::CalculateLayout()
+{
+    if (pRenderTarget != NULL)
+    {
+        D2D1_SIZE_F size = pRenderTarget->GetSize();
+        const float x = size.width / 2;
+        const float y = size.height / 2;
+        const float radius = min(x, y);
+        ellipse = D2D1::Ellipse(D2D1::Point2F(x, y), radius, radius);
+    }
+}
+
+HRESULT MainWindow::CreateGraphicsResources()
+{
+    HRESULT hr = S_OK;
+    if (pRenderTarget == NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        hr = pFactory->CreateHwndRenderTarget(
+            D2D1::RenderTargetProperties(),
+            D2D1::HwndRenderTargetProperties(m_hwnd, size),
+            &pRenderTarget);
+
+        if (SUCCEEDED(hr))
+        {
+            const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
+            hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
+
+            if (SUCCEEDED(hr))
+            {
+                CalculateLayout();
+            }
+        }
+    }
+    return hr;
+}
+
+void MainWindow::DiscardGraphicsResources()
+{
+    SafeRelease(&pRenderTarget);
+    SafeRelease(&pBrush);
+}
+
+void MainWindow::OnPaint()
+{
+    HRESULT hr = CreateGraphicsResources();
+    if (SUCCEEDED(hr))
+    {
+        PAINTSTRUCT ps;
+        BeginPaint(m_hwnd, &ps);
+     
+        pRenderTarget->BeginDraw();
+
+        pRenderTarget->Clear( D2D1::ColorF(D2D1::ColorF::SkyBlue) );
+        pRenderTarget->FillEllipse(ellipse, pBrush);
+
+        hr = pRenderTarget->EndDraw();
+        if (FAILED(hr) || hr == D2DERR_RECREATE_TARGET)
+        {
+            DiscardGraphicsResources();
+        }
+        EndPaint(m_hwnd, &ps);
+    }
+}
+
+void MainWindow::Resize()
+{
+    if (pRenderTarget != NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        pRenderTarget->Resize(size);
+        CalculateLayout();
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow)
+{
+    MainWindow win;
+
+    if (!win.Create(L"Circle", WS_OVERLAPPEDWINDOW))
+    {
+        return 0;
+    }
+
+    ShowWindow(win.Window(), nCmdShow);
+
+    // Run the message loop.
+
+    MSG msg = { };
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    return 0;
+}
+
+LRESULT MainWindow::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+    case WM_CREATE:
+        if (FAILED(D2D1CreateFactory(
+                D2D1_FACTORY_TYPE_SINGLE_THREADED, &pFactory)))
+        {
+            return -1;  // Fail CreateWindowEx.
+        }
+        return 0;
+
+    case WM_DESTROY:
+        DiscardGraphicsResources();
+        SafeRelease(&pFactory);
+        PostQuitMessage(0);
+        return 0;
+
+    case WM_PAINT:
+        OnPaint();
+        return 0;
+
+
+
+    case WM_SIZE:
+        Resize();
+        return 0;
+    }
+    return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
+}
+```
+
+base window 
+```
+template <class DERIVED_TYPE> 
+class BaseWindow
+{
+public:
+    static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+    {
+        DERIVED_TYPE *pThis = NULL;
+
+        if (uMsg == WM_NCCREATE)
+        {
+            CREATESTRUCT* pCreate = (CREATESTRUCT*)lParam;
+            pThis = (DERIVED_TYPE*)pCreate->lpCreateParams;
+            SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pThis);
+
+            pThis->m_hwnd = hwnd;
+        }
+        else
+        {
+            pThis = (DERIVED_TYPE*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+        }
+        if (pThis)
+        {
+            return pThis->HandleMessage(uMsg, wParam, lParam);
+        }
+        else
+        {
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        }
+    }
+
+    BaseWindow() : m_hwnd(NULL) { }
+
+    BOOL Create(
+        PCWSTR lpWindowName,
+        DWORD dwStyle,
+        DWORD dwExStyle = 0,
+        int x = CW_USEDEFAULT,
+        int y = CW_USEDEFAULT,
+        int nWidth = CW_USEDEFAULT,
+        int nHeight = CW_USEDEFAULT,
+        HWND hWndParent = 0,
+        HMENU hMenu = 0
+        )
+    {
+        WNDCLASS wc = {0};
+
+        wc.lpfnWndProc   = DERIVED_TYPE::WindowProc;
+        wc.hInstance     = GetModuleHandle(NULL);
+        wc.lpszClassName = ClassName();
+
+        RegisterClass(&wc);
+
+        m_hwnd = CreateWindowEx(
+            dwExStyle, ClassName(), lpWindowName, dwStyle, x, y,
+            nWidth, nHeight, hWndParent, hMenu, GetModuleHandle(NULL), this
+            );
+
+        return (m_hwnd ? TRUE : FALSE);
+    }
+
+    HWND Window() const { return m_hwnd; }
+
+protected:
+
+    virtual PCWSTR  ClassName() const = 0;
+    virtual LRESULT HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) = 0;
+
+    HWND m_hwnd;
+};
+```
+
+The D2D1 namespace contains helper functions and classes. 
+A ColorF class for constructing color values.
+A Matrix3x2F for constructing transformation matrices.
+A set of functions to initialize Direct2D structures.
+
+- render targets, devices and resources 
+
+A render target is represented by the ID2D1RenderTarget interface
+
+A render target is simply the location where your program will draw.
+
+device is created implicitly when the application creates the render target. 
+
+A device is an abstraction that represents whatever actually draws the pixels
+
+- resource in direct2d 
+
+Stroke style. Controls the appearance of a line
+
+Brush. Controls how lines and regions are painted. brushes are represented by the ID2D1Brush interface.
+
+Geometry. Represents a collection of lines and curves.
+
+Mesh. A shape formed out of triangles. 
+
+represented by an interface that derives from ID2D1Resource.
+
+- direct2d factory object 
+    Render targets.
+    Device-independent resources, such as stroke styles and geometries.
+
+```
+ID2D1Factory *pFactory = NULL;
+
+HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pFactory);
+```
+
+Device-dependent resources, such as brushes and bitmaps, are created by the render target object
+
+D2D1_FACTORY_TYPE_SINGLE_THREADED flag means that you will not call Direct2D from multiple threads.
+
+To support calls from multiple threads, specify D2D1_FACTORY_TYPE_MULTI_THREADED.
+
+You should create the Direct2D factory object before the first WM_PAINT message. The WM_CREATE message handler is a good place to create the factory:
+
+    + example to create resource 
+    
+```
+HRESULT MainWindow::CreateGraphicsResources()
+{
+    HRESULT hr = S_OK;
+    if (pRenderTarget == NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        hr = pFactory->CreateHwndRenderTarget(
+            D2D1::RenderTargetProperties(),
+            D2D1::HwndRenderTargetProperties(m_hwnd, size),
+            &pRenderTarget);
+
+        if (SUCCEEDED(hr))
+        {
+            const D2D1_COLOR_F color = D2D1::ColorF(1.0f, 1.0f, 0);
+            hr = pRenderTarget->CreateSolidColorBrush(color, &pBrush);
+
+            if (SUCCEEDED(hr))
+            {
+                CalculateLayout();
+            }
+        }
+    }
+    return hr;
+}
+```
+- direct2d render loop 
+
+```
+perform a loop similar to following.
+
+    Create device-independent resources.
+    Render the scene.
+        Check if a valid render target exists. If not, create the render target and the device-dependent resources.
+        Call ID2D1RenderTarget::BeginDraw.
+        Issue drawing commands.
+        Call ID2D1RenderTarget::EndDraw.
+        If EndDraw returns D2DERR_RECREATE_TARGET, discard the render target and device-dependent resources.
+    Repeat step 2 whenever you need to update or redraw the scene.
+
+```
+- you must understand two related concepts:
+
+    Dots per inch (DPI)
+    Device-independent pixel (DIPs).
+
+    + typography, the size of type is measured in units called points. One point equals 1/72 of an inch. desktop publishing definition of point
+
+1 pt = 1/72 inch 
+
+    + 12-point font is designed to fit within a 1/6" (12/72) line of text.
+
+    the font needs some additional space between the text. This space is called the leading.
+
+    + a computer display pixels are not all the same size. The size of a pixel depends on two factors: the display resolution, and the physical size of the monitor. 
+
+    onts are measured in logical units. A 72-point font is defined to be one logical inch tall. Logical inches are then converted to pixels.
+
+    + window uses one logical inch equals 96 pixels. 
+    
+    a 72-point font is rendered as 96 pixels tall. A 12-point font is 16 pixels tall.
+
+    12 points = 12/72 logical inch = 1/6 logical inch = 96/6 pixels = 16 pixels 
+
+    + some people prefer larger text. For this reason, Windows enables the user to change the DPI setting. For example, if the user sets the display to 144 DPI, a 72-point font is 144 pixels tall
+
+    + The standard DPI settings are 100% (96 DPI), 125% (120 DPI), and 150% (144 DPI).
+
+    + if a program does not account for DPI
+
+        * defects at high-DPI settings:
+        
+    Clipped UI elements.
+    Incorrect layout.
+    Pixelated bitmaps and icons.
+    Incorrect mouse coordinates, which can affect hit testing, drag and drop, and so forth.
+
+    If a program is not marked as being DPI aware, the DWM will scale the entire UI to match the DPI setting
+
+    + scaling also results in a somewhat blurry appearance, because the scaling is applied after the window is drawn.
+
+- A program declares itself DPI-aware through its application manifest. A manifest is a simply an XML file that describes a DLL or application.
+
+```
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3" >
+  <asmv3:application>
+    <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+      <dpiAware>true</dpiAware>
+    </asmv3:windowsSettings>
+  </asmv3:application>
+</assembly>
+```
+
+Visual Studio linker generates the rest of the manifest for you automatically.
+
+    + include a manifest in a project 
+    VS > Project > Property 
+    Configuration Properties > Maxnifest Tool > Input and Output 
+    Additional Manifest Files > OK 
+
+- GDI and DPI 
+
+you ask GDI to draw a 200 × 100 rectangle, the resulting rectangle will be 200 pixels wide and 100 pixels tall on the screen. However, GDI font sizes are scaled to the current DPI setting.
+
+if your program is DPI-aware, t he output will scale automatically
+
+- Direct2D automatically performs scaling to match the DPI setting. called device-independent pixels (DIPs). 
+
+A DIP is defined as 1/96th of a logical inch. 
+
+    + example 
+    
+DPI setting 	DIP size
+96 	            1 pixel
+120 	        1.25 pixels
+144 	        1.5 pixels
+
+    + DPI setting is 144 DPI, and you ask Direct2D to draw a 200 × 100 rectangle, the rectangle will be 300 × 150 physical pixels. In addition, DirectWrite measures font sizes in DIPs, rather than points
+
+    + CAUTION! Mouse and window coordinates are still given in physical pixels, not DIPs
+
+    example, WM_LBUTTONDOWN message, the mouse-down position is given in physical pixels. To draw a point at that position, you must convert the pixel coordinates to DIPs.
+
+- convert physical pixels to DIPs 
+
+DIPs = pixels / (DPI/96.0) 
+
+get the DPI setting, call the ID2D1Factory::GetDesktopDpi method
+
+```
+float g_DPIScaleX = 1.0f;
+float g_DPIScaleY = 1.0f;
+
+void InitializeDPIScale(ID2D1Factory *pFactory)
+{
+    FLOAT dpiX, dpiY;
+
+    pFactory->GetDesktopDpi(&dpiX, &dpiY);
+
+    g_DPIScaleX = dpiX/96.0f;
+    g_DPIScaleY = dpiY/96.0f;
+}
+
+template <typename T>
+float PixelsToDipsX(T x)
+{
+    return static_cast<float>(x) / g_DPIScaleX;
+}
+
+template <typename T>
+float PixelsToDipsY(T y)
+{
+    return static_cast<float>(y) / g_DPIScaleY;
+}
+```
+
+alternate way to get the DPI setting
+```
+void InitializeDPIScale(HWND hwnd)
+{
+    HDC hdc = GetDC(hwnd);
+    g_DPIScaleX = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f;
+    g_DPIScaleY = GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
+    ReleaseDC(hwnd, hdc);
+}
+```
+
+- window 10 1903+ use DisplayInformation::LogicalDpi for Windows Store Apps
+
+set the default DPI awareness programmatically using SetProcessDpiAwarenessContext.
+
+- resizing the render target 
+
+```
+void MainWindow::Resize()
+{
+    if (pRenderTarget != NULL)
+    {
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+
+        D2D1_SIZE_U size = D2D1::SizeU(rc.right, rc.bottom);
+
+        pRenderTarget->Resize(size);
+        CalculateLayout();
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+```
+
+- ID2D1RenderTarget::GetSize method returns the size of the render target in DIPs
+
+- using color in direct 2d 
+
+Direct2D uses the RGB color model, in which colors are formed by combining different values of red, green, and blue. A fourth component, alpha, measures the transparency of a pixel.
+
+```
+    // Initialize a magenta color.
+
+    D2D1_COLOR_F clr;
+    clr.r = 1;
+    clr.g = 0;
+    clr.b = 1;
+    clr.a = 1;  // Opaque.
+    
+    // Equivalent to the previous example.
+
+    D2D1::ColorF clr(1, 0, 1, 1);
+```
+
+    + alpha blending 
+    
+    Alpha blending creates translucent areas by blending the foreground color with the background color
+
+following formula.
+```
+color = af * Cf + (1 - af) * Cb 
+```
+
+Cb is the background color, 
+Cf is the foreground color, 
+af is the alpha value of the foreground color. 
+
+    + pixel formats 
+
+you might need to know the pixel format if you are working directly with a bitmap in memory or combine with direct3d or GDI 
+
+        1. DXGI_FORMAT_B8G8R8A8_UNORM, All pixel components (red, green, blue, and alpha) are 8-bit unsigned integers, in BGRA order in memory
+
+        2. DXGI_FORMAT_R8G8B8A8_UNORM, 8-bit unsigned integers, in RGBA order. In other words, the red and blue components are swapped, This format is supported only for hardware devices.
+        
+        3. DXGI_FORMAT_A8_UNORM, 8-bit alpha component, with no RGB components. It is useful for creating opacity masks.
+        
+call ID2D1RenderTarget::GetPixelFormat. The pixel format might not match the display resolution
+
+    + alpha mode 
+
+    D2D1_ALPHA_MODE_IGNORE, No alpha blending is performed. 
+
+    D2D1_ALPHA_MODE_STRAIGHT, straight alpha, The color components of the pixel represent the color intensity prior to alpha blending.
+    
+    D2D1_ALPHA_MODE_PREMULTIPLIED, The color components of the pixel represent the color intensity multiplied by the alpha value. not good for save an image
+    
+The D2D1_COLOR_F data type always represents colors using straight alpha
+
+- applying tranforms in direct2d 
+
+    + alter a shape in the following ways.
+
+    Rotation around a point.
+    Scaling.
+    Translation (displacement in the X or Y direction).
+    Skew (also known as shear).
+
+    + reference 
+    https://docs.microsoft.com/en-us/windows/win32/learnwin32/applying-transforms-in-direct2d
+    
+- matrix tranforms 
+
+https://docs.microsoft.com/en-us/windows/win32/learnwin32/appendix--matrix-transforms
+
+
+
+
+
+# User Input 
+- at mouse and keyboard input
+
+The XBUTTON1 and XBUTTON2 buttons are often located on the sides of the mouse, near the base
+
+the terms right click and left click refer to logical actions. Right clicking means clicking the primary button, whether that button is physically on the right or left side of the mouse.
+
+window will automatically translate the message
+
+- responding to mouse clicks 
+
+WM_LBUTTONDOWN 	Left button down
+WM_LBUTTONUP 	Left button up
+WM_MBUTTONDOWN 	Middle button down
+WM_MBUTTONUP 	Middle button up
+WM_RBUTTONDOWN 	Right button down
+WM_RBUTTONUP 	Right button up
+WM_XBUTTONDOWN 	XBUTTON1 or XBUTTON2 down
+WM_XBUTTONUP 	XBUTTON1 or XBUTTON2 up
+
+The lowest 16 bits of lParam contain the x-coordinate, and the next 16 bits contain the y-coordinate. 
+
+```
+int xPos = GET_X_LPARAM(lParam); 
+int yPos = GET_Y_LPARAM(lParam);
+```
+
+On 64-bit Windows, lParam is 64-bit value. The upper 32 bits of lParam are not used.
+
+"low-order word" and "high-order word" of lParam. In the 64-bit case, this means the low- and high-order words of the lower 32 bits.
+
+- additional flags 
+
+MK_CONTROL 	    The CTRL key is down.
+MK_LBUTTON 	    The left mouse button is down.
+MK_MBUTTON 	    The middle mouse button is down.
+MK_RBUTTON 	    The right mouse button is down.
+MK_SHIFT 	    The SHIFT key is down.
+MK_XBUTTON1 	The XBUTTON1 button is down.
+MK_XBUTTON2 	The XBUTTON2 button is down.
+
+    + test control key 
+```
+if (wParam & MK_CONTROL) { ...
+```
+
+    + The WM_XBUTTONDOWN and WM_XBUTTONUP window messages apply to both XBUTTON1 and XBUTTON2.
+```
+UINT button = GET_XBUTTON_WPARAM(wParam);  
+if (button == XBUTTON1)
+{
+    // XBUTTON1 was clicked.
+}
+else if (button == XBUTTON2)
+{
+    // XBUTTON2 was clicked.
+}
+```
+
+    + by default window does not support double click notification, set the CS_DBLCLKS flag in the WNDCLASS structure when you register the window class.
+
+    add notification to double click 
+```
+    WNDCLASS wc = { };
+    wc.style = CS_DBLCLKS;
+
+    /* Set other structure members. */
+
+    RegisterClass(&wc);
+
+```
+
+    + a double click on the left mouse button produces the following sequence of messages:
+
+WM_LBUTTONDOWN
+WM_LBUTTONUP
+WM_LBUTTONDBLCLK
+WM_LBUTTONUP
+
+    Until you get the double-click message, there is no way to tell that the first mouse click is the start of a double click. a double-click action should continue an action that begins with the first mouse click. 
+
+    + on-client area of the window. These messages have the letters "NC" in the name. For example, WM_NCLBUTTONDOWN is the non-client equivalent of WM_LBUTTONDOWN.
+    
+    DefWindowProc function handles these messages correctly. If you do handle these message, then make sure pass them to DefWindowProc too. 
+
+- mouse move 
+
+Windows posts a WM_MOUSEMOVE message. By default, WM_MOUSEMOVE goes to the window that contains the cursor
+
+Use the GET_X_LPARAM and GET_Y_LPARAM macros to unpack the coordinates from lParam. 
+
+```
+int xPos = GET_X_LPARAM(lParam); 
+int yPos = GET_Y_LPARAM(lParam);
+```
+
+these coordinates are in pixels, not device-independent pixels (DIPs).
+
+    + note, window can also receive a WM_MOUSEMOVE message when the relative position changed 
+    
+    cursor is positioned over a window, and the user hides the window, the window receives WM_MOUSEMOVE messages even if the mouse did not move
+
+    + capture window move outside the window 
+    
+    a window stops receiving WM_MOUSEMOVE messages if the mouse moves past the edge of the client area.
+
+    call the SetCapture function. After this function is called, the window will continue to receive WM_MOUSEMOVE messages for as long as the user holds at least one mouse button down
+
+    only one window can be the capture window at a time. To release mouse capture, call the ReleaseCapture function.
+
+    + example code drawing circles 
+https://docs.microsoft.com/en-us/windows/win32/learnwin32/direct2d-circle-sample
+
+```    
+MainWindow() : pFactory(NULL), pRenderTarget(NULL), pBrush(NULL),
+        ellipse(D2D1::Ellipse(D2D1::Point2F(), 0, 0)),
+        ptMouse(D2D1::Point2F())
+{
+}
+```
+        * Mouse coordinates are given in physical pixels, but Direct2D expects device-independent pixels (DIPs). To handle high-DPI settings correctly, you must translate the pixel coordinates into DIPs. 
+
+class DPIScale
+{
+    static float scaleX;
+    static float scaleY;
+
+public:
+    static void Initialize(ID2D1Factory *pFactory)
+    {
+        FLOAT dpiX, dpiY;
+        pFactory->GetDesktopDpi(&dpiX, &dpiY);
+        scaleX = dpiX/96.0f;
+        scaleY = dpiY/96.0f;
+    }
+
+    template <typename T>
+    static D2D1_POINT_2F PixelsToDips(T x, T y)
+    {
+        return D2D1::Point2F(static_cast<float>(x) / scaleX, static_cast<float>(y) / scaleY);
+    }
+};
+
+float DPIScale::scaleX = 1.0f;
+float DPIScale::scaleY = 1.0f;
+
+        * Call InvalidateRect. This function forces the window to be repainted.
+
+```
+void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
+{
+    SetCapture(m_hwnd);
+    ellipse.point = ptMouse = DPIScale::PixelsToDips(pixelX, pixelY);
+    ellipse.radiusX = ellipse.radiusY = 1.0f; 
+    InvalidateRect(m_hwnd, NULL, FALSE);
+}
+```
+
+- miscellaneous mouse operations 
+
+    +  DragDetect function returns TRUE if the user initiates a mouse gesture
+
+    case WM_LBUTTONDOWN: 
+        {
+            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            if (DragDetect(m_hwnd, pt))
+            {
+                // Start dragging.
+            }
+        }
+        return 0;
+
+    If DragDetect returns FALSE, Windows suppresses the WM_LBUTTONUP message when the user releases the mouse button. Therefore, do not call DragDetect unless your program is currently in a mode that supports dragging.
+
+    + confining the cursor, The ClipCursor function restricts the movement of the cursor to a specified rectangle.
+
+    translate client coordinates into screen coordinates, call the function ClientToScreen.
+
+```
+// Get the window client area.
+    RECT rc;
+    GetClientRect(m_hwnd, &rc);
+
+    // Convert the client area to screen coordinates.
+    POINT pt = { rc.left, rc.top };
+    POINT pt2 = { rc.right, rc.bottom };
+    ClientToScreen(m_hwnd, &pt);
+    ClientToScreen(m_hwnd, &pt2);
+    SetRect(&rc, pt.x, pt.y, pt2.x, pt2.y);
+
+    // Confine the cursor.
+    ClipCursor(&rc);
+```
+
+    ClipCursor takes a RECT structure, but ClientToScreen takes a POINT structure. A rectangle is defined by its top-left and bottom-right points.
+
+    remove restriction 
+```
+ClipCursor(NULL);
+```
+
+    + tracking hover and leave 
+    
+    choose to get both WM_MOUSEHOVER and WM_MOUSELEAVE, as shown here
+     
+    ```    
+    WM_MOUSEHOVER: The cursor has hovered over the client area for a fixed period of time.
+    WM_MOUSELEAVE: The cursor has left the client area.
+    
+    TRACKMOUSEEVENT tme;
+    tme.cbSize = sizeof(tme);
+    tme.hwndTrack = hwnd;
+    tme.dwFlags = TME_HOVER | TME_LEAVE;
+    tme.dwHoverTime = HOVER_DEFAULT;
+    TrackMouseEvent(&tme);
+    ```
+    
+    Posts messages when the mouse pointer leaves a window or hovers over a window for a specified amount of time.
+    you should wait until the next mouse-move message before calling TrackMouseEvent again. Otherwise, your window might be flooded with tracking messages.
+
+```
+class MouseTrackEvents
+{
+    bool m_bMouseTracking;
+
+public:
+    MouseTrackEvents() : m_bMouseTracking(false)
+    {
+    }
+    
+    void OnMouseMove(HWND hwnd)
+    {
+        if (!m_bMouseTracking)
+        {
+            // Enable mouse tracking.
+            TRACKMOUSEEVENT tme;
+            tme.cbSize = sizeof(tme);
+            tme.hwndTrack = hwnd;
+            tme.dwFlags = TME_HOVER | TME_LEAVE;
+            tme.dwHoverTime = HOVER_DEFAULT;
+            TrackMouseEvent(&tme);
+            m_bMouseTracking = true;
+        }
+    }
+    void Reset(HWND hwnd)
+    {
+        m_bMouseTracking = false;
+    }
+};
+
+UINT GetMouseHoverTime()
+{
+    UINT msec; 
+    if (SystemParametersInfo(SPI_GETMOUSEHOVERTIME, 0, &msec, 0))
+    {   
+        return msec;
+    }
+    else
+    {
+        return 0;
+    }
+}
+```
+
+    + mouse wheel 
+    
+```
+BOOL IsMouseWheelPresent()
+{
+    return (GetSystemMetrics(SM_MOUSEWHEELPRESENT) != 0);
+}
+```
+
+the window with focus receives a WM_MOUSEWHEEL message. The wParam parameter of this message contains an integer value called the delta that measures how far the wheel was rotated.
+
+```
+delta indicates the direction of rotation:
+
+Positive: Rotate forward, away from the user.
+Negative: Rotate backward, toward the user.
+
+```
+
+Use the GET_WHEEL_DELTA_WPARAM macro to get the value of the delta.
+```
+int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+```
+- keyboard input 
+
+The keyboard driver translates scan codes into virtual-key codes. Virtual-key codes are device-independent. 
+
+```
+    0 through 9 keys = ASCII '0' – '9' (0x30 – 0x39)
+    A through Z keys = ASCII 'A' – 'Z' (0x41 – 0x5A)
+```
+
+LEFT ARROW key is VK_LEFT (0x25). For the complete list of virtual-key codes, see Virtual-Key Codes
+
+virtual-key code for the A key is 0x41, but there is no constant named VK_A. 
+
+- key down and key up messages 
+
+keyboard focus receives one of the following messages.
+
+WM_SYSKEYDOWN
+WM_KEYDOWN
+
+two types of system key:
+
+ALT + any key
+F10
+
+keyboard's repeat feature, the system sends multiple key-down messages, followed by a single key-up message. One flag that might be useful is bit 30, the "previous key state" flag, which is set to 1 for repeated key-down messages
+
+If you intercept the WM_SYSKEYDOWN message, call DefWindowProc afterward
+
+- character messages 
+
+Key strokes are converted into characters by the TranslateMessage function,
+
+puts a WM_CHAR or WM_SYSCHAR message on the message queue of the window. The wParam parameter of the message contains the UTF-16 character.
+
+WM_CHAR messages are generated from WM_KEYDOWN messages, while WM_SYSCHAR messages are generated from WM_SYSKEYDOWN messages
+
+    + event sequence example, equence of messages:
+
+WM_KEYDOWN: SHIFT
+WM_KEYDOWN: A
+WM_CHAR: 'A'
+
+do not treat WM_SYSCHAR as text that the user has typed. should pass to DefWindowProc
+
+The WM_CHAR message is what you normally think of as character input. 
+
+    + Users can also install an Input Method Editor (IME) to enter complex scripts, such as Japanese characters
+    
+        * example to insert katakana character カ (ka) with japanese IME  
+
+    WM_KEYDOWN: VK_PROCESSKEY (the IME PROCESS key)
+    WM_KEYUP: 0x4B
+    WM_KEYDOWN: VK_PROCESSKEY
+    WM_KEYUP: 0x41
+    WM_KEYDOWN: VK_PROCESSKEY
+    WM_CHAR: カ
+    WM_KEYUP: VK_RETURN
+    
+    + Some CTRL key combinations are translated into ASCII control characters. 
+
+    CTRL+A is translated to the ASCII ctrl-A (SOH) character (ASCII value 0x01). 
+    
+    you should generally filter out the control characters.
+    
+    Also, avoid using WM_CHAR to implement keyboard shortcuts. Instead, use WM_KEYDOWN messages or use an accelerator table. Accelerator tables are described in the next topic, Accelerator Tables.
+    
+```
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    wchar_t msg[32];
+    switch (uMsg)
+    {
+    case WM_SYSKEYDOWN:
+        swprintf_s(msg, L"WM_SYSKEYDOWN: 0x%x\n", wParam);
+        OutputDebugString(msg);
+        break;
+
+    case WM_SYSCHAR:
+        swprintf_s(msg, L"WM_SYSCHAR: %c\n", (wchar_t)wParam);
+        OutputDebugString(msg);
+        break;
+
+    case WM_SYSKEYUP:
+        swprintf_s(msg, L"WM_SYSKEYUP: 0x%x\n", wParam);
+        OutputDebugString(msg);
+        break;
+
+    case WM_KEYDOWN:
+        swprintf_s(msg, L"WM_KEYDOWN: 0x%x\n", wParam);
+        OutputDebugString(msg);
+        break;
+
+    case WM_KEYUP:
+        swprintf_s(msg, L"WM_KEYUP: 0x%x\n", wParam);
+        OutputDebugString(msg);
+        break;
+
+    case WM_CHAR:
+        swprintf_s(msg, L"WM_CHAR: %c\n", (wchar_t)wParam);
+        OutputDebugString(msg);
+        break;
+
+    /* Handle other messages (not shown) */
+
+    }
+    return DefWindowProc(m_hwnd, uMsg, wParam, lParam);
+}
+```
+    
+    + miscellaneous keyboard messages 
+    
+    the WM_DEADCHAR message is sent for a combining key, such as a diacritic. WM_DEADCHAR is sent for the accent character.
+    
+    The WM_UNICHAR message is obsolete.
+    
+    The WM_IME_CHAR character is sent when an IME translates a keystroke sequence into characters. it is additional to use WM_CHAR
+    
+- keyboard state, calling the GetKeyState function
+
+When you receive the WM_LBUTTONDOWN message, just call GetKeyState as follows to detect click is combined with alt key pressed 
+
+```
+if (GetKeyState(VK_MENU) & 0x8000))
+{
+    // ALT key is down.
+}
+```
+
+ use GetKeyState to distinguish between the left and right instances of the ALT
+```
+if (GetKeyState(VK_RMENU) & 0x8000))
+{
+    // Right ALT key is down.
+}
+```
+
+GetKeyState is based on your message queue, it also ignores keyboard input that was sent to another program.
+
+immediate physical state of the keyboard, there is a function for that: GetAsyncKeyState.
+
+- Accelerator table 
+
+CTRL+O for the File Open command. You could implement keyboard shortcuts by handling individual WM_KEYDOWN messages
+
+    Requires less coding.
+    Consolidates all of your shortcuts into one data file.
+    Supports localization into other languages.
+    Enables shortcuts and menu commands to use the same application logic.
+
+An accelerator table is a data resource that maps keyboard combinations, such as CTRL+O, to application commands.
+
+    + A resource is a data blob that is built into an application binary (EXE or DLL). 
+
+Create a resource definition (.rc) file. This file defines the types of resources
+
+Use the Microsoft Windows Resource Compiler (RC) to compile the resource definition file into a compiled resource (.res) file
+
+link the compiled resource file to the binary file.
+
+    + defining an accelerator table 
+    A numeric identifier. This number identifies the application command
+    
+    The ASCII character or virtual-key code of the shortcut.
+    
+    Optional modifier keys: ALT, SHIFT, or CTRL.
+
+
+- preprocessor operator 
+
+```
+# 	Encloses the argument in quotes.
+#@ 	Encloses the argument in single quotes.
+## 	Concatenates tokens used as arguments to form other tokens.
+```
+    
+- defining an accelerator table 
+A numeric identifier. the command will be invoked by shortcut 
+ASCII character or virtual-key code of the shortcut.
+Optional modifier keys: ALT, SHIFT, or CTRL
+    
+    + example define the following keyboard shortcuts.
+CTRL+M 	Toggle between modes.
+F1 	Switch to draw mode.
+F2 	Switch to selection mode.
+
+assign symbolic constants 
+```
+#define IDR_ACCEL1                      101
+#define ID_TOGGLE_MODE                40002
+#define ID_DRAW_MODE                  40003
+#define ID_SELECT_MODE                40004
+```
+
+defines resource constants, the value IDR_ACCEL1 identifies the accelerator table
+```
+#include "resource.h"
+
+IDR_ACCEL1 ACCELERATORS
+{
+    0x4D,   ID_TOGGLE_MODE, VIRTKEY, CONTROL    // ctrl-M
+    0x70,   ID_DRAW_MODE, VIRTKEY               // F1
+    0x71,   ID_SELECT_MODE, VIRTKEY             // F2
+}
+```
+
+The virtual-key code or ASCII character that invokes the shortcut.
+The application command. which defined in resource.h 
+The keyword VIRTKEY means the first entry is a virtual-key code. the other option is use ASCII characters
+Optional modifiers: ALT, CONTROL, or SHIFT.
+
+    + loading the accelerator table 
+
+```
+HACCEL hAccel = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_ACCEL1));
+```
+
+The first parameter is the handle to the module. (This parameter is passed to your WinMain function.
+The second parameter is the resource identifier. The function returns a handle to the resource. 
+
+    + translating key strokes into WM_COMMAND messages
+
+the key stroke CTRL+M is translated into a WM_COMMAND message with the value ID_TOGGLE_MODE
+
+```
+MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        if (!TranslateAccelerator(win.Window(), hAccel, &msg))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+```
+
+call to the TranslateAccelerator function inside the message loop. The TranslateAccelerator function examines each window message, looking for key-down messages
+ sends a WM_COMMAND message to the window. 
+
+When TranslateAccelerator successfully translates a key stroke, the function returns a non-zero value. Then you should skip th enormal processing for the message 
+
+```
+case WM_COMMAND:
+        switch (LOWORD(wParam))
+        {
+        case ID_DRAW_MODE:
+            SetMode(DrawMode);
+            break;
+
+        case ID_SELECT_MODE:
+            SetMode(SelectMode);
+            break;
+
+        case ID_TOGGLE_MODE:
+            if (mode == DrawMode)
+            {
+                SetMode(SelectMode);
+            }
+            else
+            {
+                SetMode(DrawMode);
+            }
+            break;
+        }
+        return 0;
+```
+
+- setting the cursor image 
+
+associate a cursor with a window class by setting the hCursor member of the WNDCLASS or WNDCLASSEX structure.
+
+When the mouse moves over a window, the window receives a WM_SETCURSOR message 
+    + The application sets the cursor and the window procedure returns TRUE
+    + The application does nothing and passes WM_SETCURSOR to DefWindowProc
+    
+set the cursor 
+    + Calls LoadCursor to load the cursor into memory. 
+    + Calls SetCursor and passes in the cursor handle
+
+application passes WM_SETCURSOR to DefWindowProc, uses the following algorithm to set the cursor image 
+    + window has a parent, forward the WM_SETCURSOR message to the parent to handle
+    + otherwise if has a class cursor, set the cursor to the class cursor.
+    + If there is no class cursor, set the cursor to the arrow cursor.
+
+```
+    hCursor = LoadCursor(NULL, cursor);
+    SetCursor(hCursor);
+    
+    case WM_SETCURSOR:
+    if (LOWORD(lParam) == HTCLIENT)
+    {
+        SetCursor(hCursor);
+        return TRUE;
+    }
+    break;
+    
+```
+first checks the lower 16 bits of lParam. If LOWORD(lParam) equals HTCLIENT, it means the cursor is over the client area of the window. 
+
+- user input, extended example 
+```
+struct MyEllipse
+{
+    D2D1_ELLIPSE    ellipse;
+    D2D1_COLOR_F    color;
+
+    void Draw(ID2D1RenderTarget *pRT, ID2D1SolidColorBrush *pBrush)
+    {
+        pBrush->SetColor(color);
+        pRT->FillEllipse(ellipse, pBrush);
+        pBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Black));
+        pRT->DrawEllipse(ellipse, pBrush, 1.0f);
+    }
+
+    BOOL HitTest(float x, float y)
+    {
+        const float a = ellipse.radiusX;
+        const float b = ellipse.radiusY;
+        const float x1 = x - ellipse.point.x;
+        const float y1 = y - ellipse.point.y;
+        const float d = ((x1 * x1) / (a * a)) + ((y1 * y1) / (b * b));
+        return d <= 1.0f;
+    }
+};
+
+list<shared_ptr<MyEllipse>>             ellipses;
+
+list<shared_ptr<MyEllipse>>::iterator   selection;
+    ...
+    shared_ptr<MyEllipse> Selection() 
+    { 
+        if (selection == ellipses.end()) 
+        { 
+            return nullptr;
+        }
+        else
+        {
+            return (*selection);
+        }
+    }
+
+    void    ClearSelection() { selection = ellipses.end(); }
+    ...
+    
+    
+void MainWindow::OnLButtonDown(int pixelX, int pixelY, DWORD flags)
+{
+    const float dipX = DPIScale::PixelsToDipsX(pixelX);
+    const float dipY = DPIScale::PixelsToDipsY(pixelY);
+
+    if (mode == DrawMode)
+    {
+        POINT pt = { pixelX, pixelY };
+
+        if (DragDetect(m_hwnd, pt))
+        {
+            SetCapture(m_hwnd);
+        
+            // Start a new ellipse.
+            InsertEllipse(dipX, dipY);
+        }
+    }
+    else
+    {
+        ClearSelection();
+
+        if (HitTest(dipX, dipY))
+        {
+            SetCapture(m_hwnd);
+
+            ptMouse = Selection()->ellipse.point;
+            ptMouse.x -= dipX;
+            ptMouse.y -= dipY;
+
+            SetMode(DragMode);
+        }
+    }
+    InvalidateRect(m_hwnd, NULL, FALSE);
+}
+
+void MainWindow::OnMouseMove(int pixelX, int pixelY, DWORD flags)
+{
+    const float dipX = DPIScale::PixelsToDipsX(pixelX);
+    const float dipY = DPIScale::PixelsToDipsY(pixelY);
+
+    if ((flags & MK_LBUTTON) && Selection())
+    { 
+        if (mode == DrawMode)
+        {
+            // Resize the ellipse.
+            const float width = (dipX - ptMouse.x) / 2;
+            const float height = (dipY - ptMouse.y) / 2;
+            const float x1 = ptMouse.x + width;
+            const float y1 = ptMouse.y + height;
+
+            Selection()->ellipse = D2D1::Ellipse(D2D1::Point2F(x1, y1), width, height);
+        }
+        else if (mode == DragMode)
+        {
+            // Move the ellipse.
+            Selection()->ellipse.point.x = dipX + ptMouse.x;
+            Selection()->ellipse.point.y = dipY + ptMouse.y;
+        }
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+}
+
+void MainWindow::OnLButtonUp()
+{
+    if ((mode == DrawMode) && Selection())
+    {
+        ClearSelection();
+        InvalidateRect(m_hwnd, NULL, FALSE);
+    }
+    else if (mode == DragMode)
+    {
+        SetMode(SelectMode);
+    }
+    ReleaseCapture(); 
+}
+
+void MainWindow::SetMode(Mode m)
+{
+    mode = m;
+
+    // Update the cursor
+    LPWSTR cursor;
+    switch (mode)
+    {
+    case DrawMode:
+        cursor = IDC_CROSS;
+        break;
+
+    case SelectMode:
+        cursor = IDC_HAND;
+        break;
+
+    case DragMode:
+        cursor = IDC_SIZEALL;
+        break;
+    }
+
+    hCursor = LoadCursor(NULL, cursor);
+    SetCursor(hCursor);
+}
+
+void MainWindow::SetMode(Mode m)
+{
+    mode = m;
+
+    // Update the cursor
+    LPWSTR cursor;
+    switch (mode)
+    {
+    case DrawMode:
+        cursor = IDC_CROSS;
+        break;
+
+    case SelectMode:
+        cursor = IDC_HAND;
+        break;
+
+    case DragMode:
+        cursor = IDC_SIZEALL;
+        break;
+    }
+
+    hCursor = LoadCursor(NULL, cursor);
+    SetCursor(hCursor);
+}
+
+... 
+//in the window proc 
+case WM_SETCURSOR:
+        if (LOWORD(lParam) == HTCLIENT)
+        {
+            SetCursor(hCursor);
+            return TRUE;
+        }
+        break;
+...
+```
+
+
+# Create your first directx app 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/direct3dgetstarted/building-your-first-directx-app
+
+
+# Using the windows headers 
+- Windows API enable you to create 32- and 64-bit applications
+-  preferred macros used in the Windows header files. If you define NTDDI_VERSION, you must also define _WIN32_WINNT
+
+Windows 10 1903 "19H1" 	NTDDI_WIN10_19H1 (0x0A000007)
+Windows 10 1809 "Redstone 5" 	NTDDI_WIN10_RS5 (0x0A000006)
+Windows 10 1803 "Redstone 4" 	NTDDI_WIN10_RS4 (0x0A000005)
+Windows 10 1709 "Redstone 3" 	NTDDI_WIN10_RS3 (0x0A000004)
+...
+
+Windows 10 	_WIN32_WINNT_WIN10 (0x0A00)
+Windows 8.1 	_WIN32_WINNT_WINBLUE (0x0603)
+Windows 8 	_WIN32_WINNT_WIN8 (0x0602)
+Windows 7 	_WIN32_WINNT_WIN7 (0x0601)
+...
+
+Internet Explorer 11.0 	_WIN32_IE_IE110 (0x0A00)
+Internet Explorer 10.0 	_WIN32_IE_IE100 (0x0A00)
+...
+
+    + check  SdkDdkVer.h
+    
+    +  set WINVER in your source file, use the following statement:
+
+#define WINVER 0x0502
+
+    + controlling structure packing, default structure packing, which is currently 8 bytes because the largest integral type is 8 bytes. 
+    
+    ensure 8-byte values are properly aligned and will not cause alignment faults on processors that enforce data alignment.
+    
+    /Zp (struct member alignment) or pack.
+    
+    + faster builds with smaller header files 
+    
+    Define WIN32_LEAN_AND_MEAN to exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
+
+    Define one or more of the NOapi symbols to exclude the API. For example, NOCOMM excludes the serial communication API. check windows.h for more of NOapi symbols 
+    
+    #define NOCOMM
+    
+- header annotations 
+
+If you are developing for Windows 8, you should use the annotations described in SAL Annotations
+
+These annotations are defined in Specstrings.h. 
+
+    + buffer annotations, (size,length)
+	Specifies the total size and initialized length of the buffer.
+    
+    _bcount The buffer size is in bytes.
+    _ecount The buffer size is in elements.
+    _in The function reads from the buffer. 
+    _inout  The function both reads from and writes to buffer. 
+    _out    The function writes to the buffer.
+    _deref  Dereference the parameter to obtain the buffer pointer. 
+    _deref_opt  Dereference the parameter to obtain the buffer pointer.
+    _full   The function initializes the entire buffer. Use only with output buffers.
+    _part   The function initializes part of the buffer
+    _opt    This parameter can be NULL.
+    
+```
+DWORD
+WINAPI
+GetModuleFileName(
+    __in_opt HMODULE hModule,
+    __out_ecount_part(nSize, return + 1) LPTSTR lpFilename,
+    __in DWORD nSize
+    );
+```
+
+    + advance annotation, additional information about the parameter or return value. 
+    __blocksOn(resource)    The functions blocks on the specified resource.
+    __callback, The function can be used as a function pointer.
+    __checkReturn, Callers must check the return value.
+    __format_string, The parameter is a string that contains printf-style % markers.
+    __in_awcount(expr,size), If the expression is true at exit, the size of the input buffer is specified in bytes. 
+    __nullnullterminated, The buffer may be accessed up to and including the first sequence of two null characters or pointers.
+    __nullterminated, The buffer may be accessed up to and including the first null character or pointer.
+    __out_awcount(expr,size), If the expression is true at exit, the size of the output buffer is specified in bytes. 
+    __override, Specifies C#-style override behavior for virtual methods.
+    __reserved, The parameter is reserved for future use and must be zero or NULL.
+    __success(expr), If the expression is true at exit, the caller can rely on all guarantees specified by other annotations.
+    __typefix(ctype), Treat the parameter as the specified type rather than its declared type.
+    
+    
+```
+__checkReturn
+BOOL
+WINAPI
+DeleteTimerQueueTimer(
+    __in_opt HANDLE TimerQueue,
+    __in     HANDLE Timer,
+    __in_opt HANDLE CompletionEvent
+    );
+
+BOOL
+WINAPI
+FreeEnvironmentStrings(
+    __in __nullnullterminated LPTCH
+    );
+
+__callback
+LONG
+WINAPI
+UnhandledExceptionFilter(
+    __in struct _EXCEPTION_POINTERS *ExceptionInfo
+    );
+```
+    
+    
+    + reference 
+__bcount(size)
+__bcount_opt(size)
+__deref_bcount(size)
+__deref_bcount_opt(size)
+__deref_ecount(size)
+__deref_ecount_opt(size)
+__deref_in
+__deref_in_bcount(size)
+__deref_in_bcount_opt(size)
+__deref_in_ecount(size)
+__deref_in_ecount_opt(size)
+__deref_in_opt
+__deref_inout
+__deref_inout_bcount(size)
+__deref_inout_bcount_full(size)
+__deref_inout_bcount_full_opt(size)
+__deref_inout_bcount_opt(size)
+__deref_inout_bcount_part(size,length)
+__deref_inout_bcount_part_opt(size,length)
+__deref_inout_ecount(size)
+__deref_inout_ecount_full(size)
+__deref_inout_ecount_full_opt(size)
+__deref_inout_ecount_opt(size)
+__deref_inout_ecount_part(size,length)
+__deref_inout_ecount_part_opt(size,length)
+__deref_inout_opt
+__deref_opt_bcount(size)
+__deref_opt_bcount_opt(size)
+__deref_opt_ecount(size)
+__deref_opt_ecount_opt(size)
+__deref_opt_in
+__deref_opt_in_bcount(size)
+__deref_opt_in_bcount_opt(size)
+__deref_opt_in_ecount(size)
+__deref_opt_in_ecount_opt(size)
+__deref_opt_in_opt
+__deref_opt_inout
+__deref_opt_inout_bcount(size)
+__deref_opt_inout_bcount_full(size)
+__deref_opt_inout_bcount_full_opt(size)
+__deref_opt_inout_bcount_opt(size)
+__deref_opt_inout_bcount_part(size,length)
+__deref_opt_inout_bcount_part_opt(size,length)
+__deref_opt_inout_ecount(size)
+__deref_opt_inout_ecount_full(size)
+__deref_opt_inout_ecount_full_opt(size)
+__deref_opt_inout_ecount_opt(size)
+__deref_opt_inout_ecount_part(size,length)
+__deref_opt_inout_ecount_part_opt(size,length)
+__deref_opt_inout_opt
+__deref_opt_out
+__deref_opt_out_bcount(size)
+__deref_opt_out_bcount_full(size)
+__deref_opt_out_bcount_full_opt(size)
+__deref_opt_out_bcount_opt(size)
+__deref_opt_out_bcount_part(size,length)
+__deref_opt_out_bcount_part_opt(size,length)
+__deref_opt_out_ecount(size)
+__deref_opt_out_ecount_full(size)
+__deref_opt_out_ecount_full_opt(size)
+__deref_opt_out_ecount_opt(size)
+__deref_opt_out_ecount_part(size,length)
+__deref_opt_out_ecount_part_opt(size,length)
+__deref_opt_out_opt
+__deref_out
+__deref_out_bcount(size)
+__deref_out_bcount_full(size)
+__deref_out_bcount_full_opt(size)
+__deref_out_bcount_opt(size)
+__deref_out_bcount_part(size,length)
+__deref_out_bcount_part_opt(size,length)
+__deref_out_ecount(size)
+__deref_out_ecount_full(size)
+__deref_out_ecount_full_opt(size)
+__deref_out_ecount_opt(size)
+__deref_out_ecount_part(size,length)
+__deref_out_ecount_part_opt(size,length)
+__deref_out_opt
+__ecount(size)
+__ecount_opt(size)
+__in
+__in_bcount(size)
+__in_bcount_opt(size)
+__in_ecount(size)
+__in_ecount_opt(size)
+__in_opt
+__inout
+__inout_bcount(size)
+__inout_bcount_full(size)
+__inout_bcount_full_opt(size)
+__inout_bcount_opt(size)
+__inout_bcount_part(size,length)
+__inout_bcount_part_opt(size,length)
+__inout_ecount(size)
+__inout_ecount_full(size)
+__inout_ecount_full_opt(size)
+__inout_ecount_opt(size)
+__inout_ecount_part(size,length)
+__inout_ecount_part_opt(size,length)
+__inout_opt
+__out
+__out_bcount(size)
+__out_bcount_full(size)
+__out_bcount_full_opt(size)
+__out_bcount_opt(size)
+__out_bcount_part(size,length)
+__out_bcount_part_opt(size,length)
+__out_ecount(size)
+__out_ecount_full(size)
+__out_ecount_full_opt(size)
+__out_ecount_opt(size)
+__out_ecount_part(size,length)
+__out_ecount_part_opt(size,length)
+__out_opt
+
+- strict type checking 
+
+When you define the STRICT symbol, you enable features that require more care in declaring and using types. This helps you write more portable code. 
+    
+```
+#define STRICT
+#include <windows.h>
+```
+    
+- disable strict type checking 
+```
+#define NO_STRICT
+#include <windows.h>
+
+```
+- strict compliance
+
+types that require casts 
+
+LocalLock
+GlobalLock
+GetWindowLong
+SetWindowLong
+SendMessage
+DefWindowProc
+SendDlgItemMessage
+
+When you call SendMessage, DefWindowProc, or SendDlgItemMessage, you should first cast the result to type UINT_PTR. You need to take similar steps
+
+returns an LRESULT or LONG_PTR value, where the result contains a handle. the size of a handle varies, depending on the version of Windows.
+
+```
+HBRUSH hbr;
+
+hbr = (HBRUSH)(UINT_PTR)SendMessage(hwnd, WM_CTLCOLOR, ..., ...);
+
+
+HWND hwnd;
+int id;
+
+hwnd = CreateWindow(
+        TEXT("Button"), TEXT("OK"), BS_PUSHBUTTON,
+        x, y, cx, cy, hwndParent,
+        (HMENU)id,    // Cast required here
+        hinst,
+        NULL);
+```
+
+    + most benefit from STRICT type checking, there are additional guidelines you should follow
+
+- window data types 
+    + reference 
+    https://docs.microsoft.com/en-us/windows/win32/winprog/windows-data-types
+    
+    They define the size and meaning of these elements.
+    
+    pointer-type names begin with a prefix of P or LP. Handles refer to a resource that has been loaded into memory.
+    
+    + information 
+    
+    APIENTRY 	The calling convention for system functions. #define APIENTRY WINAPI
+    ATOM 	An atom. WinDef.h, typedef WORD ATOM;
+    BOOL    should be TRUE or FALSE, typedef int BOOL;
+    BOOLEAN 	A Boolean variable; typedef BYTE BOOLEAN;
+    BYTE 	A byte (8 bits). typedef unsigned char BYTE;
+    CALLBACK 	The calling convention for callback functions. #define CALLBACK __stdcall
+    CCHAR 	An 8-bit Windows (ANSI) character. WinNT.h, typedef char CCHAR;
+    COLORREF 	The red, green, blue (RGB), WInDef.h, typedef DWORD COLORREF;
+    CONST 	A variable whose value is to remain constant during execution. #define CONST const
+    DWORD 	A 32-bit unsigned integer. typedef unsigned long DWORD;
+    DWORDLONG 	A 64-bit unsigned integer. typedef unsigned __int64 DWORDLONG;
+    DWORD_PTR 	An unsigned long type for pointer precision. BaseTsd.h, typedef ULONG_PTR DWORD_PTR;
+    ...
+    HRESULT  The return codes used by COM interfaces. typedef LONG HRESULT;
+    INT_PTR  A signed integer type for pointer precision.
+        ```
+        #if defined(_WIN64) 
+         typedef __int64 INT_PTR; 
+        #else 
+         typedef int INT_PTR;
+        #endif
+        ```
+        
+- data exchange between application 
+https://docs.microsoft.com/en-us/windows/win32/dataxchg/data-exchange
+    + clipboard
+    + data copy 
+    + dynamic data exchange, dde 
+    + dynamic data exchange management library, DDEML
+    
+
+
+# Programming guide for 64-bit windows 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/winprog64/programming-guide-for-64-bit-windows
+
+
+    
+# Develop desktop app 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/desktop-app-technologies
+
+## Accessibility 
+
+## User interface 
+
+## Environment 
+
+## Installation and servicing 
+
+## Audio and video 
+
+## Data access and storage 
+
+## Devices 
+
+## Windows media device manager 11 sdk 
+
+## Windows portable devices 
+
+## Diagnostics 
+
+## Document and printing 
+
+## Graphics and gaming 
+
+## Network and internet 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/networking
+
+- delivery optimization 
+- domain name system 
+- http server api 
+- ip helper 
+- message queuing 
+- network interfaces 
+- network list manager 
+- network management 
+- network share management 
+- peer to peer 
+- remote procedure call 
+- routing and remote access service 
+- simple network management protocol 
+- telephony application 
+- programming interfaces 
+- eredo 
+- websocket protocol component api 
+- windows filtering platform 
+- windows networking 
+- windows sockets 2 
+- wireless networking 
+- webdav, The WebDAV API is a set of Win32 functions for creating and managing connections to WebDAV servers and performing file I/O operations on remote files
+
+- windows http services 
+- windows internet 
+- windows web services 
+
+
+
+## Security and identity 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/security
+
+- animalware scan interface 
+- authentication 
+- authorization 
+- best practices for the security apis 
+- certificate enrollment api 
+- crytograhpy 
+- cryptography api, next generation 
+- directory, identity and access service 
+- extensible authentication protocol 
+- extensible authentication host 
+- network access protection 
+- network policy server 
+- parental controls 
+- rights management 
+- security management 
+- security glossary 
+- TPM base services 
+- windows biometric framework 
+
+
+
+## System services 
+
+## AI and machine learning 
+- reference 
+https://docs.microsoft.com/en-us/windows/ai/
+https://onnx.ai/
+
+- samples 
+https://github.com/microsoft/Windows-Machine-Learning
+
+
+
+## Develop with server technologies
+- directory, identity and access services 
+- rights management 
+- system administration 
+- virtualization 
+- WMI/MI/OMI providers 
+- windows server
+
+
+
+# Design basic 
+- refernece 
+https://docs.microsoft.com/en-us/windows/win32/uxguide/designprinciples
+
+- checklist 
+https://docs.microsoft.com/en-us/windows/win32/uxguide/top-violations
+
+
+# API index 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/apiindex/api-index-portal
+
+- winrt api 
+https://docs.microsoft.com/en-us/windows/win32/winrt/reference
+
+- windows certification 
+https://docs.microsoft.com/en-us/windows/win32/win_cert/windows-certification-portal
+
+
+# Deveoper notes 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/devnotes/developer-notes
+
+- topics 
+
+Application Compatibility Database
+Application Verifier
+Audio and Video
+Cabinet API
+Debugging
+Drivers
+Edition Upgrade API
+Feature Staging
+FeedbackHub
+File History API
+Files
+IME Share
+Graphics Low-Level Client Support
+Miscellaneous Low-Level Client Support
+MSHTML
+Installation
+iSCSI Target Pass-Through
+Java VM
+Jet Debugging
+MSN
+MSXML 1.0 (Obsolete)
+Networking
+NFS
+Offline Files
+Offline Registry Library
+PStore
+Registry Values
+Security
+SMTP
+System
+Terminal Server Install Mode
+User Interface
+Visual Studio
+Windows Secure Mode Policy
+Word Breaker
+
+
+
+# Diagnostics 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/diagnostics
+- debugging and error handling 
+- network diagnostics framework 
+- network monitor 
+- performance counters 
+- process snapshotting 
+- process status api 
+- system event notification service 
+- system monitor 
+- tool help library 
+- windows error reporting 
+- windows events 
+
+
+
+# Graphics and gaming 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/graphics-and-multimedia
+
+- directx graphics and graming 
+- DirectComposition 
+- GDI+
+- window GDI 
+- monitor configuration 
+- OpenGL 
+- windows imaging component 
+- windows mixed reality 
+- windows color system 
+
+
+
+# unicode and character set 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/intl/unicode-and-character-sets
+- Unicode in the windows API  
+https://docs.microsoft.com/en-us/windows/win32/intl/unicode-in-the-windows-api
+
+
+
+
+# Sample 
+- direct2d clock 
+
+https://docs.microsoft.com/en-us/windows/win32/learnwin32/direct2d-clock-sample
+
+
+
+
+
+
+
+
+
+
 
