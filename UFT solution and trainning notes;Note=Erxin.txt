@@ -1,0 +1,1187 @@
+UFT solution and training notes;Note=Erxin
+
+# Training material 
+- codeless document 
+
+https://microfocusinternational.sharepoint.com/teams/codeless/Shared%20Documents/Forms/AllItems.aspx?viewid=5644bdb0%2D6365%2D4f01%2Db15e%2D1b2676224247
+
+- PE document 
+https://microfocusinternational.sharepoint.com/teams/hpswil_lt/default.aspx
+
+- FT document 
+https://microfocusinternational.sharepoint.com/teams/hpswil_ft/default.aspx
+
+# Addin 
+- registry path 
+
+Computer\HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive
+
+- addin manager settings 
+
+Computer\HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\AddIn Manager
+
+- add new addin 
+    + put the addin dll into UFT 
+    + register the dll to system 
+    + add Product ID to the registry of the addin manager 
+
+- add an ATL project, add a COM 
+IAddinObject1-4
+
+- IObjectRackClient
+
+it's a dictionary, you can put COM into it to reduce duplicated creation, addins etc are on the racks
+
+- Package, implement all the testObject in the packagers 
+
+Computer\HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\Packagers\
+
+such as MobilePackage
+
+    + put com class id and setting 
+    
+    
+- Test object registration 
+
+Computer\HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\Test Objects
+
+- for a property we have runtime property or a test object property 
+
+- recorder start point 
+
+
+CRecordMgr::StartRecord
+
+Input channel, agent will send message to uft and will send to input channel (such as a websocket)
+
+- parser vbscript -> COM factory -> COM test object then the test object will be come to runtime object 
+
+XFactory::CreateObject()
+XFactory::CreateObjFromRtId(), PS_OBJID run time id 
+
+receive messages between the packagers to ask query create test object 
+
+- ALM script, automation script 
+
+run uft with vbscript 
+
+- XLauncher can change the application setting and script settings etc. 
+
+it is used to integrate with ALM
+
+- Record setting is not mandatory 
+- Check the IBAPackage, packager and addin 
+
+image based recognition (Insight recording, change the recording model from the record bar) 
+
+- XQuery is used to create test object 
+
+- input channel, BackEnd\RecordReplay\RRInfra\RecordManager
+
+will contain code about input channel 
+
+- QTRRManager will control the package initialization 
+
+
+# Tuplip Architecture Overview ppt 
+- reference 
+
+\\10.5.32.206\Training\Tuplip Architecture Overview.ppt 
+
+- architecture 
+
+    + test subsystem 
+        + frame & views 
+        tree 
+        expert 
+        
+        + persistence 
+        + packages 
+        web 
+        std win 
+    
+    + record replay subsystem 
+    
+        * active screen
+        web 
+        generic 
+        
+        * mercury tools 
+        TD 
+        LR 
+        
+        * scripting 
+        Interpreter 
+        Debugger     
+
+- test subsystem 
+
+multi action 
+
+multiple users 
+
+data table and parameterization 
+
+- record subsystem 
+
+test object 
+
+factory 
+
+record process 
+
+replay process 
+
+query framework and services 
+
+verification framework and services 
+
+hooks framework and services 
+
+- the packages 
+
+real stuff, living in predefined framework, using as many services as possible 
+
+can override specific behavior 
+
+- frame and view 
+
+tree view 
+
+expert view 
+
+debugger view 
+
+- persistence 
+
+test on disk 
+
+one image on disk for all tests 
+
+persistence over the wire 
+
+- active screen 
+
+display user interaction 
+
+snap-shot capturing 
+
+web and generic viewers 
+
+- scripting 
+using activex scripting 
+
+selected vbscript 
+
+debugger capabilities 
+
+automation interfaces 
+
+object property 
+
+- mercuriy environments 
+
+loadrunners, test director, orchid, topaz 
+
+- mercury found in 1989
+
+qtp 9.5 2006
+
+winrunner 7i, 2000
+
+
+# hooks 
+- GetMessage, CallWindowProc hooks 
+
+WIndowsHooks.dll 
+
+- AsmHook 
+
+modified executable code directly 
+
+- bbHook 
+
+based on modifying import table of specified dll on it's loading, trap any exported function of any dll loaded into AUT 
+
+- 3 known way to inject dll 
+
+create remote thread 
+
+set windows hook use GetMessage of CallWindowProc
+
+special windows mechanism like shell extensions, IE plugins, AppInit_dll registry setting etc. 
+
+QTP uses CallWindowProc hook 
+
+- two injectors on QTP 
+bbHook (deprecated)
+DllInjector (basic QTP injector)
+
+- hooks and agents configuration 
+
+two levels, [MicIPC] section mercury.ini 0 disable, 1 enable 
+```
+ProcessName.exe={0 or 1}
+```
+entry default=1 defines DllInjector activity in unspecified processes 
+
+level 1 settings are useful for troubleshooting 
+
+    + level 2 
+    HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\HooksMgr\DllInjector\ALWAYS 
+    
+    keys are process name or default that define settings for unspecified processes 
+    
+    enabled:dword = {0 or 1}
+    UseDefault:dword={0 or 1}
+    
+    modules contains agent names, syntax agent_name.dll{0 or 1}
+
+    "vb_trap.dll"=dword:00000001
+    acx_trap.dll 
+    ime_srv.dll 
+    
+    customAgent.dll 
+    vb_trap.dll
+    
+    + process settings 
+    HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\Hooks 
+    
+    bbHook:dword={0 or 1}
+    GetMessageHook:dword={0 or 1}
+    WndProcHook:dword={0 or 1}
+    
+    + message filters 
+    HKEY_CURRENT_USER\SOFTWARE\Mercury Interactive\QuickTest Professional\MicTest\HooksMgr\Filter 
+    Record:dword={0 or 1}
+    Replay 
+    Exception 
+    Value:dword=Message code, defines message code 
+
+- typical failures 
+
+control unrecognized, agent not loaded 
+    + check agent 
+    + check record and run setting 
+    + swtich R&R setting mode 
+    + check MicIPC section of mercury.ini 
+    + check injector use mercury.ini 
+    + check HKCU\...\MicTest\HookMgr settings 
+    + manually enable agent by HooksMgs 
+    + try bbHook
+crash, incorrect behavior, QTP is up 
+QTP record does not work 
+
+
+
+# Record and replay mechanism 
+- architecture 
+- test objects 
+    + basic block 
+    + fully functional COM object 
+    + correspond to a runtime "Real" object 
+    + different TO for each runtime class 
+    + perform the actual record, replay and verification 
+    + usually 1:1 TO/RTO relationship 
+    + can have 1:M or M:1 TO/RTO relationship 
+    + runtime ID and descriptions 
+- packages 
+    + real stuff 
+    + a solution for a toolkit, vertical, Web, Siebel 
+    + supply a solution to a family of objects 
+    + contains basic components 
+    package manager 
+    test object factory 
+    test objects 
+    query engine 
+    
+- agents and the i/o channels 
+    + agents 
+    notify various events on the AUT 
+    supply required information upon request 
+    may be used to perform actions on the AUT objects 
+    
+    + input channel 
+    communicate from the AUT to tuplip
+    
+    + output channel 
+    communicate from tulip to the AUT 
+    
+- record manager 
+
+maintain test object and factory queues 
+
+manage incoming messages 
+    + receive incoming messages from the input channel 
+    + dispatch messages to the test objects queue 
+    T.O. 
+    T.O. 
+    ...
+    + dispatch messages to the factories queue 
+    Pack 
+    Pack 
+    ...
+    
+- record flow 
+
+AUT -> agent -> input channel -> record manager -> factory 
+                                                   test object -> object manager 
+                                                                  save snapshot 
+                                                                  script manager 
+
+- the object manager 
+test object repository 
+create test object wrappers on replay 
+test object description programming 
+
+- the object manager (con.)
+Browser("foo").Page("index").Link("sar").Click 
+
+script engine -browser-> MicFlow -> object manager 
+             browser collection 
+             T.O. wrapper 
+             page collection 
+             T.O. wrapper 
+
+- replay flow 
+
+load the test object from the object manager 
+replay function is a method implemented 
+test object default dispinterface 
+method is invoked using VBScript Engine 
+
+- query engines 
+
+supply a standard mechanism for retrieving information for all objects 
+general query engine manages query COM objects 
+packages can implement specific query 
+objects and register it in the query engine 
+
+
+# Sharing create new addin process 
+- AddinManager 
+
+[HKEY_LOCAL_MACHINE\ProductRegRoot\Add-In Manager\PDFPackage]
+
+[HKEY_LOCAL_MACHINE\ProductRegRoot\Add-In Manager\PDFPackage\Packages]
+"PDFPackage"="full"
+
+- QTRRManager, init the selected package 
+input/output channel, RecordMgr...
+
+########### PDFPackage ##############
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Packages\PDFPackage]
+"ProgId"="Mercury.PDFPackageMgr"
+"Load"=dword:00000001
+"LoadOrder"=dword:00002af8
+"OptionsPP"=dword:00000001
+"display name"="PDF Windows"
+"configureTOs"=dword:00000001
+"TypeLib1"="PDFPackage.dll"
+
+    + GetPackagesList() -> AddinManager to get the selected Addin 
+    
+    Init PackageMgr object 
+
+    + QTRRmanagerImpl.cpp
+    
+- import "PackageMgr.idl";
+- Spy
+
+CRecordMgr::FillObjsArrayFromPointEx
+    PDF 
+    SAPGUI 
+    WEB 
+    STD 
+    ...
+    
+    spFactory->FillArrayFromPointEx(action, X, Y, ppsObjs);
+    spFactory->FillArrayFromPoint(X, Y, ppzsObjs)
+    
+- Record 
+CRecordMgr::SendDataToSet (pFormatetc, pMednium, &dwRet, m_setFactories)
+
+- Replay 
+(*pMicQuery)->QueryIdFromContainer(psaProp, pContainer, &msaROTemp, pInfo, psaFormats);
+
+- Factory 
+
+import "Record.idl";
+
+library PDFPACKAGELib
+{
+	......
+
+	[
+		uuid(2D65DD9C-0007-4EC5-BDB9-E1DACD8611BF),
+		helpstring("PDFFactory Class")
+	]
+	coclass PDFFactory
+	{
+		[default] interface ITestObjFactory2;
+		interface IPackageServices3;
+		interface IMicDataTarget;
+	};
+	......
+}
+
+- factory 
+
+// ITestObjFactory
+SetFactorySite()
+CreateParentTestObj()
+FillArrayFromPoint()
+// IMicDataTarget
+ReceiveData()
+// IPackageServices2
+CreateObjFromRtId()
+CreateObjsFromIds()
+IsRtIdValid()
+
+- Query 
+
+import "TestObject.idl";
+
+library PDFPACKAGELib
+{
+	......
+
+	[
+		uuid(2C7E0EF0-F7A2-4A89-B264-0CDE605296B1),
+		helpstring("PDFQuery Class")
+	]
+	coclass PDFQuery
+	{
+		[default] interface IMicQuery2;
+	};
+
+	......
+}
+
+QueryIdFromContainer()
+QueryValue(/*[in]*/LPRUNTIMEID pRO, /*[in, out]*/LPSAFEARRAY pProp)
+Draw Rectangle
+Get TagName
+Get Property
+
+- Test objects 
+
+import "TestObject.idl";
+
+interface IPDFApplication : IDispatch
+dispinterface PDFApplication
+library PDFPACKAGELib
+{
+	......
+	dispinterface PDFApplication;
+
+	coclass CoPDFApplication
+	{
+		[default] dispinterface PDFApplication;
+		interface IPDFApplication;
+		interface IMicDataTarget;
+		interface DispTestObject;
+		interface ITestObject;
+		interface ITestObjectInfo;
+	};
+	......
+}
+
+```
+############ PDFApplication ############
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication]
+@="PDFApplication"
+"CLSID"="{6A05F9D5-885B-4427-B323-C20DFE5640F0}"
+"tag query name"="LogicalName"
+"Withable"=dword:00000001
+"GenTypeId"="window"
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\CommonUse]
+@="Highlight"
+"ToString"=dword:00000001
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\Info]
+"package"="PDFPackage"
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\CreateSubItems]
+@="1"
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\Description]
+@="Name"
+"Name"=dword:00000058
+"micclass"=dword:00000018
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\Properties]
+#Base properties
+"Name"=dword:00080103
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\RuntimeAttributes]
+"x"=dword:00000000
+"y"=dword:00000000
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\CheckpointTimeout]
+"DefaultTimeout"=dword:00000000
+[HKEY_LOCAL_MACHINE\ProductRegRoot\MicTest\Test Objects\PDFApplication\Icons]
+@="ProductDir\\bin\\AddinsCoreResources.dll, 25112 , 25112"
+"check"="ProductDir\\bin\\AddinsCoreResources.dll, 25122 , 25122"
+"output"="ProductDir\\bin\\AddinsCoreResources.dll, 25123 , 25123"
+
+ReceiveData()
+MakeObjVisible()
+……
+```
+
+- communication 
+
+SAPGui, Apply COM interface to communicate with AUT.
+PDF/Std, Windows message to communicate with AUT.
+Some addin, WebSocket to communicate with AUT.
+
+- inject 
+inject agent dll/js into AUT 
+    
+    
+
+# UFT guide lines 
+- reference 
+https://github.houston.softwaregrp.net/uft/uft.dev.guidelines
+
+- install git lfs 
+- add git personal Certificates 
+- enterprise credentials 
+settings 
+developer settings 
+personal access tokens 
+generate new token 
+
+- uftbase
+
+git clone https://github.houston.softwaregrp.net/uft/uftbase.git
+
+- st 
+
+git clone https://github.houston.softwaregrp.net/uft/st.git
+
+- qtp 
+
+git clone https://github.houston.softwaregrp.net/uft/qtp.provision.git
+
+- open command prompt in admin mode and run 
+$ prov_all.bat 
+
+- create working branch 
+
+<RELEASE>/dev/<BRANCH>
+
+    + individual development branch 
+<RELEASE>/<LOGIN-USER>/<TYPE>-<ID>
+
+
+
+# Codeless/UFT integration design 
+- general flow 
+AIUtil.SetContext(TO/AiContext) -> Create AIObject and set context 
+                                    Is AIContext? -yes-> snapshot from AIContext 
+                                                 -no-> snapshot from TestObject 
+                                -> Detecting 
+                                -> Find object -no-> Encounter timeout? 
+                                -yes-> Perform actions 
+                                -no-> Log step fail -> Step fail 
+                                -success->Log step pass -> Step success -> End Run 
+
+
+# HP Mobile center 
+- UFT record & run setting can configure mobile device 
+application 
+device 
+
+
+# UFT SAP web technology 
+
+
+# Questions
+- how to add a new third party library?
+- how to add a c# third party library? 
+- how to add a functional library?  
+
+
+# Release management model 
+- alm 
+
+# UFT from the customer angle 
+- top used addins 
+standard web 68% 
+.net 64% 
+java 51 % 
+visual basic 35% 
+web services 30%  
+
+
+# Web package startup 
+- QTP startup 
+    + Select addins to load 
+    + SetRect 
+    register in the rack , prop enum -> string & micclass -> web TO types 
+    create the following objects and put them in the rack, WebReplay, WebReplayErrorHandler, WebEventConfiguration, WebSettingListener 
+    add processes to the DllInjector table, preparation for IE agent injection 
+    
+    + Init
+    add BHO entry, preparation for IE agent injector
+
+    register mozilla based browsers
+    
+    HKCU\SW\Mercury…\QuickTest…\MicTest\HooksMgr\DllInjector.
+    HKCU\SW\Mercury…\QuickTest…\MicTest\Packages\WebPackage\Settings\UseDllInjector is set to 0x00000001
+    HKCU\SW\Mercury…\QuickTest…\MicTest\Packages\WebPackage\Settings\UseBHO is set to 0x00000001
+    HKCU\SW\Mercury Interactive\Browser Helper Objects\AgentsKeys
+        
+    + AddQuery, AddFactory, AddPackageServices     
+    Create and register the WebQuery, WebFactory, WebpackageServices objects 
+    
+    + Preparetion for mozilla based browser agent injection 
+    
+    CWebPackageMgr::SetRack()
+    CWebPackageMgr::Init()
+    All in CWebPackageMgr
+    See CWIPackageUtils::AddProcessListToDllInjector()
+    See CWebPackageMgr::Init()
+
+    + IE agent injection 
+    
+    See CWIPackageUtils::RegisterFirefox()
+    $(FireFox install dir)\extensions
+    $(QTP install dir)\bin\Mozilla\AgentPlugInFireFox11
+    $(user’s docs & settings)\Application Data\Mozilla\Firefox\Profiles\$(profile)\compreg.dat
+    See CWIPackageUtils::RegisterNetscape8()
+    $(user’s docs & settings)\Application Data\Netscape\NSB\Profiles.ini
+    Can be found in the installation dirercory of Netscape
+    $(QTP install dir)\bin\Mozilla\AgentPlugInNS801
+    $(user’s docs & settings)\Application Data\Netscape\NSB\Profiles\$(profile)\compreg.dat
+    In MzAgentCoreMgr.cpp.
+    In MzPluginMgr.cpp.
+
+    + AppInit DLLs 
+    HKCU\SW\Mercury…\QuickTest…\MicTest\Packages\WebPackage\Settings\UseDllInjector is set to 0x00000001
+    
+    + Browser Helper Object 
+    HKCU\SW\Mercury…\QuickTest…\MicTest\Packages\WebPackage\Settings\UseBHO
+
+    IE loads all COM classes registered under HKLM\SW\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects
+
+        a.	Look under HKCU\SW\Mercury Interactive\Browser Helper Objects\AgentsKeys to see if there are agents to load to IE
+        b.	If we inject, we create the coclass and store a reference to it in the agents vector.
+
+    IE calls IObjectWithSite::SetSite() on BHOManager, passing an interface pointer to the browser object.
+
+    BHOManager calls IObjectWithSite::SetSite() on all agents
+
+    CAccHook::InstallAccessibilityHooks()
+
+    CBaseTrapCtl::ConnectToBrowserEvents() is called and will register for the DWebBrowserEvents2
+
+    + ActiveX hook 
+    the ActiveX is loaded in to QTP 
+    
+- IE startup 
+
+first event we get the BeforeNavigate2 event [using BHO].
+
+    + create Container object 
+    create KitManager 
+    create Interface object MSGs from QTP 
+    
+    + call again ConnectToBrowserEvents 
+    
+    CInstSrvWin<T> object that will be the output channel to QTP (send MSGs to QTP)
+    
+    send EVENT_BROWSER_CREATE message to QTP
+    
+    in CBrowserMaster::ProcessWebInfoMsg()
+        1.	store the browser in the browser info map
+        2.	load kits to the browser (SRVC_LOAD_KIT)
+        3.	send the global variables to the browser (SRVC_SET_GLOBAL_VARIABLES)
+        4.	send mapping data to the browser (SRVC_SET_CLASS2WITYPE_OBJ, SRVC_SET_ENUM2STRINGMAP_OBJ)
+        5.	send event config data to the browser (SRVC_SET_EVENT_CONFIGURATION)
+
+    navigation completed, ProgressChange(), NavigateComplete2() 
+        create Page object 
+        UpdateFrames() to create and store the Frame objects 
+        
+- Mozilla based browsers startup
+...
+
+
+# Web record mechanism 
+- QTP 
+send Start Record event 
+
+web package listen to 
+    + Update ACTIVE_STATE of all browsers to WEB_ON_RECORD 
+    + send CALL_UPDATE_OF_AL_FRAMES  to all browsers 
+    
+- IE 
+Container receives CALL_UPDATE_OF_ALL_FRAMES method will pass to Page call CallUpdate() on all frames 
+
+CallUpdate()->UpdateChildren()->BuildLayoutTree()->ObjectEventConnection()
+
+connect to events on all objects under document 
+    + creating an CEventHook object 
+    + frame web reside in existing event handler in CEventHook object 
+    + put CEventHook object as the top event handler
+    
+- An event occurred 
+
+    + IE CEventHook::InvokeEx() is called 
+    
+- Send event info to QTP 
+
+    + IE 
+    
+    get additional info about the event 
+    
+    get the AO for the element
+        * CIE4ObjectMgr:: GetRecordAO() -> WIKits::GetRecordAO() 
+        * CWIKitsManager::GetRecordAO() -> CWIKitFactoryImpl::GetRecordAO() 
+        * CWIKitFactoryImpl::NewAO() -> CWebKitFactoryIE::IENewAO()
+        
+    create record information object 
+    
+    let the Kits fill more record information 
+    
+    send an EVENT_RECORD message to QTP 
+    
+    ```
+      In CWebQuery::StartRecord()
+      CIE4EventUtil::Connect()  CFrameEventUtil::ConnectToEvent()
+      In CIE4EventUtil::SendEventInfo()
+      In CIE4EventUtil::IsRecordableEvent()
+      In IWebObj2::FillRecordInformation()
+    ```
+    
+- In QTP 
+
+TO is alreadty in the objects queue we start at step 3 
+
+Get the RTID of the object that sent the event and verify it is not in the objects queue
+
+create the TO 
+    + get the CLSID using the micclass which send in event 
+    + create object ::CoCreateInstance() API 
+    + set the "objectid" property to RTID 
+    + create the parent object 
+    get the RTID of the child object 
+    get the RTID of the parent 
+    use QueryObjValue() function to get the parent RTID, go to MicQuery and to all the Query engines in WebQuery, calculate the RTID from the RTID of child 
+    
+    put RTID in web info and create TO 
+        * get CLSID, do not have the micclass, go to the client and ask 
+
+        CWebFactory::QueryObjValue(PN_MIC_CLASS) 
+        CWebQuery::QueryValue() ->  CWebQuery::MicClassQueryValue() 
+        CWIQueryHelper::QueryFromAgent()
+        
+- IE 
+QueryAttr() on the AO with the specified RTID
+
+- back in QTP 
+
+create the object using ::CoCreateInstance() 
+
+set objectid property to the RTID 
+
+set the created object as the parent of the child object 
+
+create the parent of the create object 
+
+insert the TO to the objects queue and resend the message, so it will arrive to the object 
+
+call arrives to the outer object(CTextLink) CWITOBaseElement: ReceiveData() -> ReceiveMsg() -> CallReceiveWebMsg() -> ReceiveWebMsg(), object overrides ReceiveWebMsg()
+
+call arrives to inner object (CWebElement) CWITOBaseElement: ReceiveData() -> ReceiveMsg() -> CallReceiveWebMsg() -> CWebElement::ReceiveWebMsg()
+
+```
+  In CWebFactory::ReceiveData()
+  In CWebFactory::CreateObject()
+  In CWebFactory::CreateParent()
+  In CWebQuery::QueryValue()
+  In CWebQuery::WebAncestorQuery()
+  In CWebFactory::CreateObject()
+
+```
+
+decide if want to record the event, CWITOBaseElement::WebFireEventRegisterObject() -> CComTestObject::RegisterObject()
+
+
+
+# Web replay 
+
+
+
+# WebPackage and Agents 
+- WebPackage, handles all the web-related record/replay/verification in QuickTest
+- agents, responsible for retrieving information from the browsers
+
+ns_trap.dll and ie4_trap.dll are statically linked with web_trap.lib
+
+- communication 
+
+    + concept 
+    
+    communication, WebPackage and Agent with WM_COPYDATA message, it is synchronized. 
+    
+    The Agents communication window code in shared and is within web_trap.lib, the window name contains a constant name followed by the hwnd of the browser and this allows the WebPackage to find the communication window
+    
+    + practical information, The Agents communication window code in shared and is within web_trap.lib, the window name contains a constant name followed by the hwnd
+    
+- data types 
+
+    + CWebInfo, This is the class that may contain all other classes and holds all the service/query/event information send between WebPackage and Agents 
+
+(CMicBSTR) to attribute value (CwebAttrVal) and this map contains most of the service data. The class also contains a few members
+
+MsgId is the service id (enum type), for example SRVC_MAKE_OBJ_VISIBLE or QUERY_ATTR
+
+    + CWebAttrVal, an array of CWebVariant’s and this because the value some attributes can’t be described as a single value, for example the class attribute of an CIE4Image is HTML¬_IMAGE and HTML_OBJ
+    
+    + CWebVariant, Similar to VARIANT type. The types are a little different, though, including WEB_AV_STRING (CMicBSTR), WEB_AV_POINT, WEB_AV_RECT, WEB_AV_LONG and WEB_AV_ID (CWebRunTimeID). 
+    
+    + CWebRunTImeID, a simple class holding four long’s, one for the browser hwnd, one for the frame hwnd, one for the object identifier and the fourth is used for some special objects 
+    
+- Agents architecture 
+
+Most objects also inherit from CWebOb,j, which contains commonly used object functions. All the shared functions use IWebObj to get data from the objects
+
+two major functions in IWebObj:
+1.	GetAttr - receiving an attribute name (CMicBSTR), value (CWebAttrVal) and retrieved desired attribute. 
+2.	InvokeMethod – receiving a method name (CMicBSTR), method info (CWebInfo).
+
+- Heritage 
+
+Browser object containing a vector of Frames containing a vector of objects, and so on for objects that contain other objects 
+
+- Dataflow 
+
+Most of the interface query handling code is shared in CInterface (web_trap.lib). Each browser type has a few specific queried handled within it’s CIE4Interface/CNS4Interface.
+
+- Hooking the browsers 
+
+To inject the ie4_trap all we have to do is to register it under “HKEY_LOCATL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects” in the registry. 
+
+
+
+# Plugins 
+- reference 
+Jenkins
+https://admhelp.microfocus.com/uft/en/15.0-15.0.2/UFT_Help/Content/User_Guide/Jenkins.htm
+
+Bamboo
+https://admhelp.microfocus.com/uft/en/15.0-15.0.2/UFT_Help/Content/UFT_Tools/Bamboo_Plugin/Bamboo_WhatsNew.htm
+
+Azure DevOps (TFS)
+https://admhelp.microfocus.com/uft/en/15.0-15.0.2/UFT_Help/Content/UFT_Tools/Azure_DevOps_Extension/uft-azure-devops.htm
+
+
+
+# What's in an Add-in 
+- Addin vs package 
+
+    + Addin Manager in the UFT GUI
+    StdPackage 
+    LLPackage 
+    TEAPackage 
+    DBPackage 
+    XMLPackage 
+    WWWPackage 
+    SiebelPackage 
+    CASPackage 
+    ...
+
+- terminology 
+
+run-time object, any UI control created in the AUT 
+
+test object, COM object created in the QTP context and saved in the object repository. Responsible for record/replay/verification for one or more RT(runtime) object 
+
+Agent, part of the QTP code usually running in the AUT context 
+
+- TO vs RO overview
+
+runtime object is any UI control created by AUT 
+
+test object is a COM object created in QTP and saved in the object repository 
+
+- record overview 
+
+AUT event -> QTP hook module (agent) -> QTP 
+
+    + event sent by hook arrives to record manager 
+AUT event -> ...  -> QTP Record manager -> Factory -> Test Object 
+
+- replay overview 
+
+create test object 
+
+find appropriate run-time object 
+
+perform the actual replay operation 
+
+- record mechanism 
+
+    + connecting to run-time object events 
+    + querying run-time objects properties 
+    
+    + agents and events 
+    
+    usually agent connects to all AUT events 
+    
+    agent performs initial events filtering in order to select AUT events 
+    
+    relevant events are packed into appropriate structure that contains 
+        * standard header, MIC_DATA_TRANSFER
+        * event specific data, id of the control fired the event 
+    
+    packed data is sent to QTP process through the object called Input Channel 
+        * data is sent using windows message WM_COPYDATA 
+        
+        https://docs.microsoft.com/en-us/windows/win32/dataxchg/using-data-copy
+        
+        * input channel receives the data through the hidden window class "HalonSinchroniLekabaltHodaot"
+        
+    + input channel 
+    
+    it is the singleton object responsible for receiving events from agents 
+    
+    it receives events through the special hidden window using WM_COPYDATA message 
+    
+    events from all agents are sent to input channel. all events are queued 
+    
+    input channel does not perform any event processing, it only forwards received events to listeners 
+    
+    any object in QTP interested in getting events from agents can register in the input channel as a listener 
+    
+    the most important listener during recording is called record manager 
+    
+- record manager 
+    + listener of the input channel
+    + holds two collections 
+    
+    factories queue
+        * factory objects, CStdFactory, CWebFactory, CJavaFactory etc. 
+        
+        * each factory is added to the queue by its package manager when QTP is initialized 
+        
+        * factory queue is static, once initially built the collection is not changing 
+        
+    test object queue 
+        * when recording starts this collection is empty 
+        
+        * test objects queue is dynamic. test objects are added to the queue and removed from the queue during recording 
+        
+    record manager in action
+    
+    AUT event -> AUT agent -> Input channel -> Record manager -> Test objects queue -> Factories queue 
+
+    + factory logic 
+    
+    known event format -> yes worth creating TO ? - yes -> create TO -> Add it to TO -> return RESEND 
+    
+    + test object logic 
+    
+    known event format - yes -> send by my control - yes -> record - yes -> RegisterObject()
+
+    + Runtime id 
+    
+    Runtime ID is the unique identifier of a particular run-time object valid through the run-time object lifetime 
+    
+    help to access run-time object as fast as possible 
+    
+    each runtime id contains also format identifier allowing to distinguish Runtime ID's created by different packages 
+    
+    runtime id format identifier 
+    attribute name      attribute value 
+    a                   1234
+
+    + runtime ID 
+    
+    event with information to build Runtime ID for runtime object 
+    
+    Test Object Factory creates a Test Object during recording save the Runtime ID in the Test Object 
+    
+    one run-time object can be handled by different packages. In such cases it is convenient to assign more then one Runtime ID in different formats to the same object
+    
+- object description 
+
+minimal set of attributes allowing to uniquely identify the run-time object 
+
+such as Dialog("Login") or WinButton("OK")
+
+- runtime id vs description 
+
+Runtime ID is not persistent. It is created dynamically and never saved with the test object
+
+Description is saved in the object repository. It allows QTP to find the appropriate run-time object in the AUT run after run, build after build, version after version 
+
+- runtime id -> description 
+
+    + global record flow 
+    agent sends event with control identifier 
+    
+    factory create test object and build its runtime id 
+    
+    test object receives event and decides to record test step 
+    
+    script line is added to the test 
+    
+    test object is saved in the object repository, test object description must be created 
+    
+    description is build based on the run-time object identified by given runtime id 
+
+    + runtime id -> description, configured by the object identifications settings 
+    
+    mandatory attributes, always included in the description 
+    
+    assistive attributes, included in the description when required to ensure uniqueness 
+        
+    + Visible Relations Identifiers (VRI), compare location with another test object
+    
+    selectors, used when all mandatory and assistive properties does not provide uniqueness 
+    
+    smart identification, another algorithm allowing to find runtime object 
+
+- properties 
+
+    + native properties, runtime object has its own properties, these properties are assigned by AUT developer 
+
+    + identification properties, set of properties defined by HP per test object class, defined by QTP developer at design time or dynamically at runtime  
+    
+        * Test object properties, TOProperties, internal collection of records name-value-flags
+        
+        flags define the property role and behavior, persistent, description etc. retrieve TO property with GetToProperty method 
+    
+        * Runtime object properties, ROProperties, represents the value of HP property queried directly from the run-time object. use GetROProperty 
+
+    + examples 
+    
+        * ROProperties    
+    nativeclass, text, x, y, width, height, abs_x, abs_y, ...
+    
+        * Native Properties:
+    Class, Title, Style, Default, Color, Focused, Rectangle, WindowProc, Shortcut, ...
+
+- object repository, OR 
+
+    + global record flow, reminder 
+    
+    agent sends event with control identifier 
+    
+    factory creates test object and builds its runtime id 
+    
+    test object receives event and decides to record test step 
+    
+    script line is added to the test 
+    
+    runtime id -> description 
+    
+    save test object to the object repository 
+    
+    all test object properties with "persistent" flag are saved to the OR 
+    
+    description properties are visible in OR dialog 
+    
+    later user can modify each test object description by editing the OR 
+
+- replay, description -> runtime id 
+
+create the test object 
+
+load test object properties from object repository 
+
+enumerate run-time objects in the AUT 
+    + for each run-time object compare its attributes with attributes saved in the test object description 
+    
+    + find run-time object that conforms all description attributes 
+    
+perform the actual replay operation 
+
+- query engine, standard flow of getting RO properties value 
+
+hierarchy
+
+MicQuery, Queries queue, StdQuery, WebQuery, VbQuery 
+
+MicQuery receives runtime id and the list of properties names 
+
+The list is passed to each query according its place in the queue 
+
+Each query must fill values of the environment specific properties and ignore other properties and properties handled by previous queries 
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
