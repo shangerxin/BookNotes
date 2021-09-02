@@ -752,34 +752,218 @@ However, when you use the MIDL compiler option / acf to explicitly specify an AC
         MIDL recognizes a number of COM and Automation data types, such as BSTR, VARIANT, and SAFEARRAY, and COM handles, such as HMETAFILE_PICT, HENHMETAFILE, HMETAFILE, HBITMAP, HPALETTE, and HGLOBAL. 
         
     + MIDL Arrays
+    
+    An expression that evaluates to n signifies a lower bound of zero and an upper bound of n - 1.
+    
+    two values separated by an ellipsis that represent the lower and upper bounds of the array, as in [lower...upper].
+    
+    field attributes size_is, max_is, length_is, first_is, and last_is to specify the size of the array or the part of the array
+    
+    An array is called "conformant" if the upper bound of any dimension is determined at runtime.
+    
+    the array declaration must include a size_is or max_is attribute.
+    
+```
+/* IDL file interface body */ 
+#define MAX_INDEX 10 
+ 
+typedef char  ATYPE[MAX_INDEX]; 
+typedef short BTYPE[];        // Equivalent to [*]; 
+typedef long  CTYPE[*][10];   // [][10] 
+typedef float DTYPE[0..10];   // Equivalent to [11] 
+typedef float ETYPE[0..(MAX_INDEX)];  
+ 
+typedef struct 
+{ 
+    unsigned short size; 
+    unsigned short length; 
+    [size_is(size), length_is(length)] char string[*]; 
+} counted_string; 
+ 
+HRESULT MyFunction( 
+     [in, out] short * pSize,  
+     [in, out, string, size_is(*pSize)] char a[0..*] 
+);
+```
+
+    RECT_TYPE can be defined as a two-dimensional array and the variable rect can be defined as an array of RECT_TYPE. 
+    
+    Microsoft RPC is C oriented. Following C-language conventions, only the first dimension of a multidimensional array can be determined at runtime.
+    
+    when the [string] attribute is used on multidimensional arrays, the attribute applies to the rightmost array
+    
+    The client application must allocate all memory for an [in] or [ in,out] array of reference pointers, [in], or [ in,out], [length_is], or [last_is] values.
+    
+    When embedded reference pointers are [out]-only parameters, the server-manager code must assign valid values to the array of reference pointers.
+    
+    ···
+    typedef [ref] short * ARefPointer;
+    typedef ARefPointer ArrayOfRef[10];
+    HRESULT proc1( [out] ArrayOfRef Parameter );
+    ···
+    
     + MIDL Type Definitions
+    
+    follow c++ 
+    
     + MIDL Enumerated Types
+    
+    The enum declaration is not translated by the MIDL compiler into #define statements, reproduced as a C-language enum declaration
+    
     + MIDL Structures
+    
+    Fields of more complex types, such as pointers, arrays, and other constructed types, can be modified by type or field_attributes.
+    
     + MIDL Unions
+    
+    a superset of the C/C++ union statement. MIDL provides two varieties of unions. 
+    
+    The encapsulated union is indicated by the presence of the switch keyword. 
+    
     + MIDL Binding Handles
 
+    the compiler will generate the structure with the union field named tagged_union.
 
+    shape of unions must be the same across platforms to ensure interconnectivity.
 
+```
+typedef union _S1_TYPE switch (long l1) U1_TYPE 
+{ 
+    case 1024: 
+        float f1; 
+    case 2048: 
+        double d2; 
+} S1_TYPE; 
+ 
+/* in generated header file */ 
+typedef struct _S1_TYPE 
+{ 
+    long l1; 
+    union 
+    { 
+        float f1; 
+        double d2; 
+    } U1_TYPE; 
+} S1_TYPE;
+```
 
-
-
+    + noneencapsulated unions 
+    
+    nonencapsulated union is indicated by the presence of the type attribute [switch_type] and the field attribute [switch_is].
+    
+    + MIDL binding handles 
+    
+    MIDL supports the base type handle_t. Handles of this type are known as "primitive handles." support [handle] attribute 
+    
+    Handles defined in this way are known as "user-defined" or "customized" or "generic" handles.
+    
+    a handle that maintains state information using the [context_handle] attribute
+    
+    the RPC run-time libraries to manage the handle, you can request that the run-time libraries provide automatic binding, ACF keyword [auto_handle]
+    
+    a global variable, ACF keyword [implicit_handle]. The [explicit_handle] keyword is used to state that each remote function has an explicitly specified handle.
 
 - importing files and type libraries 
 
++ The MIDL keywords include, import, and importlib let you reuse code by referencing existing header
+
+    The generated file will have a line with a #include C-preprocessor directive with the indicated header file
+    
+    include directive lets you specify in an ACF file one or more C-language header files 
+     
+    use import directive to import a file to be used with IDL, the import directive ignores procedure prototypes, since no stubs are generated for anything in the imported file. 
+    
+    ```
+[
+  auto_handle
+] 
+interface X86PC
+{ 
+  include "gendefs.h", "protos.h", "myfile.h"; 
+  //interface typdefs and function declarations here
+}    
+
+[
+  uuid(. . .), object
+] 
+interface IKnown : IUnknown
+{
+  import "base.idl", "unknwn.idl", "helper.idl";
+  //remainder of interface definition
+}
+    ```
+    
+    ODL importlib directive lets you reference a compiled type library in your IDL or ODL file. 
+    
+    The importlib directive must be inside a library statement, and must precede other type descriptions in the library
+    
+```
+library NewBrowser
+{
+  importlib("stdole32.tlb");
+  importlib("legacy.tlb");
+  //remainder of library definition
+};
+```
+
 - importing system header files 
+    
+use the #include directive to include header files in your IDL file, it is not recommended. The MIDL compiler will generate stubs for all functions defined in the IDL file being compiled.
 
+include type definitions from header files in an IDL file
 
+    + Use the import directive to include data types defined in a header file.
+    
+    + Create a helper IDL file with a dummy interface that includes the header files. only the typedefs will appear in the compiled stubs
+    
+```
+//in helper.idl:
+interface dummy
+{ 
+   #include "kitchensink.h"
+   #include "system.h"
+}
 
-
-
-
+//in main.idl:
+import "helper.idl";
+```
     
 
 # MIDL commandline reference 
+- reference
+https://docs.microsoft.com/en-us/windows/win32/midl/midl-command-line-reference
+- remarks 
 
+By default generation 
+    Client stub (name_c.c)
+    Server stub (name_s.c)
+    Header file (name.h)
+
+When the object attribute appears in the interface attribute list, COM interface:
+
+    Interface proxy file (name_p.c)
+    Interface header file (name.h)
+    Interface UUID file (name_I.c)
+    
+When the local attribute appears in the interface attribute list, the compiler generates only the interface header file, Name.h.
+
+The MIDL compiler provided with Microsoft RPC invokes the C preprocessor as needed to process the IDL file
+
+The MIDL compiler switches /env, /server, /sstub, and /out affect the server stub file.
+
+The MIDL compiler switches /header and /out affect the header file.
+
+- the response file command 
+
+A response file is a text file containing one or more MIDL compiler command-line options. 
 
 
 # MIDL language reference 
+- reference 
+https://docs.microsoft.com/en-us/windows/win32/midl/midl-language-reference
+
+- This topic lists the reserved keywords in MIDL.
+
 
 
 
@@ -787,11 +971,8 @@ However, when you use the MIDL compiler option / acf to explicitly specify an AC
 https://docs.microsoft.com/en-us/
 
 
-
 # MIDL language reference 
 https://docs.microsoft.com/en-us/windows/win32/midl/midl-language-reference
-
-
 
 
 
