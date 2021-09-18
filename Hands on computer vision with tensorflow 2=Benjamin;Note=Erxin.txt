@@ -1,0 +1,586 @@
+Hands on computer vision with tensorflow 2=Benjamin;Note=Erxin
+
+
+# Technical requirements 
+- libraries 
+numpy 
+matplotlib 
+anaconda 
+
+- pose estimation 
+
+the estimation of the objects' positions and orientations relative to the camera in the 3D space. This is especially useful for robots so that they can interact with their environment
+
+- instance tracking 
+
+- action recognition 
+human-machine interactions (such as for gesture-controlled devices)
+
+- content aware image edition 
+
+- hand crafting local features 
+
+revolutionized the domain is called Scale Invariant Feature Transform (SIFT). As its name suggests, this method, introduced by David Lowe 
+
+the SIFT method was applied to a picture using OpenCV (https://docs.opencv.org/3.1.0/da/df5/tutorial_py_sift_intro.html). For each localized key point, the radius of the circle represents the size of the patch considered for the feature computation
+
+- machine learning on top 
+more statistical ways to discriminate images based on their features started to appear. Support vector machines (SVMs), which were standardized by Vladimir Vapnik and Corinna Cortes
+
+- CUDA, a programming language that allows developers to directly program for compatible GPUs. OpenCL
+
+- Artificial neural networks (ANNs), or simply neural networks (NNs), are powerful machine learning tools
+
+- One iteration over the whole training set (steps 1 to 4) is called an epoch.
+
+- If n = 1 and the training sample is randomly selected among the remaining images, this process is called stochastic gradient descent (SGD), which is easy to implement and visualize
+
+
+# Tensorflow 2.0
+- Keras was designed as an interface to enable fast experimentation with neural networks. As such, it relied on TensorFlow or Theano (another deep learning framework
+- building the model 
+
+    + fully connected (also called dense) layers. Before we explore the architecture, let's have a look at the code.
+    
+```
+model = tf.keras.models.Sequential()
+model.add(tf.keras.layers.Flatten())
+model.add(tf.keras.layers.Dense(128, activation='relu'))
+model.add(tf.keras.layers.Dense(num_classes, activation='softmax'))
+```
+
+    + Flatten: This will take the 2D matrix representing the image pixels and turn it into a 1D array. 
+
+    + Dense of size 128: This will turn the 784 pixel values into 128 activations using a weight matrix of size 128 × 784 and a bias matrix of size 128
+    
+    + Dense of size 10: This will turn the 128 activations into our final prediction. Notice that because we want probabilities to sum to 1
+    
+- training the model 
+
+```
+model.compile(optimizer='sgd',
+ loss='sparse_categorical_crossentropy',
+ metrics=['accuracy'])
+
+model.fit(x_train, y_train, epochs=5, verbose=1, validation_data=(x_test, y_test))
+```
+
+optimizer: This is the component that will perform the gradient descent.
+
+loss: This is the metric we will optimize. In our case, we choose cross-entropy
+
+metrics: These are additional metric functions evaluated during training to provide further visibility of the model's performance
+
+Passing 'sgd' to Keras is equivalent to passing tf.keras.optimizers.SGD(). The former option is easier to read
+
+epochs, iterate over the whole train dataset five times.
+
+verbose to 1. This will allow us to get a progress bar with the metrics we chose earlier, the loss, and the Estimated Time of Arrival (ETA).
+
+- The main change in TensorFlow 2 is eager execution. Historically, TensorFlow 1 always used lazy execution by default.
+
+- creating graphs in tensorflow 2 
+
+TensorFlow AutoGraph, The TensorFlow AutoGraph module makes it easy to turn eager code into a graph
+
+@tf.function
+def compute(a, b, c):
+    d = a * b + c
+    e = a * b * c
+    return d, e
+
+TensorFlow AutoGraph can convert most Python statements, such as for loops, while loops, if statements, and iterations. Thanks to graph optimizations
+
+- backpropagating errors using the gradient tape 
+
+ minimize a simple loss, abs(A × X - B).
+
+```
+A, B = tf.constant(3.0), tf.constant(6.0)
+X = tf.Variable(20.0) # In practice, we would start with a random value
+loss = tf.math.abs(A * X - B)
+```
+
+in the context of tf.GradientTape, TensorFlow will automatically record all operations and allow us to replay them backward afterward
+
+```
+def train_step():
+    with tf.GradientTape() as tape:
+        loss = tf.math.abs(A * X - B)
+    dX = tape.gradient(loss, X)
+    
+    print('X = {:.2f}, dX = {:2f}'.format(X.numpy(), dX))
+    X.assign(X - dX)
+
+for i in range(7):
+    train_step()
+```
+
+we can see X converging toward the value that solves the equation:
+
+X = 20.00, dX = 3.000000
+X = 17.00, dX = 3.000000
+X = 14.00, dX = 3.000000
+X = 11.00, dX = 3.000000
+X = 8.00, dX = 3.000000
+X = 5.00, dX = 3.000000
+X = 2.00, dX = 0.000000
+
+Keras models encapsulate training inside the .fit() function—there's no need to update the variables manually. 
+
+- keras models and layers 
+
+.inputs and .outputs: Provide access to the inputs and outputs of the model.
+
+.layers: Lists the model's layers as well as their shape.
+
+.summary(): Prints the architecture of the model.
+
+.save(): Saves the model, its architecture, and the current state of training.
+
+.save_weights(): Only saves the weights of the model.
+
+- sequential and functional APIs 
+
+model_input = tf.keras.layers.Input(shape=input_shape)
+output = tf.keras.layers.Flatten()(model_input)
+output = tf.keras.layers.Dense(128, activation='relu')(output)
+output = tf.keras.layers.Dense(num_classes, activation='softmax')(output)
+model = tf.keras.Model(model_input, output)
+
+- Keras callbacks are utility functions that you can pass to a Keras model's .fit() 
+
+CSVLogger: Logs training information in a CSV file.
+
+EarlyStopping: Stops training if the loss or a metric stops improving. It can be useful in avoiding overfitting.
+
+LearningRateScheduler: Changes the learning rate on each epoch according to a schedule.
+
+ReduceLROnPlateau: Automatically reduces the learning rate when the loss or a metric stops improving.
+
+- tf.function works 
+
+@tf.function
+def identity(x):
+  print('Creating graph !')
+  return x
+
+- variables 
+
+model.variables. It will return the list of all variables 
+
+a = tf.Variable(3, name='my_var')
+print(a) # Prints <tf.Variable 'my_var:0' shape=() dtype=int32, numpy=3>
+
+- distribution strategies 
+
+The tf.distribute.Strategy API defines how multiple machines communicate together to train a model
+
+MirroredStrategy: For training on multiple GPUs on a single machine. 
+
+MultiWorkerMirroredStrategy: Similar to MirroredStategy, but for training on multiple machines.
+
+ParameterServerStrategy: For training on multiple machines. Instead of syncing the weights on each device
+
+TPUStrategy: For training on Google's Tensor Processing Unit (TPU) chip.
+
+- keras API. Estimators simplify training, evaluation, prediction, and serving.
+
+pre-made Estimators are DNNClassifier, DNNRegressor, LinearClassifier, and LinearRegressor. 
+
+- training a custom estimator 
+
+estimator = tf.keras.estimator.model_to_estimator(model, model_dir='./estimator_dir')
+
+BATCH_SIZE = 32
+def train_input_fn():
+    train_dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+    train_dataset = train_dataset.batch(BATCH_SIZE).repeat()
+    return train_dataset
+
+- tensorboard 
+
+$ tensorboard --logdir ./logs_keras
+
+callbacks = [tf.keras.callbacks.TensorBoard('./logs_keras')]
+model.fit(x_train, y_train, epochs=5, verbose=1, validation_data=(x_test, y_test), callbacks=callbacks)
+
+    + generating aggregates 
+    
+accuracy = tf.keras.metrics.Accuracy()
+ground_truth, predictions = [1, 0, 1], [1, 0, 0] # in practice this would come from the model
+accuracy.update_state(ground_truth, predictions)
+tf.summary.scalar('accuracy', accuracy.result(), step=4)
+
+- tensorflow addons 
+
+extended is an end to end machine learning platform for tensorflow 
+
+Data Validation: A library for exploring and validating machine learning data.
+
+Transform: A library for preprocessing data. 
+
+Model Analysis: A library for evaluating TensorFlow models.
+
+Serving: A serving system for machine learning models. 
+
+    + model lifetime 
+    
+data validation > data transform > training of your model > model analysis > model serving 
+
+- tensorflow lite and tensorflow.js 
+
+TensorFlow Lite is designed to run model predictions (inference) on mobile phones and embedded devices. 
+
+TensorFlow.js (also referred to as tfjs) was developed to empower almost any web browser with deep learning. It does not require any installation from the user and can sometimes make use of the device's GPU acceleration
+
+- CNNs can handle multidimensional data. For images, a CNN takes as input three-dimensional data (height × width × depth)
+
+width, height, depth 
+
+unlike fully connected networks, where neurons are connected to all elements from the previous layer, each neuron in CNNs only has access to some elements in the neighboring region of the previous layer. 
+
+This region (usually square and spanning all channels) is called the receptive field of the neurons (or the filter size):
+
+zij = __delta__ *(b + sigam(l=0 to kH-1) signma(m = 0 to kW-1) sigma (n=0 to D-1) w_l,m,n * x_i+1,j+m,n)
+
+matrix, 𝑧, of dimensions Ho × Wo, with Ho and Wo being the number of times the neuron can slide vertically and horizontall
+
+- properties 
+
+A convolutional layer with N sets of different neurons is thus defined by N weight matrices (also called filters or kernels) of shape D × k × k (when the filters are square), and N bias values. Therefore, this layer only has N × (Dk2 + 1) values to train.
+
+When applying a CNN to images of various sizes, you still need to be careful when sampling the input batches. Indeed, a subset of images can be stacked together into a normal batch tensor only if they all have the same dimensions
+
+- hyperparameters 
+
+A convolutional layer is first defined by its number of filters, N, by its input depth, D (that is, the number of input channels), and by its filter/kernel size, (kH, kW). As square filters are commonly used
+
+everal additional hyperparameters, affecting the way the filters are sliding over the images.
+
+The larger the stride, the sparser the resulting feature maps.
+
+- Available in the low-level API, tf.nn.conv2d() (refer to the documentation at https://www.tensorflow.org/api_docs/python/tf/nn/conv2d) is the default choice for image convolution
+
+main parameters are as follows:
+
+input: The batch of input images, of shape (B, H, W, D), with B being the batch size.
+
+filter: The N filters stacked into a tensor of shape (kH, kW, D, N).
+
+strides: A list of four integers representing the stride for each dimension of the batched input. Typically, you would use [1, sH, sW, 1] 
+
+padding: Either a list of 4 × 2 integers representing the padding before and after each dimension of the batched input, or a string defining which predefined padding case to use; that is, either VALID or SAME
+
+name: The name to identify this operation
+
+    + examples 
+    
+        * well known kernel for gaussian blur 
+
+kernel = [[1/16 2/16 1/16],
+          [2/16 4/16 2/16],
+          [1/16 2/16 1/16]]
+
+res = tf.nn.conv2d(batched_im, kernel, strides=[1,1,1,1], padding="SAME")
+
+        * well known kernel for edge detection 
+        
+kernel = [[-1 -1 -1],
+          [-1 8  -1],
+          [-1 -1 -1]]
+res = tf.nn.conv2d(batched_im, kernel, strides=[1,2,2,1], padding="SAME")
+
+VALID means the images won't be padded (p = 0), and the filters will slide only over the default valid positions
+
+opting for SAME, TensorFlow will calculate the value, p, so that the convolution outputs have the same height and width as the inputs for a stride of 1 (that is, solving Ho = Ho and Wo = W given the equations presented in the previous section, temporarily setting s to 1)
+
+complex than zeros. In those cases, it is recommended to use the tf.pad() method (refer to the documentation at https://www.tensorflow.org/api_docs/python/tf/pad)
+
+    + more network types 
+    
+ offers several other low-level convolution methods, such as tf.nn.conv1d() (refer to the documentation at https://www.tensorflow.org/api_docs/python/tf/nn/conv1d) 
+
+ tf.nn.conv3d() (refer to the documentation at https://www.tensorflow.org/api_docs/python/tf/nn/conv3d), for one-dimensional and three-dimensional data, respectively
+
+ tf.nn.depthwise_conv2d() (refer to the documentation at https://www.tensorflow.org/api_docs/python/tf/nn/depthwise_conv2d) to convolve each channel of the images with different filters
+
+```
+# Initializing the trainable variables (for instance, the filters with values from a Glorot distribution, and the bias with zeros):
+kernels_shape = [k, k, D, N]
+glorot_uni_initializer = tf.initializers.GlorotUniform()
+# ^ this object is defined to generate values following the Glorot distribution (note that other famous parameter more or less random initializers exist, also covered by TensorFlow)
+kernels = tf.Variable(glorot_uni_initializer(kernels_shape), 
+                      trainable=True, name="filters")
+bias = tf.Variable(tf.zeros(shape=[N]), trainable=True, name="bias")
+
+# Defining our convolutional layer as a compiled function:
+@tf.function
+def conv_layer(x, kernels, bias, s):
+    z = tf.nn.conv2d(x, kernels, strides=[1,s,s,1], padding='VALID')
+    # Finally, applying the bias and activation function (for instance, ReLU):
+    return tf.nn.relu(z + bias)
+```
+
+- pooling layers 
+
+with convolutional layers, you can pad the tensors before applying the operation (as shown in Figure 3.5):
+
+Max-pooling layers return only the maximum value
+
+average-pooling layers compute the average at each depth of the pooled area
+
+- tensorflow/keras methods 
+
+full connected layers 
+
+fc = tf.keras.layers.Dense(units=output_size, activation='relu')
+
+- effective receptive field (ERF) of a neural network is an important notion in deep learning, as it may affect the ability of the network to cross-reference and combine distant elements in the input images.
+
+- definitions 
+
+ERF, the region of the input image 
+
+term receptive field, RF used in place of ERF 
+
+Ri = R_i-1 + (ki - 1) * PI(j=1 to i-1) si
+
+ki is the filter size of the layer 
+
+- impelment LeNet-5
+
+The complete architecture is represented in the following diagram
+
+a convolutional layer kernel size k = 5 and stride s = 1 follow by a max-pooling layer with k = 2 and s = 2
+
+input images are zero padded by 2 
+
+
+32x32> conv#1 (N=6, k=5, s=1, p=2) > 32x32> max-pool#1(k=2,s=2,p=0) > 14x14> conv#2 (N=16, k=5, s=1, p=0)  > 10x10 > max-pool#2(k=2, s=2, p=0)> 5x5(N=16)> FC#1(in=400, out=120) > 120x1 > FC#2 (in=120, out=84) > 84x1 > FC#3(in=84, out=10) > 10x1
+    
+    + tensorflow implementation 
+```
+from tensorflow.keras.model import Model, Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+model = Sequential() # `Sequential` inherits from tf.keras.Model
+# 1st block:
+model.add(Conv2D(6, kernel_size=(5, 5), padding='same', activation='relu', 
+ input_shape=(img_height, img_width, img_channels))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+# 2nd block:
+model.add(Conv2D(16, kernel_size=(5, 5), activation='relu')
+model.add(MaxPooling2D(pool_size=(2, 2)))
+# Dense layers:
+model.add(Flatten())
+model.add(Dense(120, activation='relu'))
+model.add(Dense(84, activation='relu'))
+model.add(Dense(num_classes, activation='softmax'))
+```
+
+    + TensorFlow Basics and Training a Model, Keras also provides the functional API. This API makes it possible to define models in a more object-oriented approach
+    
+    this can help to build one specific layer is reused several times inside the networks, or when layers have multiple inputs or outputs.
+
+```
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+class LeNet5(Model): # `Model` has the same API as `Layer` + extends it
+    def __init__(self, num_classes): # Create the model and its layers
+        super(LeNet5, self).__init__()
+        self.conv1 = Conv2D(6, kernel_size=(5, 5), padding='same', 
+                            activation='relu')
+        self.conv2 = Conv2D(16, kernel_size=(5, 5), activation='relu')
+        self.max_pool = MaxPooling2D(pool_size=(2, 2))
+        self.flatten = Flatten()
+        self.dense1 = Dense(120, activation='relu')
+        self.dense2 = Dense(84, activation='relu')
+        self.dense3 = Dense(num_classes, activation='softmax')
+    def call(self, x): # Apply the layers in order to process the inputs
+        x = self.max_pool(self.conv1(x)) # 1st block
+        x = self.max_pool(self.conv2(x)) # 2nd block
+        x = self.flatten(x)
+        x = self.dense3(self.dense2(self.dense1(x))) # dense layers
+        return x
+```
+
+- application to MNIST 
+
+instantiate the optimizer (a simple stochastic gradient descent (SGD) optimizer) and define the loss (the categorical cross-entropy) before launching the training
+
+```
+model.compile(optimizer='sgd', loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+# We also instantiate some Keras callbacks, that is, utility functions automatically called at some points during training to monitor it:
+callbacks = [
+    # To interrupt the training if `val_loss` stops improving for over 3 epochs:
+    tf.keras.callbacks.EarlyStopping(patience=3, monitor='val_loss'),
+    # To log the graph/metrics into TensorBoard (saving files in `./logs`):
+    tf.keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=1)]
+# Finally, we launch the training:
+model.fit(x_train, y_train, batch_size=32, epochs=80, 
+          validation_data=(x_test, y_test), callbacks=callbacks)
+```
+
+- gradient descent challenges 
+
+gradient descent process could be summarized in a single equation
+
+P_i+1 <- P_i - v_i with v_i = __eta__ * dL_ii/dP_i
+
+__eta__ is the learning rate 
+
+    + momentum algorithms 
+
+In tf.optimizers (also accessible as tf.keras.optimizers), momentum is defined as an optional parameter of SGD
+
+```
+optimizer = tf.optimizers.SGD(lr=0.01, momentum=0.9, # `momentum` = "mu"
+                              decay=0.0, nesterov=False)
+```
+
+    + training step implementation manually 
+    
+```
+@tf.function
+def train_step(batch_images, batch_gts): # typical training step
+    with tf.GradientTape() as grad_tape: # Tell TF to tape the gradients
+        batch_preds = model(batch_images, training=True) # forward
+        loss = tf.losses.MSE(batch_gts, batch_preds)     # compute loss
+    # Get the loss gradients w.r.t trainable parameters and back-propagate:
+    grads = grad_tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+```
+
+- the ada family 
+
+- early stopping 
+
+Cross-validation is the key here to evaluate when training should be stopped. 
+
+- The L1 and L2 regularizers are prime examples of this.
+
+- In machine learning, a regularization term, R(P), computed over the parameters, P, of the method, f, to optimize 
+
+L(y, y^true) + __lambda__ * R(P) with y = f(x, P)
+
+R_L1(P) = ||P||1 = sigma(k)|P_k|
+
+R_L2(P) = 1/2 * ||P||_2^2 = 1/2 * sigma(k) P_k ^ 2 
+
+L2 regularization (also called ridge regularization) thus compels the network to minimize the sum of its squared parameter values. 
+
+On the other hand, the L1 regularizer (also called the LASSO (least absolute shrinkage and selection operator) regularizer, first introduced in Linear Inversion of Band-Limited Reflection Seismogram
+
+L1 regularization instead makes the network shrink the parameters linked to less important features toward zero. it prevents overfitting by forcing the network to ignore less meaningful features (for instance, tied to dataset noise). In other words, L1 regularization forces the network to adopt sparse parameters. Good for minimized network size 
+
+- tensorflow and keras implementations 
+
+Additional losses can be attached to tf.keras.layers.Layer and tf.keras.Model instances through their .add_loss(losses, ...) method, with the losses tensors or zero-argument callables returning the loss values. 
+
+simple convolution layer implemented previously to add optional regularization to its parameters
+```
+from functools import partial
+
+def l2_reg(coef=1e-2): # reimplementation of tf.keras.regularizers.l2()
+    return lambda x: tf.reduce_sum(x ** 2) * coef
+
+class ConvWithRegularizers(SimpleConvolutionLayer):
+    def __init__(self, num_kernels=32, kernel_size=(3, 3), stride=1,
+                 kernel_regularizer=l2_reg(), bias_regularizer=None):
+        super().__init__(num_kernels, kernel_size, stride)  
+        self.kernel_regularizer = kernel_regularizer
+        self.bias_regularizer = bias_regularizer
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        # Attaching the regularization losses to the variables.
+        if self.kernel_regularizer is not None:
+            # for instance, we tell TF to compute and save
+            # `tf.nn.l1_loss(self.kernels)` at each call (that is iteration):
+            self.add_loss(partial(self.kernel_regularizer, self.kernels))
+        if self.bias_regularizer is not None:
+            self.add_loss(partial(self.bias_regularizer, self.bias))
+```
+
+ main loss is averaged (for example, MSE and MAE). 
+
+    + the regularization losses can be computed listed and added to the main loss 
+    
+```
+# We create a NN containing layers with regularization/additional losses:
+model = Sequential()
+model.add(ConvWithRegularizers(6, (5, 5), kernel_regularizer=l2_reg())
+model.add(...) # adding more layers
+model.add(Dense(num_classes, activation='softmax'))
+
+# We train it (c.f. function `training_step()` defined before):
+for epoch in range(epochs):
+    for (batch_images, batch_gts) in dataset:
+        with tf.GradientTape() as grad_tape:
+            loss = tf.losses.sparse_categorical_crossentropy(
+                batch_gts, model(batch_images)) # main loss
+            loss += sum(model.losses)           # list of addit. losses
+        # Get the gradients of combined losses and back-propagate:
+        grads = grad_tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+```
+
+.add_loss(), as this method can greatly simplify the process of adding layer-specific losses to custom networks. 
+    
+    + we don't need to add regularization with Keras 
+Keras even explicitly defines some regularizer callables in its tf.keras.regularizers module. Finally, when using Keras training operations (such as model.fit(...)), Keras automatically takes into account additional model.losses
+```
+# We instantiate a regularizer (L1 for example):
+l1_reg = tf.keras.regularizers.l1(0.01)
+# We can then pass it as a parameter to the target model's layers:
+model = Sequential()
+model.add(Conv2D(6, kernel_size=(5, 5), padding='same', activation='relu', 
+                 input_shape=input_shape, kernel_regularizer=l1_reg))
+model.add(...) # adding more layers
+model.fit(...) # training automatically taking into account the reg. terms
+```
+
+- dropout, through tf.nn.dropout(x, rate, ...) 
+
+model = Sequential([ # ...
+    Dense(120, activation='relu'),
+    Dropout(0.2),    # ...
+])
+
+- batch normalization 
+
+Like dropout, batch normalization, is an operation that can be inserted into neural networks and affects their training. This operation takes the batched results of the preceding layers and normalizes them
+
+Since batches are randomly sampled in SGD (and thus are rarely the same twice), this means that the data will almost never be normalized the same way.
+
+
+
+    
+
+# author 
+please visit authors.packtpub.com and apply today.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -368,6 +368,3088 @@ ATL offers the IDispEventImpl and IDispEventSimpleImpl classes to help you imple
 
 - Multiple dual interfaces 
 
+making the class available to scripting languages as well as C++
+
+expose multiple dual interfaces on a single COM object, it is not recommended. If there are multiple dual interfaces, there must be only one IDispatch interface exposed.
+
+    + exposing a single IDispatch interface 
+    
+    a single object by deriving from two or more specializations of IDispatchImpl. However, if you allow clients to query for the IDispatch interface, you will need to use the COM_INTERFACE_ENTRY2 macro (or COM_INTERFACE_ENTRY_IID)) to specify which base class to use for the implementation of IDispatch.
+    
+```
+COM_INTERFACE_ENTRY2(IDispatch, IMyDualInterface)
+```
+
+    only one IDispatch interface is exposed, clients that can only access your objects through the IDispatch interface will not be able to access the methods or properties in any other interface.
+
+    + combining multiple dual interfaces into a single implementation of IDispatch 
+
+    manually combining the interfaces, such as creating a templated class that contains a union of the separate IDispatch interfaces, creating a new object to perform the QueryInterface function, or using a typeinfo-based implementation of nested objects to create the IDispatch interface
+    
+    it is not recommanded, may have namespace collisions 
+
+    + nonexistensible attribute 
+
+should apply the nonextensible attribute to your interface definition. enable full code verification at compile time.
+
+```
+// cpp_attr_ref_nonextensible.cpp
+// compile with: /LD
+#include "unknwn.h"
+[module(name="ATLFIRELib")];
+[export] typedef long HRESULT;
+
+[dual, nonextensible, ms_union, oleautomation,
+uuid("00000000-0000-0000-0000-000000000001")]
+__interface IFireTabCtrl
+{
+   HRESULT procedure (int i);
+};
+```
+
+    + dual interfaces and events 
+
+doesn't need to design a dual event interface, becaus source of the event will only fire the event via the vtable or via Invoke, not both
+
+- ATL collections 
+
+A collection is a COM object that provides an interface that allows access to a group of data item
+
+Item property that returns an item from the collection based on an index
+
+a _NewEnum property that returns an enumerator for the collection
+
+An enumerator is a COM object that provides an interface for iterating through items in a collection. 
+
+    + classes help you implement collections and enumerators 
+    
+ICollectionOnSTLImpl 	Collection interface implementation
+IEnumOnSTLImpl 	        Enumerator interface implementation (assumes data stored in a C++ Standard Library-compatible container)
+CComEnumImpl 	        Enumerator interface implementation (assumes data stored in an array)
+CComEnumOnSTL 	        Enumerator object implementation (uses IEnumOnSTLImpl)
+CComEnum 	            Enumerator object implementation (uses CComEnumImpl)
+_Copy 	                Copy policy class
+_CopyInterface 	        Copy policy class
+CAdapt 	                Adapter class (hides operator & allowing CComPtr, CComQIPtr, and CComBSTR to be stored in C++ Standard Library containers)
+
+    + different design principles behind each type of interface
+    
+    A collection interface provides random access to a single item in the collection via the Item method, it lets clients discover how many items are in the collection via the Count property,
+
+    An enumerator interface provides serial access to multiple items in a collection, it doesn't allow the client to discover how many items are in the collection
+
+    + implementing a c++ standard library based collection 
+    
+    ATL provides the ICollectionOnSTLImpl interface to enable you to quickly implement C++ Standard Library-based collection interfaces on your objects
+
+    + generating a new simple object 
+
+    Use the ATL Add Class dialog box and Add Simple Object Wizard to generate a Simple Object called Words.  IWords is generated.
+
+        * edit IDL file 
+        
+```
+[
+   object,
+   uuid(7B3AC376-509F-4068-87BA-03B73ADC359B),
+   dual,                                                    // (1)
+   nonextensible,                                           // (2)
+   pointer_default(unique)
+]
+interface IWords : IDispatch
+{
+   [id(DISPID_NEWENUM), propget]                            // (3)
+   HRESULT _NewEnum([out, retval] IUnknown** ppUnk);
+
+   [id(DISPID_VALUE), propget]                              // (4)
+   HRESULT Item([in] long Index, [out, retval] BSTR* pVal); // (5)
+
+   [id(0x00000001), propget]                                // (6)
+   HRESULT Count([out, retval] long* pVal);
+};
+```
+
+    Collection interfaces are usually dual because Automation clients accesses the _NewEnum property via IDispatch::Invoke.
+    
+    If a dual interface or dispinterface will not be extended at run time, should apply nonextensible attribute to the definition 
+
+    The correct DISPID is important if you want Automation clients to be able to use this property.
+
+    Item typically uses DISPID_VALUE to make it the default property of the collection. This allows Automation clients to refer to the property without naming it explicitly.
+
+    data type used for the return value of the Item property is the type of the item stored in the collection as far as COM clients are concerned.
+
+    The value used for the DISPID of the Count property is completely arbitrary.
+    
+    + creating typedefs for storage and exposure via enumerator 
+
+```
+// Store the data in a vector of std::strings
+typedef std::vector< std::string >         ContainerType;
+
+// The collection interface exposes the data as BSTRs
+typedef BSTR                               CollectionExposedType;
+typedef IWords                             CollectionInterface;
+
+// Use IEnumVARIANT as the enumerator for VB compatibility
+typedef VARIANT                            EnumeratorExposedType;
+typedef IEnumVARIANT                       EnumeratorInterface;
+```
+
+store the data as a std::vector of std::strings. std::vector is a C++ Standard Library container class that behaves like a managed array. 
+
+VB require the _NewEnum property must support the IEnumVARIANT interface
+
+    + creating typedefs for copy policy classes 
+
+// Typedef the copy classes using existing typedefs
+typedef VCUE::GenericCopy<EnumeratorExposedType, ContainerType::value_type> EnumeratorCopyType;
+typedef VCUE::GenericCopy<CollectionExposedType, ContainerType::value_type> CollectionCopyType;
+
+GenericCopy class defined in VCUE_Copy.h and VCUE_CopyString.h from the ATLCollections sample
+
+    + creating typedefs for enumeration and collection 
+
+    all the template parameters necessary to specialize the CComEnumOnSTL and ICollectionOnSTLImpl 
+
+```
+typedef CComEnumOnSTL< EnumeratorInterface, &__uuidof(EnumeratorInterface), EnumeratorExposedType, EnumeratorCopyType, ContainerType > EnumeratorType;
+
+typedef ICollectionOnSTLImpl< CollectionInterface, ContainerType, CollectionExposedType, CollectionCopyType, EnumeratorType > CollectionType;
+```
+
+    + editing the wizard-generated code 
+derive CWords from the interface implementation represented by the CollectionType
+
+```
+class ATL_NO_VTABLE CWords :
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CWords, &CLSID_Words>,
+   // 'CollectionType' replaces 'IWords' in next line
+   public IDispatchImpl<CollectionType, &IID_IWords, &LIBID_NVC_ATL_COMLib, /*wMajor =*/ 1, /*wMinor =*/ 0>
+{
+public:
+DECLARE_REGISTRY_RESOURCEID(IDR_WORDS)
+
+
+BEGIN_COM_MAP(CWords)
+   COM_INTERFACE_ENTRY(IWords)
+   COM_INTERFACE_ENTRY(IDispatch)
+END_COM_MAP()
+
+// Remainder of class declaration omitted.
+```
+
+    + adding code to populate the collection 
+    
+```
+CWords()
+{
+    m_coll.push_back("this");
+    m_coll.push_back("is");
+    m_coll.push_back("a");
+    m_coll.push_back("test");
+}
+```
+
+- ATL copy olicy classes 
+
+Copy policy classes are utility classes used to initialize, copy, and delete data.
+
+implementations of the following templates:
+```
+CComEnumImpl
+
+IEnumOnSTLImpl
+
+ICollectionOnSTLImpl
+```
+
+    + definition copy policy class:
+```
+static void init( DestinationType * p);
+
+static HRESULT copy( DestinationType * pTo, const SourceType * pFrom);
+
+static void destroy( DestinationType * p);
+```
+
+DestinationType and SourceType with arbitrary data types for each copy policy.
+
+    + two requirements on the use and implementation
+    
+    first parameter to copy must only receive a pointer to data that you have previously initialized using init.
+
+    destroy must only ever receive a pointer to data that you have previously initialized using init or copied via copy.
+    
+    + standard implementation 
+
+    The _Copy class allows homogeneous copying only,  a single template parameter to specify both DestinationType and SourceType. uses memcpy to copy the data. ATL also provides specializations of _Copy for VARIANT, LPOLESTR, OLEVERB, and CONNECTDATA data types.
+
+    The _CopyInterface class provides an implementation for copying interface pointers following standard COM rules.
+
+    + custom implementations 
+
+    look at the files VCUE_Copy.h and VCUE_CopyString.h in the ATLCollections sample
+
+    GenericCopy allows you to specify the SourceType and DestinationType as template arguments.
+    
+```
+template <class DestinationType, class SourceType = DestinationType>
+class GenericCopy
+{
+public :
+   typedef DestinationType destination_type;
+   typedef SourceType      source_type;
+
+   static void init(destination_type* p)
+   {
+      _Copy<destination_type>::init(p);
+   }
+   static void destroy(destination_type* p)
+   {
+      _Copy<destination_type>::destroy(p);
+   }
+   static HRESULT copy(destination_type* pTo, const source_type* pFrom)
+   {
+      return _Copy<destination_type>::copy(pTo, const_cast<source_type*>(pFrom));
+   }
+
+}; // class GenericCopy
+```
+
+    + MapCopy, assumes that the data being copied is stored into a C++ Standard Library-style map
+
+    MapType class to determine the type of the source data and to call the appropriate GenericCopy class.
+    
+```
+template <class MapType, class DestinationType = MapType::mapped_type>
+class MapCopy
+{
+public :
+   typedef DestinationType               destination_type;
+   typedef typename MapType::value_type  source_type;
+   
+   typedef MapType                       map_type;
+   typedef typename MapType::mapped_type pseudosource_type;
+
+   static void init(destination_type* p)
+   {
+      GenericCopy<destination_type, pseudosource_type>::init(p);
+   }
+   static void destroy(destination_type* p)
+   {
+      GenericCopy<destination_type, pseudosource_type>::destroy(p);
+   }
+   static HRESULT copy(destination_type* pTo, const source_type* pFrom)
+   {
+      return GenericCopy<destination_type, pseudosource_type>::copy(pTo, &(pFrom->second));
+   }
+
+}; // class MapCopy
+```
+- MFC independent utility classes 
+
+CImage Provides enhanced bitmap support, including the ability to load and save images in JPEG, GIF, BMP, and Portable Network Graphics (PNG) formats.
+
+CPoint Provides an implementation for storing coordinate (x, y) pairs.
+
+CRect Provides an implementation for storing coordinates of rectangular areas.
+
+CSize Provides an implementation for storing distance, relative positions, or paired values.
+
+CString Provides an implementation for storing character strings.
+
+CAdapt A simple template used to wrap classes that redefine the address-of operator.
+
+_U_RECT An argument adapter class that allows either RECT pointers or references to be passed to a function that is implemented in terms of pointers.
+
+- ATL component control fundamentals 
+
+A composite control is a type of ActiveX control that can contain (similar to a dialog box) other ActiveX controls or Windows controls
+
+    + inserting a composite control 
+
+    VS > Add Class dialog box allows you to insert an ATL object into a project. 
+    
+    choose ATL Control. This will start the ATL Control Wizard.
+
+    select the Options tab, and click the Composite control check box, a default html will be created for viewing the control 
+
+    + modify the ATL project, add a new resource script and then use the Dialog editor.
+
+    + adding functionality to the composite control 
+
+    new functionality usually falls into two categories:
+
+    Supporting additional interfaces and customizing the behavior of your composite control with additional
+
+    Handling events from the contained ActiveX control (or controls).
+    
+    an ActiveX control in the dialog resource, right-click the control and click Add Event Handler. Select the event you want to handle and click Add and Edit.
+
+    ActiveX controls on the composite control are automatically connected and disconnected via calls to CComCompositeControl::AdviseSinkMap. advise or unadvise all controls hosted by the composite control.
+
+    + test your composite control using the Test Container tool, or any other application that can host an ActiveX control. 
+
+- ATL control containment FAQ
+
+https://docs.microsoft.com/en-us/cpp/atl/atl-control-containment-faq?view=msvc-160
+
+- ATL COM property pages 
+
+Property pages are COM objects that implement the IPropertyPage or IPropertyPage2 interface
+
+Control containers use the ISpecifyPropertyPages interface to find out which property pages can be used to set your control's properties
+
+    + Derive your class from ISpecifyPropertyPagesImpl.
+
+    + Add an entry for ISpecifyPropertyPages to your class's COM map.
+
+    + Add a PROP_PAGE entry to the property map for each page associated with your control.
+
+    + example 
+    
+```
+class ATL_NO_VTABLE CMyCtrl :
+   OtherInterfaces
+   public ISpecifyPropertyPagesImpl<CMyCtrl>
+{
+public:
+
+BEGIN_COM_MAP(CMyCtrl)
+   OtherComMapEntries
+   COM_INTERFACE_ENTRY(ISpecifyPropertyPages)
+END_COM_MAP()
+
+BEGIN_PROP_MAP(CMyCtrl)
+   OtherPropMapEntries
+   PROP_PAGE(CLSID_DatePage)
+   PROP_PAGE(CLSID_StockColorPage)
+END_PROP_MAP()
+
+   // Remainder of class declaration omitted.
+```
+
+    + ATL Property Page wizard is not available in Visual Studio 2019 and later
+
+- ATL support for DHTML conttrols
+
+Hosts the WebBrowser control.
+
+Accesses the WebBrowser object and its methods through its interface, IWebBrowser2.
+
+    + it implements an additional interface that is used to communicate between the C++ code and the HTML user interface (UI). The HTML UI calls into C++ code using this interface.
+    
+    + creates an HTML resource for the control UI.
+
+    +  DHTML object model through the member variable m_spBrowser, which is a smart pointer of type IWebBrowser2.
+
+    + calling cpp code from DHTML 
+    
+    ```
+    STDMETHOD(OnClick)(IDispatch* pdispBody, VARIANT varColor)
+    ```
+
+    <BUTTON onclick='window.external.OnClick(theBody, "red");'>Red</BUTTON>
+    
+    + creatingan ATL DHTML control 
+    
+    Add Class dialog box, double-click the ATL Control Wizard. In the ATL Control Wizard, click the Options tab and select DHTML control
+
+    Testing Properties and Events with Test Container for information on how to access Test Container.
+
+    Click Insert New Control. In the Insert Control dialog box, select your control from the list box.
+    
+    + modifying the ATL DHTML control 
+    
+    In Class View, expand the control project.
+    
+    Add a method called MethodInvoked to the interface
+    
+    find stubbed-out method in the .cpp file and add code to display a message box,
+
+```
+::MessageBox(NULL, _T("I'm invoked"), _T("Your Container Message"), MB_OK);
+```
+
+    Add another method called HelloHTML, only this time, add it to the interface that ends in "UI." Find the stubbed-out HelloHTML method in the .cpp file 
+    
+    Add a third method, GoToURL, to the interface that does not end in "UI." Implement this method by calling IWebBrowser2::Navigate, as follows
+    
+```
+m_spBrowser->Navigate(CComBSTR(L"www.microsoft.com"), NULL, NULL, NULL, NULL);
+```
+
+    + testing the modified ATL DHTML control 
+
+
+- ATL connection points 
+
+A connectable object is one that supports outgoing interfaces. An outgoing interface allows the object to communicate with a client. exposes its connection points to the client through the IConnectionPointContainer interface
+
+The connectable object expose a connection point IConnectionPoint interface, each outgoing interface is implemented by a client on an object called a sink.
+
+    + ATL connection point classes to support connection points:
+
+    IConnectionPointImpl implements a connection point. The IID of the outgoing interface it represents is passed as a template parameter.
+
+    IConnectionPointContainerImpl implements the connection point container and manages the list of IConnectionPointImpl objects.
+
+    IPropertyNotifySinkCP implements a connection point representing the IPropertyNotifySink interface.
+
+    CComDynamicUnkArray manages an arbitrary number of connections between the connection point and its sinks.
+
+    CComUnkArray manages a predefined number of connections as specified by the template parameter.
+
+    CFirePropNotifyEvent notifies a client's sink that an object's property has changed or is about to change.
+
+    IDispEventImpl provides support for connection points for an ATL COM object. These connection points are mapped with an event sink map, which is provided by your COM object.
+
+    IDispEventSimpleImpl works in conjunction with the event sink map in your class to route events to the appropriate handler function.
+
+- Adding connection points to an object 
+
+ATL implements connection points with the IConnectionPointImpl class. with two choices 
+
+    + implement your own outgoing event source by adding a connection point to the control or object 
+    
+    + reuse a connection point interface defined in another type library 
+    
+implement connection point wizard use a type library to do its work 
+
+    1. Define a dispinterface in the library block of the .idl file, if enabled connectioin points, created the control with the ATL Control Wizard, the dispinterface will already be created.
+    
+    if not enabled, you must manually add a dispinterface to the .idl file. The following is an example of a dispinterface. 
+    
+    ```
+    [
+       uuid(3233E37D-BCC0-4871-B277-48AE6B61224A),
+        helpstring("Buddy Events")
+    ]
+    dispinterface DBuddyEvents
+    {
+       properties:
+       methods:
+    };
+    ```
+    
+    2. Add the dispinterface as the [default,source] interface in the coclass for the object in the project's .idl file. 
+    
+    to manually add this entry 
+    
+    ```
+    coclass Buddy
+    {
+       [default] interface IBuddy;
+       [default,source] dispinterface DBuddyEvents;
+    };
+    ```
+    
+    3. use Class View to add methods and properties to the event interface. Right-click the class in Class View, point to Add on the shortcut menu, and click Add Connection Point.
+    
+    4. In the Source Interfaces list box of the Implement Connection Point Wizard, select Project's interfaces. choose an interface for your control and press OK
+
+        * Generate a header file with an event proxy class that implements the code that will make the outgoing calls for the event.
+        
+        * add an entry to the connection point map 
+        
+    + reuse a connection point interface defined in another type library 
+    
+        1. In Class View, right-click a class that implements a BEGIN_COM_MAP macro, Add on the shortcut menu, and click Add Connection Point.
+        
+        2. select a type library and an interface in the type library and click Add.
+        
+        3. Edit the .idl file to either
+        
+        Copy the dispinterface from the .idl file for the object 
+        
+        Use the importlib instruction on that type library.
+
+    + example shows an IPropertyNotifySink as an outgoing interface 
+    
+```
+class ATL_NO_VTABLE CConnect1 :
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CConnect1, &CLSID_Connect1>,
+   public IConnectionPointContainerImpl<CConnect1>,
+   public IConnectionPointImpl<CConnect1, &IID_IPropertyNotifySink>,
+   public IConnect1
+{
+public:
+   CConnect1()
+   {
+   }
+
+DECLARE_REGISTRY_RESOURCEID(IDR_CONNECT1)
+
+
+BEGIN_COM_MAP(CConnect1)
+   COM_INTERFACE_ENTRY(IConnect1)
+   COM_INTERFACE_ENTRY(IConnectionPointContainer)
+END_COM_MAP()
+
+BEGIN_CONNECTION_POINT_MAP(CConnect1)
+   CONNECTION_POINT_ENTRY(IID_IPropertyNotifySink)
+END_CONNECTION_POINT_MAP()
+
+
+   DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+   HRESULT FinalConstruct()
+   {
+      return S_OK;
+   }
+
+   void FinalRelease()
+   {
+   }
+
+public:
+
+};
+```
+
+specifying IPropertyNotifySink as an outgoing interface, you can use class IPropertyNotifySinkCP instead of IConnectionPointImpl
+
+```
+class ATL_NO_VTABLE CConnect2 :
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CConnect2, &CLSID_Connect2>,
+   public IConnectionPointContainerImpl<CConnect2>,
+   public IPropertyNotifySinkCP<CConnect2>
+```
+
+- Event handling and ATL 
+
+    + three steps
+    
+    Implement the event interface on your object.
+
+    Advise the event source that your object wants to receive events.
+
+    Unadvise the event source when your object no longer needs to receive events.
+
+    + implement the event interface will depdend on its type, An event interface can be vtable, dual, or a dispinterface. 
+
+    Query the source object for IConnectionPointContainer
+    
+    Call IConnectionPointContainer::FindConnectionPoint passing the IID of the event interface that interests you.
+
+    this will return the IConnectionPoint interface on a connection point object
+
+    Call IConnectionPoint::Advise passing the IUnknown of the event sink. If successful, this will return a DWORD cookie representing the connection.
+
+    When you no longer need to receive events, you can pass the cookie back to the connection point via IConnectionPoint::Unadvise.
+
+    + implement the event handling interface, common ways of implementing an interface using ATL are:
+
+    Deriving from a custom interface directly.
+
+    Deriving from IDispatchImpl for dual interfaces described in a type library.
+
+    Deriving from IDispEventImpl for dispinterfaces described in a type library.
+
+    Deriving from IDispEventSimpleImpl for dispinterfaces not described in a type library or when you want to improve efficiency by not loading the type information at run time.
+
+    a custom or dual interface, you should advise the event source by calling AtlAdvise or CComPtrBase::Advise. You will need to keep track of the cookie returned by the call yourself, Call AtlUnadvise to break the connection.
+
+    using IDispEventImpl or IDispEventSimpleImpl, you should advise the event source by calling IDispEventSimpleImpl::DispEventAdvise. Call IDispEventSimpleImpl::DispEventUnadvise to break the connection.
+
+    using IDispEventImpl as a base class of a composite control, the event sources listed in the sink map will be advised and unadvised automatically using CComCompositeControl::AdviseSinkMap. IDispEventImpl, IDispEventSimpleImpl manage the cookies for you. 
+
+    + using IDispEventImpl to handle events, you will need to:
+
+    Derive your class from IDispEventImpl.
+
+    Add an event sink map to your class.
+
+    Add entries to the event sink map using the SINK_ENTRY or SINK_ENTRY_EX macro.
+
+    Implement the methods that you're interested in handling.
+
+    Advise and unadvise the event source.
+    
+        * example, handle the DocumentChange event fired by Word's Application object. 
+
+```
+[ uuid(000209F7-0000-0000-C000-000000000046), hidden ]
+dispinterface ApplicationEvents {
+properties:
+methods:
+    [id(0x00000001), restricted, hidden]
+    void Startup();
+
+    [id(0x00000002)]
+    void Quit();
+
+    [id(0x00000003)]
+    void DocumentChange();
+};
+```
+
+    uses #import to generate the required header files from Word's type library. other versions of Word, you must specify the correct mso dll file. 
+
+```
+#pragma warning (disable : 4146)
+
+// Paths to required MS OFFICE files (replace "MSO.DLL" and "MSWORD.OLB" with the actual paths to those files...)
+#define _MSDLL_PATH "MSO.DLL"
+// Delete the *.tlh files when changing import qualifiers
+#import _MSDLL_PATH rename("RGB", "MSRGB") rename("DocumentProperties", "WordDocumentProperties") raw_interfaces_only
+
+#import "C:\Program Files\Common Files\Microsoft Shared\VBA\VBA6\VBE6EXT.OLB" raw_interfaces_only
+
+#define _MSWORDOLB_PATH "MSWORD.OLB"
+#import _MSWORDOLB_PATH rename("ExitWindows", "WordExitWindows") rename("FindText", "WordFindText") raw_interfaces_only
+
+#pragma warning (default : 4146)
+```
+
+code appears in NotSoSimple.h. The relevant code is noted by comments:
+```
+// Note #import doesn't generate a LIBID (because we don't use 'named_guids')
+// so we have to do it manually
+namespace Word
+{
+   struct __declspec(uuid("00020905-0000-0000-C000-000000000046"))
+      /* library */ Library;
+};
+
+class ATL_NO_VTABLE CNotSoSimple : 
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CNotSoSimple, &CLSID_NotSoSimple>,
+   public IDispatchImpl<ISwitch, &IID_ISwitch, &LIBID_ATLEVENTHANDLINGLib>,
+   // Note inheritance from IDispEventImpl
+   public IDispEventImpl</*nID*/ 1, CNotSoSimple,
+            &__uuidof(Word::ApplicationEvents2),
+            &__uuidof(Word::Library), /*wMajor*/ 8, /*wMinor*/ 1>
+
+{
+public:
+   CNotSoSimple()
+   {
+   }
+
+DECLARE_REGISTRY_RESOURCEID(IDR_NOTSOSIMPLE)
+
+DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+BEGIN_COM_MAP(CNotSoSimple)
+   COM_INTERFACE_ENTRY(ISwitch)
+   COM_INTERFACE_ENTRY(IDispatch)
+END_COM_MAP()
+
+   CComPtr<Word::_Application> m_pApp;
+
+   // Event handlers
+   // Note the __stdcall calling convention and 
+   // dispinterface-style signature   
+   void __stdcall OnQuit()
+   {
+      Stop();
+   }
+
+   void __stdcall OnDocChange()
+   {
+     ATLASSERT(m_pApp != NULL);
+
+      // Get a pointer to the _Document interface on the active document
+      CComPtr<Word::_Document> pDoc;
+      m_pApp->get_ActiveDocument(&pDoc);
+
+      // Get the name from the active document
+      CComBSTR bstrName;
+      if (pDoc)
+        pDoc->get_Name(&bstrName);
+
+      // Create a display string
+      CComBSTR bstrDisplay(_T("New document title:\n"));
+      bstrDisplay += bstrName;
+
+      // Display the name to the user
+      USES_CONVERSION;
+      MessageBox(NULL, W2CT(bstrDisplay), _T("IDispEventImpl : Active Document Changed"), MB_OK);
+   }
+
+// Note the mapping from Word events to our event handler functions.
+BEGIN_SINK_MAP(CNotSoSimple)
+   SINK_ENTRY_EX(/*nID =*/ 1, __uuidof(Word::ApplicationEvents2), /*dispid =*/ 3, OnDocChange)
+   SINK_ENTRY_EX(/*nID =*/ 1, __uuidof(Word::ApplicationEvents2), /*dispid =*/ 2, OnQuit)
+END_SINK_MAP()
+
+// ISwitch
+public:
+
+   STDMETHOD(Start)()
+   {
+      // If we already have an object, just return
+      if (m_pApp)
+         return S_OK;
+
+      // Create an instance of Word's Application object
+      HRESULT hr = m_pApp.CoCreateInstance(__uuidof(Word::Application), NULL, CLSCTX_SERVER);
+     if (FAILED(hr))
+        return hr;
+
+     ATLASSERT(m_pApp != NULL);
+
+      // Make the Word user interface visible
+      m_pApp->put_Visible(true);
+
+      // Note call to advise
+      // Forge a connection to enable us to receive events
+      DispEventAdvise(m_pApp);
+
+      return S_OK;
+   }
+
+   STDMETHOD(Stop)()
+   {
+      // Check we have an object to unadvise on
+      if (!m_pApp)
+         return S_OK;
+
+      // Note call to unadvise
+      // Break the connection with the event source
+      DispEventUnadvise(m_pApp);
+
+      // Release the Word application
+      m_pApp.Release();
+
+      return S_OK;
+   }
+};
+```
+
+```
+// Note #import doesn't generate a LIBID (because we don't use 'named_guids')
+// so we have to do it manually
+namespace Word
+{
+   struct __declspec(uuid("00020905-0000-0000-C000-000000000046"))
+      /* library */ Library;
+};
+
+class ATL_NO_VTABLE CNotSoSimple : 
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CNotSoSimple, &CLSID_NotSoSimple>,
+   public IDispatchImpl<ISwitch, &IID_ISwitch, &LIBID_ATLEVENTHANDLINGLib>,
+   // Note inheritance from IDispEventImpl
+   public IDispEventImpl</*nID*/ 1, CNotSoSimple,
+            &__uuidof(Word::ApplicationEvents2),
+            &__uuidof(Word::Library), /*wMajor*/ 8, /*wMinor*/ 1>
+
+{
+public:
+   CNotSoSimple()
+   {
+   }
+
+DECLARE_REGISTRY_RESOURCEID(IDR_NOTSOSIMPLE)
+
+DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+BEGIN_COM_MAP(CNotSoSimple)
+   COM_INTERFACE_ENTRY(ISwitch)
+   COM_INTERFACE_ENTRY(IDispatch)
+END_COM_MAP()
+
+   CComPtr<Word::_Application> m_pApp;
+
+   // Event handlers
+   // Note the __stdcall calling convention and 
+   // dispinterface-style signature   
+   void __stdcall OnQuit()
+   {
+      Stop();
+   }
+
+   void __stdcall OnDocChange()
+   {
+     ATLASSERT(m_pApp != NULL);
+
+      // Get a pointer to the _Document interface on the active document
+      CComPtr<Word::_Document> pDoc;
+      m_pApp->get_ActiveDocument(&pDoc);
+
+      // Get the name from the active document
+      CComBSTR bstrName;
+      if (pDoc)
+        pDoc->get_Name(&bstrName);
+
+      // Create a display string
+      CComBSTR bstrDisplay(_T("New document title:\n"));
+      bstrDisplay += bstrName;
+
+      // Display the name to the user
+      USES_CONVERSION;
+      MessageBox(NULL, W2CT(bstrDisplay), _T("IDispEventImpl : Active Document Changed"), MB_OK);
+   }
+
+// Note the mapping from Word events to our event handler functions.
+BEGIN_SINK_MAP(CNotSoSimple)
+   SINK_ENTRY_EX(/*nID =*/ 1, __uuidof(Word::ApplicationEvents2), /*dispid =*/ 3, OnDocChange)
+   SINK_ENTRY_EX(/*nID =*/ 1, __uuidof(Word::ApplicationEvents2), /*dispid =*/ 2, OnQuit)
+END_SINK_MAP()
+
+// ISwitch
+public:
+
+   STDMETHOD(Start)()
+   {
+      // If we already have an object, just return
+      if (m_pApp)
+         return S_OK;
+
+      // Create an instance of Word's Application object
+      HRESULT hr = m_pApp.CoCreateInstance(__uuidof(Word::Application), NULL, CLSCTX_SERVER);
+     if (FAILED(hr))
+        return hr;
+
+     ATLASSERT(m_pApp != NULL);
+
+      // Make the Word user interface visible
+      m_pApp->put_Visible(true);
+
+      // Note call to advise
+      // Forge a connection to enable us to receive events
+      DispEventAdvise(m_pApp);
+
+      return S_OK;
+   }
+
+   STDMETHOD(Stop)()
+   {
+      // Check we have an object to unadvise on
+      if (!m_pApp)
+         return S_OK;
+
+      // Note call to unadvise
+      // Break the connection with the event source
+      DispEventUnadvise(m_pApp);
+
+      // Release the Word application
+      m_pApp.Release();
+
+      return S_OK;
+   }
+};
+```
+
+    + Using IDispEventSimpleImpl, you will need to:
+
+    Derive your class from IDispEventSimpleImpl.
+
+    Add an event sink map to your class.
+
+    Define _ATL_FUNC_INFO structures describing the events.
+
+    Add entries to the event sink map using the SINK_ENTRY_INFO macro.
+
+    Implement the methods that you're interested in handling.
+
+    Advise and unadvise the event source.
+
+        * example, the application and #import section are sample with the previous example. The difference is the following simple implementation with IDispEventSimpleImpl
+        
+```
+// Note declaration of structure for type information
+extern _ATL_FUNC_INFO OnDocChangeInfo;
+extern _ATL_FUNC_INFO OnQuitInfo;
+
+class ATL_NO_VTABLE CSimple : 
+   public CComObjectRootEx<CComSingleThreadModel>,
+   public CComCoClass<CSimple, &CLSID_Simple>,
+   public IDispatchImpl<ISwitch, &IID_ISwitch, &LIBID_ATLEVENTHANDLINGLib>,
+   // Note inheritance from IDispEventSimpleImpl
+   public IDispEventSimpleImpl</*nID =*/ 1, CSimple, &__uuidof(Word::ApplicationEvents)>
+{
+public:
+   CSimple()
+   {
+   }
+
+DECLARE_REGISTRY_RESOURCEID(IDR_SIMPLE)
+
+DECLARE_PROTECT_FINAL_CONSTRUCT()
+
+BEGIN_COM_MAP(CSimple)
+   COM_INTERFACE_ENTRY(ISwitch)
+   COM_INTERFACE_ENTRY(IDispatch)
+END_COM_MAP()
+
+   CComPtr<Word::_Application> m_pApp;
+
+   // Event handlers
+   // Note the __stdcall calling convention and 
+   // dispinterface-style signature
+   void __stdcall OnQuit()
+   {
+      Stop();
+   }
+
+   void __stdcall OnDocChange()
+   {
+     ATLASSERT(m_pApp != NULL);
+
+      // Get a pointer to the _Document interface on the active document
+      CComPtr<Word::_Document> pDoc;
+      m_pApp->get_ActiveDocument(&pDoc);
+
+      // Get the name from the active document
+      CComBSTR bstrName;
+     if (pDoc)
+      pDoc->get_Name(&bstrName);
+
+      // Create a display string
+      CComBSTR bstrDisplay(_T("New document title:\n"));
+      bstrDisplay += bstrName;
+
+      // Display the name to the user
+      USES_CONVERSION;
+      MessageBox(NULL, W2CT(bstrDisplay), _T("IDispEventSimpleImpl : Active Document Changed"), MB_OK);
+   }
+
+// Note the mapping from Word events to our event handler functions.
+BEGIN_SINK_MAP(CSimple)
+   SINK_ENTRY_INFO(/*nID =*/ 1, __uuidof(Word::ApplicationEvents), /*dispid =*/ 3, OnDocChange, &OnDocChangeInfo)
+   SINK_ENTRY_INFO(/*nID =*/ 1, __uuidof(Word::ApplicationEvents), /*dispid =*/ 2, OnQuit, &OnQuitInfo)
+END_SINK_MAP()
+
+// ISwitch
+public:
+   STDMETHOD(Start)()
+   {
+      // If we already have an object, just return
+      if (m_pApp)
+         return S_OK;
+      
+      // Create an instance of Word's Application object
+      HRESULT hr = m_pApp.CoCreateInstance(__uuidof(Word::Application), NULL, CLSCTX_SERVER);
+     if (FAILED(hr))
+        return hr;
+
+     ATLASSERT(m_pApp != NULL);
+
+      // Make the Word user interface visible
+      m_pApp->put_Visible(true);
+
+      // Note call to advise
+      // Forge a connection to enable us to receive events
+      DispEventAdvise(m_pApp);
+
+      return S_OK;
+   }
+
+   STDMETHOD(Stop)()
+   {
+      // Check we have an object to unadvise on
+      if (!m_pApp)
+         return S_OK;
+
+      // Note call to unadvise
+      // Break the connection with the event source
+      DispEventUnadvise(m_pApp);
+
+      // Release the Word application
+      m_pApp.Release();
+
+      return S_OK;
+   }
+};
+
+// Define type info structure
+_ATL_FUNC_INFO OnDocChangeInfo = {CC_STDCALL, VT_EMPTY, 0};
+_ATL_FUNC_INFO OnQuitInfo = {CC_STDCALL, VT_EMPTY, 0};
+// (don't actually need two structure since they're the same)
+```
+
+    + ATL event handling summary 
+    
+    Implement the event interface on your object.
+    
+    Advise the event source that your object wants to receive events.
+
+    Unadvise the event source when your object no longer needs to receive events.
+
+        * implementing the interface 
+        
+Derive from 	Suitable for Interface type 	Requires you to implement all methods* 	Requires a type library at run time
+The interface 	        Vtable 	                        Yes 	No
+IDispatchImpl 	        Dual 	                        Yes 	Yes
+IDispEventImpl 	        Dispinterface 	                No 	    Yes
+IDispEventSimpleImpl 	Dispinterface 	                No 	    No
+
+- ATL and the Free Threaded Marshaler
+
+The ATL Simple Object Wizard's Attributes page provides an option that allows your class to aggregate the free threaded marshaler (FTM).
+
+A COM_INTERFACE_ENTRY_AGGREGATE macro is automatically added to the COM map to ensure that QueryInterface requests for IMarshal are handled by the free threaded marshaler.
+
+global interface table (GIT) and getting the pointer from the GIT each time it is used. ATL provides the class CComGITPtr to help you use interface pointers stored in the GIT.
+
+The free threaded marshaler allows direct access to interfaces on your object from any thread in the same process
+
+- specify the threading model for a project (ATL)
+
+_ATL_SINGLE_THREADED 	Define if all of your objects use the single threading model.
+
+_ATL_APARTMENT_THREADED 	Define if one or more of your objects use apartment threading.
+
+_ATL_FREE_THREADED 	Define if one or more of your objects use free or neutral threading. Existing code may contain references to the equivalent macro _ATL_MULTI_THREADED.
+
+- ATL module classes 
+
+Earlier versions of ATL used CComModule. In ATL 7.0, CComModule functionality is replaced
+
+    + CAtlBaseModule Contains information required by most applications that use ATL
+
+    + CAtlComModule Contains information required by the COM classes in ATL.
+
+    + CAtlWinModule Contains information required by the windowing classes in ATL.
+
+    + CAtlDebugInterfacesModule Contains support for interface debugging.
+
+    + CAtlModule The following CAtlModule-derived classes are customized to contain information required in a particular application type
+
+    + CAtlDllModuleT Used in DLL applications. Provides code for the standard exports.
+
+    + CAtlExeModuleT Used in EXE applications. Provides code required in an EXE.
+
+    + CAtlServiceModuleT Provides support to create Windows NT and Windows 2000 Services.
+
+    COM, windowing, interface debugging, and application-specific (DLL or EXE) features
+
+    Automatically declare global instance of each of these modules.
+
+    Remove the necessity of calling Init and Term methods.
+
+- ATL services 
+
+    + The wizard will then create a class derived from CAtlServiceModuleT to implement the service.
+
+    To install it as a service, run the following at the command prompt:
+
+    $ YourEXE .exe /Service
+    
+    $ YourEXE .exe /UnregServer
+
+    + When service run _tWinMain calls CAtlServiceModuleT::WinMain, which in turn calls CAtlServiceModuleT::Start
+    
+    CAtlServiceModuleT::Start sets up an array of SERVICE_TABLE_ENTRY structures that map each service to its startup win32 function StartServiceCtrlDispatcher. In theory, one EXE could handle multiple services and the array could have multiple SERVICE_TABLE_ENTRY structures. 
+
+    ATL-generated service supports only one service per EXE
+
+    a single entry that contains the service name and _ServiceMain
+
+    _ServiceMain is a static member function of CAtlServiceModuleT that calls the non-static member function, ServiceMain.
+
+    Failure of StartServiceCtrlDispatcher to connect to the service control manager (SCM) probably means that the program is not running as a service. In this case, the program calls CAtlServiceModuleT::Run directly so that the program can run as a local server
+
+    + CAtlServiceModuleT::ServiceMain function, The service control manager (SCM) calls ServiceMain when try to start the service 
+    
+    service must give the SCM a handler function to let it get service status
+
+    the service passes _Handler to the Win32 API function, RegisterServiceCtrlHandler. 
+
+    At startup, a service should also inform the SCM of its current status
+    
+    passing SERVICE_START_PENDING to the Win32 API function, SetServiceStatus
+    
+    ServiceMain then calls CAtlExeModuleT::InitializeCom, which calls the Win32 API function CoInitializeEx. 
+    
+    By default, InitializeCom passes the COINIT_MULTITHREADED flag to the function. indicates that the program is to be a free-threaded server.
+    
+    CAtlServiceModuleT::Run is called to perform the main work of the service. Run continue execute until the service is stopped 
+    
+    + CAtlServiceModuleT::Run function 
+    
+    Run contains calls to PreMessageLoop, RunMessageLoop, and PostMessageLoop. After being called
+    
+    PreMessageLoop first stores the service's thread ID. 
+    
+    use this ID to close itself by sending a WM_QUIT message using the Win32 API function, PostThreadMessage.
+    
+    PreMessageLoop then calls InitializeSecurity. By default, InitializeSecurity calls CoInitializeSecurity with the security descriptor set to NULL which means any user has access to your object 
+    
+    If you do not want the service to specify its own security, override PreMessageLoop and don't call InitializeSecurity, COM will then determine the security settings from the registry. 
+    
+    configure registry settings is with the DCOMCNFG utility 
+    
+    Once security is specified, the object is registered with COM so that new clients can connect to the program. Finally, the program tells the service control manager (SCM) that it is running
+    
+    + CAtlServiceModuleT::Handler function 
+    
+    CAtlServiceModuleT::Handler is the routine that the service control manager (SCM) calls to retrieve the status of the service and give it various instructions
+    
+    A default ATL-generated service only handles the stop instruction
+    
+    The service then calls PostThreadMessage to post a quit message to itself. This terminates the message loop 
+    
+    To handle more instructions, you need to change the m_status data member initialized in the CAtlServiceModuleT constructor
+    
+    + Registry entries 
+    
+    DCOM introduced the concept of Application IDs (AppIDs), which group configuration options for one or more DCOM objects into a centralized location in the registry AppID value under the object's CLSID
+    
+    By default, an ATL-generated service uses its CLSID as the GUID for its AppID, Under HKEY_CLASSES_ROOT\AppID
+    
+        * LocalService, with a value equal to the name of the service, if exist will be used instead of the LocalServer32 key under the CLSID
+        
+        * ServiceParameters, with a value equal to -Service. This value specifies parameters that will be passed to the service when it is started. these parameter pass to ServiceMain, not WinMain
+        
+    Any DCOM service also needs to create another key under HKEY_CLASSES_ROOT\AppID. This key is equal to the name of the EXE and acts as a cross-reference. pointing back to the AppID entries
+    
+    + DCOMCNFG, is a Windows NT 4.0 utility that allows you to configure various DCOM
+    
+        * Default security page 
+    
+        three sections: Access, Launch, and Configuration. Edit Default button. These Default Security settings are stored in the registry under HKEY_LOCAL_MACHINE\Software\Microsoft\OLE
+
+        * Default protocols, set of network protocols available to DCOM on this machine.
+        
+        * Default properties page 
+        
+        Default Properties page, you must select the Enable Distributed COM on this computer check box if you want clients on other machines to access COM objects running on this machine. 
+        
+        sets the HKEY_LOCAL_MACHINE\Software\Microsoft\OLE\EnableDCOM value to Y.
+
+        * application page 
+
+        The General page confirms the application
+
+        Location page allows you to specify where the application should run when a client calls CoCreateInstance on the relevant CLSID
+        
+        Run application on the following computer check box and enter a computer name, then a RemoteServerName value is added under the AppID
+        
+        Run application on this computer check box renames the LocalService value to _LocalService
+
+        The Security page is similar to the Default Security page found in the DCOMCNFG window
+        
+        The Identify page identifies which user is used to run the application.
+
+        The Endpoints page lists the set of protocols and endpoints available for use by clients
+        
+- Debugging tips 
+
+    + using task manager right click the process and select debug
+
+    + displaying assertions, If you determine that your service is displaying a message box that you cannot see, you may want to set the Allow Service to Interact with Desktop option
+    
+    + Services Control Panel application, select the service, click Startup, and then select the Allow Service to Interact with Desktop option.
+
+    + running the program as a local server 
+    
+    If running the program as a service is inconvenient, you can temporarily change the registry. rename the LocalService value under your AppID to _LocalService and ensure the LocalServer32 key under your CLSID is set correctly
+    
+    DCOMCNFG to specify that your application should be run on a different computer renames your LocalServer32 key to _LocalServer32.
+    
+        * account reference 
+    
+    https://stackoverflow.com/questions/510170/the-difference-between-the-local-system-account-and-the-network-service-acco
+    
+        * local service 
+    A limited service account that is very similar to Network Service and meant to run standard least-privileged services.
+    
+    Name: NT AUTHORITY\LocalService
+    the account has no password (any password information you provide is ignored)
+    HKCU represents the LocalService user account
+    has minimal privileges on the local computer
+    presents anonymous credentials on the network
+    SID: S-1-5-19
+    has its own profile under the HKEY_USERS registry key (HKEY_USERS\S-1-5-19)
+
+        * network service account 
+     meant to run standard privileged services. This account is far more limited than Local System (or even Administrator) but still has the right to access the network
+
+    NT AUTHORITY\NetworkService
+    the account has no password (any password information you provide is ignored)
+    HKCU represents the NetworkService user account
+    has minimal privileges on the local computer
+    presents the computer's credentials (e.g. MANGO$) to remote servers
+    SID: S-1-5-20
+    has its own profile under the HKEY_USERS registry key (HKEY_USERS\S-1-5-20)
+    If trying to schedule a task using it, enter NETWORK SERVICE into the Select User or Group dialog
+
+        * LocalSystem account (dangerous, don't use!) 
+    Completely trusted account, more so than the administrator account. this requires Active Directory and granting the machine account. basically the operating system
+    
+    Name: .\LocalSystem (can also use LocalSystem or ComputerName\LocalSystem)
+    the account has no password (any password information you provide is ignored)
+    SID: S-1-5-18
+    does not have any profile of its own (HKCU represents the default user)
+    has extensive privileges on the local computer
+    presents the computer's credentials (e.g. MANGO$) to remote servers
+
+        * accessing the network, this refers solely to SPNEGO (Negotiate), NTLM and Kerberos and not to any other authentication mechanism. For example, processing running as LocalService can still access the internet
+
+- ATL window class 
+
+CWindow allows you to attach a window handle to the CWindow object
+
+CWindowImpl allows you to implement a new window and process messages with a message map. 
+
+CDialogImpl allows you to implement a modal or a modeless dialog box and process messages with a message map.
+
+CContainedWindowT is a prebuilt class that implements a window whose message map is contained in another class.
+
+CAxDialogImpl allows you to implement a dialog box (modal or modeless) that hosts ActiveX controls.
+
+CSimpleDialog allows you to implement a modal dialog box with basic functionality.
+
+CAxWindow allows you to implement a window that hosts an ActiveX control.
+
+CAxWindow2T allows you to implement a window that hosts a licensed ActiveX control.
+
+CWndClassInfo manages the information of a new window class.
+
+CWinTraits and CWinTraitsOR provide a simple method of standardizing the traits of an ATL window object.
+
+    + using a window 
+    
+    attach a window to a CWindow object, you can then call CWindow methods to manipulate the window. 
+    
+    CWindow also contains an HWND operator to convert a CWindow object to an HWND. Thus you can pass a CWindow object to any function that requires a handle to a window. You can easily mix CWindow method calls and Win32 function calls
+    
+    Because CWindow has only two data member (a window handle and the default dimensions), it does not impose an overhead on your code.
+
+    ATL itself derives three classes from CWindow: CWindowImpl, CDialogImpl, and CContainedWindowT.
+
+    + implementing a window 
+
+    Class CWindowImpl allows you to implement a window and handle its messages. 
+
+    first select the control in the Class View. Then open the Properties window, select the Messages icon, and click the drop-down control in the box opposite the required message.
+    
+    + message maps 
+    
+    ATL's message map macros, you can specify a message map for a window.
+    
+    CWindowImpl::WindowProc uses the default message map to process messages sent to the window. 
+
+
+two alternative message map and default message map is empty 
+```
+BEGIN_MSG_MAP(CMyClass)
+ALT_MSG_MAP(1)
+   MESSAGE_HANDLER(WM_PAINT, OnPaint)
+   MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
+ALT_MSG_MAP(2)
+   MESSAGE_HANDLER(WM_CREATE, OnCreate)
+END_MSG_MAP()
+```
+        * message maps and entries 
+
+Name 	                    Description
+ALT_MSG_MAP 	            Marks the beginning of an alternate message map.
+BEGIN_MSG_MAP 	            Marks the beginning of the default message map.
+CHAIN_MSG_MAP_ALT 	        Chains to an alternate message map in the base class.
+CHAIN_MSG_MAP_ALT_MEMBER 	Chains to an alternate message map in a data member of the class.
+
+CHAIN_MSG_MAP 	            Chains to the default message map in the base class.
+CHAIN_MSG_MAP_DYNAMIC 	    Chains to the message map in another class at run time.
+CHAIN_MSG_MAP_MEMBER 	    Chains to the default message map in a data member of the class.
+
+COMMAND_CODE_HANDLER 	    Maps a WM_COMMAND message to a handler function, based on the notification code.
+
+COMMAND_HANDLER 	        Maps a WM_COMMAND message to a handler function, based on the notification code and the identifier of the menu item, control, or accelerator.
+
+COMMAND_ID_HANDLER 	        Maps a WM_COMMAND message to a handler function, based on the identifier of the menu item, control, or accelerator.
+
+COMMAND_RANGE_CODE_HANDLER 	Maps a WM_COMMAND message to a handler function, based on the notification code and a contiguous range of control identifiers.
+
+COMMAND_RANGE_HANDLER 	    Maps a WM_COMMAND message to a handler function, based on a contiguous range of control identifiers.
+
+DECLARE_EMPTY_MSG_MAP 	    Implements an empty message map.
+DEFAULT_REFLECTION_HANDLER 	Provides a default handler for reflected messages that are not handled otherwise.
+
+END_MSG_MAP 	            Marks the end of a message map.
+FORWARD_NOTIFICATIONS 	    Forwards notification messages to the parent window.
+MESSAGE_HANDLER 	        Maps a Windows message to a handler function.
+MESSAGE_RANGE_HANDLER 	    Maps a contiguous range of Windows messages to a handler function.
+NOTIFY_CODE_HANDLER 	    Maps a WM_NOTIFY message to a handler function, based on the notification code.
+
+NOTIFY_HANDLER 	            Maps a WM_NOTIFY message to a handler function, based on the notification code and the control identifier.
+
+NOTIFY_ID_HANDLER 	        Maps a WM_NOTIFY message to a handler function, based on the control identifier.
+
+NOTIFY_RANGE_CODE_HANDLER 	Maps a WM_NOTIFY message to a handler function, based on the notification code and a contiguous range of control identifiers.
+NOTIFY_RANGE_HANDLER 	    Maps a WM_NOTIFY message to a handler function, based on a contiguous range of control identifiers.
+
+REFLECT_NOTIFICATIONS 	    Reflects notification messages back to the window that sent them.
+
+REFLECTED_COMMAND_CODE_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on the notification code.
+
+REFLECTED_COMMAND_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on the notification code and the identifier of the menu item, control, or accelerator.
+
+REFLECTED_COMMAND_ID_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on the identifier of the menu item, control, or accelerator.
+
+REFLECTED_COMMAND_RANGE_CODE_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on the notification code and a contiguous range of control identifiers.
+
+REFLECTED_COMMAND_RANGE_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on a contiguous range of control identifiers.
+
+REFLECTED_NOTIFY_CODE_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on the notification code.
+
+REFLECTED_NOTIFY_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on the notification code and the control identifier.
+
+REFLECTED_NOTIFY_ID_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on the control identifier.
+
+REFLECTED_NOTIFY_RANGE_CODE_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on the notification code and a contiguous range of control identifiers.
+
+REFLECTED_NOTIFY_RANGE_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on a contiguous range of control identifiers.
+
+        * message to a handler function
+Macro 	                Description
+MESSAGE_HANDLER 	    Maps a Windows message to a handler function.
+MESSAGE_RANGE_HANDLER 	Maps a contiguous range of Windows messages to a handler function.
+
+COMMAND_HANDLER 	    Maps a WM_COMMAND message to a handler function, based on the notification code and the identifier of the menu item, control, or accelerator.
+
+COMMAND_ID_HANDLER 	    Maps a WM_COMMAND message to a handler function, based on the identifier of the menu item, control, or accelerator.
+
+COMMAND_CODE_HANDLER 	Maps a WM_COMMAND message to a handler function, based on the notification code.
+COMMAND_RANGE_HANDLER 	Maps a contiguous range of WM_COMMAND messages to a handler function, based on the identifier of the menu item, control, or accelerator.
+
+NOTIFY_HANDLER 	        Maps a WM_NOTIFY message to a handler function, based on the notification code and the control identifier.
+
+NOTIFY_ID_HANDLER 	    Maps a WM_NOTIFY message to a handler function, based on the control identifier.
+NOTIFY_CODE_HANDLER 	Maps a WM_NOTIFY message to a handler function, based on the notification code.
+NOTIFY_RANGE_HANDLER 	Maps a contiguous range of WM_NOTIFY messages to a handler function, based on the control identifier.
+
+        * macros direct messages to another message map. This process is called "chaining."
+        
+CHAIN_MSG_MAP 	            Chains to the default message map in the base class.
+CHAIN_MSG_MAP_MEMBER 	    Chains to the default message map in a data member of the class.
+CHAIN_MSG_MAP_ALT 	        Chains to an alternate message map in the base class.
+CHAIN_MSG_MAP_ALT_MEMBER 	Chains to an alternate message map in a data member of the class.
+
+CHAIN_MSG_MAP_DYNAMIC 	    Chains to the default message map in another class at run time.
+
+        * macros direct "reflected" messages from the parent window. For example, a control normally sends notification messages to its parent window for processing, but the parent window can reflect the message back to the control.
+
+REFLECTED_COMMAND_HANDLER 	            Maps a reflected WM_COMMAND message to a handler function, based on the notification code and the identifier of the menu item, control, or accelerator.
+
+REFLECTED_COMMAND_ID_HANDLER 	        Maps a reflected WM_COMMAND message to a handler function, based on the identifier of the menu item, control, or accelerator.
+
+REFLECTED_COMMAND_CODE_HANDLER 	        Maps a reflected WM_COMMAND message to a handler function, based on the notification code.
+
+REFLECTED_COMMAND_RANGE_HANDLER 	    Maps a reflected WM_COMMAND message to a handler function, based on a contiguous range of control identifiers.
+
+REFLECTED_COMMAND_RANGE_CODE_HANDLER 	Maps a reflected WM_COMMAND message to a handler function, based on the notification code and a contiguous range of control identifiers.
+
+REFLECTED_NOTIFY_HANDLER 	            Maps a reflected WM_NOTIFY message to a handler function, based on the notification code and the control identifier.
+
+REFLECTED_NOTIFY_ID_HANDLER 	        Maps a reflected WM_NOTIFY message to a handler function, based on the control identifier.
+
+REFLECTED_NOTIFY_CODE_HANDLER 	        Maps a reflected WM_NOTIFY message to a handler function, based on the notification code.
+
+REFLECTED_NOTIFY_RANGE_HANDLER 	        Maps a reflected WM_NOTIFY message to a handler function, based on a contiguous range of control identifiers.
+
+REFLECTED_NOTIFY_RANGE_CODE_HANDLER 	Maps a reflected WM_NOTIFY message to a handler function, based on the notification code and a contiguous range of control identifiers.
+
+        * example 
+        
+```
+class CMyExtWindow : public CMyBaseWindow
+{
+public:
+   BEGIN_MSG_MAP(CMyExtWindow)
+      MESSAGE_HANDLER(WM_PAINT, OnPaint)
+      MESSAGE_HANDLER(WM_SETFOCUS, OnSetFocus)
+      CHAIN_MSG_MAP(CMyBaseWindow)
+   END_MSG_MAP()
+
+   LRESULT OnPaint(UINT /*nMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
+      BOOL& /*bHandled*/)
+   {
+      return 0;   
+   }
+
+   LRESULT OnSetFocus(UINT /*nMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
+      BOOL& /*bHandled*/) 
+   {
+      return 0;   
+   }
+};
+```
+
+CHAIN_MSG_MAP_ALT directs messages to an alternate message map in a base class. You must have declared this alternate message map with ALT_MSG_MAP(msgMapID). To direct messages to a base class's default message map
+
+window procedure is using default message map, does not handle a message, the message is directed to base class's default message map 
+
+if a window procedure is using the first alternative message map. all messages are directed to based class's default map 
+
+message handler functions accept an additional argument of type BOOL&. This argument indicates whether a message has been processed. set to FALSE will let the message continue look for handlers 
+
+        * chained message maps 
+
+        chain message maps, which directs the message handling to a message map defined in another class
+        
+        implement common message handling in a separate class to provide uniform behavior for all windows chaining to that class
+        
+        chain to a base class or to a data member of your class.
+        
+        dynamic chaining, which allows you to chain to another object's message map at run time. 
+        
+        must derive your class from CDynamicChain. Then declare the CHAIN_MSG_MAP_DYNAMIC macro in your message map. CHAIN_MSG_MAP_DYNAMIC requires a unique number that identifies the object and the message map to which you are chaining. define this unique value through a call to CDynamicChain::SetChainEntry.
+        
+        any class that declares a message map, provided the class derives from CMessageMap. CMessageMap allows an object to expose its message maps to other objects.
+        
+        * lternate message maps, declared with the ALT_MSG_MAP macro. Each alternate message map is identified by a unique number
+        
+        by default, CWindowImpl does not use alternate message maps
+        
+        add this support, override the WindowProc method in your CWindowImpl-derived class and call ProcessWindowMessage with the message map identifier
+        
+    + message handler functions 
+        * command handler, identified by the third parameter of the COMMAND_HANDLER macro in your message map.
+        
+        LRESULT CommandHandler(
+            WORD wNotifyCode,
+            WORD wID,
+            HWND hWndCtl,
+            BOOL& bHandled);
+            
+        * message handler, the name of the function identified by the second parameter of the message handler 
+        
+        LRESULT MessageHandler(
+            UINT uMsg,
+            WPARAM wParam,
+            LPARAM lParam,
+            BOOL& bHandled);
+            
+        * notify handler identified by the third parameter of the NOTIFY_HANDLER macro in your message map.
+        
+        LRESULT NotifyHandler(
+            int idCtrl,
+            LPNMHDR pnmh,
+            BOOL& bHandled);
+        
+        Address of an NMHDR structure that contains the notification code and additional information.
+        
+        * example, CWindowImpl passes NULL to the DECLARE_WND_CLASS macro, which means ATL will generate a Windows class name. 
+        
+        custom class name with DECLARE_WND_CLASS in your CWindowImpl-derived class.
+        
+```
+class CMyCustomWnd : public CWindowImpl<CMyCustomWnd>
+{
+public:
+   // Optionally specify name of the new Windows class
+   DECLARE_WND_CLASS(_T("MyName")) 
+              // If this macro is not specified in your
+              // class, ATL will generate a class name
+
+   BEGIN_MSG_MAP(CMyCustomWnd)
+      MESSAGE_HANDLER(WM_PAINT, OnPaint)
+   END_MSG_MAP()
+
+   LRESULT OnPaint(UINT /*nMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
+      BOOL& /*bHandled*/)
+   {
+      // Do some painting code
+      return 0;
+   }
+
+};
+```
+
+create a window, create an instance of CMyWindow and then call the Create method.
+
+override the default Windows class information, implement the GetWndClassInfo method in your derived class by setting the CWndClassInfo members
+
+        * example superclass the edit
+class CMyEdit : public CWindowImpl<CMyEdit>
+{
+public:
+   // "Edit" is the name of the standard Windows class.
+   // "MyEdit" is the name of the new Windows class
+   // that will be based on the Edit class.
+   DECLARE_WND_SUPERCLASS(_T("MyEdit"), _T("Edit"))
+
+   BEGIN_MSG_MAP(CMyEdit)
+      MESSAGE_HANDLER(WM_CHAR, OnChar)
+   END_MSG_MAP()
+
+   LRESULT OnChar(UINT /*nMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
+      BOOL& /*bHandled*/)
+   {
+      // Do some character handling code
+      return 0;
+   }
+};
+
+        * subclassing an existing window 
+        
+        Instead of calling Create, call SubclassWindow and pass it the handle to the existing window you want to subclass.
+
+        use CWindowImpl::WindowProc (or your function that overrides this method) to direct messages to the message map. To detach a subclassed window from your object, call UnsubclassWindow. The original window procedure will be restored 
+        
+    + Add Class dialog box, select the ATL Dialog object to add a dialog box to your ATL project. Fill in the ATL Dialog Wizard as appropriate and click Finish. 
+    
+    it add CAxDialogImpl to your project. Open Resource View from the View menu, locate your dialog, and double-click it to open it in the resource editor
+    
+    use CSimpleDialog or CDialogImpl instead to avoid support ActiveX 
+    
+        * add dialog manually 
+    
+        You derive a class from either CAxDialogImpl, CDialogImpl, or CSimpleDialog and declare a message map to handle messages. 
+        
+        you must also specify a dialog template resource ID in your derived class. Your class must have a data member called IDD to hold this value
+        
+        the wizard automatically adds the IDD member as an enum type.
+        
+        create an instance of your CDialogImpl-derived (or CAxDialogImpl-derived) -class and then call the DoModal method. 
+        
+        To close a modal dialog box, call the EndDialog method from a message handler. To create a modeless dialog box, call the Create method instead of DoModal
+        
+        Sinking events is automatically done in CAxDialogImpl. Implement the dialog box's message handlers as you would the handlers in a CWindowImpl-derived class
+        
+        If there is a message-specific return value, return it as an LRESULT
+        
+        source code for CDialogImplBaseT::DialogProc in atlwin.h.
+        
+```
+class CMyDialog : public CDialogImpl<CMyDialog>
+{
+public:
+   enum { IDD = IDD_MYDLG };
+
+   BEGIN_MSG_MAP(CMyDialog)
+      MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialog)
+      COMMAND_HANDLER(IDCANCEL, BN_CLICKED, OnBnClickedCancel)
+   END_MSG_MAP()
+
+   LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
+      BOOL& /*bHandled*/)
+   {
+      // Do some initialization code
+      return 1;
+   }
+public:
+   LRESULT OnBnClickedCancel(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/);
+};
+```
+
+- using contained windows 
+
+ATL implements contained windows with CContainedWindowT. A contained window represents a window that delegates its messages to a container object instead instead of handling by in its own class  
+
+```
+class CMyContainer : public CMessageMap
+{
+public:
+   CContainedWindow m_wndEdit;
+   CContainedWindow m_wndList;
+
+   CMyContainer() : m_wndEdit(_T("Edit"), this, 1), 
+                    m_wndList(_T("List"), this, 2)
+   {
+   }
+
+   BEGIN_MSG_MAP(CMyContainer)
+   ALT_MSG_MAP(1)
+      // handlers for the Edit window go here
+   ALT_MSG_MAP(2)
+      // handlers for the List window go here
+   END_MSG_MAP()
+
+};
+```
+
+first specify the existing class name in the constructor for the CContainedWindowT object. Then call CContainedWindowT::Create. To subclass an existing window
+
+Simply call the CContainedWindowT::SubclassWindow method with the handle to the window being subclassed.
+
+contained windows as data members of a container class. The container does not need to be a window; however, it must derive from CMessageMap.
+
+- understanding window traits 
+
+Window traits classes provide a simple method for standardizing the styles used for the creation of an ATL window object
+
+it is template parameters by CWindowImpl and other ATL window classes as a way of providing default window styles
+
+CWinTraits 	Use this template when you want to provide default window styles
+
+CWinTraitsOR 	Use this class when you want to specify styles that must always be set for the window class. 
+
+```
+static DWORD GetWndStyle(DWORD dwStyle);
+static DWORD GetWndExStyle(DWORD dwExStyle);
+```
+
+    + commonly used combinations of window styles:
+
+    CControlWinTraits
+    CFrameWinTraits
+    CMDIChildWinTraits
+
+- ATL collection classes
+
+The amount of data to be stored
+
+Efficiency versus performance in accessing the data
+
+The ability to access the data by index or by key
+
+How the data is ordered
+
+Personal preference
+
+    + small collection classes, It is not recommended that you use them in your programs.
+    
+    CSimpleArray
+    
+    CSimpleMap
+    
+    + general purpose collection classes:
+    
+    CAtlArray 	    Implements an array.
+    CAtlList 	    Implements a list.
+    CAtlMap 	    Implements a mapping structure, whereby data can be referenced by key or value.
+    CRBMap 	        Implements a mapping structure using the Red-Black algorithm.
+    CRBMultiMap 	Implements a Red-Black multimapping structure.
+
+    These classes will trap many programming errors when used in debug builds, retail builds will not check 
+
+    + specialized collection classes 
+    
+CAutoPtrArray 	    Provides methods useful when constructing an array of smart pointers.
+
+CAutoPtrList 	    Provides methods useful when constructing a list of smart pointers.
+
+CComUnkArray 	    Stores IUnknown pointers and is designed to be used as a parameter to the IConnectionPointImpl template class.
+
+CHeapPtrList 	    Provides methods useful when constructing a list of heap pointers.
+
+CInterfaceArray 	Provides methods useful when constructing an array of COM interface pointers.
+
+CInterfaceList 	    Provides methods useful when constructing a list of COM interface pointers.
+
+    + using CTraits objects 
+    
+    CTraits classes are similar to, but more flexible than, the MFC collection class
+    
+```
+// Collection class / traits class example.
+// This program demonstrates using a CTraits class
+// to create a new comparison operator.
+
+#define MAX_STRING 80
+
+// Define our own data type to store in the list.
+
+struct MyData 
+{
+   int ID;
+   TCHAR name[MAX_STRING];
+   TCHAR address[MAX_STRING];
+};
+
+// Define our own traits class, making use of the
+// existing traits and overriding only the comparison
+// we need.
+
+class MyTraits : public CElementTraits< MyData >
+{
+public:
+    // Override the comparison to only compare
+    // the ID value.
+
+   static bool CompareElements(const MyData& element1, const MyData& element2)
+   {
+      if (element1.ID == element2.ID)
+         return true;
+      else
+         return false;
+   };
+};
+
+void DoAtlCustomTraitsList()
+{
+   // Declare the array, with our data type and traits class 
+
+   CAtlList < MyData, MyTraits > MyList;
+
+   // Create some variables of our data type
+
+   MyData add_item, search_item;
+
+   // Add some elements to the list.
+
+   add_item.ID = 1;
+   _stprintf_s(add_item.name, _T("Rumpelstiltskin"));
+   _stprintf_s(add_item.address, _T("One Grimm Way"));
+
+   MyList.AddHead(add_item);
+
+   add_item.ID = 2;
+   _stprintf_s(add_item.name, _T("Rapunzel"));
+   _stprintf_s(add_item.address, _T("One Grimm Way"));
+
+   MyList.AddHead(add_item);
+
+   add_item.ID = 3;
+   _stprintf_s(add_item.name, _T("Cinderella"));
+   _stprintf_s(add_item.address, _T("Two Grimm Way"));
+
+   MyList.AddHead(add_item);
+
+   // Create an element which will be used
+   // to search the list for a match.
+
+   search_item.ID = 2;
+   _stprintf_s(search_item.name, _T("Don't care"));
+   _stprintf_s(search_item.address, _T("Don't care"));
+
+   // Perform a comparison by searching for a match
+   // between any element in the list, and our
+   // search item. This operation will use the
+   // (overridden) comparison operator and will
+   // find a match when the IDs are the same.
+
+   POSITION i;
+
+   i = MyList.Find(search_item);
+
+   if (i != NULL)
+      _tprintf_s(_T("Item found!\n"));
+   else
+      _tprintf_s(_T("Item not found.\n"));
+}
+```
+
+- ATL registry component (Registrar)
+
+optimized access to the system registry through a custom interface. The Registrar is free-threaded and allows static linking of code for C++ clients.
+
+atlmfc\include\atliface.h.
+
+The ATL Control Wizard automatically generates a registrar script for your COM server. You can find this script in the .rgs file
+
+    + understanding backus-Naur form (BNF) syntax 
+    
+::= 	                Equivalent
+| 	                    OR
+X+ 	                    One or more Xs.
+[X] 	                X is optional. Optional delimiters are denoted by [].
+Any bold text 	        A string literal.
+Any italicized text 	How to construct the string literal.
+
+    + string literals used in an ATL Registrar script.
+
+ForceRemove 	Completely removes the next key (if it exists) and then re-creates it.
+NoRemove 	    Does not remove the next key during Unregister.
+val 	        Specifies that <Key Name> is actually a named value.
+Delete 	        Deletes the next key during Register.
+s 	            Specifies that the next value is a string (REG_SZ).
+d 	            Specifies that the next value is a DWORD (REG_DWORD).
+m 	            Specifies that the next value is a multistring (REG_MULTI_SZ).
+b 	            Specifies that the next value is a binary value (REG_BINARY).
+
+```
+<registry expression> ::= <Add Key>
+<registry expression> ::= <Add Key> | <Delete Key>
+<Key Name> ::= '<AlphaNumeric>+'
+<Add Key> ::= [ForceRemove | NoRemove | val]<Key Name>
+<AlphaNumeric> ::= any character not NULL, that is, ASCII 0
+```
+
+        * example 
+```
+val 'testmulti' = m 'String 1\0String 2\0'
+```
+
+    + parse trees, define one or more parse trees in your registrar script
+
+<root-key>{<registry expression>}+
+
+```
+
+
+    <root-key> ::=
+    HKEY_CLASSES_ROOT | HKEY_CURRENT_USER |
+    HKEY_LOCAL_MACHINE | HKEY_USERS |
+    HKEY_PERFORMANCE_DATA | HKEY_DYN_DATA |
+    HKEY_CURRENT_CONFIG | HKCR | HKCU |
+    HKLM | HKU | HKPD | HKDD | HKCC
+
+    <registry-expression> ::=
+     <Add-Key> | <Delete-Key>
+
+    <Add-Key> ::=
+     [ForceRemove | NoRemove | val] <Key-Name> [<Key-Value>] [ { <Add-Key> } ]
+
+    <Delete-Key> ::=
+     Delete <Key-Name>
+
+    <Key-Name> ::=
+     '<AlphaNumeric>+'
+
+    <AlphaNumeric> ::=
+     any non-null character.
+
+    <Key-Value> ::=
+     <Key-Type> <Key-Name>
+
+    <Key-Type> ::=
+     s | d
+```
+
+    + registry scripting example 
+```
+HKCR
+{
+    ATL.Registrar = s 'ATL Registrar Class'
+    {
+        CLSID = s '{44EC053A-400F-11D0-9DCD-00A0C90391D3}'
+    }
+    NoRemove CLSID
+    {
+        ForceRemove {44EC053A-400F-11D0-9DCD-00A0C90391D3} = s 'ATL Registrar Class'
+        {
+            ProgID = s 'ATL.Registrar'
+            InprocServer32 = s '%MODULE%'
+            {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+    }
+}
+```
+    + using replaceable parameters 
+    
+    The ATL Control Wizard automatically generates a script that uses %MODULE%. ATL uses this replaceable parameter for the actual location of your server's DLL or EXE.
+
+    concatenating run-time data with script data, suppose an entry is needed that contains a full path to a module with the string ", 1" appended at the end.
+    
+```
+'MySampleKey' = s '%MODULE%, 1'
+```
+
+add a replacement to the map
+```
+TCHAR szModule[_MAX_PATH];
+::GetModuleFileName(_AtlBaseModule.GetModuleInstance(), szModule, _MAX_PATH);
+p->AddReplacement(OLESTR("Module"), T2OLE(szModule));   
+```
+
+parsing of the script, the Registrar expands '%MODULE%, 1' to c:\mycode\mydll.dll, 1.
+
+The methods StringRegister and StringUnregister allow the .rgs file to be stored in a dynamically allocated string.
+
+    + invoking scripts, the Registrar has eight other methods specific to scripting
+    ResourceRegister 
+    ResourceUnregister 
+    ResourceRegisterSz 
+    ResourceUnregisterSz 
+    FileRegister 
+    FileUnregister 
+    StringRegister 
+    StringUnregister 
+    
+    + setting up a static link to the registrar code (c++ only )
+    
+    create a static link to the Registrar's code, specified DECLARE_REGISTRY_RESOURCEID in your object's declaration
+    
+    Specify /D _ATL_STATIC_REGISTRY instead of /D _ATL_DLL on the CL command line. 
+    
+    recompile 
+    
+- Programming with ATL and C runtime code 
+
+C Run-Time Library (CRT) with either static or dynamic linking.
+
+    + benefits and tradeoffs of the method used to link the CRT 
+    
+    statically link, About 25K of startup code is added to your image, substantially increasing its size.
+    
+    Dynamically linking to the CRT, The CRT DLL must be on the system running the image.
+
+    + linking to the CRT in your ATL project 
+    
+    All ATL projects link to the CRT library.
+    
+    dynamically link to the CRT, you may find that some code can be statically linked (for example, DllMainCRTStartup).
+    
+    either explicitly or implicitly specify an entry point that the operating system will call into after loading the image. For a DLL, the default entry point is DllMainCRTStartup. For an EXE, it is WinMainCRTStartup. You can override the default with the /ENTRY linker option.
+    
+    information relative to linker topic /ENTRY (Entry-Point Symbol).
+    https://docs.microsoft.com/en-us/cpp/build/reference/entry-entry-point-symbol?view=msvc-160
+    
+    optimization options,  /OPT:NOWIN98 can further reduce a default ATL control by 10K
+    
+- Programming with CComBSTR (ATL)
+
+    + conversion issues 
+    
+    Although several CComBSTR methods will automatically convert an ANSI string argument into Unicode, the methods will always return Unicode format strings
+    
+    convert the output string back to ANSI
+
+```
+// Declare a CComBSTR object. Although the argument is ANSI,
+// the constructor converts it into UNICODE.
+CComBSTR bstrMyString("Hello World");
+// Convert the string into an ANSI string
+CW2A szMyString(bstrMyString);
+// Display the ANSI string
+MessageBoxA(NULL, szMyString, "String Test", MB_OK);   
+```
+
+use wide character to reduce unnecessary conversions 
+```
+// The following converts the ANSI string to Unicode
+CComBSTR bstr1("Test");
+// The following uses a Unicode string at compile time 
+CComBSTR bstr2(L"Test");  
+```
+
+    + scope issues, any well-behaved class, CComBSTR will free its resources when it goes out of scope. If a function returns a pointer to the CComBSTR string, this can cause problems. use Copy method instead 
+
+```
+// The wrong way to do it
+BSTR * MyBadFunction()
+{
+   // Create the CComBSTR object
+   CComBSTR bstrString(L"Hello World");
+   // Convert the string to uppercase
+   HRESULT hr;
+   hr = bstrString.ToUpper();
+
+   // Return a pointer to the BSTR. ** Bad thing to do **
+   return &bstrString;
+}
+// The correct way to do it
+HRESULT MyGoodFunction(/*[out]*/ BSTR* bstrStringPtr)
+{
+   // Create the CComBSTR object
+   CComBSTR bstrString(L"Hello World");
+   // Convert the string to uppercase
+   HRESULT hr;
+   hr = bstrString.ToUpper();
+   if (hr != S_OK)
+       return hr;
+   // Return a copy of the string.
+   return bstrString.CopyTo(bstrStringPtr);
+}
+```
+
+    + explicitly freeing the CComBSTR object 
+    
+```
+// Declare a CComBSTR object
+CComBSTR bstrMyString(L"Hello World");
+// Free the string explicitly
+::SysFreeString(bstrMyString);
+// The string will be freed a second time
+// when the CComBSTR object goes out of scope,
+// which is invalid.
+```
+
+::SysFreeString, Deallocates a string allocated previously by SysAllocString, SysAllocStringByteLen, SysReAllocString, SysAllocStringLen, or SysReAllocStringLen.
+
+typedef WCHAR OLECHAR;
+OLECHAR is WCHAR 
+
+    + using CComBSTR objects in loops, As the CComBSTR class allocates a buffer to perform certain operations, such as the += operator or Append method, it is not recommended that you perform string manipulation inside a tight loop. Use CStringT instead 
+    
+```
+// This is not an efficient way to use a CComBSTR object.
+CComBSTR bstrMyString;
+HRESULT hr;
+while (bstrMyString.Length() < 1000)
+   hr = bstrMyString.Append(L"*");   
+```
+
+    + Memory leak issues 
+    
+    Passing the address of an initialized CComBSTR to a function as an [out] parameter causes a memory leak.
+    
+    the string allocated to hold the string "Initialized" is leaked when the function MyGoodFunction replaces the string.
+    
+```
+CComBSTR bstrLeak(L"Initialized");
+HRESULT hr = MyGoodFunction(&bstrLeak);   //leak here!!!
+```
+
+call the Empty method on existing CComBSTR objects before passing the address as an [out] parameter
+
+    + reference string conversion macros 
+    https://docs.microsoft.com/en-us/cpp/atl/reference/string-conversion-macros?view=msvc-160
+
+- ATL encoding reference 
+
+such as uuencode, hexadecimal, and UTF8 is supported by the code found in atlenc.h.
+
+AtlGetHexValue 	Call this function to get the numeric value of a hexadecimal digit.
+
+AtlUnicodeToUTF8 	Call this function to convert a Unicode string to UTF-8.
+
+BEncode 	Call this function to convert some data using the "B" encoding.
+
+EscapeXML 	Call this function to convert characters that are unsafe for use in XML to their safe equivalents.
+
+GetExtendedChars 	Call this function to get the number of extended characters in a string.
+
+QEncode 	Call this function to convert some data using the "Q" encoding.
+
+QPDecode 	Decodes a string of data that has been encoded in quoted-printable format such as by a previous call to QPEncode.
+
+UUDecode 	Decodes a string of data that has been uuencoded such as by a previous call to UUEncode.
+
+UUEncode 	Call this function to uuencode some data.
+...
+
+
+- ATL untilities reference 
+
+manipulating paths and URLs in the form of CPathT and CUrl. A thread pool, CThreadPool, can be used in your applications
+
+CPathT class 	            This class represents a path.
+CDebugReportHook class 	    Use this class to send debug reports to a named pipe.
+CNonStatelessWorker class 	Receives requests from a thread pool and passes them on to a worker object that is created and destroyed on each request.
+
+CNoWorkerThread class 	    Use this class as the argument for the MonitorClass template parameter to cache classes if you want to disable dynamic cache maintenance.
+
+CThreadPool class 	        This class provides a pool of worker threads that process a queue of work items.
+
+CUrl class 	                This class represents a URL. It allows you to manipulate each element of the URL independently of the others whether parsing an existing URL string or building a string from scratch.
+
+CWorkerThread class 	    This class creates a worker thread or uses an existing one, waits on one or more kernel object handles, and executes a specified client function when one of the handles is signaled.
+
+    + typedefs 
+    
+CPath 	A specialization of CPathT using CString.
+CPathA 	A specialization of CPathT using CStringA.
+CPathW 	A specialization of CPathT using CStringW.
+ATL_URL_PORT 	The type used by CUrl for specifying a port number.
+
+    + enums 
+ATL_URL_SCHEME 	The members of this enumeration provide constants for the schemes understood by CUrl.
+
+    + functions 
+AtlCanonicalizeUrl 	    Call this function to canonicalize a URL, which includes converting unsafe characters and spaces into escape sequences.
+
+AtlCombineUrl 	        Call this function to combine a base URL and a relative URL into a single, canonical URL.
+
+AtlEscapeUrl 	        Call this function to convert all unsafe characters to escape sequences.
+AtlGetDefaultUrlPort 	Call this function to get the default port number associated with a particular internet protocol or scheme.
+
+AtlHexValue 	        Call this function to get the numeric value of a hexadecimal digit.
+AtlIsUnsafeUrlChar 	    Call this function to find out whether a character is safe for use in a URL.
+
+AtlUnescapeUrl 	        Call this function to convert escaped characters back to their original values.
+
+SystemTimeToHttpDate 	Call this function to convert a system time to a string in a format suitable for using in HTTP headers.
+
+ATLPath::AddBackslash 	This function is an overloaded wrapper for [PathAddBackslash](/windows/desktop/api/shlwapi/nf-shlwapi-pathaddbackslasha
+). 	
+
+ATLPath::AddExtension 	This function is an overloaded wrapper for PathAddExtension.
+ATLPath::Append 	    This function is an overloaded wrapper for PathAppend.
+ATLPath::BuildRoot 	    This function is an overloaded wrapper for PathBuildRoot.
+ATLPath::Canonicalize 	This function is an overloaded wrapper for PathCanonicalize.
+ATLPath::Combine 	    his function is an overloaded wrapper for PathCombine.
+ATLPath::CommonPrefix 	This function is an overloaded wrapper for PathCommonPrefix.
+ATLPath::CompactPath 	This function is an overloaded wrapper for PathCompactPath.
+ATLPath::CompactPathEx 	This function is an overloaded wrapper for PathCompactPathEx.
+ATLPath::FileExists 	This function is an overloaded wrapper for PathFileExists.
+ATLPath::FindExtension 	This function is an overloaded wrapper for PathFindExtension.
+ATLPath::FindFileName 	This function is an overloaded wrapper for PathFindFileName.
+ATLPath::GetDriveNumber 	This function is an overloaded wrapper for PathGetDriveNumber.
+
+ATLPath::IsDirectory 	This function is an overloaded wrapper for PathIsDirectory.
+ATLPath::IsFileSpec 	This function is an overloaded wrapper for PathIsFileSpec.
+ATLPath::IsPrefix 	    This function is an overloaded wrapper for PathIsPrefix.
+ATLPath::IsRelative 	This function is an overloaded wrapper for PathIsRelative.
+ATLPath::IsRoot 	    This function is an overloaded wrapper for PathIsRoot.
+ATLPath::IsSameRoot 	This function is an overloaded wrapper for PathIsSameRoot.
+ATLPath::IsUNC 	        This function is an overloaded wrapper for PathIsUNC.
+ATLPath::IsUNCServer 	This function is an overloaded wrapper for PathIsUNCServer.
+ATLPath::IsUNCServerShare 	This function is an overloaded wrapper for PathIsUNCServerShare.
+ATLPath::MakePretty 	This function is an overloaded wrapper for PathMakePretty.
+ATLPath::MatchSpec 	    This function is an overloaded wrapper for PathMatchSpec.
+ATLPath::QuoteSpaces 	This function is an overloaded wrapper for PathQuoteSpaces.
+ATLPath::RelativePathTo 	This function is an overloaded wrapper for PathRelativePathTo.
+
+ATLPath::RemoveArgs 	This function is an overloaded wrapper for PathRemoveArgs.
+ATLPath::RemoveBackslash 	This function is an overloaded wrapper for PathRemoveBackslash.
+
+ATLPath::RemoveBlanks 	    This function is an overloaded wrapper for PathRemoveBlanks.
+ATLPath::RemoveExtension 	This function is an overloaded wrapper for PathRemoveExtension.
+ATLPath::RemoveFileSpec 	This function is an overloaded wrapper for PathRemoveFileSpec.
+ATLPath::RenameExtension 	This function is an overloaded wrapper for PathRenameExtension.
+
+ATLPath::SkipRoot 	    This function is an overloaded wrapper for PathSkipRoot.
+ATLPath::StripPath 	    This function is an overloaded wrapper for PathStripPath.
+ATLPath::StripToRoot 	This function is an overloaded wrapper for PathStripToRoot.
+ATLPath::UnquoteSpaces 	This function is an overloaded wrapper for PathUnquoteSpaces.
+
+
+
+# ATL tutorial 
+- how to add a control to an ATL project that draws a circle and a filled polygon. The control will then be displayed on a Web page using some VBScript to make it respond to events.
+
+This is usually only a concern if you are running Visual Studio .NET over a Terminal Services connection.
+
+- Creating the project 
+
+download it from the Polygon sample abstract, https://github.com/Microsoft/VCSamples/tree/master/VC2008Samples/ATL/Controls/Polygon
+
+compile with vs2017 earlier, , modify pch.h 
+```
+#ifndef WINVER
+#define WINVER 0x0400
+#endif
+```
+
+    + create the initial ATL project using ATL project wizard 
+    
+    File > New > Project > Visual C++ > MFC/ATL 
+    
+    Click Application Settings to see the options available. Because this project creates a control, and a control must be an in-process server, leave the application type as a DLL 
+    
+        * file list 
+
+Polygon.cpp 	Contains the implementation of DllMain, DllCanUnloadNow, DllGetClassObject, DllRegisterServer, and DllUnregisterServer. Also contains the object map, which is a list of the ATL objects 
+
+Polygon.def 	This module-definition file provides the linker with information about the exports required by your DLL.
+
+Polygon.idl 	The interface definition language file, which describes the interfaces specific to your objects.
+
+Polygon.rgs 	This registry script contains information for registering your program's DLL.
+
+Polygon.rc 	The resource file, which initially contains the version information and a string containing the project name.
+
+Resource.h 	The header file for the resource file.
+
+Polygonps.def 	This module definition file provides the linker with information about the exports required by the proxy and stub code that support calls across apartments.
+
+pch.cpp 	The file that will #include pch.h.
+
+pch.h 	The file that will #include and precompile the ATL header files.
+
+    + solution explorer, right click Polygen project 
+    
+    shortcut menu click properties 
+    
+    click on linker, change Per-UserRedirection option to Yes 
+    
+    click OK 
+    
+    + add a control 
+    
+    Add on the shortcut menu, and click New Item in the submenu.
+    
+    ATL Control. Click Add. The ATL Control wizard will open, and you can configure the control.
+    
+    CoClass 	The name of the component class for this control.
+    
+    Type 	A description for the control.
+
+    ProgID 	The readable name that can be used to look up the CLSID of the control.
+    
+    + enable support for rich error information and connection point 
+    
+    Click Options to open the Options page.
+    
+    + extend control 
+    
+    Click Interfaces to open the Interfaces page.
+    
+    Select the Connection points check box. This option creates support for an outgoing interface
+    
+    Select IProvideClassInfo2 and click the Up arrow to move it to the Supported list.
+    
+    Select ISpecifyPropertyPages and click the Up arrow to move it to the Supported list.
+    
+    + make the control insertable 
+    
+    Click Appearance to open the Appearance page.
+    
+    Select the Insertable check box.
+    
+    add a Fill Color stock property.
+    
+    displayed by the object will have a solid fill color, so you have to add a Fill Color stock property.
+     
+    + add a fill color stock property and create the control 
+     
+    Stock Properties to open the Stock Properties page.
+    
+    Under Not supported, scroll down the list of possible stock properties. Select Fill Color and click the Up arrow to move it to the Supported list.
+    
+    build and test control 
+    
+    + Adding a property to the control (ATL tutorial)
+    
+    IPolyCtl is the interface that contains the control's custom methods and properties
+    
+    Class View, expand the Polygon branch.
+    
+    Right-click IPolyCtl.
+    
+    On the shortcut menu, click Add, and then click Add Property. The Add Property wizard will appear.
+    
+    Type Sides as the Property Name.
+    
+    In the drop-down list of Property Type, select short.
+    
+    from Solution explorer open Polygon.idl and replace the following lines at the end of the IPolyCtl : IDispatch interface:
+    
+    ```
+    short get_Sides();
+    void set_Sides(short value);
+    ```
+    
+    with C++ 
+    ```
+    [propget, id(1), helpstring("property Sides")] HRESULT Sides([out, retval] short *pVal);
+    [propput, id(1), helpstring("property Sides")] HRESULT Sides([in] short newVal);    
+    ```
+    
+    From Solution Explorer, open PolyCtl.h and add the following lines
+    
+    ```
+    short m_nSides;
+    STDMETHOD(get_Sides)(short* pval);
+    STDMETHOD(put_Sides)(short newval);
+    ```
+    
+    + To update the get and put methods
+    
+    add code to constructor in PolyCtl.h 
+    
+    ```
+    m_nSides = 3;
+    ```
+    
+    Implement the Get and Put methods. The get_Sides and put_Sides function declarations have been added to PolyCtl.h. Now add the code for get_Sides and put_Sides to PolyCtl.cpp
+    
+```
+STDMETHODIMP CPolyCtl::get_Sides(short* pVal)
+{
+   *pVal = m_nSides;
+
+   return S_OK;
+}
+
+STDMETHODIMP CPolyCtl::put_Sides(short newVal)
+{
+   if (2 < newVal && newVal < 101)
+   {
+      m_nSides = newVal;
+      return S_OK;
+   }
+   else
+   {
+      return Error(_T("Shape must have between 3 and 100 sides"));
+   }
+}
+```
+   
+    The get_Sides method returns the current value of the Sides property through the pVal pointer. In the put_Sides method, the code ensures the user is setting the Sides property to an acceptable value.
+
+    + changing the drawing code 
+
+    Start by adding support for the math functions sin and cos, which will be used calculate 
+
+    Add the line #include <math.h> to the top of PolyCtl.h.
+
+    Implement the IProvideClassInfo interface to provide method information for the control, by adding the following code to PolyCtl.h.
+
+    in CPolyCtl replace 
+    ```
+    public CComControl<CPolyCtl>,
+    public IProvideClassInfo2Impl<&CLSID_PolyCtl, &DIID__IPolyCtlEvents, &LIBID_PolygonLib>
+    ```
+    
+    in BEGIN_COM_MAP add lines 
+   
+    ```
+    COM_INTERFACE_ENTRY(IProvideClassInfo)
+    COM_INTERFACE_ENTRY(IProvideClassInfo2)
+    ```
+        
+    Once the polygon points are calculated, they will be stored in an array of type POINT, in PolyCtl.h 
+    ```
+    POINT m_arrPoint[100];
+    ```
+    
+    + modify the OnDraw method in PolyCtl.h 
+    
+```
+HRESULT CPolyCtl::OnDraw(ATL_DRAWINFO& di)
+{
+   RECT& rc = *(RECT*)di.prcBounds;
+   HDC hdc  = di.hdcDraw;
+
+   COLORREF    colFore;
+   HBRUSH      hOldBrush, hBrush;
+   HPEN        hOldPen, hPen;
+
+   // Translate m_colFore into a COLORREF type
+   OleTranslateColor(m_clrFillColor, NULL, &colFore);
+
+   // Create and select the colors to draw the circle
+   hPen = (HPEN)GetStockObject(BLACK_PEN);
+   hOldPen = (HPEN)SelectObject(hdc, hPen);
+   hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+   hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+
+   Ellipse(hdc, rc.left, rc.top, rc.right, rc.bottom);
+
+   // Create and select the brush that will be used to fill the polygon
+   hBrush    = CreateSolidBrush(colFore);
+   SelectObject(hdc, hBrush);
+
+   CalcPoints(rc);
+   Polygon(hdc, &m_arrPoint[0], m_nSides);
+
+   // Select back the old pen and brush and delete the brush we created
+   SelectObject(hdc, hOldPen);
+   SelectObject(hdc, hOldBrush);
+   DeleteObject(hBrush);
+
+   return S_OK;
+}
+```
+
+    + adding a method to calculate the polygon points 
+    
+    called CalcPoints, that will calculate the coordinates of the points that make up the perimeter of the polygon.
+    
+    PolyCtl.h 
+```
+void CalcPoints(const RECT& rc);
+```
+
+```
+void FinalRelease()
+   {
+   }
+public:
+   void CalcPoints(const RECT& rc);
+```
+
+add this implementation of CalcPoints 
+
+```
+void CPolyCtl::CalcPoints(const RECT& rc)
+{
+   const double pi = 3.14159265358979;
+   POINT   ptCenter;
+   double  dblRadiusx = (rc.right - rc.left) / 2;
+   double  dblRadiusy = (rc.bottom - rc.top) / 2;
+   double  dblAngle = 3 * pi / 2;          // Start at the top
+   double  dblDiff  = 2 * pi / m_nSides;   // Angle each side will make
+   ptCenter.x = (rc.left + rc.right) / 2;
+   ptCenter.y = (rc.top + rc.bottom) / 2;
+
+   // Calculate the points for each side
+   for (int i = 0; i < m_nSides; i++)
+   {
+      m_arrPoint[i].x = (long)(dblRadiusx * cos(dblAngle) + ptCenter.x + 0.5);
+      m_arrPoint[i].y = (long)(dblRadiusy * sin(dblAngle) + ptCenter.y + 0.5);
+      dblAngle += dblDiff;
+   }
+}
+```
+
+    + initializing the fill color, adding this line to the CPolyCtl constructor in PolyCtl.h:
+```
+m_clrFillColor = RGB(0, 0xFF, 0);
+
+CPolyCtl()
+{
+   m_nSides = 3;
+   m_clrFillColor = RGB(0, 0xFF, 0);
+}
+```
+
+    + building and testing the control
+    
+    use the ActiveX Control test container 
+
+or errors involving ATL::CW2AEX, in Script.Cpp, replace line TRACE( "XActiveScriptSite::GetItemInfo( %s )\n", pszNameT ); with TRACE( "XActiveScriptSite::GetItemInfo( %s )\n", pszNameT.m_psz );,
+
+For errors involving HMONITOR, open StdAfx.h in the TCProps project and replace:
+```
+#ifndef WINVER
+#define WINVER 0x0400
+#endif
+```
+with 
+```
+#ifndef WINVER
+#define WINVER 0x0500
+#define _WIN32_WINNT 0x0500
+#endif
+```
+
+In Test Container, on the Edit menu, click Insert New Control.
+
+Locate your control, which will be called PolyCtl class, and click OK.
+
+modify properties on a dual interface from within Test Container, use Invoke Methods.
+
+In Test Container, click Invoke Methods on the Control menu.
+
+The Invoke Method dialog box is displayed.
+
+Select the PropPut version of the Sides property from the Method Name drop-down list box.
+
+Type 5 in the Parameter Value box, click Set Value, and click Invoke.
+
+add a call to the FireViewChange function, defined in IViewObjectExImpl, after you set the number of sides. If the control is running in its own window, FireViewChange will call the InvalidateRect method directly. If the control is running windowless, the InvalidateRect method will be called on the container's site interface. This forces the control to repaint itself.
+
+Update PolyCtl.cpp by adding the call to FireViewChange to the put_Sides method. 
+```
+STDMETHODIMP CPolyCtl::put_Sides(short newVal)
+{
+   if (2 < newVal && newVal < 101)
+   {
+      m_nSides = newVal;
+      FireViewChange();
+      return S_OK;
+   }
+   else
+   {
+      return Error(_T("Shape must have between 3 and 100 sides"));
+   }
+}
+```
+
+- adding an event 
+
+will add a ClickIn and a ClickOut event to your ATL control. You will fire the ClickIn event if the user clicks within the polygon and fire ClickOut if the user clicks outside
+
+    + Adding the ClickIn and ClickOut methods
+    
+    created the ATL control in step 2, you selected the Connection points check box. This created the _IPolyCtlEvents interface in the Polygon.idl file. Note that the interface name starts with an underscore. This is a convention to indicate that the interface is an internal interface. 
+    
+```
+[default, source] dispinterface _IPolyCtlEvents;
+
+```
+    The source attribute indicates that the control is the source of the notifications, so it will call this interface on the container.
+    
+    add the ClickIn and ClickOut methods to the _IPolyCtlEvents interface.
+    
+    open Polygon.idl and add the following code under methods: in the dispInterface_IPolyCtlEvents
+    
+```
+[id(1), helpstring("method ClickIn")] void ClickIn([in] LONG x,[in] LONG y);
+[id(2), helpstring("method ClickOut")] void ClickOut([in] LONG x,[in] LONG y);
+```
+
+    + Generating the Type Library
+    
+    Generate the type library at this point, because the project will use it to obtain the information it needs to construct a connection point interface and a connection point container 
+    
+        * Rebuild your project. 
+        
+        or 
+        
+        * Right-click the Polygon.idl file in Solution Explorer and click Compile on the shortcut menu.
+        
+        This will create the Polygon.tlb file, which is your type library. The Polygon.tlb file is not visible from Solution Explorer
+        
+    + Implementing the Connection Point Interfaces
+    
+    Because a COM object can have multiple connection points, the COM object also implements a connection point container interface
+    
+    In Solution Explorer, open _IPolyCtlEvents_CP.h and add the following code under the public: statement in the CProxy_IPolyCtlEvents
+    
+```
+VOID Fire_ClickIn(LONG x, LONG y)
+{
+    T* pT = static_cast<T*>(this);
+    int nConnectionIndex;
+    CComVariant* pvars = new CComVariant[2];
+    int nConnections = m_vec.GetSize();
+
+    for (nConnectionIndex = 0; nConnectionIndex < nConnections; nConnectionIndex++)
+    {
+        pT->Lock();
+        CComPtr<IUnknown> sp = m_vec.GetAt(nConnectionIndex);
+        pT->Unlock();
+        IDispatch* pDispatch = reinterpret_cast<IDispatch*>(sp.p);
+        if (pDispatch != NULL)
+        {
+            pvars[1].vt = VT_I4;
+            pvars[1].lVal = x;
+            pvars[0].vt = VT_I4;
+            pvars[0].lVal = y;
+            DISPPARAMS disp = { pvars, NULL, 2, 0 };
+            pDispatch->Invoke(0x1, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &disp, NULL, NULL, NULL);
+        }
+    }
+    delete[] pvars;
+
+}
+VOID Fire_ClickOut(LONG x, LONG y)
+{
+    T* pT = static_cast<T*>(this);
+    int nConnectionIndex;
+    CComVariant* pvars = new CComVariant[2];
+    int nConnections = m_vec.GetSize();
+
+    for (nConnectionIndex = 0; nConnectionIndex < nConnections; nConnectionIndex++)
+    {
+        pT->Lock();
+        CComPtr<IUnknown> sp = m_vec.GetAt(nConnectionIndex);
+        pT->Unlock();
+        IDispatch* pDispatch = reinterpret_cast<IDispatch*>(sp.p);
+        if (pDispatch != NULL)
+        {
+            pvars[1].vt = VT_I4;
+            pvars[1].lVal = x;
+            pvars[0].vt = VT_I4;
+            pvars[0].lVal = y;
+            DISPPARAMS disp = { pvars, NULL, 2, 0 };
+            pDispatch->Invoke(0x2, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &disp, NULL, NULL, NULL);
+        }
+    }
+    delete[] pvars;
+
+}
+```
+
+    this file has a class called CProxy_IPolyCtlEvents that derives from IConnectionPointImpl. _IPolyCtlEvents_CP.h now defines the two methods Fire_ClickIn and Fire_ClickOut, which take the two coordinate parameters.
+    
+    + add a handler for the WM_LBUTTONDOWN message 
+    
+    In Class View, right-click the CPolyCtl class and click Properties on the shortcut menu.
+    
+    In the Properties window, click the Messages icon and then click WM_LBUTTONDOWN from the list on the left.
+    
+    From the drop-down list that appears, click <Add> OnLButtonDown. The OnLButtonDown handler declaration will be added to PolyCtl.h
+    
+    update code OnLButtonDown in PolyCtl.cpp 
+    
+```
+LRESULT CPolyCtl::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, 
+   BOOL& /*bHandled*/)
+{
+   HRGN hRgn;
+   WORD xPos = LOWORD(lParam);  // horizontal position of cursor
+   WORD yPos = HIWORD(lParam);  // vertical position of cursor
+
+   CalcPoints(m_rcPos);
+
+   // Create a region from our list of points
+   hRgn = CreatePolygonRgn(&m_arrPoint[0], m_nSides, WINDING);
+
+   // If the clicked point is in our polygon then fire the ClickIn
+   //  event otherwise we fire the ClickOut event
+   if (PtInRegion(hRgn, xPos, yPos))
+      Fire_ClickIn(xPos, yPos);
+   else
+      Fire_ClickOut(xPos, yPos);
+
+   // Delete the region that we created
+   DeleteObject(hRgn);
+   return 0;
+}
+```
+
+    + building and testing the control 
+    
+    view the event log window, To route events to the output window, click Logging from the Options menu and select Log to output window. Insert the control and try clicking in the window. 
+    
+    + adding a property page 
+    
+    The ATL OLE DB Provider wizard is not available in Visual Studio 2019 and later.
+    
+    https://docs.microsoft.com/en-us/cpp/atl/adding-a-property-page-atl-tutorial-part-6?view=msvc-160
+    
+    Add > New Item > ATL > ATL Property page
+    
+    Click Strings to open the Strings page and enter &Polygon as the Title.
+    
+    ...
+    
+    CComQIPtr class, which performs the QueryInterface on each object to obtain the IPolyCtl interface from the IUnknown interface
+    
+    
+    Putting the control on a web page 
+    
+    Open the PolyCtl.htm file from Solution Explorer, and you can see your control on a Web page.
+     
+    https://docs.microsoft.com/en-us/cpp/atl/putting-the-control-on-a-web-page-atl-tutorial-part-7?view=msvc-160
+    
+    ...
+    
+
+# ATL class overview by category 
+- reference 
+
+https://docs.microsoft.com/en-us/cpp/atl/atl-class-overview?view=msvc-160
+
+- categories 
+
+Class factories
+Class information
+Collection
+COM modules
+Composite controls
+Connection points
+Control containment
+Controls: General support
+Data transfer
+Data types
+Debugging and exception
+Dual interfaces
+Enumerators and collections
+Error information
+File handling
+Interface pointers
+IUnknown implementation
+Memory management
+MMC snap-in
+Object safety
+Persistence
+Properties and property pages
+Registry support
+Running objects
+Security
+Service provider support
+Site information
+String and text
+Tear-off interfaces
+Thread pooling
+Threading models and critical sections
+UI support
+Windows support
+Utility
+
+
+# ATL library reference 
+- reference 
+
+https://docs.microsoft.com/en-us/cpp/atl/reference/atl-classes?view=msvc-160
+
+- ATL_URL_SCHEME 
+
+enum ATL_URL_SCHEME{
+   ATL_URL_SCHEME_UNKNOWN = -1,
+   ATL_URL_SCHEME_FTP     = 0,
+   ATL_URL_SCHEME_GOPHER  = 1,
+   ATL_URL_SCHEME_HTTP    = 2,
+   ATL_URL_SCHEME_HTTPS   = 3,
+   ATL_URL_SCHEME_FILE    = 4,
+   ATL_URL_SCHEME_NEWS    = 5,
+   ATL_URL_SCHEME_MAILTO  = 6,
+   ATL_URL_SCHEME_SOCKS   = 7
+};
+
+atlutil.h
+
+- ATL functions 
+    + reference 
+    
+    https://docs.microsoft.com/en-us/cpp/atl/reference/atl-functions?view=msvc-160
+    
+    + categories 
+
+ATL Path Functions
+Provide support for manipulating file paths.
+
+COM Map Global Functions
+Provide support for COM map IUnknown implementations.
+
+Composite Control Global Functions
+Provide support for creating dialog boxes, and for creating, hosting and licensing ActiveX controls.
+
+Connection Point Global Functions
+Provide support for connection points and sink maps.
+
+Debugging and Error Reporting Global Functions
+Provide useful debugging and trace facilities.
+
+Device Context Global Functions
+Creates a device context for a given device.
+
+Event Handling Global Functions
+Provides an event handler.
+
+Marshaling Global Functions
+Provide support for marshaling and converting marshaling data into interface pointers.
+
+Pixel/HIMETRIC Conversion Global Functions
+Provide support for converting to and from pixel and HIMETRIC units.
+
+Registry and TypeLib Global Functions
+Provide support for loading and registering a type library.
+
+Security Global Functions
+Provide support for modifying SID and ACL objects.
+
+Security Identifier Global Functions
+Return common well-known SID objects.
+
+Server Registration Global Functions
+Provide support for registering and unregistering server objects in the object map.
+
+WinModule Global Functions
+Provide support for _AtlCreateWndData structure operations.
+
+- ATL macros 
+
+    + reference 
+    https://docs.microsoft.com/en-us/cpp/atl/reference/atl-macros?view=msvc-160
+    
+    + categories 
+Aggregation and Class Factory Macros
+Provide ways of controlling aggregation and of declaring class factories.
+
+Category Macros
+Define category maps.
+
+COM Map Macros
+Define COM interface maps.
+
+Compiler Options Macros
+Control specific compiler features.
+
+Composite Control Macros
+Define event sink maps and entries.
+
+Connection Point Macros
+Define connection point maps and entries.
+
+Debugging and Error Reporting Macros
+Provide useful debugging and trace facilities.
+
+Exception Handling Macros
+Provide support for exception handling.
+
+Message Map Macros
+Define message maps and entries.
+
+Object Map Macros
+Define object maps and entries.
+
+Object Status Macros
+Sets flags belonging to ActiveX controls.
+
+Property Map Macros
+Define property maps and entries.
+
+Registry Data Exchange Macros
+Perform Registry Data Exchange operations.
+
+Registry Macros
+Define useful type library and registry facilities.
+
+Service Map Macros
+Define service maps and entries.
+
+Snap-In Object Macros
+Provide support for snap-in extensions.
+
+String Conversion Macros
+Provide string conversion features.
+
+Window Class Macros
+Define window class utilities.
+
+Windows Messages Macros
+Forward window messages.
+
+- ATL operators 
+
+operator == 	Compares two CSid objects or SID structures for equality.
+operator != 	Compares two CSid objects or SID structures for inequality.
+operator <  	Tests if the CSid object or SID structure on the left side of the operator is less than the CSid object or SID structure on the right side (for C++ Standard Library compatibility).
+    
+operator > 	    Tests if the CSid object or SID structure on the left side of the operator is greater than the CSid object or SID structure on the right side (for C++ Standard Library compatibility).
+
+
+operator <= 	Tests if the CSid object or SID structure on the left side of the operator is less than or equal to the CSid object or SID structure on the right side (for C++ Standard Library compatibility).
+
+operator >= 	Tests if the CSid object or SID structure on the left side of the operator is greater than or equal to the CSid object or SID structure on the right side (for C++ Standard Library compatibility).
+
+- global variables 
+
+_pAtlModule, A global variable storing a pointer to the current module.
+
+__declspec(selectany) CAtlModule * _pAtlModule
+
+    + example 
+```
+LONG lLocks = _pAtlModule->GetLockCount();
+```
+- ATL typedefs 
+
+_ATL_BASE_MODULE 	    Defined as a typedef based on _ATL_BASE_MODULE70.
+_ATL_COM_MODULE 	    Defined as a typedef based on _ATL_COM_MODULE70.
+_ATL_MODULE 	        Defined as a typedef based on _ATL_MODULE70.
+_ATL_WIN_MODULE 	    Defined as a typedef based on _ATL_WIN_MODULE70
+ATL_URL_PORT 	        The type used by CUrl for specifying a port number.
+CComDispatchDriver 	    This class manages COM interface pointers.
+CComGlobalsThreadModel 	Calls the appropriate thread model methods, regardless of the threading model being used.
+
+CComObjectThreadModel 	Calls the appropriate thread model methods, regardless of the threading model being used.
+
+CContainedWindow 	    This class is a specialization of CContainedWindowT.
+CPath 	                A specialization of CPathT using CString.
+CPathA 	                A specialization of CPathT using CStringA.
+CPathW 	                A specialization of CPathT using CStringW.
+CSimpleValArray 	    Represents an array for storing simple types.
+DefaultThreadTraits 	The default thread traits class.
+LPCURL 	                A pointer to a constant CUrl object.
+LPURL 	                A pointer to a CUrl object.
+
+https://docs.microsoft.com/en-us/cpp/atl/reference/atl-global-variables?view=msvc-160
+
+
+
+# ATL project in Visual studio 
+- ATL wizards and dialog boxes 
+
+Creating an ATL Project 	Describes the ATL project wizard and its settings.
+ATL Simple Object 	Creates a basic object.
+ATL Property Page 	Creates a basic property page.
+Not available in Visual Studio 2019 and later.
+ATL OLE DB Provider 	Creates a basic OLE DB provider.
+Not available in Visual Studio 2019 and later.
+ATL OLE DB Consumer 	Creates a basic OLE DB consumer.
+Not available in Visual Studio 2019 and later.
+ATL Dialog Box 	Creates a basic dialog box.
+ATL Control 	Creates a basic ActiveX control.
+ATL COM+ 1.0 Component 	Creates a basic ATL COM+ 1.0 component.
+Not available in Visual Studio 2019 and later.
+ATL Active Server Page Component 	Creates a basic ATL Active Server Page component.
+Not available in Visual Studio 2019 and later.
+ATL COM Desktop Components 	Links to the ATL documentation.
+
+- active server page is removed after vs2019 
+
+- COM+ 1.0 component wizard is removed after vs2019 
+
+- ATL control wizard 
+
+this wizard will register its COM components under HKEY_CURRENT_USER instead of HKEY_LOCAL_MACHINE. to modify this by set the Register component for all users option of the wizard 
+
+    + standard control, An ActiveX control.
+    + composite control, An ActiveX control that can contain (similar to a dialog box) other ActiveX controls or Windows controls
+    
+    A template for the dialog box that implements the composite control.
+
+    A custom resource, REGISTRY, which automatically registers the composite control when invoked.
+
+    A C++ class that implements the composite control.
+
+    A COM interface, exposed by the composite control.
+
+    An HTML test page containing the composite control.
+    
+    this control sets CComControlBase::m_bWindowOnly to true, to indicate that this is a windowed control.
+    
+    
+    + DHTML control, DHTML control: An ATL DHTML control specifies the user interface, using HTML. The DHTML UI class contains a COM map. By default, this control sets CComControlBase::m_bWindowOnly to true, 
+
+- ATL dialog wizard 
+- OLE db consumer wizard, is removed after vs2019 
+- OLE db provider wizard, is removed after vs2019 
+- ATL project 
+
+Dynamic-link library Specifies that your server is a DLL and therefore an in-process server.
+
+Attributed Specifies that your project uses attributes.
+
+    + using code wizards 
+    
+    Add object and controls to an ATL project
+
+    Add a new interface in an ATL project
+
+    Add a COM+ 1.0 component to an ATL project
+
+    + enhance an ATL project:
+
+    Make an ATL object noncreatable
+
+    Optimize the compiler for an ATL project
+
+    + project properties 
+    https://docs.microsoft.com/en-us/cpp/build/reference/general-property-page-project?view=msvc-160
+    
+    + build configuration 
+    
+    https://docs.microsoft.com/en-us/visualstudio/ide/understanding-build-configurations
+
+    + server types 
+    
+    Dynamic-link library (DLL), Select to create an in-process server.
+
+    Executable (EXE), Select to create a local out-of-process server. This option does not allow support for MFC or COM+ 1.0.
+    
+    Service (EXE), Select to create a Windows application that runs in the background
+    
+    + additional options 
+
+    Allow merging of proxy/stub code check box as a convenience when marshaling interfaces is required. This option puts the MIDL-generated proxy and stub code in the same executable as the server.
+    
+    MFC support. This option links your project to the MFC libraries, it is available for nonattributed ATL dll only. a class derived from CWinApp 
+    https://docs.microsoft.com/en-us/cpp/mfc/reference/cwinapp-class?view=msvc-160
+    
+    support COM+ 1.0 components. In addition to the standard list of libraries, adds comsvcs.lib, Mtxguid.lib
+
+    The component registrar allows your COM+ 1.0 object to obtain a list of components, register components, or unregister components 
+    
+- add a new interface in an ATL project 
+
+the class in which you add the interface must implement the BEGIN_COM_MAP macro or, if the project is attributed, it must have the coclass attribute.
+
+    + In Class View, right-click the class name of a control. For example, a full control or composite control, or any other control class that implements a BEGIN_COM_MAP macro in its header file.
+    
+    + shortcut menu, click Add, and then click Implement Interface.
+    
+    + add manually 
+    
+    Add the definition of your new interface to the .idl file.
+    
+    Derive your object or control from the interface.
+    
+    Create a new COM_INTERFACE_ENTRY for the interface or, if the project is attributed, add the coclass attribute.
+    
+    implement the methods 
+    
+-  ATL property page is removed after vs2019 
+
+- making an ATL object noncreatable 
+
+an ATL-based COM object so that a client cannot directly create the object. In this case, the object would be returned through a method call on another object rather than created directly.
+    
+Remove the OBJECT_ENTRY_AUTO for the object. If you want the object to be noncreatable but the control to be registered, replace OBJECT_ENTRY_AUTO with OBJECT_ENTRY_NON_CREATEABLE_EX_AUTO.
+
+Add the noncreatable attribute to the coclass in the .idl file.
+
+[uuid(A1992E3D-3CF0-11D0-826F-00A0C90F2851),
+helpstring("MyObject"),
+noncreatable]
+coclass MyObject
+{
+    [default] interface IMyInterface;
+}
+
+- compiler options 
+
+ ATL Control Wizard generates new classes with the ATL_NO_VTABLE macro
+ 
+```
+#ifdef _ATL_DISABLE_NO_VTABLE
+#define ATL_NO_VTABLE
+#else
+#define ATL_NO_VTABLE __declspec(novtable)
+#endif
+```
+
+You must use ATL_NO_VTABLE, and consequently declspec(novtable), with only base classes that are not directly creatable
+
+You must not use declspec(novtable) with the most-derived class in your project, because this class (usually CComObject, CComAggObject, or CComPolyObject) initializes the vtable pointer for your project.
+
+You must not call virtual functions from the constructor of any object that uses declspec(novtable).
+
+
+
+
+
+# ATL samples 
+- reference 
+https://docs.microsoft.com/en-us/cpp/overview/visual-cpp-samples?view=msvc-160
+
+- ATL samples advanced 
+
+ActiveDOc 
+Async 
+ATLButton 
+ATLDuck 
+ATLSecurity
+
+
+
+# Reference 
+- VARIANT, oaidl.h 
+
+https://docs.microsoft.com/en-us/windows/win32/api/oaidl/ns-oaidl-variant
+
+```
+typedef struct tagVARIANT {
+  union {
+    struct {
+      VARTYPE vt;
+      WORD    wReserved1;
+      WORD    wReserved2;
+      WORD    wReserved3;
+      union {
+        LONGLONG     llVal;
+        LONG         lVal;
+        BYTE         bVal;
+        SHORT        iVal;
+        FLOAT        fltVal;
+        DOUBLE       dblVal;
+        VARIANT_BOOL boolVal;
+        VARIANT_BOOL __OBSOLETE__VARIANT_BOOL;
+        SCODE        scode;
+        CY           cyVal;
+        DATE         date;
+        BSTR         bstrVal;
+        IUnknown     *punkVal;
+        IDispatch    *pdispVal;
+        SAFEARRAY    *parray;
+        BYTE         *pbVal;
+        SHORT        *piVal;
+        LONG         *plVal;
+        LONGLONG     *pllVal;
+        FLOAT        *pfltVal;
+        DOUBLE       *pdblVal;
+        VARIANT_BOOL *pboolVal;
+        VARIANT_BOOL *__OBSOLETE__VARIANT_PBOOL;
+        SCODE        *pscode;
+        CY           *pcyVal;
+        DATE         *pdate;
+        BSTR         *pbstrVal;
+        IUnknown     **ppunkVal;
+        IDispatch    **ppdispVal;
+        SAFEARRAY    **pparray;
+        VARIANT      *pvarVal;
+        PVOID        byref;
+        CHAR         cVal;
+        USHORT       uiVal;
+        ULONG        ulVal;
+        ULONGLONG    ullVal;
+        INT          intVal;
+        UINT         uintVal;
+        DECIMAL      *pdecVal;
+        CHAR         *pcVal;
+        USHORT       *puiVal;
+        ULONG        *pulVal;
+        ULONGLONG    *pullVal;
+        INT          *pintVal;
+        UINT         *puintVal;
+        struct {
+          PVOID       pvRecord;
+          IRecordInfo *pRecInfo;
+        } __VARIANT_NAME_4;
+      } __VARIANT_NAME_3;
+    } __VARIANT_NAME_2;
+    DECIMAL decVal;
+  } __VARIANT_NAME_1;
+} VARIANT;
+```
+
+- decimal 
+
+https://docs.microsoft.com/en-us/dotnet/visual-basic/language-reference/data-types/decimal-data-type
+
+
+
 
 
 
