@@ -1117,6 +1117,347 @@ class Vector:
         return cls(memv)  
 
 
+# interfaces, protocols, abcs 
+- typing maps 
+
+duck typing, python's default 
+
+goose typing, abstract base classes since python 2.6, goose typing means is: isinstance(obj, cls) is now just fine
+
+static typing, like c and java, using the typing module 
+
+static duck typing, using the typing.Protocol new in python 3.8 
+
+- fail fast, defensive programming 
+
+- abc syntax 
+
+@abstractmethod, the abc module defines the @abstractclassmethod, @abstractstaticmethod, and @abstractproperty 
+
+- __subclasshook__ allows ABCs to support structural typing. You can formalize an interface with an ABC, you can make isinstance checks against that ABC
+
+- static protocols 
+
+```
+from typing import TypeVar, Protocol
+
+T = TypeVar('T')  1
+
+class Repeatable(Protocol):
+    def __mul__(self: T, repeat_count: int) -> T: ...  2
+
+RT = TypeVar('RT', bound=Repeatable)  3
+
+def double(x: RT) -> RT:  4
+    return x * 2
+```
+ 
+- typing.Protocol subclass, you can use the @runtime_checkable decorator to make that protocol support isinstance/issubclass checks at runtime
+
+```
+@runtime_checkable
+class SupportsComplex(Protocol):
+    """An ABC with one abstract method __complex__."""
+    __slots__ = ()
+
+    @abstractmethod
+    def __complex__(self) -> complex:
+        pass
+```
+
+- the numbers abcs and numeric protocols 
+
+opmost ABC, Complex is its immediate subclass, and so on, down to Integral:
+
+Number
+
+Complex
+
+Real
+
+Rational
+
+Integral
+
+
+
+# inheritance for good for worse 
+- provide aggregate classes to users 
+- don't subclass from more than one concrete class 
+- subclasing built-in types is tricky 
+- __init__ and __update__ methods 
+
+```
+>>> class DoppelDict(dict):
+...     def __setitem__(self, key, value):
+...         super().__setitem__(key, [value] * 2)  
+...
+>>> dd = DoppelDict(one=1)  
+>>> dd
+{'one': 1}
+>>> dd['two'] = 2  
+>>> dd
+{'one': 1, 'two': [2, 2]}
+>>> dd.update(three=3)  
+>>> dd
+{'three': 3, 'one': 1, 'two': [2, 2]}
+```
+- distinguish interface inheritance from implementation inheritance 
+- provide aggregate classes to users 
+
+
+# More about type hints 
+- typing.TypedDict for type hinting dicts used as records
+
+- @typing.overload allows annotating each different combination
+
+- takeaways from overloading max 
+
+- TypedDict to protect against errors while handling dynamic data structures like JSON API responses
+
+```
+from typing import TypedDict
+import json
+
+class BookDict(TypedDict):
+    isbn: str
+    title: str
+    authors: list[str]
+    pagecount: int
+```
+
+- type casting 
+
+The typing.cast() special function provides one way to handle type checking malfunctions or incorrect type hints
+
+
+- contravariant 
+
+```
+from typing import TypeVar, Generic
+
+class Refuse:  
+    """Any refuse."""
+
+class Biodegradable(Refuse):
+    """Biodegradable refuse."""
+
+class Compostable(Biodegradable):
+    """Compostable refuse."""
+
+T_contra = TypeVar('T_contra', contravariant=True)  
+
+class TrashCan(Generic[T_contra]):  
+    def put(self, refuse: T_contra) -> None:
+        """Store trash until dumped."""
+
+def deploy(trash_can: TrashCan[Biodegradable]):
+    """Deploy a trash can for biodegradable refuse."""
+```
+
+A contravariant container is usually a write-only data structure, also known as a “sink”.
+
+
+
+# Operator overloading, doing it right 
+- limitations 
+
+We cannot overload operators for the built-in types.
+
+We cannot create new operators, only overload existing ones.
+
+A few operators can’t be overloaded: is, and, or, not (but the bitwise &, |, ~, can).
+
+- unary operators 
+
+__neg__ 
+
+__pos__ 
+
+__invert__ 
+
+- using @ as an infix operator 
+
+The @ operator is supported by the special methods __matmul__, __rmatmul__, and __imatmul__
+
+```
+>>> va = Vector([1, 2, 3])
+>>> vz = Vector([5, 6, 7])
+>>> va @ vz == 38.0  # 1*5 + 2*6 + 3*7
+True
+>>> [10, 20, 30] @ vz
+380.0
+>>> va @ 3
+Traceback (most recent call last):
+...
+TypeError: unsupported operand type(s) for @: 'Vector' and 'int'
+```
+
+
+# Iterables, iterators and generators 
+- a sequence of words 
+import re
+import reprlib
+
+RE_WORD = re.compile(r'\w+')
+
+
+class Sentence:
+
+    def __init__(self, text):
+        self.text = text
+        self.words = RE_WORD.findall(text)  
+
+    def __getitem__(self, index):
+        return self.words[index]  
+
+    def __len__(self):  
+        return len(self.words)
+
+    def __repr__(self):
+        return 'Sentence(%s)' % reprlib.repr(self.text)  
+        
+- user iter to create a iterator from a function or a callable object 
+
+>>> def d6():
+...     return randint(1, 6)
+...
+>>> d6_iter = iter(d6, 1)
+>>> d6_iter
+<callable_iterator object at 0x10a245270>
+>>> for roll in d6_iter:
+...     print(roll)
+...
+4
+3
+6
+3
+
+- iter from iterable 
+
+>>> s = 'ABC'
+>>> it = iter(s)  
+>>> while True:
+...     try:
+...         print(next(it))  
+...     except StopIteration:  
+...         del it  
+...         break  
+...
+A
+B
+C
+
+- python standard interface for an iterator has two methods 
+
+__next__ 
+
+__iter__ 
+
+
+- lazy generator 
+
+The re.finditer function is a lazy version of re.findall. Instead of a list, re.finditer returns a generator yielding re.MatchObject instances on demand. 
+
+- an arithmetic progression generator 
+
+The itertools module in Python 3.10 has 20 generator functions that can be combined in a variety of interesting ways
+
+```
+>>> import itertools
+>>> gen = itertools.count(1, .5)
+>>> next(gen)
+```
+
+- yield and yield from statement 
+
+```
+def tree(cls):
+    yield cls.__name__, 0
+    yield from sub_tree(cls, 1)
+
+
+def sub_tree(cls, level):
+    for sub_cls in cls.__subclasses__():
+        yield sub_cls.__name__, level
+        yield from sub_tree(sub_cls, level+1)
+
+
+def display(cls):
+    for cls_name, level in tree(cls):
+        indent = ' ' * 4 * level
+        print(f'{indent}{cls_name}')
+
+
+if __name__ == '__main__':
+    display(BaseException)
+```
+
+- generic iterable types 
+
+```
+from collections.abc import Iterable
+
+FromTo = tuple[str, str]  
+
+def zip_replace(text: str, changes: Iterable[FromTo]) -> str:  
+    for from_, to in changes:
+        text = text.replace(from_, to)
+    return text
+```
+
+Generator[YieldType, SendType, ReturnType]
+
+- return a value from a coroutine 
+
+```
+from collections.abc import Generator
+from typing import Union, NamedTuple
+
+class Result(NamedTuple):  
+    count: int  # type: ignore  
+    average: float
+
+class Sentinel:  
+    def __repr__(self):
+        return f'<Sentinel>'
+
+STOP = Sentinel()  
+
+SendType = Union[float, Sentinel]  
+```
+
+
+
+
+
+
+
+
+
+
+# Classic coroutines 
+
+
+
+# Concurrency models in python 
+
+
+
+# Concurrency with futures 
+
+
+
+# Asynchronous programming 
+
+
+# Dynamic attribute and properties 
+
+# Class meta programming 
+
+
+
+
 
 
 
