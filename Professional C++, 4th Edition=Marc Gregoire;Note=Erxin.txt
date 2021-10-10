@@ -4865,7 +4865,634 @@ The Standard Library does not provide any generic tree or graph structures.
 
 
 # Understanding containers and iterators 
-- 
+- class template, and the ref() and cref() function templates are defined in the <functional> header. 
+
+- elements in containers using the default allocator and comparator are shown in the following table
+
+copy constructor 
+
+move constructor 
+
+assignment operator 
+
+move assignment operator 
+
+destructor 
+
+default constructor 
+
+operator == 
+
+operator < 
+
+- Iterators
+
+The Standard Library uses the iterator pattern to provide a generic abstraction for accessing the elements of a container. 
+
+- The standard defines five categories of iterators, as summarized in the following table.
+
+input 
+
+ouput 
+
+forward 
+
+bidirectional 
+
+random access 
+
+use std::distance() to compute the distance between two iterators of a container.
+
+a const iterator for a vector of ints has as type std::vector<int>::const_iterator.
+
+- vector, deque, list, forward_list, and array are called sequential containers.
+
+vector 
+
+template <class T, class Allocator = allocator<T>> class vector;
+
+constructors and destructors 
+
+vector<int> intVector; // Creates a vector of ints with zero elements
+
+vector<int> intVector({ 1, 2, 3, 4, 5, 6 });
+
+intVector.assign({ 1, 2, 3, 4 }); //copy assignment 
+
+Comparing two vectors with operator== or operator!= requires the individual elements to be comparable with operator==.
+
+with operator<, operator>, operator<=, or operator>= requires the individual elements to be comparable with operator<
+
+    + iterate 
+    
+for (vector<double>::iterator iter = begin(doubleVector); iter != end(doubleVector); ++iter) {
+    *iter /= max;
+    cout << *iter << " ";
+}
+
+for (auto iter = begin(doubleVector); iter != end(doubleVector); ++iter) {
+    *iter /= max;
+    cout << *iter << " ";
+}
+
+vector<string> stringVector(10, "hello");
+for (auto& str : stringVector) {
+    str.append(" there");
+}
+
+    + const iterator 
+    
+vector<type>::const_iterator it = begin(myVector);
+
+vector<string> stringVector(10, "hello");
+for (auto iter = begin(stringVector); iter != end(stringVector); ++iter) {
+    cout << *iter << endl;
+}
+
+vector<string> stringVector(10, "hello");
+for (auto iter = begin(stringVector); iter != end(stringVector); ++iter) {
+    cout << *iter << endl;
+}
+
+vector<string> stringVector(10, "hello");
+for (auto iter = cbegin(stringVector); iter != cend(stringVector); ++iter) {
+    cout << *iter << endl;
+}
+
+    + Generally, iterators are about as safe as pointers—that is, extremely unsafe. 
+
+Recall that the iterator returned by end() is one element past the end of a vector, not an iterator referring to the last element! 
+```
+vector<int> intVector;
+auto iter = end(intVector);
+*iter = 10; // BUG! iter doesn't refer to a valid element.
+```
+
+use mismatched iterators. For example, the following for loop initializes an iterator from vectorTwo, and tries to compare it to the end iterator of vectorOne
+```
+vector<int> vectorOne(10);
+vector<int> vectorTwo(10);
+
+// Fill in the vectors.
+
+// BUG! Possible infinite loop
+for (auto iter = begin(vectorTwo); iter != end(vectorOne); ++iter) {
+    // Loop body
+}
+```
+
+    + The vector iterator is random access, which means that you can move it backward or forward
+
+vector<int> intVector(10);
+auto it = begin(intVector);
+it += 5;
+--it;
+*it = 4;
+
+    + Storing references in a vector, store std::reference_wrappers in the container. The std::ref() and cref() function templates are used to create non-const and const reference_wrapper instances. 
+    
+```
+string str1 = "Hello";
+string str2 = "World";
+
+// Create a vector of references to strings.
+vector<reference_wrapper<string>> vec{ ref(str1) };
+vec.push_back(ref(str2));  // push_back() works as well.
+
+// Modify the string referred to by the second reference in the vector.
+vec[1].get() += "!";
+
+// The end result is that str2 is actually modified.
+cout << str1 << " " << str2 << endl;
+```
+
+    + adding and removing elements, an element to a vector with the push_back() method. The vector provides a parallel remove method called pop_back().
+
+    erase() and the following versions of insert():
+
+    insert(const_iterator pos, const T& x): the value x is inserted at position pos.
+    insert(const_iterator pos, size_type n, const T& x): the value x is inserted n times at position pos.
+    insert(const_iterator pos, InputIterator first, InputIterator last): the elements in the range [first, last) are inserted at position pos.
+
+```
+vector<int> vectorOne = { 1, 2, 3, 5 };
+vector<int> vectorTwo;
+
+// Oops, we forgot to add 4. Insert it in the correct place
+vectorOne.insert(cbegin(vectorOne) + 3, 4);
+
+// Add elements 6 through 10 to vectorTwo
+for (int i = 6; i <= 10; i++) {
+    vectorTwo.push_back(i);
+}
+printVector(vectorOne);
+printVector(vectorTwo);
+
+// Add all the elements from vectorTwo to the end of vectorOne
+vectorOne.insert(cend(vectorOne), cbegin(vectorTwo), cend(vectorTwo));
+printVector(vectorOne);
+
+// Now erase the numbers 2 through 5 in vectorOne
+vectorOne.erase(cbegin(vectorOne) + 1, cbegin(vectorOne) + 5);
+printVector(vectorOne);
+
+// Clear vectorTwo entirely
+vectorTwo.clear();
+
+// And add 10 copies of the value 100
+vectorTwo.insert(cbegin(vectorTwo), 10, 100);
+
+// Decide we only want 9 elements
+vectorTwo.pop_back();
+printVector(vectorTwo);
+```
+
+- move sementics 
+
+Without move semantics, assigning the result of createVectorOfSize() to myVector calls the copy assignment operator.
+```
+vector<int> createVectorOfSize(size_t size)
+{
+    vector<int> vec(size);
+    int contents = 0;
+    for (auto& i : vec) {
+        i = contents++;
+    }
+    return vec;
+}
+…
+vector<int> myVector;
+myVector = createVectorOfSize(123);
+```
+
+push_back() makes a copy of myElement and puts it in the vector.
+
+push_back(T&& val), which is the move equivalent of push_back(const T& val)
+
+vec.push_back(move(myElement));
+
+//The preceding call to push_back() triggers a call to the move version because the call to the string constructor results in a temporary object
+vec.push_back(string(5, "a"));
+
+- emplace operations 
+
+An example is emplace_back() on a vector object, which does not copy or move anything. Instead, it makes space in the container and constructs the object in place
+
+emplace_back(). The difference in performance between emplace_back() and push_back() using move semantics depends on how your specific compiler implements
+
+```
+vec.push_back(string(5, 'a'));
+// Or
+vec.emplace_back(5, 'a');
+```
+
+C++17, the emplace_back() method returns a reference to the inserted element. Before C++17, the return type of emplace_back() was void.
+ 
+-  vector size() and capacity()
+
+C++17 introduces non-member std::size() and std::empty() global functions. These are similar to the non-member functions that are available to get iterators
+
+- directly accessing the data 
+
+C++17 introduces a non-member std::data() global function that can be used to get a pointer to the data.
+
+- vector example 
+
+```
+// Class template RoundRobin
+// Provides simple round-robin semantics for a list of elements.
+template <typename T>
+class RoundRobin
+{
+    public:
+        // Client can give a hint as to the number of expected elements for
+        // increased efficiency.
+        RoundRobin(size_t numExpected = 0);
+        virtual ~RoundRobin() = default;
+
+        // Prevent assignment and pass-by-value
+        RoundRobin(const RoundRobin& src) = delete;
+        RoundRobin& operator=(const RoundRobin& rhs) = delete;
+
+        // Explicitly default a move constructor and move assignment operator
+        RoundRobin(RoundRobin&& src) = default;
+        RoundRobin& operator=(RoundRobin&& rhs) = default;
+
+        // Appends element to the end of the list. May be called
+        // between calls to getNext().
+        void add(const T& element);
+
+        // Removes the first (and only the first) element
+        // in the list that is equal (with operator==) to element.
+        // May be called between calls to getNext().
+        void remove(const T& element);
+
+        // Returns the next element in the list, starting with the first,
+        // and cycling back to the first when the end of the list is
+        // reached, taking into account elements that are added or removed.
+        T& getNext();
+    private:
+        std::vector<T> mElements;
+        typename std::vector<T>::iterator mCurrentElement;
+};
+```
+
+- the vector<bool> specification 
+
+The C++ standard requires a partial specialization of vector for bools, with the intention that it optimizes space allocation by “packing” the Boolean values. 
+
+Even worse, accessing and modifying elements in a vector<bool> is much slower than, for example, in a vector<int>. Many C++ experts recommend avoiding vector<bool> in favor of the bitset.
+
+use something like vector<std::int_fast8_t> or vector<unsigned char>. The std::int_fast8_t type is defined in <cstdint>
+
+supports cbegin(), cend(), rbegin(), rend(), crbegin(), and crend().
+
+- A Network Packet Buffer
+
+When two computers communicate over a network, they send information to each other divided up into discrete chunks called packets.
+
+- A priority queue is a queue that keeps its elements in sorted order. Instead of a strict FIFO ordering
+
+- pair<int, double> aPair = make_pair(5, 10.10);
+
+C++17 introduces template parameter deduction for constructors
+
+auto aThirdPair = pair(5, 10.10);
+
+- map 
+
+map<string, int> m = {
+    { "Marc G.", 123 },
+    { "Warren B.", 456 },
+    { "Peter V.W.", 789 }
+};
+
+map<int, Data> dataMap;
+
+auto ret = dataMap.insert({ 1, Data(4) });   // Using an initializer_list
+if (ret.second) {
+    cout << "Insert succeeded!" << endl;
+} else {
+    cout << "Insert failed!" << endl;
+}
+
+ret = dataMap.insert(make_pair(1, Data(6))); // Using a pair object
+if (ret.second) {
+    cout << "Insert succeeded!" << endl;
+} else {
+    cout << "Insert failed!" << endl;
+}
+
+pair<map<int, Data>::iterator, bool> ret;
+
+if (auto [iter, success] = dataMap.insert({ 1, Data(4) }); success) {
+    cout << "Insert succeeded!" << endl;
+} else {
+    cout << "Insert failed!" << endl;
+}
+
+ret = dataMap.insert_or_assign(1, Data(7));
+if (ret.second) {
+    cout << "Inserted." << endl;
+} else {
+    cout << "Overwritten." << endl;
+} 
+
+map<int, Data> dataMap;
+dataMap[1] = Data(4);
+dataMap[1] = Data(6); // Replaces the element with key 1
+
+for (auto iter = cbegin(dataMap); iter != cend(dataMap); ++iter) {
+    cout << iter->second.getValue() << endl;
+}
+
+for (const auto& [key, data] : dataMap) {
+    cout << data.getValue() << endl;
+}
+
+for (const auto& p : dataMap) {
+    cout << p.second.getValue() << endl;
+}
+
+- looking up elements 
+
+map<int, Data> dataMap;
+dataMap[1] = Data(4);
+dataMap[1] = Data(6);
+dataMap[1].setValue(100);
+
+- removing elements 
+
+map<int, Data> dataMap;
+dataMap[1] = Data(4);
+cout << "There are " << dataMap.count(1) << " elements with key 1" << endl;
+dataMap.erase(1);
+cout << "There are " << dataMap.count(1) << " elements with key 1" << endl;
+
+map<int, Data> dataMap2;
+auto extractedNode = dataMap.extract(1);
+dataMap2.insert(std::move(extractedNode));
+
+map<int, int> src = { {1, 11}, {2, 22} };
+map<int, int> dst = { {2, 22}, {3, 33}, {4, 44}, {5, 55} };
+dst.merge(src);
+
+- other containers 
+
+including standard C-style arrays, strings, streams, and bitset.
+
+istream_iterator and ostream_iterator that allow you to “iterate” through input and output streams. 
+
+    + A bitset, defined in <bitset>, is templatized on the number of bits it stores. 
+```
+bitset<10> myBitset;
+
+myBitset.set(3);
+myBitset.set(6);
+myBitset[8] = true;
+myBitset[9] = myBitset[3];
+
+if (myBitset.test(3)) {
+    cout << "Bit 3 is set!"<< endl;
+}
+cout << myBitset << endl;
+```
+
+
+# Mastering standard library algorithms 
+- performing error checking on stream input 
+
+#include <algorithm>
+#include <vector>
+#include <iostream>
+using namespace std;
+
+int main()
+{
+    int num;
+    vector<int> myVector;
+    while (true) {
+        cout << "Enter a number to add (0 to stop): ";
+        cin >> num;
+        if (num == 0) {
+            break;
+        }
+        myVector.push_back(num);
+    }
+
+    while (true) {
+        cout << "Enter a number to lookup (0 to stop): ";
+        cin >> num;
+        if (num == 0) {
+            break;
+        }
+        auto endIt = cend(myVector);
+        auto it = find(cbegin(myVector), endIt, num);
+        if (it == endIt) {
+            cout << "Could not find " << num << endl;
+        } else {
+            cout << "Found " << *it << endl;
+        }
+    }
+    return 0;
+}
+
+auto it = find_if(cbegin(myVector), endIt, [](int i){ return i >= 100; });
+
+- std::function, defined in the <functional> header file, can be used to create a type that can point to a function, a function object, or a lambda expression
+
+std::function<R(ArgTypes…)>
+
+void func(int num, const string& str)
+{
+    cout << "func(" << num << ", " << str << ")" << endl;
+}
+
+int main()
+{
+    function<void(int, const string&)> f1 = func;
+    f1(1, "test");
+    return 0;
+}
+
+    + using find_if() 
+    
+bool isEven(int num)
+{
+    return num % 2 == 0;
+}
+
+int main()
+{
+    vector<int> vec{ 1,2,3,4,5,6,7,8,9 };
+
+    function<bool(int)> fcn = isEven;
+    auto result = find_if(cbegin(vec), cend(vec), fcn);
+    if (result != cend(vec)) {
+        cout << "First even number: " << *result << endl;
+    } else {
+        cout << "No even number found." << endl;
+    }
+    return 0;
+}
+
+    + using raw function pointer 
+    
+void process(const vector<int>& vec, function<void(int)> f)
+{
+    for (auto& i : vec) {
+        f(i);
+    }
+}
+
+void print(int num)
+{
+    cout << num << "  ";
+}
+
+int main()
+{
+    vector<int> vec{ 0,1,2,3,4,5,6,7,8,9 };
+
+    process(vec, print);
+    cout << endl;
+
+    int sum = 0;
+    process(vec, [&sum](int num){sum += num;});
+    cout << "sum = " << sum << endl;
+    return 0;
+}
+
+template <typename F>
+void processTemplate(const vector<int>& vec, F f)
+{
+    for (auto& i : vec) {
+        f(i);
+    }
+}
+
+- lambda expression 
+
+auto basicLambda = []{ cout << "Hello from Lambda" << endl; };
+basicLambda();
+
+auto parametersLambda = [](int value){ cout << "The value is " << value << endl; };
+parametersLambda(42);
+
+double data = 1.23;
+auto capturingLambda = [data]{ cout << "Data = " << data << endl; };
+
+double data = 1.23;
+auto capturingLambda = [&data]{ data *= 2; };
+
+[=] captures all variables by value
+[&] captures all variables by reference
+
+[&x] captures only x by reference and nothing else.
+[x] captures only x by value and nothing else.
+[=, &x, &y] captures by value by default, except variables x and y, which are captured by reference.
+[&, x] captures by reference by default, except variable x, which is captured by value.
+[&x, &x] is illegal because identifiers cannot be repeated.
+[this] captures the current object. In the body of the lambda expression you can access this object, even without using this->.
+
+    + cpp17 
+
+[*this] captures a copy of the current object
+
+
+[capture_block](parameters) mutable constexpr
+    noexcept_specifier attributes
+    -> return_type {body}
+    
+    + generic lambda 
+
+// Define a generic lambda to find values > 100.
+auto isGreaterThan100 = [](auto i){ return i > 100; };
+
+// Use the generic lambda with a vector of integers.
+vector<int> ints{ 11, 55, 101, 200 };
+auto it1 = find_if(cbegin(ints), cend(ints), isGreaterThan100);
+if (it1 != cend(ints)) {
+    cout << "Found a value > 100: " << *it1 << endl;
+}
+
+// Use exactly the same generic lambda with a vector of doubles.
+vector<double> doubles{ 11.1, 55.5, 200.2 };
+auto it2 = find_if(cbegin(doubles), cend(doubles), isGreaterThan100);
+if (it2 != cend(doubles)) {
+    cout << "Found a value > 100: " << *it2 << endl;
+}
+
+double pi = 3.1415;
+auto myLambda = [myCapture = "Pi: ", pi]{ cout << myCapture << pi; };
+
+    + it is possible to capture it by moving, as in this example:
+
+auto myPtr = std::make_unique<double>(3.1415);
+auto myLambda = [p = std::move(myPtr)]{ cout << *p; };
+
+    + lambda as return type 
+    
+auto multiplyBy2Lambda(int x)
+{
+    return [x]{ return 2 * x; };
+}
+
+function<int(void)> fn = multiplyBy2Lambda(5);
+cout << fn() << endl;
+
+//x is not exist when lambda is executed 
+auto multiplyBy2Lambda(int x)
+{
+    return [&x]{ return 2 * x; }; // BUG!
+}
+
+//good 
+auto multiplyBy2Lambda(int x)
+{
+    return [x]{ return 2 * x; };
+}
+
+- Standard Library algorithms: count_if() and generate()
+
+vector<int> vec{ 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+int value = 3;
+int cnt = count_if(cbegin(vec), cend(vec),
+                   [value](int i){ return i > value; });
+cout << "Found " << cnt << " values > " << value << endl;
+
+The generate() algorithm requires an iterator range and replaces the values in that range with the values returned from the function given as a third argument. 
+
+-  function objects 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
