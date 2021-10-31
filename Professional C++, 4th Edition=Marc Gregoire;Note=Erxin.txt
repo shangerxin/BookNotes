@@ -5463,35 +5463,610 @@ cout << "Found " << cnt << " values > " << value << endl;
 
 The generate() algorithm requires an iterator range and replaces the values in that range with the values returned from the function given as a third argument. 
 
--  function objects 
+- function objects 
+
+call operator in a class such that objects of the class can be used in place of function pointers. These objects are called function objects
+
+Your <functional> header might also contain functions like bind1st(), bind2nd(), mem_fun(), mem_fun_ref(), and ptr_fun(). These functions have officially been removed from the C++17 standard
+
+    + arithmetic function objects 
+```
+plus<int> myPlus;
+int res = myPlus(4, 5);
+cout << res << endl;
+```
+
+arithmetic function objects is that you can pass them as callbacks to algorithms
+```
+double geometricMean(const vector<int>& nums)
+{
+    double mult = accumulate(cbegin(nums), cend(nums), 1, multiplies<int>());
+    return pow(mult, 1.0 / nums.size());
+}
+```
+
+    + transparent operator functors, allow you to omit the template type 
+    
+    specify multiplies<>() instead of multiplies<int>()
+    
+```    
+double geometricMeanTransparent(const vector<int>& nums)
+{
+    double mult = accumulate(cbegin(nums), cend(nums), 1, multiplies<>());
+    return pow(mult, 1.0 / nums.size());
+}
+```
+
+    + comparison function objects 
+    
+    standard comparisons: equal_to, not_equal_to, less, greater, less_equal, and greater_equal.
+    ```
+    priority_queue<int, vector<int>, greater<>> myQueue;
+    ```
+
+    + logical function objects 
+    
+    logical_not (operator!), logical_and (operator&&), and logical_or (operator||). These logical operations deal only with the values true and false
+    
+```
+bool allTrue(const vector<bool>& flags)
+{
+    return accumulate(begin(flags), end(flags), true, logical_and<>());
+}
+```
+
+    + bitwise function objects 
+
+    bitwise operations: bit_and (operator&), bit_or (operator|), bit_xor (operator^), and bit_not (operator~)
+
+    + adaptor function objects 
+
+    The adaptor function objects attempt to rectify this problem and others. They allow you to adapt function objects, lambda expressions, function pointers, basically any callable.
+
+    + binders 
+
+    Binders can be used to bind parameters of callables to certain values. Arguments that are not bound to specific values should be specified as _1, _2, _3, and so on.
+
+```
+string myString = "abc";
+auto f1 = bind(func, placeholders::_1, myString);
+f1(16);
+```
+func(16, abc)
+
+    can also be used to switch parameter positions 
+```
+auto f2 = bind(func, placeholders::_2, placeholders::_1);
+f2("Test", 32);
+```
+
+Using std::ref() to pass a proper reference correctly increments index
+```
+void increment(int& value) { ++value; }
+
+int index  = 0;
+auto incr = bind(increment, ref(index));
+incr();
+```
+
+bind to overload functions 
+```
+void overloaded(int num) {}
+void overloaded(float f) {}
+
+auto f3 = bind(overloaded, placeholders::_1); // ERROR
+auto f4 = bind((void(*)(float))overloaded, placeholders::_1); // OK
+
+// Code for inputting scores into the vector omitted, similar as earlier.
+auto endIter = end(myVector);
+auto it = find_if(begin(myVector), endIter,
+    bind(greater_equal<>(), placeholders::_1, 100));
+if (it == endIter) {
+    cout << "No perfect scores" << endl;
+} else {
+    cout << "Found a \"perfect\" score of " << *it << endl;
+}
+
+auto it = find_if(begin(myVector), endIter, [](int i){ return i >= 100; });
+```
+
+Negators are similar to binders but they complement the result of a callable. 
+```
+// Code for inputting scores into the vector omitted, similar as earlier.
+auto endIter = end(myVector);
+auto it = find_if(begin(myVector), endIter, not_fn(perfectScore));
+if (it == endIter) {
+    cout << "All perfect scores" << endl;
+} else {
+    cout << "Found a \"less-than-perfect\" score of " << *it << endl;
+}
+```
+
+find_if_not() algorithm.
+```
+auto it = find_if(begin(myVector), endIter, [](int i){ return i < 100; });
+```
+
+The std::not_fn() adaptor is introduced with C++17. Before C++17 you could use the std::not1() and not2() adaptors. 
+```
+// Code for inputting scores into the vector omitted, similar as earlier.
+auto endIter = end(myVector);
+function<bool(int)> f = perfectScore;
+auto it = find_if(begin(myVector), endIter, not1(f));
+```
+
+use not1() with your own functor class, then you had to make sure your functor class definition included two typedefs: argument_type and result_type
+
+use not2(), then your functor class definition had to provide three  your functor class definition had to provide three typedefs: first_argument_type, second_argument_type, and result_type. 
+The easiest way to do that was to derive your function object class from either unary_function or binary_function
+```
+class PerfectScore : public std::unary_function<int, bool>
+{
+    public:
+        result_type operator()(const argument_type& score) const
+        {
+            return score >= 100;
+        }
+};
+
+auto it = find_if(begin(myVector), endIter, not1(PerfectScore()));
+```
+
+not1() and not2() have been deprecated by the C++17 standard. 
+
+    + calling member functions 
+
+if you just pass a pointer to string::empty() to find_if(), the algorithm has no way to know that it received a pointer to a method instead of a normal function pointer or functor. 
+
+C++ provides a conversion function called mem_fn() that you can call with a method pointer before passing it to an algorithm
+
+```
+void findEmptyString(const vector<string>& strings)
+{
+    auto endIter = end(strings);
+    auto it = find_if(begin(strings), endIter, mem_fn(&string::empty));
+    if (it == endIter) {
+        cout << "No empty strings!" << endl;
+    } else {
+        cout << "Empty string at position: "
+             << static_cast<int>(it - begin(strings)) << endl;
+    }
+}
+
+//using lambda 
+void findEmptyString(const vector<string>& strings)
+{
+    auto endIter = end(strings);
+    auto it = find_if(begin(strings), endIter,
+        [](const string& str){ return str.empty(); });
+    // Remainder of function omitted because it is the same as earlier
+}
+
+using a container pointer 
+void findEmptyString(const vector<string*>& strings)
+{
+    auto endIter = end(strings);
+    auto it = find_if(begin(strings), endIter,
+        [](const string* str){ return str->empty(); });
+    // Remainder of function omitted because it is the same as earlier
+}
+```
+
+    + C++17 introduces std::invoke(), defined in <functional>, which you can use to call any callable object with a set of parameters.
+
+```
+void printMessage(string_view message) { cout << message << endl; }
+
+int main()
+{
+    invoke(printMessage, "Hello invoke.");
+    invoke([](const auto& msg) { cout << msg << endl; }, "Hello invoke.");
+    string msg = "Hello invoke.";
+    cout << invoke(&string::size, msg) << endl;
+}
+```
+
+    + write your own function objects 
+```
+class myIsDigit
+{
+    public:
+        bool operator()(char c) const { return ::isdigit(c) != 0; }
+};
+
+bool isNumber(string_view str)
+{
+    auto endIter = end(str);
+    auto it = find_if(begin(str), endIter, not_fn(myIsDigit()));
+    return (it == endIter);
+}
+```
+
+If you need stateful predicates for other algorithms, wrap your predicate in an std::reference_wrapper which you can create using std::ref().
+
+    + use member function pointer directly 
+```
+class A {
+public:
+ int f();
+ int (A::*x)(); // <- declare by saying what class it is a pointer to
+};
+
+int A::f() {
+ return 1;
+}
 
 
+int main() {
+ A a;
+ a.x = &A::f; // use the :: syntax
+ printf("%d\n",(a.*(a.x))()); // use together with an object of its class
+}
+```
+
+- algorithm details 
+
+all available Standard Library algorithms, divided into different categories. Most of the algorithms are defined in the <algorithm> header file
+
+<algorithm> header file, but a few are located in <numeric> and in <utility>
+
+- Iterators
+
+InputIterator, OutputIterator, ForwardIterator, BidirectionalIterator, and RandomAccessIterator. These names are just names: they don’t provide binding type checking
+
+- non-modifying sequence algorithms
+
+two search algorithms: find() and find_if()
+
+```
+// The list of elements to be searched
+vector<int> myVector = { 5, 6, 9, 8, 8, 3 };
+auto beginIter = cbegin(myVector);
+auto endIter = cend(myVector);
+
+// Find the first element that does not satisfy the given lambda expression
+auto it = find_if_not(beginIter, endIter, [](int i){ return i < 8; });
+if (it != endIter) {
+    cout << "First element not < 8 is " << *it << endl;
+}
+
+```
+
+- specialized searchers 
+
+three options: default_searcher, boyer_moore_searcher, or boyer_moore_horspool_searcher, all defined in <functional>. The last two options implement the well-known Boyer-Moore and Boyer-Moore-Horspool search algorithms. These are very efficient, and can be used to find a substring in a larger piece of text. 
+
+```
+string text = "This is the haystack to search a needle in.";
+string toSearchFor = "needle";
+auto searcher = std::boyer_moore_searcher(
+    cbegin(toSearchFor), cend(toSearchFor));
+auto result = search(cbegin(text), cend(text), searcher);
+if (result != cend(text)) {
+    cout << "Found the needle." << endl;
+} else {
+    cout << "Needle not found." << endl;
+}
+```
+boyer-moore-horspool search algorithm, pattern not found, O(N+M), pattern found(NM)
+
+- comparison algorithms 
+
+three different ways: equal(), mismatch(), and lexicographical_compare(). 
+
+equal() returns true if all corresponding elements are equal. 
+
+mismatch() returns iterators, one iterator for each range, to indicate where in the range the corresponding elements mismatch.
+
+lexicographical_compare()returns true if the first unequal element in the first range is less than its corresponding element in the second range
+
+```
+    // Compare the two containers
+    if (equal(cbegin(myVector), cend(myVector),
+              cbegin(myList), cend(myList))) {
+        cout << "The two containers have equal elements" << endl;
+    } else {
+    // If the containers were not equal, find out why not
+        auto miss = mismatch(cbegin(myVector), cend(myVector),
+                             cbegin(myList), cend(myList));
+        cout << "The following initial elements are the same in "
+            << "the vector and the list:" << endl;
+        for (auto i = cbegin(myVector); i != miss.first; ++i) {
+            cout << *i << '\t';
+        }
+        cout << endl;
+    }
+
+    // Now order them.
+    if (lexicographical_compare(cbegin(myVector), cend(myVector),
+                                cbegin(myList), cend(myList))) {
+        cout << "The vector is lexicographically first." << endl;
+    } else {
+        cout << "The list is lexicographically first." << endl;
+    }
+    return 0;
+```
+
+- counting algorithm 
+
+counting algorithms are all_of(), any_of(), none_of(), count(), and count_if()
+ 
+```
+// all_of()
+vector<int> vec2 = { 1, 1, 1, 1 };
+if (all_of(cbegin(vec2), cend(vec2), [](int i){ return i == 1; })) {
+    cout << "All elements are == 1" << endl;
+} else {
+    cout << "Not all elements are == 1" << endl;
+}
+```
+- modifying sequence algorithms 
+
+Ranges from maps and multimaps cannot be used as destinations of modifying algorithms. 
+
+transform, A first version of the transform() algorithm applies a callback to each element in a range and expects the callback to generate a new element
+
+```
+transform(begin(myVector), end(myVector), begin(myVector),
+    [](int i){ return i + 100;});
+```
+
+The copy() algorithm allows you to copy elements from one range to another, starting with the first element and proceeding to the last element in the range. 
+```
+copy(cbegin(vec1), cend(vec1), begin(vec2));
+
+copy_backward(cbegin(vec1), cend(vec1), end(vec2));
+
+auto endIterator = copy_if(cbegin(vec1), cend(vec1),
+         begin(vec2), [](int i){ return i % 2 == 0; });
+         
+copy_n(cbegin(vec1), cnt, begin(vec2));
+```
+
+two move-related algorithms: move() and move_backward(). They both use move semantics
+```
+move(begin(vecSrc), end(vecSrc), begin(vecDst));
+```
+
+The replace() and replace_if() algorithms replace elements in a range matching a value or predicate
+Its first and second parameters specify the range of elements in your container. 
+The third parameter is a function or lambda expression that returns true or false. If it returns true, the value in the container is replaced with the value given as fourth parameter;
+```
+replace_if(begin(vec), end(vec), [](int i){ return i % 2 != 0; }, 0);
+```
+
+remove elements matching a certain condition. 
+```
+    auto it = remove_if(begin(strings), end(strings),
+        [](const string& str){ return str.empty(); });
+```
+
+The unique() algorithm is a special case of remove() that removes all duplicate contiguous elements. The basic form of unique() runs in place, but there is also a version of the algorithm called unique_copy() that copies its results to a new destination range.
+
+sample() algorithm returns a selection of n randomly chosen elements from a given source range and stores them in a destination range. 
+```
+returns a selection of n randomly chosen elements from a given source range and stores them in a destination range. 
+```
+
+The reverse() algorithm reverses the order of the elements in a range. 
+
+shuffle() rearranges the elements of a range in a random order with a linear complexity. 
+
+- operational algorithms 
+
+The for_each_n() algorithm requires a begin iterator of the range, the number of elements to iterate over, and a function callback. It returns an iterator equal to begin + n.
+
+```
+for_each(cbegin(myMap), cend(myMap), [](const auto& p)
+    { cout << p.first << "->" << p.second << endl; });
+    
+for_each_n(cbegin(myMap), 2, [](const auto& p)
+    { cout << p.first << "->" << p.second << endl; });
+```
+
+- swap and exchange algorithms 
+```
+swap(a, b);
+
+int returnedValue = exchange(a, b);
+```
+
+exchange() is useful in implementing move assignment operators. A move assignment operator needs to move the data from a source object to a destination object
+
+```
+mPtr = exchange(rhs.mPtr, nullptr); // Move + nullify
+```
+
+- partition algorithms 
+
+partition_copy() copies elements from a source to two different destinations. The specific destination for each element is selected based on the result of a predicate, either true or false
+
+```
+auto pairIters = partition_copy(cbegin(vec1), cend(vec1),
+    begin(vecEven), begin(vecOdd),
+    [](int i){ return i % 2 == 0; });
+```
+
+- sorting algorithm 
+
+A variant of sort(), called stable_sort(), maintains the relative order of equal elements in a range
+```
+sort(begin(vec), end(vec), greater<>());
+```
+
+- binary search 
+
+These algorithms are binary_search(), lower_bound(), upper_bound(), and equal_range().
+
+- set algorithm 
+
+The set_union(), set_intersection(), set_difference(), and set_symmetric_difference() algorithms implement the standard semantics of those operations. 
+
+```
+if (includes(cbegin(vec1), cend(vec1), cbegin(vec2), cend(vec2))) {
+    cout << "The second set is a subset of the first." << endl;
+}
+
+auto newEnd = set_union(cbegin(vec1), cend(vec1), cbegin(vec2),
+    cend(vec2), begin(result));
+
+newEnd = set_difference(cbegin(vec1), cend(vec1), cbegin(vec2),
+    cend(vec2), begin(result));
+```
+
+the result is at most the minimum size of the two input ranges,
+
+- minium/maxium algorithms 
+
+std::clamp() is a little helper function, defined in <algorithm>, that you can use to make sure that a value (v) is between a given minimum (lo) and maximum (hi). 
+
+The min() and max() algorithms compare two or more elements of any type using operator< or a user-supplied binary predicate
+
+- parallel algorithm
+
+C++17 adds support to more than 60 Standard Library algorithms for executing them in parallel to improve their performance. Examples include for_each(), all_of(), copy(), count_if(), find(), replace(), search(), sort(), transform(), and many more
+
+- numerical processing 
+inner_product(), defined in <numeric>, calculates the inner product of two sequences.
+```
+cout << inner_product(cbegin(v1), cend(v1), cbegin(v2), 0) << endl;
+```
+
+The iota() algorithm, defined in the <numeric> header file, generates a sequence of values in a specified range starting with a specified value and applying operator++
+
+The gcd() algorithm returns the greatest common divisor, while lcm() returns the least common multiple of two integer types
+
+std::accumulate() is one of the few algorithms that does not support parallel execution. Instead, you need to use the newly introduced std::reduce() algorithm to calculate a generalized sum with the option to execute it in parallel. 
+
+use the generalized transform_reduce(), which has the option to execute in parallel
+
+C++17 introduces four scan algorithms: exclusive_scan(), inclusive_scan(), transform_exclusive_scan(), and transform_inclusive_scan().
+
+- the voter registration audit problem statement 
 
 
+# String localization and regular expressions 
+- localizing string literals 
 
+cout << "Read " << n << " bytes" << endl;
 
+cout << Format(IDS_TRANSFERRED, n) << endl;
 
+IDS_TRANSFERRED could be defined as “Read $1 bytes”, while the Dutch version of the resource could be defined as “$1 bytes gelezen”.
 
+- wide characters 
 
+wchar_t that holds a wide character. Languages with non-ASCII (U.S.) characters
 
+The C++ standard does not define a size for wchar_t. Some compilers use 16 bits while others use 32 bits. To write cross-platform code, it is not safe to assume that wchar_t is of a particular size.
 
+```
+wchar_t myWideCharacter = L'm';
+```
 
+wide-versions of cout, cin, cerr, and clog available, called wcout, wcin, wcerr, and wclog.
+```
+wcout << L"I am a wide-character string literal." << endl;
+```
 
+- avaliable character types 
 
+char: Stores 8 bits. This type can be used to store ASCII characters
 
+char16_t: Stores at least 16 bits. This type can be used as the basic building block for UTF-16 encoded, one Unicode character is encoded as one or two char16_ts.
 
+char32_t: Stores at least 32 bits. This type can be used for storing UTF-32 encoded Unicode characters as one char32_t.
 
+wchar_t: Stores a wide character of a compiler-specific size and encoding.
 
+char16_t and char32_t instead of wchar_t is that the size of char16_t is guaranteed to be at least 16 bits, and the size of char32_t is guaranteed to be at least 32 bits, independent of the compiler
 
+There is no minimum size guaranteed for wchar_t.
 
+defines the following macros.
 
+__STDC_UTF_32__: If defined by the compiler, then the type char32_t uses UTF-32 encoding. 
 
+__STDC_UTF_16__: If defined by the compiler, then the type char16_t uses UTF-16 encoding. 
 
+- string prefixes 
 
+u8: A char string literal with UTF-8 encoding.
 
+u: A char16_t string literal, which can be UTF-16 if __STDC_UTF_16__ is defined by the compiler.
 
+U: A char32_t string literal, which can be UTF-32 if __STDC_UTF_32__ is defined by the compiler.
 
+L: A wchar_t string literal with a compiler-dependent encoding.
 
+```
+const char* s1 = u8R"(Raw UTF-8 encoded string literal)";
+const wchar_t* s2 = LR"(Raw wide string literal)";
+const char16_t* s3 = uR"(Raw char16_t string literal)";
+const char32_t* s4 = UR"(Raw char32_t string literal)";
+
+const char* formula = u8"\u03C0 r\u00B2";
+```
+
+Besides the std::string class, there is also support for wstring, u16string, and u32string. 
+```
+using string = basic_string<char>;
+using wstring = basic_string<wchar_t>;
+using u16string = basic_string<char16_t>;
+using u32string = basic_string<char32_t>;
+```
+
+- convert between char16_t/char32_t and multibyte characters, and vice versa: mbrtoc16, c16rtomb, mbrtoc32, and c32rtomb, The <locale> header defines the following four encoding conversion classes.
+
+codecvt<char,char,mbstate_t>
+
+codecvt<char16_t,char,mbstate_t>
+
+codecvt<char32_t,char,mbstate_t>
+
+codecvt<wchar_t,char,mbstate_t>
+
+    + Before C++17, the following three code conversion facets were defined in <codecvt>: codecvt_utf8, codecvt_utf16, and codecvt_utf8_utf16. These could be used with two convenience conversion interfaces: wstring_convert and wbuffer_convert
+
+- locals and facets 
+
+    + using locales 
+    The POSIX standard is to separate a language and an area into two-letter sections with an optional encoding. For example, the locale for the English language as spoken in the U.S. is en_US
+    
+    lang[_country_region[.code_page]]
+
+    use the user’s locale for a stream by calling the imbue() method on the stream.
+
+```
+wcout.imbue(locale(""));
+wcout << 32767 << endl;
+```
+
+string::npos when the given substring is not found.
+
+```
+locale loc("");
+if (loc.name().find("en_US") == string::npos &&
+    loc.name().find("en-US") == string::npos) {
+    wcout << L"Welcome non-U.S. English speaker!" << endl;
+} else {
+    wcout << L"Welcome U.S. English speaker!" << endl;
+}
+```
+
+- character classification 
+
+The <locale> header contains the following character classification functions: std::isspace(), isblank(), iscntrl(), isupper(), islower(), isalpha(), isdigit(), ispunct(), isxdigit(), isalnum(), isprint(), isgraph(). They all accept two parameters: the character to classify, and the locale to use for the classification. 
+
+bool result = isupper('A', locale(""));
+
+- character conversion 
+
+std::toupper() and tolower(). They accept two parameters: the character to convert, and the locale to use for the conversion.
+
+Using Facets. 
+
+use_facet<moneypunct<wchar_t>>(locale("en_GB"));
 
 
 
