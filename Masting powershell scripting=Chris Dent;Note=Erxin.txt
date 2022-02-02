@@ -244,68 +244,2686 @@ NuGet is a package manager for .NET. PowerShellGet can use a NuGet repository as
 # Working with objects in powershell 
 - standard output, In PowerShell, the streams are Standard, Error, Warning, Verbose, Debug, and Information.
 
+assign the data from standard output to a variable 
+
+```
+$computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem 
+```
+
+- non-standard output 
+
+stream              command         stream number 
+standard output     Write-Output        1 
+error               Write-Error         2
+warning             Write-Warning       3
+verbose             Write-Verbose       4 
+debug               Write-Debug         5 
+Information         Write-Information   6
+
+add the Verbose switch to the preceding command, more information is shown. This extra information is not held in the variable; it is sent to a different stream
+
+- the object pipeline 
+
+the output of Get-Process is sent to the Where-Object command, which applies a filter
+
+\> Get-Process | Where-Object WorkingSet64 -gt 50MB
 
 
+- members, members are used to interact with an object. A few of the more frequently used members are NoteProperty, ScriptProperty, ScriptMethod, and Event.
 
+\> Get-Process -Id $PID | Get-Member 
+
+Base: This shows properties that are derived from a .NET object
+Adapted: This shows members handled by PowerShell's Adapted Type System (ATS)
+Extended: This shows members added by PowerShell's Extended Type System (ETS)
+
+- accessing object properties 
+```
+$process = Get-Process -Id $PID 
+$process.Name 
+```
+
+access property with space 
+\> $object = [PSCustomObject]@{ 'Some Name' = 'Value' } 
+
+- access modifier 
+
+two possible values: Get, indicating that the property can be read; and Set, indicating that the property can be written to (changed).
+
+```
+PS> $File = New-Item NewFile.txt 
+PS> $File | Get-Member -MemberType Property
+    TypeName: System.IO.FileInfo
+Name              MemberType    Definition 
+----              ----------    ---------- 
+Attributes        Property      System.IO.FileAttributes Attributes {get;set;}
+CreationTime      Property      datetime CreationTime {get;set;} 
+CreationTimeUtc   Property      datetime CreationTimeUtc {get;set;} 
+```
+
+- using methods
+
+<Object>.Method()
+
+PS> $date = Get-Date -Day 1 -Month 1 -Year 2010
+PS> $date.ToLongDateString()
+
+- add member command 
+
+Add-Member allows new members to be added to existing objects. T
+
+PS> $empty = New-Object Object
+PS> $empty |
+>>     Add-Member -NotePropertyName New -NotePropertyValue 'Hello world'
+PS> $empty
+New
+---
+Hello world
+
+- enumerating and filtering 
+
+ForEach-Object may be used to work on an existing collection or objects
+
+Where-Object may be used to filter an existing collection or objects
+
+```
+Get-Process | ForEach-Object { 
+    Write-Host $_.Name -ForegroundColor Green 
+} 
+```
+
+The special variable $_ is used to access the current object.
+
+ForEach-Object also supports Begin and End parameters
+
+```
+1..5 | ForEach-Object -Begin {
+    Write-Host "Starting the pipeline. Creating value."
+    $value = 0
+} -Process {
+    Write-Host "Adding $_ to value."
+    $value += $_
+} -End {
+    Write-Host "Finished the pipeline. Displaying value."
+    $value
+}
+```
+
+    + ForEach-Object gains a Parallel parameter. This, as the name suggests, can be used to run process blocks in parallel
+```
+1..10 | ForEach-Object -Parallel {
+    Start-Sleep -Seconds 2
+    $_
+}
+```
+    + MemberName parameter 
+1..10 | ForEach-Object -Parallel {
+    Start-Sleep -Seconds 2
+    $_
+}
+
+    + Where-Object 
+```
+Get-Process | Where-Object StartTime -gt (Get-Date 9:00:00) 
+
+Get-Process |
+   Where-Object -Property StartTime -Value (Get-Date 9:00:00) -gt 
+```
+
+```
+$date = (Get-Date).AddDays(-90)
+'Computer1', 'Computer2' | Where-Object {
+    (Test-Path "\\$_\c$\temp\file.txt") -and
+    (Get-Item "\\$_\c$\temp\file.txt").LastWriteTime -lt $date
+}
+```
+
+- selecting and sorting 
+
+Select-Object acts on an input pipeline; either an existing collection of object
+
+Sort-Object can be used to perform both simple and complex sorting based on an input pipeline.
+
+```
+Get-Process | Select-Object -Property Name, Id 
+```
+
+- calculated properties 
+
+Calculated properties are described using a hashtable with specific key names. The format is described in help for Select-Object
+
+```
+@{ Name = 'PropertyName'; Expression = { 'PropertyValue' } }
+@{ Label = 'PropertyName'; Expression = { 'PropertyValue' } }
+@{ n = 'PropertyName'; e = { 'PropertyValue' } }
+@{ l = 'PropertyName'; e = { 'PropertyValue' } }
+```
+
+- the sort object command 
+
+The Sort-Object command allows objects to be sorted. By default, Sort-Object will sort objects in ascending order
+
+\> Get-Process | Sort-Object -Property Id 
+
+$examResults = @(
+    [PSCustomObject]@{ Exam = 'Music';   Result = 'N/A';  Mark = 0 }
+    [PSCustomObject]@{ Exam = 'History'; Result = 'Fail'; Mark = 23 }
+    [PSCustomObject]@{ Exam = 'Biology'; Result = 'Pass'; Mark = 78 }
+    [PSCustomObject]@{ Exam = 'Physics'; Result = 'Pass'; Mark = 86 }
+    [PSCustomObject]@{ Exam = 'Maths';   Result = 'Pass'; Mark = 92 }
+)
+$examResults | Sort-Object {
+    switch ($_.Result) {
+        'Pass' { 1 }
+        'Fail' { 2 }
+        'N/A'  { 3 }
+    }
+}
+PS> $examResults | Sort-Object { 
+>>     switch ($_.Result) { 
+>>         'Pass' { 1 } 
+>>         'Fail' { 2 } 
+>>         'N/A'  { 3 } 
+>>     } 
+>> }, @{ Expression = { $_.Mark }; Descending = $true } 
+
+- The Group-Object command
+
+The Group-Object command shows a group and count for each occurrence of a value in a collection of objects. Measure-Object returns a value for Count, which is the number of items passed in using the pipeline;
+
+PS> 6, 7, 7, 8, 8, 8 | Group-Object
+Count    Name                   Group
+-----    ----                   -----
+    1    6                      {6}
+    2    7                      {7, 7}
+    3    8                      {8, 8, 8}
+
+- measure object command Measure-Object returns a value for Count
+
+PS> 1, 5, 9, 79 | Measure-Object
+Count     : 4
+Average   :
+Sum       :
+Maximum   :
+Minimum   :
+Property  :
+
+- the Compare-Object command to compare collections of objects with one another.
+
+PS> $params = @{
+>>     ReferenceObject  = 1, 2, 3, 4
+>>     DifferenceObject = 1, 2
+>>     IncludeEqual     = $true
+>> }
+PS> Compare-Object @params
+ 
+InputObject SideIndicator
+----------- -------------
+          1 ==
+          2 ==
+          3 <=
+          4 <=
+
+- importing exporting and converting 
+
+Export-Csv
+Import-Csv
+Export-CliXml
+Import-CliXml
+Tee-Object
+
+\> Get-Process | Export-Csv processes.csv
+
+\> Import-Csv TabDelimitedFile.tsv -Delimiter `t 
+
+- The Tee-Object command is used to send output to two places at the same time. 
+
+output of Get-Process on the screen and writes the content to a $processes variable.
+
+Get-Process | Tee-Object -Variable processes
 
 
 
 # Operators 
+- types
 
+Addition: +
+Subtraction: -
+Multiplication: *
+Division: /
+Remainder: %
+
+- concatenate strings:
+
+'good' + 'bye' 
+
+- a new array will be created containing 1, 2, and 3:
+
+@(1, 2) + 3 
+
+- Hashtables may be joined in a similar manner:
+
+@{key1 = 1} + @{key2 = 2} 
+
+- assignment operators 
+Assign: =
+Add and assign: +=
+Subtract and assign: -=
+Multiply and assign: *=
+Divide and assign: /=
+Remainder and assign: %=
+
+- PowerShell, statements can be assigned to variables
+
+```
+$services = Get-CimInstance Win32_Service -Filter 'State="Running"'
+$serviceInfo = foreach ($service in $services) {
+    $process = Get-Process -ID $service.ProcessID
+    [PSCustomObject]@{
+        Name        = $service.Name
+        ProcessName = $process.Name
+        ProcessID   = $service.ProcessID
+        Path        = $process.Path
+        MemoryUsed  = $process.WorkingSet64 / 1MB
+    }
+}
+```
+- comparison operators 
+
+Equal to and not equal to: -eq and -ne
+Like and not like: -like and -notlike
+Greater than and greater than or equal to: -gt and -ge
+Less than and less than or equal to: -lt and -le
+Contains and not contains: -contains and -notcontains
+In and not in: -in and -notin
+
+    + None of the comparison operators are case-sensitive by default. 
+    + explicit case sensitive by 
+    'Trees' -ceq 'trees'
+    
+    + explicit case-insensitive modifier
+    'Trees' -ieq 'trees' 
+    
+- compare to null 
+
+$array = 1, 2 
+if ($array -eq $null) { Write-Host 'Variable not set' } 
+
+    + If it were a single null value, PowerShell would flatten the array. With two values, PowerShell cannot do that
+    
+[Boolean]@($null)            # Returns false 
+[Boolean]@($null, $null)     # Returns true 
+
+PowerShell returns matching values from the array, not just true or false. If it were a single null value, PowerShell would flatten the array.
+
+```
+$array = 1, 2, $null, $null 
+if ($null -eq $array) { Write-Host 'Variable not set' } 
+```
+the array is not enumerated; null is compared with the entire array. 
+
+    + When using -contains or -notcontains, the array must be on the left-hand side 
+    
+    + When using -in or -notin, the array must be on the right-hand side 
+    
+- regular expression 
+
+Match: -match
+Not match: -notmatch
+Replace: -replace
+Split: -split
+
+if -match (or -notmatch) is used against an array, it returns each matching element instead of true or false
+
+```
+'Group one, Group two' -match 'Group (.*), Group (.*)'
+```
+Regular expressions use parentheses to denote groups. Groups may be used to capture interesting elements
+
+
+'abababab' -replace 'a'
+
+'a1b2c3d4' -split '[0-9]' 
+
+- logic operators 
+
+And: -and
+Or: -or
+Exclusive or: -xor
+Not: -not and !
+
+- binary operators 
+
+Binary and: -band
+Binary or: -bor
+Binary exclusive or: -bxor
+Binary not: -bnot
+Shift left: -shl
+Shift right: -shr
+
+- shift left and shift right, The -shl and -shr operators
+
+2 * 4 -shl 2 + 2 
+
+- type operators 
+
+As: -as
+Is: -is
+Is not: -isnot
+
+- The -as operator is used to attempt to convert a value into an object 
+
+- redirection operators > 
+
+Stream name         Stream number
+Standard out            1
+Error                   2
+Warning                 3
+Verbose                 4
+Debug                   5
+Information             6
+
+    + to file 
+$output = Test-Redirect 3> 'warnings.txt'
+
+    + Stream numbers on the right-hand side are prefixed with an ampersand (&) to distinguish the stream from a filename. following examples shows redirection to Stdout, &1. 
+    
+PS> $stdOut = Test-Redirect 2>&1 3>&1 
+
+    + drop content by redirect to null 
+Get-Process > $null 
+
+The wildcard character * may be used to represent all streams if all content
+
+
+- other operators 
+
+Call: &
+Comma: ,
+Format: -f
+Increment and decrement: ++ and --
+Join: -join
+
+    + The call operator (&) is used to execute a string or script block. 
+
+runs pwsh.exe using a full path held in a string:
+```
+& 'C:\Program Files\PowerShell\7\pwsh.exe'
+
+
+$pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
+$argumentList = @(
+    '-NoProfile'
+    '-NoLogo'
+    '-Command'
+    'Write-Host "Hello world"'
+)
+& $pwsh $argumentList
+
+$scriptBlock = { Write-Host 'Hello world' } 
+& $scriptBlock 
+```
+
+    + comma, it creates an array containing one element:
+```
+$array = ,1 
+```
+
+    + format 
+'1: {0}, 2: {1}, 3: {2}' -f 'one', 'two', 'three' 
+1: one, 2: two, 3: three
+
+    + The -join operator joins arrays using a string.
+    
+- The ternary operator is a conditional operator that performs a comparison
+
+$result = $value ? 1 : 2
+
+- The nullable 
+
+$valueA = $null
+$valueB = $valueA ?? 'Default value'
+
+$value ??= 1
+
+- null conditional 
+
+The null conditional operator can be used to avoid errors when a property or method is used on an object
+
+${someObject}?.ToString()
+
+$someOtherObject.{Value}?.ToString()
+
+- The pipeline chain operators allow conditional execution of commands based on the success (or failure) of another command. 
+
+Two operators are available, && and ||.
+
+PS> function left { 'Doing fine' }
+PS> function right { 'Done!' }
+PS> left && right
+Doing fine
+Done!
+
+PS> function left { throw  'Failed' }
+PS> function right { 'Done!' }
+PS> left || right
+Failed
+Done!
+
+- background 
+
+The background operator may be used to send the command preceding the operator into a job.
 
 
 # Variables, arrays and hashtables 
+- variable
+$variable_name 
+
+- complex variable names
+
+${My Variable} 
+${My-Variable} 
+
+- shows an attempt to embed the var variable in a string
+
+$var = 'var'
+"$variable"   # Will not expand correctly
+"${var}iable" # Will expand var
+
+-  a file path is written as the variable name, allows variables to be stored on the filesystem:
+
+${C:\Windows\Temp\variable.txt} = "New value" 
+
+- work with variables:
+
+Clear-Variable
+Get-Variable
+New-Variable
+Remove-Variable
+Set-Variable
+
+    + The Get-Variable command provides access to any variable that has been created in the current session as well as the default (automatic) variables
+    
+    Get-Variable | Select-Object Name, Description 
+    
+    + The New-Variable command can be used to create a variable:
+    
+    New-Variable -Name today -Value (Get-Date) 
+    $today = Get-Date 
+    
+    + The Set-Variable command allows certain properties of an existing variable to be changed.
+
+- PowerShell includes a provider and a drive, which allows variables to be listed, created, and changed using Get-ChildItem, Test-Path
+
+- three named scopes:
+
+    Global
+    Script
+    Local
+    
+- retrieves the value for a variable, it starts by looking for the variable in the Local scope till parent 
+
+- A scope modifier is placed before the variable name and is followed by a colon.
+
+$Global.variable_name = value 
+
+- Get-Variable command allows a numeric value to be used for the Scope parameter. The numeric value describes how far away from the current scope
+
+- A private variable is hidden from child scopes. A private variable may either be created using New-Variable or by using the private scope 
+
+New-Variable -Name thisValue -Option Private
+$private:thisValue = "Some value" 
+
+- type conversion 
+
+Type conversion in PowerShell is used to change between different types
+
+[String](Get-Date)
+[DateTime]"01/01/2016"
+01 January 2016 00:00:00 
+
+$attribute.GetType().
+    GetProperties('Instance,NonPublic').
+    GetMethod.Invoke($attribute, @())
+    
+(50l).GetType()
+(50l).GetType()
+
+- An array contains a collection of objects. 
+
+$myArray = @() 
+
+$myArray = [Object[]]::new(10)        # 10 objects 
+
+```
+$myGreetings = "Hello world", "Hello sun", "Hello moon" 
+
+Or it can be created as follows:
+
+$myGreetings = @("Hello world", "Hello sun", "Hello moon") 
+```
+    + array with type 
+    
+[String[]]      # An array of strings 
+[UInt64[]]      # An array of unsigned 64-bit integers 
+[Xml[]]         # An array of XML documents 
+
+    + add 
+    
+$myArray = @() 
+$myArray += "New value" 
+
+    + merge 
+    
+Using @() around a set of elements or expressions is often the cleanest way to merge values into a single array
+    
+    + select 
+$myArray = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 
+$myArray[0] 
+$myArray[1] 
+
+    + remove 
+$myArray = 1, 2, 3, 4, 5 
+$myArray[1] = $null 
+$myArray 
+
+    + removing by index 
+    
+$oldArray = 1..100 
+
+$newArray = $oldArray[0..48] + $oldArray[50..99] 
+
+$newArray = [Object[]]::new($oldArray.Count - 1) 
+
+[Array]::Copy(
+    $oldArray,    # Source 
+    $newArray,    # Destination 
+    49            # Number of elements to copy 
+)
+
+$oldArray = 1..100 
+$newArray = $oldArray -ne 50
+
+$newArray = $oldArray | Where-Object { $_ -ne 50 } 
+
+- multi-dimensional and jagged arrays 
+
+$arrayOfArrays = @( 
+    @(1, 2, 3), 
+    @(4, 5, 6), 
+    @(7, 8, 9) 
+) 
+
+$arrayOfArrays = @( 
+    @(1,  2), 
+    @(4,  5,  6,  7,  8,  9), 
+    @(10, 11, 12) 
+) 
+
+- A Hashtable is an associative array or an indexed array. 
+
+Get-Command -ParameterType Hashtable
+$hashtable = @{} 
+$hashtable = @{Key1 = "Value1"; Key2 = "Value2"} 
+
+$hashtable = @{} 
+$hashtable.Add("Key1", "Value1") 
+
+$hashtable = @{ Existing = "Old" } 
+$hashtable.New = "New"               # Add this 
+$hashtable.Existing = "Updated"      # Update this 
+
+$hashtable = @{ 
+    Key1 = 'Value1' 
+    Key2 = 'Value2' 
+} 
+[Object[]]$keys = $hashtable.Keys 
+foreach ($key in $keys) { 
+    $hashtable[$key] = "NewValue" 
+} 
+
+$hashtable.GetEnumerator()
+
+$hashtable.Remove($key)
+
+- NET collections are discussed:
+
+System.Collections.Generic.List
+System.Collections.Generic.Dictionary
+System.Collections.Generic.Queue
+System.Collections.Generic.Stack
+    
+$list = [System.Collections.Generic.List[String]]::new()
+
+- The Measure-Command command may be used to time the two searches for a number of different values
+
+$list = [System.Collections.Generic.List[Int]]@(1..100000000)
+[PSCustomObject]@{
+    # Linear and Binary are roughly comparable 
+    'Linear, near start' = Measure-Command {
+        $list.IndexOf(24)
+    } | ForEach-Object TotalMilliseconds
+    'Binary, near start' = Measure-Command {
+        $list.BinarySearch(24)
+    } | ForEach-Object TotalMilliseconds
+    # Binary is more effective 
+    'Linear, near end'   = Measure-Command {
+        $list.IndexOf(99767859)
+    } | ForEach-Object TotalMilliseconds
+    'Binary, near end'   = Measure-Command {
+        $list.BinarySearch(99767859)
+    } | ForEach-Object TotalMilliseconds
+}
+
 
 
 # Conditional statements and loops 
+- condition 
+if (<first-condition>) { 
+    <first-statements> 
+} elseif (<second-condition>) { 
+    <second-statements> 
+} elseif (<last-condition>) { 
+    <last-statements> 
+}
+
+- switch 
+
+switch [-regex|-wildcard|-exact][-casesensitive] (<value>) { 
+    <case>   { <statements> } 
+    <case>   { <statements> } 
+    default  { <statements> }
+}
+
+    + switch array 
+$arrayOfValues = 1..3
+switch ($arrayOfValues) {
+    1 { 'One' }
+    2 { 'Two' }
+    3 { 'Three' }
+}
+
+    + file content 
+switch [-regex|-wildcard][-casesensitive] -File <Name> { 
+    <condition> { <statements> } 
+    <condition> { <statements> } 
+} 
+
+    + wildcard regex 
+switch -Wildcard ('cat') {
+    'c*'  { Write-Host 'The word begins with c' } 
+    '???' { Write-Host 'The word is 3 characters long' } 
+    '*t'  { Write-Host 'The word ends with t' } 
+} 
+
+switch -Regex ('cat') {
+ '^c'          { Write-Host 'The word begins with c' }
+  '^[a-z]{3}$' { Write-Host 'The word is 3 characters long' }
+  't$'         { Write-Host 'The word ends with t' }
+} 
+
+    + script bock cases 
+switch (Get-Date) {
+    { $_ -is [DateTime] } { Write-Host 'This is a DateTime type' } 
+    { $_.Year -ge 2020 }  { Write-Host 'It is 2020 or later' } 
+}
+
+    + The break and continue keywords may be used within the switch statement to control when it should stop testing a value
+
+break keyword is included, as shown here, only the first executes then the switch statement stops:
+
+switch (1, 2) { 
+    1 { Write-Host 'Equals 1'; break } 
+    2 { Write-Host 'Equals 2' } 
+} 
+
+continues to the next element in the array.
+
+switch (1, 2) { 
+    1 { Write-Host 'Equals 1'; continue }
+    1 { Write-Host 'value is still 1' } 
+    2 { Write-Host 'Equals 2' } 
+} 
+
+- loops 
+
+foreach (<element> in <collection>) { 
+    <statements> 
+} 
+
+for (<initial>; <condition>; <repeat>){ 
+    <body-statements>
+} 
+
+the following loop only ends because the body contains break:
+
+for (;;) {
+    break
+}
+
+do { 
+    <body-statements> 
+} <until | while> (<condition>)
+
+
+while (<condition>) { 
+    <body-statements> 
+} 
+
+    + loop break and continue 
+    
+    + loops and labels 
+:outerLoop for ($i = 1; $i -le 5; $i++) {
+    :innerLoop foreach ($value in 1..5) {
+        Write-Host "$i :: $value"
+        if ($value -eq $i) {
+            continue outerLoop
+        }
+    }
+}
 
 
 # Working with .net 
+- PowerShell 7.1 was built using .NET 5 and can make use of the APIs: https://docs.microsoft.com/dotnet/api/?view=net-5.0.
+
+- An assembly is a collection of types and any other supporting resources. .NET objects are implemented within assemblies. can be static or dynamic 
+
+loaded from System.Private.CoreLib.dll in PowerShell 7:
+
+PS> [System.String].Assembly.Location
+C:\Program Files\PowerShell\7\System.Private.CoreLib.dll
+
+- list all the load assembly 
+
+[System.AppDomain]::CurrentDomain.GetAssemblies() 
+
+- load assembly
+
+Assemblies can be explicitly loaded with the Add-Type command. PowerShell 7 includes the System.Windows.Forms.dll file in the $PSHome folder 
+
+```
+Add-Type -AssemblyName System.Windows.Forms
+```
+
+Much of PowerShell itself is implemented in the System.Management.Automation DLL. 
+
+- powershell assemblies are often loaded from the GAC 
+
+Global Assembly Cache (GAC). PowerShell 7 (and other .NET Core applications) cannot use the GAC
+
+%SystemRoot%\Assembly
+
+```
+PS> Install-Module Gac -Scope CurrentUser
+PS> Get-GacAssembly System.Windows.Forms
+```
+
+- A type is used to represent the generalized functionality of an object. This description is vague, but a .NET type can be used to describe anything; 
+
+- In PowerShell, types are written between square brackets. The [System.AppDomain] and [System.Management.Automation.PowerShell] statements
+
+- The type of an object can be revealed by the Get-Member command 
+
+use the GetEnumValues() method on the enumeration type:
+
+PS> $VerbosePreference.GetType().GetEnumValues()
+
+- namespace 
+
+The namespace value is accessible as a property of the type:
+
+PS> [System.IO.File].Namespace
+System.IO
+
+using namespace System.IO
+using namespace System.Data.SqlClient
+
+- using assembly 
+
+Using assemblies
+
+The using assembly statement is used to load assemblies into the PowerShell session.
+
+```
+using assembly System.Windows.Forms 
+using assembly 'C:\Program Files\PowerShell\7\System.Windows.Forms.dll'
+```
+
+- A type accelerator is an alias for a type. At the beginning of this chapter, the System.Management.Automation.PowerShell type was used
+
+The accelerator allows the following to be used:
+
+[PowerShell].Assembly 
+[System.DirectoryServices.DirectoryEntry]"WinNT://$env:COMPUTERNAME" 
+[ADSI]"WinNT://$env:COMPUTERNAME"
+
+PowerShell includes a lot of type accelerators; 
+
+- constructors 
+
+The New-Object command can be used:
+
+New-Object System.Text.StringBuilder
+[System.Text.StringBuilder]::new()
+
+- properties 
+
+[MyClass]::new() | Get-Member
+
+- fluent interfaces, A fluent interface is a particular pattern where each method call returns the instance of the object the method is affecting
+
+- static method 
+
+    + check static methods 
+[DateTime] | Get-Member -MemberType Method -Static
+
+    + call static methods
+PS> [DateTime]::IsLeapYear(2020)
+
+It acts on an existing instance of an array:
+
+$array = 1, 2, 3
+[Array]::Reverse($array)
+
+- Static properties
+
+Static properties are used to return values that are related to the type
+PS> [DateTime] | Get-Member -MemberType Property -Static
+
+[DateTime]::Now
+
+- The TypeAccelerators type
+
+The TypeAccelators type is used to list and add type accelerators
+
+- The ArgumentTypeConverterAttribute type
+
+The ArgumentTypeConverterAttribute attribute is used by PowerShell when casting a variable value.
+
+[string]$variable = 'value'
+
+see the non-public members by using an overload for the GetMembers method. The overload accepts a System.Reflection.BindingFlags value
+
 
 
 # String number and date 
+- manipulate string 
+
+.replace
+
+.PadLeft
+
+.ToUpper
+
+.ToLower 
+
+format operator can be used instead:
+
+PS> '"{0,10}"' -f 'one'     # Pad left
+
+- convert string 
+
+*-Csv commands
+ConvertFrom-StringData
+Convert-String
+ConvertFrom-String
+
+PS> Get-Process -Id $pid | Select-Object Name, Id, Path | ConvertTo-Csv
+
+$string.Replace(':', '=') | ConvertFrom-StringData
+
+'Michael Caine', 'Benny Hill', 'Raf Vallone' |
+    Convert-String -Example 'Michael Caine=MCaine' 
+
+$bytes = [Convert]::FromBase64String('SGVsbG8gd29ybGQ=')
+
 
 
 # Regular expression 
+- example 
+'9*8'-match '\*'   # * is reserved 
+'1+5' -match '\+'   # + is reserved 
+
+- Quantifiers
+
+A quantifier is used to define how many times a preceding character or group is repeated
+
+{min,max}
+
+* 
++ 
+? 
+{exactly}
+{min,}
+
+- character classes 
+
+'get' -match 'g[aeiou]t' 
+
+- added to an ordered dictionary before being converted to a custom object:
+
+$properties = [Ordered]@{}
+$string -split '\n' | Where-Object {
+    $_ -match '^(?<Key>[^:]+): (?<Value>.+)$'
+} | ForEach-Object {
+    $properties[$matches['Key']] = $matches['Value']
+}
+[PSCustomObject]$properties
+
+added as shown here:
+
+[Regex]::Matches(
+    $string,
+    '^(?<Key>[^:]+): (?<Value>.+)$',
+    'Multiline, IgnoreCase'
+)
 
 
 # Files, folders, and the registry 
+- Working with providers
+
+Each provider shares a common set of commands, such as Set-Location, Get-Item, and New-Item.
+
+- a provider that supports navigation allows the use of Get-Item, Get-ChildItem, Set-Location, and so on.
+
+Set-Location, which has the alias cd, is used to navigate around a provider's hierarchy;
+
+The Get-Item command is used to get an instance of an object represented by a path
+
+- drives
+
+PowerShell will automatically create a drive for any disk with a drive letter, any existing shared drive, the HKEY_LOCAL_MACHINE and HKEY_CURRENT_USER registry hive
+
+Additional drives may be added using New-PSDrive; for example, a network drive can be created:
+
+New-PSDrive -Name X -PSProvider FileSystem -Root \\Server\Share 
+New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT 
+
+- It is possible to write limited providers in PowerShell by using the SHiPS module, which is available on the PowerShell Gallery: https://github.com/PowerShell/SHiPS.
+
+- Testing for existing items
+
+The Test-Path command may be used to test for the existence
+
+- New-Item command can create files, directories, keys, and so on depending on the provider:
+
+New-Item $env:Temp\newfile.txt -ItemType File 
+
+- The Get-ItemProperty and Set-ItemProperty commands allow individual properties to be modified.
+
+- Windows permissions
+
+Windows permissions, such as NTFS Access Control Lists (ACLs), are used to describe who or what can access a resource.
+```
+New-Item C:\Temp\ACL -ItemType Directory -Force
+1..5 | ForEach-Object {
+    New-Item C:\Temp\ACL\$_ -ItemType Directory -Force
+    'content' | Out-File "C:\Temp\ACL\$_\$_.txt"
+    New-Item C:\Temp\ACL\$_\$_ -ItemType Directory -Force
+    'content' | Out-File "C:\Temp\ACL\$_\$_\$_.txt"
+}
+```
+- The Discretionary Access Control List (DACL) is used to grant (or deny) access to a resource
+
+- The System Access Control List (SACL) is used to define which activities should be audited. 
+
+ACLs, by default, inherit rules (ACEs) from parent container objects. 
+
+copied into the ACL:
+```
+$acl = Get-Acl C:\Temp\ACL\2 
+$acl.SetAccessRuleProtection($true, $true) 
+Set-Acl C:\Temp\ACL\2 -AclObject $acl  
+```
+
+- ACL using several different methods:
+
+RemoveAccessRule: Matches IdentityReference and AccessMask
+
+System.Security.AccessControl.FileSystemAccessRule
+System.Security.AccessControl.FileSystemAuditRule
+System.Security.AccessControl.RegistryAccessRule
+System.Security.AccessControl.RegistryAuditRule
+
+- filesystem rights 
+
+[System.Security.AccessControl.FileSystemRights].GetEnumNames()
+
+- ownership 
+
+C:\Temp\ACL\1 file is the current user:
+
+PS> Get-Acl C:\Temp\ACL\1 | Select-Object Owner
+
+- A transaction allows a set of changes to be grouped together and committed at the same time.
+
+```
+Start-Transaction 
+$path = 'HKCU:\TestTransaction' 
+New-Item $path -ItemType Key -UseTransaction 
+Set-ItemProperty $path -Name 'Name' -Value 'Transaction' -UseTransaction 
+Set-ItemProperty $path -Name 'Length' -Value 20 -UseTransaction 
+```
+
+PS> Get-PSProvider
+Name            Capabilities                         Drives 
+----            ------------                         ------ 
+Registry        ShouldProcess, Transactions          {HKLM, HKCU} 
+Alias           ShouldProcess                        {Alias} 
+Environment     ShouldProcess                        {Env} 
+FileSystem      Filter, ShouldProcess, Credentials   {B, C, D} 
+Function        ShouldProcess                        {Function} 
+Variable        ShouldProcess                        {Variable}
+
+- A file catalog is a reasonably lightweight form of File Integrity Monitoring (FIM). The file catalog generates and stores SHA1 hashes for each file 
+    
+    + Test-FileCatalog
+
+The Test-FileCatalog command compares the content of the catalog file to the filesystem
+
+
 
 
 # Windows management intrumentation 
+- WMI classes
+
+PowerShell, as a shell for working with objects, presents WMI classes in a similar manner to .NET classes or any other object.
+
+- Distributed Management Task Force (DMTF) standard DSP0004. A move toward compliance with open standards is critical 
+
+- the Common Information Model (CIM) cmdlets 
+
+CIM commands are as follows:
+
+    Get-CimAssociatedInstance
+    Get-CimClass
+    Get-CimInstance
+    Get-CimSession
+    Invoke-CimMethod
+    New-CimInstance
+    New-CimSession
+    New-CimSessionOption
+    Register-CimIndicationEvent
+    Remove-CimInstance
+    Remove-CimSession
+    Set-CimInstance
+- Creating instances
+
+The arguments for Win32_Process include a ProcessStartupInformation parameter. ProcessStartupInformation is described by a WMI class
+
+- The WMI Query Language
+
+WMI Query Language, or WQL, is used to query WMI in a similar style to SQL.
+
+The generalized syntax for the Query parameter is as follows:
+
+SELECT <Properties> FROM <WMI Class> 
+```
+Get-CimInstance -Query "SELECT * FROM Win32_Process" 
+```
+
+- wmi object paths 
+
+object path is made up of several components:
+
+<Namespace>:<ClassName>.<KeyName>=<Value> 
+
+- wmi type accelerators 
+
+accelerators remain and can still be used:
+
+    Wmi: System.Management.ManagementObject
+    WmiClass: System.Management.ManagementClass
+    WmiSearcher: System.Management.ManagementObjectSearcher
+    
+- getting instances 
+
+([WmiSearcher]"SELECT * FROM Win32_Process").Get() 
+
+$query = '
+SELECT Name, CreationDate
+FROM Win32_Process
+WHERE ProcessId={0}
+' -f $PID
+([WmiSearcher]$query).Get() | Select-Object @(
+    'Name'
+    @{
+        Name = 'CreationDate'
+        Expression = {
+            $_.ConvertToDateTime($_.CreationDate)
+        }
+    }
+)
+
+- Creating a shared directory
+
+The following snippet creates a directory and shares that directory:
+```
+$path = 'C:\Temp\WmiPermissions' 
+New-Item $path -ItemType Directory
+$params = @{
+    ClassName = 'Win32_Share'
+    MethodName = 'Create'
+    Arguments = @{
+        Name = 'WmiPerms'
+        Path = $path
+        Type = [UInt32]0
+    }
+}
+Invoke-CimMethod @params 
+```
+
+- get security descriptor represent the security for each of the shares on a computer:
+
+$params = @{
+    ClassName = 'Win32_LogicalShareSecuritySetting'
+    Filter    = "Name='WmiPerms'"
+}
+$security = Get-CimInstance @params
+
+- Adding an access control entry
+
+To add an Access Control Entry (ACE) to an existing list,
+
+```
+$trustee = New-CimInstance (Get-CimClass Win32_Trustee) -ClientOnly 
+$trustee.Domain = $env:USERDOMAIN 
+$trustee.Name = $env:USERNAME 
+```
+
+- wmi permissions, WMI permissions might be set using wmimgmt.msc if the GUI is used. The content of the DACL differs slightly.
+
+Each WMI namespace has its own instance of the __SystemSecurity class; an example is as follows:
+
+Get-CimClass __SystemSecurity -Namespace root 
+
 
 
 # Working with HTML, xml and json 
+- PowerShell includes the ConvertTo-Html command
+
+- Adding style
+
+You can enhance HTML content by adding a Cascading Style Sheet (CSS) fragment. When CSS is embedded in an HTML document
+
+- HTML in the Multiple tables example:
+
+# Create the body 
+$body = @(
+    Get-Service | 
+        Where-Object Status -eq 'Running' |
+        ConvertTo-Html -PreContent '<h1>Services</h1>' -Property @(
+            'Name'
+            'DisplayName'
+        ) -Fragment
+    
+    Get-Process | 
+        Where-Object WorkingSet -gt 50MB | 
+        ConvertTo-Html -PreContent '<h1>Processes</h1>' -Property @(
+            'Name'
+            'Id'
+            'WorkingSet'
+        ) -Fragment 
+) | Out-String
+# Create a document with the merged body
+ConvertTo-Html -Body $body -Title Report |
+    Set-Content report.html 
+
+- XML PowerShell includes Select-Xml and ConvertTo-Xml commands to work with XML content.
+
+Select-Xml
+
+The Select-Xml command may be used to search XML documents using the XPath query language
+
+PS> Select-Xml -XPath '//car[colour="Green"]/engine' -Content $string | 
+    Select-Object -ExpandProperty Node 
+    
+- System.Xml
+
+PowerShell primarily uses the System.Xml.XmlDocument type to work with XML content
+
+- creating xml documents 
+
+Create static method:
+
+$writer = [System.Xml.XmlWriter]::Create("$pwd\newfile.xml") 
+$writer.WriteStartDocument() 
+$writer.WriteStartElement('cars') 
+$writer.WriteStartElement('car') 
+
+- System.Xml.Linq 
+
+assembly has been added:
+
+Add-Type -AssemblyName System.Xml.Linq 
+
+$xDocument = [System.Xml.Linq.XDocument]::Load("$pwd\cars.xml") 
+
+$xDocument = [System.Xml.Linq.XDocument]::Load("$pwd\cars.xml") 
+$xDocument.Descendants('car').
+    Where( { $_.Element('colour').Value -eq 'Green' } ).
+    Element('engine') 
+    
+    
+$xDocument.Element('items'). 
+    Elements('item'). 
+    Where( { $_.Attribute('name').Value -eq 'Fridge' } ). 
+    ForEach( { $_.Element('category').Value = 'Appliances' } ) 
+    
+    + add nodes 
+$xDocument.Element('list'). 
+    Element('name'). 
+    AddAfterSelf(@( 
+        [XElement]::new('name', 2), 
+        [XElement]::new('name', 3), 
+        [XElement]::new('name', 4) 
+    )) 
+    
+- ConvertTo-Json
+
+The ConvertTo-Json command can be used to convert a PowerShell object (or Hashtable) into JSON
+
+    + Additional options are included to escape all non-ASCII content (EscapeNonAscii), and to escape HTML control characters (EscapeHtml).
+
+- The ConvertFrom-Json command is used to turn a JSON document into an object
+
+use the AsHashtable parameter may to create a Hashtable instead of a PSCustomObject.
+
+$hashtable = @"
+{ 
+    "Decimal": 1.23, 
+    "String": "string", 
+    "Int32": 1, 
+    "Int64": 2147483648, 
+    "Boolean": true 
+} 
+"@ | ConvertFrom-Json -AsHashtable
+
+    + The NoEnumerate parameter is relevant when the root element in a document is an array, and that array contains only one element
+
+PS> $content = @"
+>> [
+>>     { "Element": { "Value": 1 } }
+>> ]
+>> "@ | ConvertFrom-Json -NoEnumerate
+PS> $content.GetType()
+
+
 
 
 # Web requests and web services 
+- replaces the CheckValidationResult method:
+
+Class AcceptAllPolicy: System.Net.ICertificatePolicy { 
+    [Boolean] CheckValidationResult( 
+        [System.Net.ServicePoint] $servicePoint, 
+        [System.Security.Cryptography.X509Certificates.X509Certificate] $certificate, 
+        [System.Net.WebRequest] $webRequest, 
+        [Int32] $problem
+    ) { 
+        return $true 
+    }
+} 
+[System.Net.ServicePointManager]::CertificatePolicy = [AcceptAllPolicy]::new() 
+
+
+- token is used in place of a password:
+
+$params = @{
+    Uri        = 'https://api.github.com/user/emails'
+    Credential = Get-Credential
+}
+Invoke-RestMethod @params
+
+- OAuth
+
+OAuth is offered by a wide variety of web services.
+
+```
+$httpListener = [System.Net.HttpListener]::new()
+$httpListener.Prefixes.Add('http://localhost:40000/') 
+$httpListener.Start()
+$clientId = Read-Host 'Enter the client-id'
+$authorizeUrl = 'https://github.com/login/oauth/authorize?client_id={0}&scope={1}' -f @(
+    $clientId
+    'user:email'
+)
+# Let the operating system choose the browser to use for this request
+Start-Process -FilePath $authorizeUrl
+$context = $httpListener.GetContext()
+$buffer = [Byte[]][Char[]]"<html><body>OAuth complete! Please return to PowerShell!</body></html>"
+$context.Response.OutputStream.Write(
+    $buffer,
+    0,
+    $buffer.Count
+)
+$context.Response.OutputStream.Close()
+$httpListener.Stop()
+$authorizationCode = $context.Request.QueryString['code']
+```
+
+- Unlike REST, which is an architectural style, SOAP is a protocol. It is perhaps reasonable to compare working with SOAP to importing a .NET assembly (DLL) to work with the types inside. 
+
 
 
 # Remoting and remote managment 
+- PowerShell Remoting Protocol (PSRP) package.
+
+- enabled using a group policy:
+
+Policy name: Allow remote server management through WinRM
+Path: Computer configuration\Administrative Templates\Windows Components\Windows Remote Management (WinRM)\WinRM Service
+    
+- a firewall rule should be created to allow access to the service:
+
+Policy name: Define inbound port exceptions
+Path: Computer Configuration\Administrative Templates\Network\Network Connections\Windows Firewall\Domain Profile
+Port exception example: 5985:TCP:*:enabled:WSMan
+
+- PowerShell using Disable-PSRemoting. Disabling remoting will show the following warning:
+
+PS> Disable-PSRemoting
+
+- Get-WSManInstance provides access to instances of resources at a lower level than commands such as Get-CimInstance
+
+- The WSMan drive
+
+The content of the WSMan drive is accessible when PowerShell is running as the administrator. 
+
+Set-Item WSMan:\localhost\MaxEnvelopeSizekb 8KB
+
+- restart the WinRM service after changing the values:
+
+Restart-Service winrm 
+
+Certificates used by remoting have the following requirements:
+
+    The subject must contain the computer name (without a domain)
+    The certificate must support the server authentication enhanced key usage
+    The certificate must not be expired, revoked, or self-signed
+
+Get-ChildItem WSMan:\localhost\Listener | ForEach-Object { 
+    $listener = $_ | Select-Object Name 
+    Get-ChildItem $_.PSPath | ForEach-Object { 
+        $listener | Add-Member $_.Name $_.Value 
+    } 
+    $listener 
+} | Where-Object Transport -eq 'HTTPS' 
+
+Disabling certificate verification can be achieved by configuring the options of a PSSession:
+
+$options = New-PSSessionOption -SkipCACheck 
+$session = New-PSSession computerName -SessionOption $options 
+
+allow the connection to complete. This can be verified using Test-WSMan:
+
+Test-WSMan -UseSSL
+
+- remote permission gui 
+
+ command is run:
+
+Set-PSSessionConfiguration -Name PowerShell.7 -ShowSecurityDescriptorUI 
+
+The current value can be viewed using the following:
+
+$params = @{
+    Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    Name = 'LocalAccountTokenFilterPolicy'
+}
+Get-ItemPropertyValue @params
+
+- Get-PSSession
+
+Sessions created using New-PSSession persist until the PSSession is removed (by Remove-PSSession) or the PowerShell session ends
+
+- Local functions and remote sessions
+
+The following example executes a function created on the local machine in a remote system using positional arguments:
+
+function Get-FreeSpace { 
+    param ( 
+        [Parameter(Mandatory = $true)] 
+        [String]$Name 
+    ) 
+ 
+    [Math]::Round((Get-PSDrive $Name).Free / 1GB, 2) 
+} 
+Invoke-Command ${function:Get-FreeSpace} -Session $session -ArgumentList C
+
+- The AsJob parameter
+
+The AsJob parameter can be used with Invoke-Command, for example:
+
+$session = New-PSSession PSTest 
+Invoke-Command -Session $session -AsJob -ScriptBlock {
+    Start-Sleep -Seconds 120 'Done sleeping'
+} 
+
+- Disconnected sessions
+
+The InDisconnectedSession of Invoke-Command starts the requested script and immediately disconnects the session
+
+The session is returned by the following command:
+
+Invoke-Command {
+    Start-Sleep -Seconds 120
+    'Done'
+} -ComputerName PSTest -InDisconnectedSession 
+
+- The Enter-PSSession command
+
+Enter-PSSession may be employed to use a session as a remote console. By default, Enter-PSSession accepts a computer name as the first argument:
+
+- Export-PSSession
+
+In the preceding example, Import-PSSession is used to immediately import commands from a remote system into a local session. 
+
+- Copying items between sessions
+
+PowerShell 5 introduced the ability to copy between sessions using the Copy-Item command.
+
+The FromSession parameter is used to copy a file to the local system:
+
+$session1 = New-PSSession PSTest1 
+Copy-Item -Path C:\temp\doc.txt -Destination C:\Temp -FromSession $se
+
+- connect to linux 
+
+$params = @{
+    Path = 'HKLM:\SOFTWARE\OpenSSH'
+    Name = 'DefaultShell'
+    Value = Join-Path -Path $pshome -ChildPath 'pwsh.exe'
+    Force = $true
+}
+New-ItemProperty @params
+
+- double hop problem
+
+The double-hop problem describes a scenario in PowerShell where remoting is used to connect to a host and the remote host tries to connect to another resource
+
+These two options are useful in the following situations:
+
+    The remote endpoint is trusted and has not been compromised
+    Critical authentication tokens can be extracted by an administrator on the remote system
+    They are not used for wide-scale regular or scheduled automation, as the methods significantly increase exposure
+    
+    + using CredSSP as the authentication provider:
+
+$params = @{
+    ComputerName   = 'PSTest'
+    Credential     = Get-Credential
+    Authentication = 'CredSSP'
+}
+New-PSSession @params
+
+    + Passing credentials into a remote session means the second hop can authenticate without being dependent on authentication tokens from the original system
+    
+$Credential = Get-Credential 
+Invoke-Command -ComputerName PSTest -ScriptBlock { 
+    Get-ADUser -Filter * -Credential $using:Credential 
+} 
+
+    + CIM sessions may be viewed by entering the following:
+
+Get-Command -ParameterName CimSession 
+
+- Just Enough Administration (JEA) leverages PowerShell remoting to allow administrative delegation via a remoting session.
+
 
 
 # Asynchronous processing 
+- PowerShell includes several different commands and classes that can do more than one thing at a time. The most obvious of these are the job commands.
+
+- woring with jobs 
+The Start-Job command in PowerShell
+
+- The Start-Job, Get-Job, and Remove-Job commands
+
+You can use the Start-Job command to execute a script block in a similar manner to Invoke-Comman
+
+- places the preceding statement into a job:
+
+Get-Process &
+
+- You can use Start-ThreadJob in much the same way as Start-Job.
+
+Start-ThreadJob { Write-Host 'Hello world' } | Receive-Job -Wait
+
+- create batches using a for loop:
+
+$objects = foreach ($value in 1..1000) {
+    [PSCustomObject]@{ Value = $value }
+}
+$batchSize = 100
+$ScriptBlock = {
+    # Long job set-up step
+    Start-Sleep -Seconds 120
+    foreach ($object in $using:batch) {
+        # Perform action and create output
+        $object
+    }
+}
+for ($i = 0; $i -lt $objects.Count; $i += $batchSize) {
+    $batch = $objects[$i..($i + $batchSize)]
+    Start-Job -ScriptBlock $ScriptBlock
+}
+
+- The Register-ObjectEvent and *-Event commands
+
+Register-ObjectEvent is used to register interest in an event raised by a .NET object. 
+
+$watcher = [System.IO.FileSystemWatcher]::new('C:\Data')
+Register-ObjectEvent -InputObject $watcher -EventName Changed
+
+The Get-Event command can be used to view the event data
+
+- Get-EventSubscriber and Unregister-Event commands
+
+The Get-EventSubscriber command may be used to view any existing event handlers 
+
+- Runspaces and runspace pools are an efficient way of asynchronously executing PowerShell code. 
+
+A type accelerator exists for this type and the name can be shortened:
+
+$psInstance = [PowerShell]::Create()
+
+retrieve output from the commands:
+
+$psInstance = [PowerShell]::Create().
+    AddCommand('Start-Sleep').AddParameter('Seconds', 300)
+$asyncResult = $psInstance.BeginInvoke()
+
+- running multiple instances 
+
+PowerShell object and the IASyncResult object should be preserved:
+
+$jobs = 1..5 | ForEach-Object {
+    $instance = [PowerShell]::Create().AddScript('
+        Start-Sleep -Seconds (Get-Random -Minimum 10 -Maximum 121)
+    ')
+    [PSCustomObject]@{
+        Id          = $instance.InstanceId
+        Instance    = $instance
+        AsyncResult = $instance.BeginInvoke()
+    } | Add-Member State -MemberType ScriptProperty -PassThru -Value {
+        $this.Instance.InvocationStateInfo.State
+    }
+}
+
 
 
 # Graphical user interfaces 
+-  Windows Presentation Foundation (WPF)
+Designing a UI
+About XAML
+Displaying the UI
+Layout
+
+- add WPF
+Add-Type -AssemblyName PresentationFramework
+
+- ShowDialog method of the Window:
+
+$Window.ShowDialog()
+
+function Show-Window {
+    param (
+        [Xml]$Xaml
+    )
+    Add-Type -AssemblyName PresentationFramework
+    $Window = [System.Windows.Markup.XamlReader]::Load(
+        [System.Xml.XmlNodeReader]$Xaml
+    )
+    $Window.ShowDialog()
+}
+
+- Import-Xaml and Runspace support
+
+The Import-Xaml function can be changed to better support UIs that run long-running commands.
+
+- Using the Dispatcher
+
+As mentioned previously, the Dispatcher must be used in the background thread to read from the UI.
+
+```
+function Import-Xaml {
+    param (
+        [Xml]$Xaml
+    )
+    Add-Type -AssemblyName PresentationFramework
+    $window = [System.Windows.Markup.XamlReader]::Load(
+        [System.Xml.XmlNodeReader]$Xaml
+    )
+    $controls = [Hashtable]::Synchronized(@{
+        Dispatcher = $window.Dispatcher
+    })
+    foreach ($control in $Xaml.SelectNodes('//*[@Name]')) {
+        $controls[$control.Name] = $window.FindName($control.Name)
+    }
+    $initialSessionState = [InitialSessionState]::CreateDefault2()
+    $initialSessionState.Variables.Add(
+        [System.Management.Automation.Runspaces.SessionStateVariableEntry]::new(
+            'ui',
+            [PSCustomObject]@{ Controls = $controls },
+            'UI controls'
+        )
+    )
+    [PSCustomObject]@{
+        MainWindow = $Window
+        Controls   = $controls
+        PSHost     = [PowerShell]::Create($initialSessionState)
+    }
+}
+
+$ui = Import-Xaml $xaml
+$ui.Controls['Button'].add_Click({
+    $ui.PSHost.Commands.Clear()
+    $ui.PSHost.AddScript({
+        $value = $ui.Controls['Dispatcher'].Invoke(
+            [Func[object]]{ $ui.Controls['TextBox'].Text }
+        )
+        Write-Host $value
+    }).BeginInvoke()
+})
+$ui.MainWindow.ShowDialog()
+```
+
+addScript uses a script block to enclose the content to run in the background. 
+
+The Click event handler also omits the param block used in many of the previous examples;
+
 
 
 # Scripts, functions and script blocks 
+- The Click event handler also omits the param block used in many of the previous examples;
+- The Requires statement is valid only in scripts and can be used to restrict a script from running if certain conditions are not met.
+
+```
+#Requires -RunAsAdministrator
+```
+
+- nesting functions 
+function Outer {
+    param (
+        $Parameter1
+    )
+    function Inner1 {
+    }
+    function Inner2 {
+    }
+    Write-Host 'Hello world'
+}
+
+- script block 
+
+$scriptBlock = { $string }
+$string = "second value"
+& $scriptBlock
+
+    + closures 
+    
+The GetNewClosure method can be used to copy the values of variables from the current session into the scriptBlock session. 
+
+$string = 'first value'
+$scriptBlock = { $string }.GetNewClosure()
+$string = 'second value'
+& $scriptBlock
+
+- Cmdlet binding 
+
+CmdletBinding may be used to do the following:
+
+    Add common parameters, such as ErrorAction, Verbose, Debug, ErrorVariable, WarningVariable, and so on
+    Enable use of the built-in $PSCmdlet variable
+    
+- 
+function Invoke-Something {
+    begin {
+         $fileStream = [System.IO.File]::OpenWrite((
+            Join-Path -Path $pwd -ChildPath NewFile.txt
+        ))
+        $count = 0
+    }
+    process {
+        if ((++$count) -eq 3) {
+            throw 'Oh no! Something unexpected went wrong'
+        }
+    }
+    end {
+        $fileStream.Close()
+    }
+}
+1..5 | Invoke-Something
+Remove-Item NewFile.txt
+
+- The Out-Null command can be used at the end of a pipeline to discard the output from the preceding pipeline.
+
+- casting to void 
+
+It is possible to cast to System.Void to discard output.
+
+- Line break after a pipe
+
+The most obvious technique is perhaps to add a line break after a pipe; for example:
+
+Get-Process |
+    Where-Object Name -match 'po?w(er)?sh(ell)?'
+    
+- comment-based help 
+
+PowerShell includes help for authoring comment-based help:
+
+Get-Help about_Comment_Based_Help
+
+most used ones:
+
+    .SYNOPSIS
+    .DESCRIPTION
+    .PARAMETER <Name>
+    .EXAMPLE
+    .INPUTS
+    .OUTPUTS
+    .NOTES
+    .LINK
+
+SYNOPSIS and .DESCRIPTION are mandatory when writing help. 
+
 
 
 # Parameters, validation and dynamic parameters 
+- The Parameter attribute
+
+The Parameter attribute is an optional attribute that you can use to define some of the behavior of a parameter,
+
+positional binding is shown in the following example:
+
+function Test-Position {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        $Parameter1,
+        [Parameter(
+             Mandatory,
+             HelpMessage = 'Help text for Parameter1'
+         )]
+        $Parameter2
+    )
+    '{0}-{1}' -f $Parameter1, $Parameter2
+}
+
+- You can use DontShow to hide a parameter from tab completion and IntelliSense. 
+
+- The PSTypeName attribute can test the type name assigned to a custom object.
+
+$object = [PSCustomObject]@{
+    Property   = 'Value'
+    PSTypeName = 'SomeTypeName'
+}
+
+PSTypeName property does not exist on the resulting object, but Get-Member will now show the new type name
+
+- WMI-based commands, this is used in addition to a .NET type name, an array of CimInstance
+
+PowerShell offers several validation attributes to test the content of arguments passed to parameters. 
+
+function Test-ValidateNotNull {
+    [CmdletBinding()]
+    param (
+        [ValidateNotNull()]
+        $Parameter1
+    )
+}
+
+function Test-ValidateLength {
+    [CmdletBinding()]
+    param (
+        [ValidateLength(2, 6)]
+        [String[]]$Parameter1
+    )
+}
+
+multiple options as a comma-separated list, for example:
+
+[ValidatePattern('^Hello', Options = 'IgnoreCase, Multiline')]
+
+- multiple options as a comma-separated list, for example:
+
+[ValidatePattern('^Hello', Options = 'IgnoreCase, Multiline')]
+function Test-AllowNull {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        [Object]$Parameter1
+    )
+}
+
+- Pipeline input
+
+Using the Parameter attribute to set either ValueFromPipeline
+
+- Accepting null input
+
+Commands such as Where-Object allow an explicit null value in the input pipeline.
+
+```
+function Get-EmptyOutput { }
+function Get-InputObject {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        $InputObject
+    )
+}
+# No output, no error
+Get-EmptyOutput | Get-InputObject 
+```
+- InputObject variable, the command will only work if the input pipeline contains that object type.
+
+- one parameter uses ValueFromPipeline, PowerShell will attempt to provide values to each.
+
+function Test-ValueFromPipeline {
+    [CmdletBinding()]
+    param (
+        [Parameter(ValueFromPipeline)]
+        [Int]$Parameter1,
+        [Parameter(ValueFromPipeline)]
+        [Int]$Parameter2
+    )
+    process {
+        'Parameter1: {0}:: Parameter2: {1}' -f @(
+            $Parameter1
+            $Parameter2
+        )
+    }
+}
+
+PS> 1..2 | Test-ValueFromPipeline
+Parameter1: 1 :: Parameter2: 1
+Parameter1: 2 :: Parameter2: 2
+
+- creates a dictionary and adds a single parameter 
+
+using namespace System.Management.Automation
+function Test-DynamicParam {
+    [CmdletBinding()]
+    param ( )
+    dynamicparam {
+        $parameters = [RuntimeDefinedParameterDictionary]::new()
+        $parameter = [RuntimeDefinedParameter]::new(
+            'Action',
+            [String],
+            [Attribute[]]@(
+                [Parameter]@{ Mandatory = $true; Position = 1 }
+                [ValidateSet]::new(
+                    'Start',
+                    'Stop',
+                    'Create', 
+                    'Delete'
+                )
+            )
+        )
+        $parameters.Add($parameter.Name, $parameter)
+        $parameters
+    }
+}
+
 
 
 # Classes and enumerations 
+- enumeration 
+
+enum MyEnum {
+    First  = 1
+    Second = 2
+    Third  = 3
+}
+
+- ValidateSet can be used to limit the possible arguments for a parameter.
+
+function Test-ParameterValue {
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('Absent', 'Present')]
+        [string]$Ensure
+    )
+}
+
+- The enumerations used previously are used as single values. The name used with the parameter is either Absent or Present, never a combination of the two. 
+
+- An enumeration that uses the Flags attribute allows you to use more than one name when describing a value
+
+[Flags()]
+enum MyEnum {
+    First  = 0x001  # 1
+    Second = 0x002  # 2
+    Third  = 0x004  # 4
+    Fourth = 0x008  # 8
+    Fifth  = 0x010  # 16
+    Sixth  = 0x020  # 32
+}
+
+- The following example defines two enumerations. The first is a list of values the end user will see; the second holds the internal name
+
+- hidden modifier to hide a property from tab completion and Get-Member.
+
+class MyClass {
+    [string]$Property
+    MyClass() {
+        $this.Initialize()
+    }
+    hidden [void] Initialize() {
+        $this.Property = 'defaultValue'
+    }
+}
+
+- static members without creating an instance of a type (based on a class).
+
+- inheritance 
+class MyBaseClass {
+    [string]$BaseProperty = 'baseValue'
+}
+class MyClass : MyBaseClass {
+    [string]$Property = 'Value'
+}
+
+- call parent class method 
+class ParentClass {
+    [string] GetString() {
+        return 'Hello world'
+    }    
+}
+class ChildClass : ParentClass {
+    [string] GetString() {
+        $string = ([ParentClass]$this).GetString()
+        return '{0} on {1}' -f @(
+            $string
+            Get-Date -Format 'dddd'
+        )
+    }
+}
+
+- Implementing IComparable
+
+As mentioned above, the IComparable interface makes it possible to usefully compare two instances
+
+class MyClass : IComparable {
+    [int] $Number
+    [int] CompareTo([object] $object) {
+        if ($this.Number -gt $object.Number) {
+            return 1
+        } elseif ($this.Number -lt $object.Number) {
+            return -1
+        } else {
+            return 0
+        }
+    }
+}
+
+- Classes and DSC
+
+Microsoft DSC, or Desired State Configuration, is one of several different configuration management systems available.
+
+    + Implementing Get
+
+The Get method should evaluate the current state of the resource. 
+
+```
+class ComputerDescription {
+    [ComputerDescription] Get() {
+        $key = Get-Item $this.Path
+        if ($key.GetValueNames() -contains $this.valueName) {
+            $this.Ensure = 'Present'
+            $this.Description = $key.GetValue($this.valueName)
+        } else {
+            $this.Ensure = 'Absent'
+        }
+        return $this
+    }
+}
+
+class ComputerDescription {
+    [Void] Set() {
+        $commonParams = @{
+            Path = $this.path
+            Name = $this.valueName
+        }
+        if ($this.Ensure -eq 'Present') {
+            $newParams = @{
+                Value = $this.Description
+                Type  = 'String'
+                Force = $true
+            }
+            New-ItemProperty @newParams @commonParams
+        } else {
+            $key = Get-Item $this.Path
+            if ($key.GetValueNames() -contains $this.valueName) {
+                Remove-ItemProperty @commonParams
+            }
+        }
+    }
+}
+
+class ComputerDescription {
+    [bool] Test() {
+        $key = Get-Item $this.Path
+        if ($this.Ensure -eq 'Present') {
+            if ($key.GetValueNames() -notcontains $this.valueName) {
+                return $false
+            }
+            return $key.GetValue($this.valueName) -eq
+                $this.Description
+        } else {
+            return $key.GetValueNames() -notcontains $this.valueName
+        }
+        return $true
+    }
+}
+```
+
+test method to determine whether set should be run 
+
+module path is system-wide, accessible by the Local Configuration Manager (LCM)
+
 
 
 # Building modules 
+- The root module
+
+The root module has a psm1 extension and is otherwise like any other script file in PowerShell
+
+- import 
+
+Import-Module .\LocalMachine.psm1
+
+- Export-ModuleMember
+
+You can use the Export-ModuleMember command inside a psm1 file to explicitly define what is exported from a module.
+
+```
+...
+function Remove-ComputerDescription {
+    [CmdletBinding(SupportsShouldProcess)]
+    param ( )
+    $removeParams = GetRegistryParameter
+    if ($PSCmdlet.ShouldProcess(
+        'Removing computer description')) {
+        Remove-ItemProperty @removeParams
+    }
+}
+...
+
+
+Export-ModuleMember -Function @(
+    'Get-ComputerDescription'
+    'Remove-ComputerDescription'
+    'Set-ComputerDescription'
+)
+```
+- Module manifests
+
+The module manifest is a PowerShell data file (psd1 file, a Hashtable stored in a file) that contains metadata for a module.
+
+    + Get-Module command:
+
+If RootModule is set to a psm1 file (as in our example), the module type will be script
+If RootModule is set to a dll file, the module type will be binary
+If RootModule is not set or is set to a value with any other file extension, the module type will be manifest
+
+If NestedModules is set, the module type will be manifest (regardless of the RootModule value)
+
+Test-ModuleManifest command attempts to read and perform basic checks of the values used in the module manifest.
+
+Update-ModuleManifest command from the PowerShellGet module to update the content of an existing manifest
+
+Publish-Module command to publish a module to a PowerShell repository.
+
+    + public server 
+Chocolatey Server: https://community.chocolatey.org/packages/chocolatey.server
+Nexus OSS: https://www.sonatype.com/products/repository-oss-download
+ProGet: https://inedo.com/proget/pricing
+
+- removing local repository 
+
+no longer required, the repository can be removed:
+
+Unregister-PSRepository -Name PSLocal
+
+- multi-file module layout 
+
+ProjectRoot
+| -- LocalMachine
+     | -- public
+     |     | -- Get-ComputerDescription.ps1
+     |     | -- Set-ComputerDescription.ps1
+     |
+     | -- private
+     |    | -- GetRegistryParameter.ps1
+     |    | -- TestComputerDescriptionValue.ps1
+     |
+     | -- LocalMachine.psd1
+     | -- LocalMachine.psm1
+     
+-  higher maintenance approach is to name the files to import instead of allowing any file at all to load
+
+$private = 'GetRegistryParameter'
+foreach ($item in $private) {
+    . '{0}\private\{1}.ps1' -f $PSScriptRoot, $item
+}
+$public = @(
+    'Get-ComputerDescription'
+)
+foreach ($item in $public) {
+    . '{0}\public\{1}.ps1' -f $PSScriptRoot, $item
+}
+Export-ModuleMember -Function $public
+
+- merging module content 
+
+Install-Module ModuleBuilder -Scope CurrentUser
+
+- Script modules loaded from psm1 files have a shared scope that you can access using the $Script: scope modifier
+
+- Accessing module scope
+
+All functions and classes within a module can access script-scoped variables by using the scope modifier.
+
+    + The module is created in memory using the New-Module command, which avoids the need to create a file to demonstrate the feature.
+    
+```
+New-Module SomeService {
+    function GetServiceConnection {
+        [CmdletBinding()]
+        param ( )
+        $Script:connection
+    }
+    function Connect-Service {
+        [CmdletBinding()]
+        param (
+            [String]$Name
+        )
+        $Script:connection = $Name
+    }
+    $Script:connection = 'DefaultConnection'
+    Export-ModuleMember -Function Connect-Service
+} | Import-Module
+```
+
+- An instance of a PowerShell class can be returned as objects from functions within a module. 
+
+New-Module ModuleWithClass {
+    class ModuleClass {
+        [string] $Property = 'value'
+    }
+    function Get-Something {
+        [ModuleClass]::new()
+    }
+} | Import-Module
+
+- The OnRemove event is raised when you use Remove-Module. 
+
+StreamWriter on the file when the module is removed:
+
+@'
+using namespace System.IO
+$path = Join-Path $PSScriptRoot -ChildPath 'OnRemove.log'
+$stream = [StreamWriter][File]::OpenWrite($path)
+$stream.WriteLine('Initialising module')
+$executionContext.SessionState.Module.OnRemove = {
+    $stream.WriteLine('Closing log')
+    $stream.Flush()
+    $stream.Close()
+}
+'@ | Set-Content OnRemove.psm1
+
+
+
+# Testing 
+- Static analysis is the process of evaluating code without executing it. PSScriptAnalyzer uses static analysis.
+
+Install-Module PSScriptAnalyzer 
+
+- PSScriptAnalyzer includes 64 default rules. Most of these rules are automatically evaluated when a script is analyzed. 
+
+Get-ScriptAnalyzerRule | Where-Object {
+    $_.ImplementingType.BaseType.Name -eq 'ConfigurableRule'
+}
+
+$params = @{
+    ScriptDefinition = 'get-process'
+    Settings = @{
+        Rules = @{
+            PSUseCorrectCasing = @{
+                Enable = $true
+            }
+        }
+    }
+}
+Invoke-ScriptAnalyzer @params
+
+- Suppressing rules
+function New-Message { 
+    [Diagnostics.CodeAnalysis.SuppressMessage(
+        'PSUseShouldProcessForStateChangingFunctions',
+        ''
+    )] 
+    [CmdletBinding()] 
+    param ( 
+        $Message 
+    ) 
+ 
+    [PSCustomObject]@{ 
+        Name  = 1 
+        Value = $Message 
+    } 
+}
+
+- The AST in PowerShell is available for any script block; 
+
+PS> { Write-Host 'content' }.Ast 
+
+- Visualizing the AST
+
+The ShowPSAst module, available in the PowerShell Gallery, may be used to visualize the AST tree. Install the module with:
+
+Install-Module ShowPSAst -Scope CurrentUser
+
+Show-Ast 'Get-Process -ID $PID | Select-Object Name, Path'
+
+- searching the AST 
+
+CommandAst for Get-Process by expanding properties in the AST:
+
+$ast = { Get-Process -ID $PID | Select-Object Name, Path }.Ast 
+$ast.EndBlock.Statements[0].PipelineElements[0]
+
+- Tokenizer
+
+In addition to the AST, PowerShell can also convert a script into a series of tokens
+
+```
+using namespace System.Management.Automation.Language
+$errors = $tokens = @()
+$script = @'
+# A short script
+Write-Host 'Hello world'
+'@
+$ast = [Parser]::ParseInput($script,  [ref]$tokens, [ref]$errors)
+```
+
+- testing with Pester 
+
+Install-Module Pester -Force -SkipPublisherCheck
+
+
+@'
+Describe 'PS developer workstation' {
+    It 'PowerShell 7 is installed' {
+        $PSVersionTable.PSVersion |
+            Should -BeGreaterOrEqual 7.0.0
+    }
+}
+'@ | Set-Content workstation.tests.ps1
+Invoke-Pester -Path workstation.tests.ps1
+
+- Describe is the top-most keyword used in a test document
+
+- Context is essentially the same as Describe. It has the same capabilities and will contain one or more It statements
+
+Describe 'PS developer workstation' {
+    Context 'PowerShell' {
+        It 'PowerShell 7 is installed' {
+        }
+    }
+    Context 'Packages' {
+        It 'git is installed' {
+        }
+        It 'Terraform is installed' {
+        }
+    }
+}
+
+- Should and assertions
+
+The Should keyword is used to assert the state of the thing it is testing.
+
+Describe 'PS developer workstation' {
+    Context 'PowerShell' {
+        It 'PowerShell 7 is installed' {
+            Get-Command pwsh -ErrorAction SilentlyContinue |
+                ForEach-Object Version |
+                Should -BeGreaterOrEqual '7.0.0'
+        }
+    }
+    Context 'Packages' {
+        It 'Chocolatey is installed' {
+            { Get-Command choco -ErrorAction Stop } |
+                Should -Not -Throw
+        }
+    }
+}
+
+- woth Chocolatey, the installation of a package can be tested using the following command:
+
+choco list -e terraform -l -r
+
+- The -ForEach parameter can be used to execute either a Describe or Context block against an array of values
+
+Describe "DNS servers" -ForEach @(
+    'dns01'
+    'dns02'
+) -Fixture {
+    It "The DNS service is running on $_" {
+        $params = @{
+            ClassName    = 'Win32_Service'
+            Filter       = 'Name="dns"'
+            ComputerName = $_
+        }
+        Get-CimInstance @params | Should -Not -BeNullOrEmpty
+    }
+}
+
+- You can use -Skip, a switch parameter, to bypass one or more tests.
+
+Describe 'PS developer workstation' {
+    Context 'Packages' {
+        It 'Chocolatey is installed' -Skip:(-not $IsWindows) {
+            { Get-Command choco -ErrorAction Stop } |
+                Should -Not -Throw
+        }
+    }
+}
+
+- Pester 5 introduces the concept of different phases when executing tests. 
+
+- Before and after blocks 
+
+The blocks are:
+
+    BeforeAll
+    BeforeEach
+    AfterAll
+    AfterEach
+
+- Mocking commands
+
+Mocking is used to reduce the scope of a set of tests and a vital part of unit testing. 
+
+Parameter filters are added using the -ParameterFilter parameter for Mock. 
+
+```
+Mock Import-Csv -MockWith {
+    [PSCustomObject]@{
+        Name           = 'service1'
+        ExpectedStatus = 'Running'
+    }
+    [PSCustomObject]@{
+        Name           = 'service2'
+        ExpectedStatus = 'Running'
+    }
+    [PSCustomObject]@{
+        Name           = 'service3'
+        ExpectedStatus = 'Stopped'
+    }
+}
+```
+
+- override mock 
+
+It 'Service is running, expected stopped' {
+    Mock Import-Csv -MockWith {
+        [PSCustomObject]@{
+            Name           = 'service1'
+            ExpectedStatus = 'Stopped'
+        }
+    }
+    Set-ServiceState -Path file.csv
+    Should -Invoke Start-Service -Times 0
+    Should -Invoke Stop-Service -Times 1
+}
+
+- Disarming .NET types
+
+A piece of code being tested may interact with a specific .NET type. The .NET type may (by default) need to interact with other systems
+
+```
+using namespace System.Data.SqlClient
+function Open-SqlConnection {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [SqlConnection]$SqlConnection
+    )
+    if ($sqlConnection.State -eq 'Closed') {
+        $SqlConnection.Open()
+    }
+}
+```
+
 
 
 # Error handling 
+- PowerShell defines two different types of errors: terminating and non-terminating errors.
+
+- non-terminating errors, A non-terminating error, a type of informational output, is written without stopping a script. 
+
+function Update-Value {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory, ValueFromPipeline)]
+        [string]$Value
+    )
+    process {
+        if ($Value.Length -lt 5) {
+            Write-Error ('The value {0} is unacceptable' -f $Value)
+        } else {
+            'Updated value: {0}' -f $Value
+        }
+    }
+}
+
+- Terminating errors are used to stop an operation from continuing.
+
+function Stop-Command {
+    Write-Host 'First'
+    throw 'Error'
+    Write-Host 'Second'
+}
+
+- The -ErrorAction parameter and the ErrorActionPreference variable are used to control what happens when a non-terminating error is encountered
+
+function Start-Task { 
+    [CmdletBinding()] 
+    param ( ) 
+ 
+    Write-Error 'Something went wrong' 
+}
+Start-Task -ErrorAction SilentlyContinue 
+
+- An ErrorRecord object contains several fields that are useful for diagnosing an error.
+
+using namespace System.Management.Automation
+$numerator = 10 
+$denominator = 0 
+try { 
+    $numerator / $denominator 
+} catch { 
+    $errorRecord = [ErrorRecord]::new( 
+        [Exception]::new($_.Exception.Message), 
+        'InvalidDivision',   # ErrorId 
+        'InvalidOperation',  # ErrorCategory 
+        [PSCustomObject]@{  # TargetObject 
+            Numerator   = $numerator 
+            Denominator = $denominator 
+        }
+    ) 
+    Write-Error -ErrorRecord $errorRecord 
+}
+
+
+throw keyword raises a terminating error
+
+- ThrowTerminatingError method
+
+Like the WriteError method, ThrowTerminatingError is made available to scripts that use the CmdletBinding attribute
+
+```
+using namespace System.Management.Automation
+function Invoke-Something { 
+    [CmdletBinding()] 
+    param ( ) 
+ 
+    $errorRecord = [ErrorRecord]::new( 
+        [InvalidOperationException]::new('Failed'), 
+        'AnErrorID', 
+        [ErrorCategory]::OperationStopped, 
+        $null 
+    ) 
+    $PSCmdlet.ThrowTerminatingError($errorRecord) 
+}
+```
+
+- using either a try, catch, and finally statement, or by using a trap statement
+
+try {
+    throw 'An error'
+} catch {
+    Write-Host 'Caught an error'
+}
+
+try {
+    throw [ArgumentException]::new('Invalid argument')
+} catch [ArgumentException] {
+    Write-Host 'Caught an argument exception'
+} catch {
+    Write-Host 'Something else went wrong'
+}
+
+    + rethrow error 
+    
+try { 
+    'Statement1' 
+    throw 'Statement2' 
+    'Statement3' 
+} catch { 
+    throw 
+} 
+
+- All the way back in PowerShell 1.0, a trap statement was the only way to handle terminating errors in a script.
+
+trap {
+    Write-Host 'An error occurred'
+}
+
+& { 
+    Write-Host 'Statement1' 
+    throw 'Statement2' 
+    Write-Host 'Statement3' 
+ 
+    trap { 
+        Write-Host 'An error occurred' 
+        continue 
+    } 
+}
+
 
 
 # Debugging and troubleshooting 
+- Use commands such as Write-Verbose or Write-Debug to write identifiable messages
+
+- Assignment instead of equality
+
+Accidentally using the assignment operator, =, in place of the equality operator, -eq, is a common problem.
+
+function Get-Something
+{
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(ValueFromPipeline)]
+        [string]$InputObject
+    )
+    Write-Verbose 'Starting Get-Something'
+code
+    process
+    {
+        Write-Verbose "Working on $InputObject"
+    }
+}
+
+When you add a pipeline parameter to a function that only implements an end block
+
+- Problems with variables
+
+Variables are a critical part of almost every script. Potential problems with variables include:
+
+Typing errors
+Incorrectly assigned types
+Accidental use of reserved variables
 
 
-#
+function Test-StrictMode {
+    Set-StrictMode -Version Latest
+    $names = 'pwsh', 'powershell'
+    foreach ($name in $naems) {
+        Write-Host $name
+    }
+}
+
+[string]$string = 'Hello world'
+
+- setting a command breakpoing 
+
+Set-PSBreakpoint -Command Get-Process
+$names = 'powershell', 'pwsh', 'code'
+foreach ($name in $names) {
+    Get-Process $name -ErrorAction SilentlyContinue
+}
+
+foreach ($value in 1..5) {
+    $newValue = $value
+}
+
+@'
+$names = 'powershell', 'pwsh', 'code'
+foreach ($name in $names) {
+    Get-Process $name -ErrorAction SilentlyContinue
+}
+'@ | Set-Content script.ps1
+Set-PSBreakpoint -Script script.ps1 -Line 3
+.\script.ps1
+
+
+Set-PSBreakpoint -Variable newValue
+foreach ($value in 1..5) {
+    $newValue = $value
+}
+
+- automatic variables cannot be viewed:
+
+    $Args
+    $Input
+    $MyInvocation
+    $PSBoundParameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
