@@ -1,0 +1,4827 @@
+PowerShell Online Document;Note=Erxin
+
+
+# Reference 
+- MS
+
+https://docs.microsoft.com/en-us/powershell/scripting/learn/tutorials/00-introduction?view=powershell-7.2
+
+https://powershellexplained.com/
+
+
+
+# Learning powershell 
+## powershell 101 
+-  there's a 64-bit version of the PowerShell console and the PowerShell ISE (Integrated Scripting Environment), and a 32-bit version
+
+- Now that PowerShell is being run elevated as a local administrator, UAC will no longer be a problem when a command is run on the local computer that would normally require a prompt for elevation.
+
+Right-click on the PowerShell shortcut that's now pinned to the taskbar and select properties 
+
+Click on "Advanced" as denoted by #1 in Figure 1-10, then check the "Run as administrator" checkbox as denoted by #2 in Figure 1-10,
+
+- powershell version 
+
+ One of these variables is $PSVersionTable, which contains a hashtable
+
+- The Get-ExecutionPolicy cmdlet is used to determine what the current execution policy setting is and the Set-ExecutionPolicy
+
+    + RemoteSigned requires downloaded scripts to be signed by a trusted publisher 
+
+    + PowerShell scripts can't be run at all when the execution policy is set to Restricted. 
+    
+    + change powershell execution policy 
+    
+$ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned
+
+- three core comdlets in powershell 
+
+    Get-Command
+    Get-Help
+    Get-Member (covered in chapter 3)
+
+    + different parameter sets:
+
+    Full
+    Detailed
+    Examples
+    Online
+    Parameter
+    ShowWindow
+
+$ Get-Help -Name Get-Help -Full
+
+    + information is grouped:
+
+    NAME
+    SYNOPSIS
+    SYNTAX
+    DESCRIPTION
+    PARAMETERS
+    INPUTS
+    OUTPUTS
+    NOTES
+    EXAMPLES
+    RELATED LINKS
+
+    + a list of all About help topics on your system.
+    help About_*
+    help *process*
+    
+    + Get-Command is designed to help you locate commands. 
+        
+    The Name, Noun, and Verb parameters accept wildcards. 
+    
+$ Get-Command -Noun Process
+
+limiting the results with the CommandType parameter.
+$ Get-Command -Name *service* -CommandType Cmdlet, Function, Alias
+
+- The Update-Help cmdlet is used to update the help topics. It requires internet access by default
+
+- discovering objects, properties and methods 
+
+- one-liner and the pipeline 
+
+the Remote Server Administration Tools (RSAT) for Windows.
+
+- Get-Member helps you discover what objects, properties, and methods are available for commands.
+
+- Status, Name, and DisplayName are examples of properties as shown in the previous set of results.
+
+$ Get-Service -Name w32time | Get-Member
+
+$ Get-Command -ParameterType ServiceController
+
+$ Get-Service -Name w32time | Select-Object -Property Status, DisplayName, Can*
+
+- methods 
+
+Methods are an action that can be taken. Use the MemberType parameter to narrow down the results of Get-Member
+
+$ Get-Service -Name w32time | Get-Member -MemberType Method
+
+$ (Get-Service -Name w32time).Stop()
+
+Get-Member, a command must produce object-based output. 
+
+Get-Service -Name w32time | Out-Host | Get-Member
+
+$ $Users | Select-Object -Property Name, LastLogonDate, LastBadPasswordAttempt
+
+- one-liners and the pipeline 
+
+A PowerShell one-liner is one continuous pipeline and not necessarily a command that's on one physical line. 
+
+Get-Service |
+  Where-Object CanPauseAndContinue -eq $true |
+    Select-Object -Property *
+    
+- Using the backtick (`) or grave accent character as a line continuation character is a controversial topic. 
+
+- PowerShell ISE, use Shift+Enter instead of just pressing Enter when continuing a command on another line.
+
+- filtering left 
+
+Get-Service to immediately filter the results to the Windows Time service only.
+
+Select-Object to select only a few properties and Where-Object to filter on properties that won't be in the selection
+
+$ Get-Service |
+Select-Object -Property DisplayName, Running, Status |
+Where-Object CanPauseAndContinue
+
+$ Get-Service |
+Where-Object CanPauseAndContinue |
+Select-Object -Property DisplayName, Status
+
+- pipeline, check the cmdlet input, output are same then the commands can be piped together 
+
+Only the relevant section of the help is shown in the previous results. As you can see, the INPUTS section states that a ServiceController or a String object can be piped to the Stop-Service cmdlet
+
+$ Get-Service -Name w32time | Get-Member
+
+The contents of the CustomObject variable is a PSCustomObject object type and it contains a property named Name.
+
+$ Stop-Service -DisplayName (Get-Content -Path $env:TEMP\services.txt)
+
+The command within parentheses always runs prior to the outer portion of the command.
+
+- PowerShellGet, PowerShellGet ships with PowerShell version 5.0 and higher.
+
+Find-Module cmdlet that's part of the PowerShellGet module to find a module 
+
+pipe the previous command to Install-Module.
+
+$ Find-Module -Name MrToolkit | Install-Module
+
+
+## formatting aliases, providers, comparison 
+- common format commands are Format-Table and Format-List. Format-Wide and Format-Custom
+
+Get-Service -Name w32time | Select-Object -Property Status, DisplayName, Can* |
+Format-Table
+
+- Get-Alias -Name gcm
+
+- A provider in PowerShell is an interface that allows file system like access to a datastore.
+
+$ Import-Module -Name ActiveDirectory, SQLServer
+
+A PSDrive for each of those modules was also added
+
+- comparison operators 
+```
+-eq 	Equal to
+-ne 	Not equal to
+-gt 	Greater than
+-ge 	Greater than or equal to
+-lt 	Less than
+-le 	Less than or equal to
+-Like 	Match using the * wildcard character
+-NotLike 	Does not match using the * wildcard character
+-Match 	Matches the specified regular expression
+-NotMatch 	Does not match the specified regular expression
+-Contains 	Determines if a collection contains a specified value
+-NotContains 	Determines if a collection does not contain a specific value
+-In 	Determines if a specified value is in a collection
+-NotIn 	Determines if a specified value is not in a collection
+-Replace 	Replaces the specified value
+```
+
+
+## Flow control 
+- foreach-object 
+
+'ActiveDirectory', 'SQLServer' |
+   ForEach-Object {Get-Command -Module $_} |
+     Group-Object -Property ModuleName -NoElement |
+         Sort-Object -Property Count -Descending
+         
+$ComputerName = 'DC01', 'WEB01'
+foreach ($Computer in $ComputerName) {
+  Get-ADComputer -Identity $Computer
+}
+
+for ($i = 1; $i -lt 5; $i++) {
+  Write-Output "Sleeping for $i seconds"
+  Start-Sleep -Seconds $i
+}
+
+$number = Get-Random -Minimum 1 -Maximum 10
+do {
+  $guess = Read-Host -Prompt "What's your guess?"
+  if ($guess -lt $number) {
+    Write-Output 'Too low!'
+  }
+  elseif ($guess -gt $number) {
+    Write-Output 'Too high!'
+  }
+}
+until ($guess -eq $number)
+
+$number = Get-Random -Minimum 1 -Maximum 10
+do {
+  $guess = Read-Host -Prompt "What's your guess?"
+  if ($guess -lt $number) {
+    Write-Output 'Too low!'
+  } elseif ($guess -gt $number) {
+    Write-Output 'Too high!'
+  }
+}
+while ($guess -ne $number)
+
+$date = Get-Date -Date 'November 22'
+while ($date.DayOfWeek -ne 'Thursday') {
+  $date = $date.AddDays(1)
+}
+Write-Output $date
+
+
+for ($i = 1; $i -lt 5; $i++) {
+  Write-Output "Sleeping for $i seconds"
+  Start-Sleep -Seconds $i
+  break
+}
+
+while ($i -lt 5) {
+  $i += 1
+  if ($i -eq 3) {
+    continue
+  }
+  Write-Output $i
+}
+
+$number = 1..10
+foreach ($n in $number) {
+  if ($n -ge 4) {
+    Return $n
+  }
+}
+
+
+## Working with WMI 
+- PowerShell has had cmdlets for working with WMI since the beginning. Get-Command can be used to determine what WMI cmdlets exist in PowerShell
+
+$ Get-Command -Noun WMI* 
+
+Common Information Model (CIM) cmdlets were introduced in PowerShell version 3.0
+
+$ Get-Command -Module CimCmdlets
+
+- WMI Query Language (WQL) to query WMI such as in the following example.
+
+```vb
+strComputer = "."
+Set objWMIService = GetObject("winmgmts:" _
+    & "{impersonationLevel=impersonate}!\\" & strComputer & "\root\cimv2")
+
+Set colBIOS = objWMIService.ExecQuery _
+    ("Select * from Win32_BIOS")
+
+For each objBIOS in colBIOS
+    Wscript.Echo "Manufacturer: " & objBIOS.Manufacturer
+    Wscript.Echo "Name: " & objBIOS.Name
+    Wscript.Echo "Serial Number: " & objBIOS.SerialNumber
+    Wscript.Echo "SMBIOS Version: " & objBIOS.SMBIOSBIOSVersion
+    Wscript.Echo "Version: " & objBIOS.Version
+Next
+```
+
+equal to powershell 
+```
+Get-CimInstance -Query 'Select * from Win32_BIOS'
+```
+
+writing a one-liner to query WMI, I use the following syntax.
+ 
+```
+Get-CimInstance -ClassName Win32_BIOS
+
+Get-CimInstance -ClassName Win32_BIOS -Property SerialNumber |
+Select-Object -Property SerialNumber
+```
+
+- query remote computers with the CIM 
+
+    + I could relaunch PowerShell as a domain administrator since Get-CimInstance doesn't have a Credential parameter. But, trust me, that isn't a good idea because then anything that I run from PowerShell would be running as a domain admin.
+
+$ CimSession = New-CimSession -ComputerName dc01 -Credential (Get-Credential)
+
+$ Get-CimInstance -ComputerName dc01 -ClassName Win32_BIOS //not work with normal priviledge 
+
+$ Get-CimInstance -CimSession $CimSession -ClassName Win32_BIOS
+
+    + protocol 
+    
+The Get-CimInstance cmdlet uses the WSMan protocol by default, which means the remote computer needs PowerShell version 3.0 or higher to connect. 
+
+Test-WSMan cmdlet. It needs to be version 3.0. That's the version you'll find with PowerShell version 3.0 and higher.
+
+Create the DCOM protocol option using the New-CimSessionOption cmdlet and store it in a variable.
+$ $DCOM = New-CimSessionOption -Protocol Dcom
+$ $Cred = Get-Credential
+
+
+
+## Powershell remoting 
+- check which command have an specific name as parameter 
+
+$ Get-Command -ParameterName ComputerName
+
+- one-to-one remoting 
+
+one-to-one remoting is what you want. This type of remoting is provided via the Enter-PSSession cmdlet.
+
+go ahead and store your domain admin credentials in the $Cred variable.
+
+$ Cred = Get-Credential
+
+$ Enter-PSSession -ComputerName dc01 -Credential $Cred
+
+$ Get-Process | Get-Member
+
+$ Exit-PSSession
+
+- one to many, Invoke-Command cmdlet to run a command against one or more remote computers at the same time.
+
+
+$ Invoke-Command -ComputerName dc01, sql02, web01 {Get-Service -Name W32time} -Credential $Cred
+
+$ Invoke-Command -ComputerName dc01, sql02, web01 {Get-Service -Name W32time} -Credential $Cred | Get-Member
+
+- create new session 
+
+$ Session = New-PSSession -ComputerName dc01, sql02, web01 -Credential $Cred
+$ Invoke-Command -Session $Session {(Get-Service -Name W32time).Start()}
+$ Invoke-Command -Session $Session {Get-Service -Name W32time}
+$ Get-PSSession| Remove-PSSession 
+
+when finished call remote-pssession 
+
+- naming, PowerShell, use a Pascal case name with an approved verb and a singular noun. I also recommend prefixing the noun. 
+
+-  list of approved verbs that can be obtained by running Get-Verb.
+
+Verb        Group
+----        -----
+Add         Common
+Approve     Lifecycle
+Assert      Lifecycle
+Backup      Data
+Block       Security
+Checkpoint  Data
+Clear       Common
+Close       Common
+Compare     Data
+Complete    Lifecycle
+Compress    Data
+Confirm     Lifecycle
+Connect     Communications
+Convert     Data
+ConvertFrom Data
+ConvertTo   Data
+Copy        Common
+Debug       Diagnostic
+Deny        Lifecycle
+Disable     Lifecycle
+Disconnect  Communications
+Dismount    Data
+Edit        Data
+Enable      Lifecycle
+Enter       Common
+Exit        Common
+Expand      Data
+Export      Data
+Find        Common
+Format      Common
+Get         Common
+Grant       Security
+Group       Data
+Hide        Common
+Import      Data
+Initialize  Data
+Install     Lifecycle
+Invoke      Lifecycle
+Join        Common
+Limit       Data
+Lock        Common
+Measure     Diagnostic
+Merge       Data
+Mount       Data
+Move        Common
+New         Common
+Open        Common
+Optimize    Common
+Out         Data
+Ping        Diagnostic
+Pop         Common
+Protect     Security
+Publish     Data
+Push        Common
+Read        Communications
+Receive     Communications
+Redo        Common
+Register    Lifecycle
+Remove      Common
+Rename      Common
+Repair      Diagnostic
+Request     Lifecycle
+Reset       Common
+Resize      Common
+Resolve     Diagnostic
+Restart     Lifecycle
+Restore     Data
+Resume      Lifecycle
+Revoke      Security
+Save        Data
+Search      Common
+Select      Common
+Send        Communications
+Set         Common
+Show        Common
+Skip        Common
+Split       Common
+Start       Lifecycle
+Step        Common
+Stop        Lifecycle
+Submit      Lifecycle
+Suspend     Lifecycle
+Switch      Common
+Sync        Data
+Test        Diagnostic
+Trace       Diagnostic
+Unblock     Security
+Undo        Common
+Uninstall   Lifecycle
+Unlock      Common
+Unprotect   Security
+Unpublish   Data
+Unregister  Lifecycle
+Update      Data
+Use         Other
+Wait        Lifecycle
+Watch       Common
+Write       Communications
+
+Unapproved verbs also limit the discoverability of your functions.
+
+
+
+## Functions 
+- simple function 
+function Get-Version {
+    $PSVersionTable.PSVersion
+}
+
+- parameters 
+
+function Test-MrParameter {
+
+    param (
+        $ComputerName
+    )
+
+    Write-Output $ComputerName
+
+}
+
+function Get-MrParameterCount {
+    param (
+        [string[]]$ParameterName
+    )
+
+    foreach ($Parameter in $ParameterName) {
+        $Results = Get-Command -ParameterName $Parameter -ErrorAction SilentlyContinue
+
+        [pscustomobject]@{
+            ParameterName = $Parameter
+            NumberOfCmdlets = $Results.Count
+        }
+    }
+}
+
+- advanced functions have a number of common parameters that are added to the function automatically.
+
+function Test-MrCmdletBinding {
+
+    [CmdletBinding()] #<<-- This turns a regular function into an advanced function
+    param (
+        $ComputerName
+    )
+
+    Write-Output $ComputerName
+
+}
+
+CmdletBinding requires a param block, but the param block can be empty.
+
+common parameters 
+```
+Verbose
+Debug
+ErrorAction
+WarningAction
+InformationAction
+ErrorVariable
+WarningVariable
+InformationVariable
+OutVariable
+OutBuffer
+PipelineVariable
+```
+
+- SupportsShouldProcess
+
+SupportsShouldProcess adds WhatIf and Confirm parameters. These are only needed for commands that make changes
+
+function Test-MrSupportsShouldProcess {
+
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        $ComputerName
+    )
+
+    Write-Output $ComputerName
+
+}
+
+$ (Get-Command -Name Test-MrSupportsShouldProcess).Parameters.Keys
+
+Get-Command to return a list of the actual parameter names including the common ones along with WhatIf and Confirm.
+
+- parameter validation 
+
+function Test-MrParameterValidation {
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$ComputerName
+        
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Items
+    )
+
+    Write-Output $ComputerName
+
+}
+
+- verbose output instead of inline comments are useful, especially if you're writing some complex code they never get seen by users
+
+function Test-MrVerboseOutput {
+
+    [CmdletBinding()]
+    param (
+        [ValidateNotNullOrEmpty()]
+        [string[]]$ComputerName = $env:COMPUTERNAME
+    )
+
+    foreach ($Computer in $ComputerName) {
+        Write-Verbose -Message "Attempting to perform some action on $Computer"
+        Write-Output $Computer
+    }
+
+}
+
+function Test-MrPipelineInput {
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipelineByPropertyName)]
+        [string[]]$ComputerName
+    )
+
+    PROCESS {
+            Write-Output $ComputerName
+    }
+
+}
+
+ValueFromPipelineByPropertyName parameter attribute and it can be specified for any number of parameters regardless of datatype
+
+- error handling 
+function Test-MrErrorHandling {
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory,
+                   ValueFromPipeline,
+                   ValueFromPipelineByPropertyName)]
+        [string[]]$ComputerName
+    )
+
+    PROCESS {
+        foreach ($Computer in $ComputerName) {
+            try {
+                Test-WSMan -ComputerName $Computer -ErrorAction Stop
+            }
+            catch {
+                Write-Warning -Message "Unable to connect to Computer: $Computer"
+            }
+        }
+    }
+
+}
+
+Specify the ErrorAction parameter with Stop as the value to turn a non-terminating error into a terminating one.
+
+the ErrorAction on the command itself. In that scenario, you might need to change the global $ErrorActionPreference variable
+
+- comment based help 
+
+function Get-MrAutoStoppedService {
+
+<#
+.SYNOPSIS
+    Returns a list of services that are set to start automatically, are not
+    currently running, excluding the services that are set to delayed start.
+
+.DESCRIPTION
+    Get-MrAutoStoppedService is a function that returns a list of services from
+    the specified remote computer(s) that are set to start automatically, are not
+    currently running, and it excludes the services that are set to start automatically
+    with a delayed startup.
+
+.PARAMETER ComputerName
+    The remote computer(s) to check the status of the services on.
+
+.PARAMETER Credential
+    Specifies a user account that has permission to perform this action. The default
+    is the current user.
+
+.EXAMPLE
+     Get-MrAutoStoppedService -ComputerName 'Server1', 'Server2'
+
+.EXAMPLE
+     'Server1', 'Server2' | Get-MrAutoStoppedService
+
+.EXAMPLE
+     Get-MrAutoStoppedService -ComputerName 'Server1' -Credential (Get-Credential)
+
+.INPUTS
+    String
+
+.OUTPUTS
+    PSCustomObject
+
+.NOTES
+    Author:  Mike F Robbins
+    Website: http://mikefrobbins.com
+    Twitter: @mikefrobbins
+#>
+
+    [CmdletBinding()]
+    param (
+
+    )
+
+    #Function Body
+
+}
+
+When you add comment based help to your functions, help can be retrieved for them just like the default built-in commands.
+
+Snippets can be accessed in the PowerShell ISE using the Ctrl+J key combination.
+
+
+
+
+## Script modules 
+- dot-sourcing functions 
+//Get-MrPSVersion.ps1.
+function Get-MrPSVersion {
+    $PSVersionTable
+}
+
+    + calling the script that contains the function is that the functions are loaded in the Script scope. When the script completes, that scope is removed 
+
+//load powershell script into memory 
+$ Get-ChildItem -Path Function:\Get-MrPSVersion
+
+    + loaded into the Global scope. That can be accomplished by dot-sourcing the script 
+    
+. .\Get-MrPSVersion.ps1
+. C:\Demo\Get-MrPSVersion.ps1
+
+    + can be combined with the remainder of the path.
+$Path = 'C:\' 
+. $Path\Get-MrPSVersion.ps1
+
+$ Get-ChildItem -Path Function:\Get-MrPSVersion
+
+
+- A script module in PowerShell is simply a file containing one or more functions that's saved as a .PSM1 file instead of a .PS1 file
+
+$ help New-Module
+
+uses the New-Module cmdlet to create a dynamic module in memory 
+```
+New-Module -Name MyModule -ScriptBlock {
+
+    function Return-MrOsVersion {
+        Get-CimInstance -ClassName Win32_OperatingSystem |
+        Select-Object -Property @{label='OperatingSystem';expression={$_.Caption}}
+    }
+
+    Export-ModuleMember -Function Return-MrOsVersion
+
+} | Import-Module
+```
+
+//MyScriptModule.psm1.
+PowerShell
+
+function Get-MrPSVersion {
+    $PSVersionTable
+}
+
+function Get-MrComputerName {
+    $env:COMPUTERNAME
+}
+
+//import the file with the Import-Module cmdlet. PowerShell
+
+$ Import-Module C:\MyScriptModule.psm1
+
+    + autoloading 
+    
+To take advantage of module autoloading, a script module needs to be saved in a folder with the same base name as the .PSM1 file 
+
+a location specified in $env:PSModulePath. PowerShell
+
+$env:PSModulePath
+$env:PSModulePath -split ';'
+
+module locations
+```
+C:\Users\mike-ladm\Documents\WindowsPowerShell\Modules
+C:\Program Files\WindowsPowerShell\Modules
+C:\Windows\system32\WindowsPowerShell\v1.0\Modules
+C:\Program Files (x86)\Microsoft SQL Server\130\Tools\PowerShell\Modules\
+```
+- module manifests 
+
+New-ModuleManifest is used to create a module manifest. Path is the only value that's required
+
+$ Get-Module -Name MyScriptModule
+
+$ New-ModuleManifest -Path $env:ProgramFiles\WindowsPowerShell\Modules\MyScriptModule\MyScriptModule.psd1 -RootModule MyScriptModule -Author 'Mike F Robbins' -Description 'MyScriptModule' -CompanyName 'mikefrobbins.com'
+
+- defining public and private functions 
+
+    + only have a .PSM1 file, then your only option is to use the Export-ModuleMember cmdlet.
+    
+```
+function Get-MrPSVersion {
+    $PSVersionTable
+}
+
+function Get-MrComputerName {
+    $env:COMPUTERNAME
+}
+
+Export-ModuleMember -Function Get-MrPSVersion
+
+```
+
+    + a module manifest to your module, export in the FunctionsToExport section of the module manifest.
+
+FunctionsToExport = 'Get-MrPSVersion'
+
+
+## Appendix A 
+
+
+## Tutorial 
+- PowerShell unique is that accepts and returns .NET objects, rather than text.
+
+- use case 
+    
+cloud management 
+
+ci/cd 
+
+automate task for active directory and exchange 
+
+- cmdlets Get-Process. This naming convention makes it easier to understand what the cmdlet does.
+
+- using cmdlets to explore pwoershell 
+
+Get-Verb,list a verbs that most commands adhere 
+
+Get-COmmand, list of all commands installed on your machine 
+
+Get-Member, operates on object based output, discover properties and methods 
+
+Get-Help
+
+- filter the output of Get-Command, using different parameters. 
+
+$ Get-Command -Name '*Process'
+
+Filter on verb. The verb part of a command's name is the leftmost part
+
+$ get-command -verb 'Get'
+
+Filter on noun. The rightmost part of a command is the noun part.
+$ Get-Command -Noun U*
+
+use together 
+$ Get-Command -Verb Get -Noun U*
+
+- use helper cmdlets 
+
+Select-Object. It's a very versatile command that helps you pick out specific properties 
+
+$ Get-Command | Select-Object -First 3
+
+where-object 
+$ Where-Object. The where object helps you select objects from a collection
+
+- explore objects with get-member 
+
+$ Get-Process | Get-Member
+
+$ Get-Process | Get-Member -MemberType Method
+
+$ Get-Process | Get-Member | Select-Object Name, Definition
+
+$ Get-Command -ParameterType Process
+
+- find relatived commands 
+
+$ Get-Process | Get-Member | Select-Object TypeName -Unique
+
+- Start a PowerShell console by typing pwsh:
+
+$ pwsh
+
+
+
+# Deep dives
+- contribute 
+
+submit request 
+
+idea template 
+
+Contribution Licensing Agreement (CLA). We need you to complete the online
+
+- digital art 
+https://docs.microsoft.com/en-us/powershell/scripting/community/digital-art?view=powershell-7.2
+
+
+
+## everything you want to know about array 
+- array 
+    + create 
+PS> $data = @()
+
+PS> $data = @('Zero','One','Two','Three')
+
+$data = 'Zero','One','Two','Three'
+
+    + offset start from 0 
+    
+PS> $data = 'Zero','One','Two','Three'
+PS> $data[0]
+
+    + index 
+    
+PS> $data[0,2,3]
+
+PS> $data[1..3]
+
+PS> $data[3..1]
+
+PS> $data[-1]
+last item 
+
+PS> $a = 1,2,3,4,5,6,7,8
+PS> $a[2..-1]
+
+PS> $a[2,1,0,-1]
+
+    + out of bounds 
+PS> $null -eq $data[9000]
+
+    + cannot index into a null array 
+PS> $empty = $null
+
+
+Even $null has a count property except it returns 0.
+$null.count 
+
+    + iteration 
+    
+PS> $data = 'Zero','One','Two','Three'
+PS> $data | ForEach-Object {"Item: [$PSItem]"}
+
+foreach ( $node in $data )
+{
+    "Item: [$node]"
+}
+
+PS> $data.foreach({"Item [$PSItem]"})
+
+for ( $index = 0; $index -lt $data.count; $index++)
+{
+    "Item: [{0}]" -f $data[$index]
+}
+
+$data = 'Zero','One','Two','Three'
+switch( $data )
+{
+    'One'
+    {
+        'Tock'
+    }
+    'Three'
+    {
+        'Tock'
+    }
+    Default
+    {
+        'Tick'
+    }
+}
+
+    + updating values 
+for ( $index = 0; $index -lt $data.count; $index++ )
+{
+    $data[$index] = "Item: [{0}]" -f $data[$index]
+}
+
+- arrays of objects 
+
+$data = @(
+    [pscustomobject]@{FirstName='Kevin';LastName='Marquette'}
+    [pscustomobject]@{FirstName='John'; LastName='Doe'}
+)
+
+$processList = Get-Process
+
+PS> $data[0]
+
+    + array properties 
+PS> $data | ForEach-Object {$_.LastName}
+
+use the Select-Object -ExpandProperty cmdlet.
+PS> $data | Select-Object -ExpandProperty LastName
+
+- where object filtering 
+PS> $data | Where-Object {$_.FirstName -eq 'Kevin'}
+
+Arrays have a Where() method on them that allows you to specify a scriptblock 
+
+$data.Where({$_.FirstName -eq 'Kevin'})
+
+- updating objects in loops 
+
+foreach($person in $data)
+{
+    $person.FirstName = 'Kevin'
+}
+
+foreach($person in $data)
+{
+    $person = [pscustomobject]@{
+        FirstName='Kevin'
+        LastName='Marquette'
+    }
+}
+
+- operators 
+
+    + join 
+The -join operator is the most obvious one so let's look at it first. I like the -join operator 
+
+PS> $data = @(1,2,3,4)
+PS> $data -join '-'
+1-2-3-4
+PS> $data -join ','
+1,2,3,4
+
+    + replace and split 
+PS> $data = @('ATX-SQL-01','ATX-SQL-02','ATX-SQL-03')
+PS> $data -replace 'ATX','LAX'
+
+    + contains 
+PS> $data = @('red','green','blue')
+PS> $data -contains 'green'
+
+    + in 
+PS> $data = @('red','green','blue')
+PS> 'green' -in $data
+
+    + equal and not equal 
+PS> $data = @('red','green','blue')
+PS> $data -eq 'green'
+
+    + match 
+PS> $servers = @(
+    'LAX-SQL-01'
+    'LAX-API-01'
+    'ATX-SQL-01'
+    'ATX-API-01'
+)
+PS> $servers -match 'SQL'
+
+    + testing null or empty 
+Testing for $null or empty arrays can be tricky. Here are the common traps with arrays.
+
+if ( $array -eq $null)
+{
+    'Array is $null'
+}
+
+if ( $array.count -gt 0 )
+{
+    "Array isn't empty"
+}
+
+- array addition 
+
+$first = @(
+    'Zero'
+    'One'
+)
+$second = @(
+    'Two'
+    'Three'
+)
+
+$data = @(
+    'Zero'
+    'One'
+    'Two'
+    'Three'
+)
+$data += 'four'
+
+- pipeline assignment 
+
+$array = 1..5 | ForEach-Object {
+    "ATX-SQL-$PSItem"
+}
+
+- array types 
+
+    + strong types 
+PS> [int[]] $numbers = 1,2,3
+PS> [int[]] $numbers2 = 'one','two','three'
+
+$myarray = [System.Collections.ArrayList]::new()
+[void]$myArray.Add('Value')
+
+- imporve adding speed with array list 
+
+The ArrayList is commonly one of the first things that we think of when we need an array that is faster to work with.
+
+$myarray = [System.Collections.ArrayList]::new()
+[void]$myArray.Add('Value')
+
+The reason I'm using [void] at the beginning of the line is to suppress the return code. 
+
+- generic list 
+
+$mylist = [System.Collections.Generic.List[string]]::new()
+
+$mylist = [System.Collections.Generic.List[int]]::new()
+
+$mylist = [System.Collections.Generic.List[int]]@(1,2,3)
+
+- remove 
+
+using namespace System.Collections.Generic
+$myList = [List[string]]@('Zero','One','Two','Three')
+[void]$myList.Remove("Two")
+Zero
+One
+Three
+
+- pre-sized array 
+
+$data = [Object[]]::new(4)
+
+- multiplying array 
+
+PS> $data = @('red','green','blue')
+PS> $data * 3
+
+- init with 0 
+PS> $data = @(0) * 4
+
+- nested arrays 
+
+$data = @(@(1,2,3),@(4,5,6),@(7,8,9))
+
+- write-output -noEnumerate 
+
+PowerShell likes to unwrap or enumerate arrays.
+
+gets unwrapped and Get-Member sees the members of the array 
+
+to prevent that unwrap of the array, you can use Write-Output -NoEnumerate.
+
+PS> $data = @('red','green','blue')
+PS> $data | Get-Member
+TypeName: System.String
+
+or place a comma in front 
+
+PS> ,$data | Get-Member
+TypeName: System.Object[]
+...
+
+
+## about hashtables 
+- A hashtable is a data structure, much like an array, except you store each value (object) using a key. 
+- create 
+
+$ageList = @{}
+
+$ageList = @{
+    Kevin = 36
+    Alex  = 9
+}
+
+
+- access 
+
+$ageList['Kevin']
+$ageList['Alex']
+
+    + multi selection 
+    
+$environments[@('QA','DEV')]
+$environments[('QA','DEV')]
+$environments['QA','DEV']
+
+- iterating 
+
+PS> $ageList | Measure-Object
+
+PS> $ageList.values | Measure-Object -Average
+
+PS> $ageList.keys | ForEach-Object{
+    $message = '{0} is {1} years old!' -f $_, $ageList[$_]
+    Write-Output $message
+}
+
+foreach($key in $ageList.keys)
+{
+    $message = '{0} is {1} years old' -f $key, $ageList[$key]
+    Write-Output $message
+}
+
+$ageList.GetEnumerator() | ForEach-Object{
+    $message = '{0} is {1} years old!' -f $_.key, $_.value
+    Write-Output $message
+}
+
+- One important detail is that you can't modify a hashtable while it's being enumerated.
+
+The trick to this situation is to clone the keys before doing the enumeration.
+
+- property based access
+
+- remove 
+
+$person.remove('age')
+
+$person.clear()
+
+- ordered hashtables 
+
+$person = [ordered]@{
+    name = 'Kevin'
+    age  = 36
+}
+
+enumerate the keys and values, they stay in that order.
+
+- inline 
+
+$person = @{ name = 'kevin'; age = 36; }
+
+- custom expressions in common pipeline 
+
+$property = @{
+    name = 'totalSpaceGB'
+    expression = { ($_.used + $_.free) / 1GB }
+}
+
+$drives = Get-PSDrive | Where Used
+$drives | Select-Object -Property name, $property
+
+- custom sort expression 
+
+Get-ADUser | Sort-Object -Parameter @{ e={ Get-TotalSales $_.Name } }
+
+$data = @(
+    @{name='a'}
+    @{name='c'}
+    @{name='e'}
+    @{name='f'}
+    @{name='d'}
+    @{name='b'}
+)
+
+$data | Sort-Object -Property @{e={$_.name}}
+
+- splatting hashtables at cmdlets 
+
+$ Add-DhcpServerv4Scope -Name 'TestNetwork' -StartRange'10.0.0.2' -EndRange '10.0.0.254' -SubnetMask '255.255.255.0' -Description 'Network for testlab A' -LeaseDuration (New-TimeSpan -Days 8) -Type "Both"
+
+Without using splatting, all those things need to be defined on a single line. It either scrolls off the screen or will wrap. The use of the @ sign instead of the $ is what invokes the splat operation.
+
+$DHCPScope = @{
+    Name        = 'TestNetwork'
+    StartRange  = '10.0.0.2'
+    EndRange    = '10.0.0.254'
+    SubnetMask  = '255.255.255.0'
+    Description = 'Network for testlab A'
+    LeaseDuration = (New-TimeSpan -Days 8)
+    Type = "Both"
+}
+Add-DhcpServerv4Scope @DHCPScope
+
+use of the @ sign instead of the $ is what invokes the splat operation.
+
+    + multiple splats 
+    
+$Common = @{
+    SubnetMask  = '255.255.255.0'
+    LeaseDuration = (New-TimeSpan -Days 8)
+    Type = "Both"
+}
+
+$DHCPScope = @{
+    Name        = 'TestNetwork'
+    StartRange  = '10.0.0.2'
+    EndRange    = '10.0.0.254'
+    Description = 'Network for testlab A'
+}
+
+Add-DhcpServerv4Scope @DHCPScope @Common
+
+    + for clean code 
+$log = @{Path = '.\logfile.log'}
+Add-Content "logging this command" @log
+
+    + for executable 
+    
+$robo = @{R=1;W=1;MT=8}
+robocopy source destination @robo
+
+    + adding hashtables 
+$person += @{Zip = '78701'}
+
+    + nested hashtables 
+$person = @{
+    name = 'Kevin'
+    age  = 36
+}
+$person.location = @{}
+$person.location.city = 'Austin'
+$person.location.state = 'TX'
+
+    + display nested hashtable 
+    
+PS> $people | ConvertTo-Json
+{
+    "Kevin":  {
+                "age":  36,
+                "city":  "Austin"
+            },
+    "Alex":  {
+                "age":  9,
+                "city":  "Austin"
+            }
+}
+
+    + creating objects A pscustomobject makes that easy
+
+$person = [pscustomobject]@{
+    name = 'Kevin'
+    age  = 36
+}
+
+$person = @{
+    name = 'Kevin'
+    age  = 36
+}
+
+[pscustomobject]$person
+
+    + saving a nested hashtable to file 
+$people | ConvertTo-JSON | Set-Content -Path $path
+$people = Get-Content -Path $path -Raw | ConvertFrom-JSON
+
+use depth to ensure that you have expanded all the nested hashtables 
+@{ a = @{ b = @{ c = @{ d = "e" }}}} | ConvertTo-Json -Depth 3
+
+    + convert from json to hashtable 
+'{ "a": "b" }' | ConvertFrom-Json -AsHashtable
+
+    + import from file 
+$content = Get-Content -Path $Path -Raw -ErrorAction Stop
+
+    + quote to make it key 
+$person = @{
+    'full name' = 'Kevin Marquette'
+    '#' = 3978
+}
+$person['full name']
+
+$person.'full name'
+
+$key = 'full name'
+$person.$key
+
+- automatic variables 
+
+$PSBoundParameters
+
+$PSBoundParameters is an automatic variable that only exists inside the context of a function.
+
+- $PSDefaultParameterValues
+
+This automatic variable lets you assign default values to any cmdlet without changing the cmdlet.
+
+$PSDefaultParameterValues["Out-File:Encoding"] = "UTF8"
+
+$PSDefaultParameterValues[ "Connect-VIServer:Server" ] = 'VCENTER01.contoso.local'
+
+- regex match 
+
+the -match operator, an automatic variable called $matches is created with the results of the match. 
+
+```
+$message = 'My SSN is 123-45-6789.'
+
+$message -match 'My SSN is (.+)\.'
+$Matches[0]
+$Matches[1]
+
+```
+
+- group-object -AsHashtable 
+
+Import-CSV $Path | Group-Object -AsHashtable -Property email
+
+- copying hashtable 
+
+PS> $orig = @{name='orig'}
+PS> $copy = $orig
+PS> $copy.name = 'copy'
+PS> 'Copy: [{0}]' -f $copy.name
+PS> 'Orig: [{0}]' -f $orig.name
+
+- shadow copy 
+
+we can use .Clone() to make a shallow copy.
+
+PS> $orig = @{name='orig'}
+PS> $copy = $orig.Clone()
+PS> $copy.name = 'copy'
+
+- deep copies 
+
+using PowerShell to recursively create a deep copy:
+
+```
+function Get-DeepClone
+{
+    [CmdletBinding()]
+    param(
+        $InputObject
+    )
+    process
+    {
+        if($InputObject -is [hashtable]) {
+            $clone = @{}
+            foreach($key in $InputObject.keys)
+            {
+                $clone[$key] = Get-DeepClone $InputObject[$key]
+            }
+            return $clone
+        } else {
+            return $InputObject
+        }
+    }
+}
+```
+
+    + Another way is to use .Net to deserialize it using CliXml,  CliXml, it's memory intensive and if you are cloning huge hashtables, that might be a problem.  depth limitation of 48.
+
+function Get-DeepClone
+{
+    param(
+        $InputObject
+    )
+    $TempCliXmlString = [System.Management.Automation.PSSerializer]::Serialize($obj, [int32]::MaxValue)
+    return [System.Management.Automation.PSSerializer]::Deserialize($TempCliXmlString)
+}
+
+
+## PSCustomObject 
+- PSCustomObject is to have a simple way to create structured data.
+
+$myObject = [PSCustomObject]@{
+    Name     = 'Kevin'
+    Language = 'PowerShell'
+    State    = 'Texas'
+}
+
+$myObject | ConvertTo-Json -depth 1 | Set-Content -Path $Path
+
+- adding properties 
+
+$myObject | Add-Member -MemberType NoteProperty -Name 'ID' -Value 'KevinMarquette'
+
+- remove 
+
+$myObject.psobject.properties.remove('ID')
+
+- enumerate 
+
+$myObject | Get-Member -MemberType NoteProperty | Select -ExpandProperty Name
+
+- convert to hashtable 
+
+$hashtable = @{}
+foreach( $property in $myobject.psobject.properties.name )
+{
+    $hashtable[$property] = $myObject.$property
+}
+
+- testing 
+
+if( $null -ne $myObject.ID )
+
+- adding object methods 
+
+$ScriptBlock = {
+    $hashtable = @{}
+    foreach( $property in $this.psobject.properties.name )
+    {
+        $hashtable[$property] = $this.$property
+    }
+    return $hashtable
+}
+
+- objects vs value types 
+
+$third = [PSCustomObject]@{Key=3}
+$fourth = $third
+$fourth.Key = 4
+
+- copy object 
+$third.psobject.copy()
+
+- PSTypename for custom object types 
+
+$myObject.PSObject.TypeNames.Insert(0,"My.Object")
+
+- using default property set 
+
+$defaultDisplaySet = 'Name','Language'
+$defaultDisplayPropertySet = New-Object System.Management.Automation.PSPropertySet('DefaultDisplayPropertySet',[string[]]$defaultDisplaySet)
+$PSStandardMembers = [System.Management.Automation.PSMemberInfo[]]@($defaultDisplayPropertySet)
+$MyObject | Add-Member MemberSet PSStandardMembers $PSStandardMembers
+
+$TypeData = @{
+    TypeName = 'My.Object'
+    DefaultDisplayPropertySet = 'Name','Language'
+}
+Update-TypeData @TypeData
+
+$myObject | Format-List *
+
+- script properties 
+
+$TypeData = @{
+    TypeName = 'My.Object'
+    MemberType = 'ScriptProperty'
+    MemberName = 'UpperCaseName'
+    Value = {$this.Name.toUpper()}
+}
+Update-TypeData @TypeData
+
+- function parameters 
+
+param( [PSTypeName('My.Object')]$Data )
+
+- funtion output type 
+
+function Get-MyObject
+{
+    [OutputType('My.Object')]
+    [CmdletBinding()]
+        param
+        (...)
+
+
+## String substitution 
+- concatenation 
+$name = 'Kevin Marquette'
+$message = 'Hello, ' + $name
+
+- variable substitution 
+$last = "def"
+$first = "abc"
+$message = "Hello, $first $last."
+
+- command substitution 
+
+$directory = Get-Item 'c:\windows'
+$message = "Time: $directory.CreationTime"
+
+$message = "Time: $($directory.CreationTime)"
+
+
+- command execution, You can run commands inside a string. Even though I have this option. hard to debug 
+
+$message = "Date: $(Get-Date)"
+
+- format string 
+
+
+# .NET string format string
+[string]::Format('Hello, {0} {1}.',$first,$last)
+
+# PowerShell format string
+'Hello, {0} {1}.' -f $first, $last
+
+$values = @(
+    "Kevin"
+    "Marquette"
+)
+'Hello, {0} {1}.' -f $values
+
+"{0:yyyyMMdd}" -f (Get-Date)
+"Population {0:N0}" -f  8175133
+
+- joining strings 
+$servers = @(
+    'server1'
+    'server2'
+    'server3'
+)
+
+$servers  -join ','
+
+- join path 
+$folder = 'Temp'
+Join-Path -Path 'c:\windows' -ChildPath $folder
+
+- strings are arrays 
+
+$message = "Numbers: "
+foreach($number in 1..10000)
+{
+    $message += " $number"
+}
+
+- string builder 
+
+$stringBuilder = New-Object -TypeName "System.Text.StringBuilder"
+
+[void]$stringBuilder.Append("Numbers: ")
+foreach($number in 1..10000)
+{
+    [void]$stringBuilder.Append(" $number")
+}
+$message = $stringBuilder.ToString()
+
+- delineation with braces 
+
+$test = "Bet"
+$tester = "Better"
+Write-Host "$test $tester ${test}ter"
+
+- find and replace tokens 
+
+$letter = Get-Content -Path TemplateLetter.txt -RAW
+$letter = $letter -replace '#FULL_NAME#', 'Kevin Marquette'
+
+- replace multiple tokens 
+
+$tokenList = @{
+    Full_Name = 'Kevin Marquette'
+    Location = 'Orange County'
+    State = 'CA'
+}
+
+$letter = Get-Content -Path TemplateLetter.txt -RAW
+foreach( $token in $tokenList.GetEnumerator() )
+{
+    $pattern = '#{0}#' -f $token.key
+    $letter = $letter -replace $pattern, $token.Value
+}
+
+- execution context expand string, call to .InvokeCommand.ExpandString on the current execution context uses the variables 
+
+$message = 'Hello, $Name!'
+$name = 'Kevin Marquette'
+$string = $ExecutionContext.InvokeCommand.ExpandString($message)
+
+$message = 'Hello, $Name!'
+$nameList = 'Mark Kraus','Kevin Marquette','Lee Dailey'
+foreach($name in $nameList){
+    $ExecutionContext.InvokeCommand.ExpandString($message)
+}
+
+
+
+# if statement, then, else 
+- condition 
+
+$condition = $true
+if ( $condition )
+{
+    Write-Output "The condition was true"
+}
+
+- operators 
+
+    + equal 
+    $value = Get-MysteryValue
+    if ( 5 -eq $value )
+    {
+        # do something
+    }
+
+few variations.
+```
+-eq case-insensitive equality
+-ieq case-insensitive equality
+-ceq case-sensitive equality
+```
+
+    + not equal 
+```
+    -ne case-insensitive not equal
+    -ine case-insensitive not equal
+    -cne case-sensitive not equal
+
+```
+
+    + compare 
+```
+
+    -gt greater than
+    -igt greater than, case-insensitive
+    -cgt greater than, case-sensitive
+    -ge greater than or equal
+    -ige greater than or equal, case-insensitive
+    -cge greater than or equal, case-sensitive
+    -lt less than
+    -ilt less than, case-insensitive
+    -clt less than, case-sensitive
+    -le less than or equal
+    -ile less than or equal, case-insensitive
+    -cle less than or equal, case-sensitive
+
+```
+
+    + match 
+```
+-like operator. These wildcard patterns are fairly basic.
+
+    ? matches any single character
+    * matches any number of characters
+
+
+
+    -like case-insensitive wildcard
+    -ilike case-insensitive wildcard
+    -clike case-sensitive wildcard
+    -notlike case-insensitive wildcard not matched
+    -inotlike case-insensitive wildcard not matched
+    -cnotlike case-sensitive wildcard not matched
+
+```
+
+    + regular expression 
+```
+$value = 'S-ATX-SQL01'
+if ( $value -match 'S-\w\w\w-SQL\d\d')
+{
+    # do something
+}
+
+$value = 'S-ATX-SQL01'
+if ( $value -match 'SQL')
+{
+    # do something
+}
+
+    -match case-insensitive regex
+    -imatch case-insensitive regex
+    -cmatch case-sensitive regex
+    -notmatch case-insensitive regex not matched
+    -inotmatch case-insensitive regex not matched
+    -cnotmatch case-sensitive regex not matched
+
+```
+
+    + type check 
+
+```
+if ( $value -is [string] )
+{
+    # do something
+}
+
+    -is of type
+    -isnot not of type
+
+```
+
+- collection operators 
+
+the result is $true or $false. This is handled slightly differently when working with a collection
+
+```
+$array = 1..6
+if ( $array -gt 3 )
+{
+    # do something
+}
+```
+
+    + contain 
+$array = 1..6
+if ( $array -contains 3 )
+{
+    # do something
+}
+
+
+```
+
+
+    -contains case-insensitive match
+    -icontains case-insensitive match
+    -ccontains case-sensitive match
+    -notcontains case-insensitive not matched
+    -inotcontains case-insensitive not matched
+    -cnotcontains case-sensitive not matched
+
+```
+
+    + The -in operator is just like the -contains operator except the collection is on the right-hand side.
+
+$array = 1..6
+if ( 3 -in $array )
+{
+    # do something
+}
+
+- logical operators 
+
+    + The -not operator flips an expression from $false to $true 
+
+    use ! as an alias for -not.
+    
+if ( -not $value ){}
+if ( !$value ){}
+
+
+    + and 
+    
+if ( ($age -gt 13) -and ($age -lt 55) )
+
+
+    + or
+
+The -or allows for you to specify two expressions and returns $true 
+
+    + exclusive or 
+
+    This one is a little unusual. -xor allows only one expression to evaluate to $true. So if both items are $false or both items are $true, then the whole expression is $false
+
+    it is -xor exclusive or
+
+    + bitwisze operators 
+```
+
+    -band binary AND
+    -bor binary OR
+    -bxor binary exclusive OR
+    -bnot binary NOT
+    -shl shift left
+    -shr shift right
+
+```
+
+- checking for $null 
+
+if ( $null -eq $value )
+
+Having a no result or a $null value evaluates to $false in the if statement. 
+
+- assign variable within condition 
+
+if ($process=Get-Process notepad -ErrorAction ignore) {$process} else {$false}
+
+PS> $first = 1
+PS> ($second = 2)
+
+if ( $process = Get-Process Notepad* )
+{
+    $process | Stop-Process
+}
+
+- variable assignment from the scriptblock 
+
+```
+$discount = if ( $age -ge 55 )
+{
+    Get-SeniorDiscount
+}
+elseif ( $age -le 13 )
+{
+    Get-ChildDiscount
+}
+else
+{
+    0.00
+}
+```
+
+- alternate execution path 
+
+if ( Test-Path -Path $Path -PathType Leaf )
+{
+    Move-Item -Path $Path -Destination $archivePath
+}
+else
+{
+    Write-Warning "$path doesn't exist or isn't a file."
+}
+
+- elseif 
+
+if ( Test-Path -Path $Path -PathType Leaf )
+{
+    Move-Item -Path $Path -Destination $archivePath
+}
+elseif ( Test-Path -Path $Path )
+{
+    Write-Warning "A file was required but a directory was found instead."
+}
+else
+{
+    Write-Warning "$path could not be found."
+}
+
+- switch 
+
+$itemType = 'Role'
+switch ( $itemType )
+{
+    'Component'
+    {
+        'is a component'
+    }
+    'Role'
+    {
+        'is a role'
+    }
+    'Location'
+    {
+        'is a location'
+    }
+}
+
+- array inline 
+
+$snowSqlParam = @(
+    '--accountname', $Endpoint
+    '--username', $Credential.UserName
+    '--option', 'exit_on_error=true'
+    '--option', 'output_format=csv'
+    '--option', 'friendly=false'
+    '--option', 'timing=false'
+    if ($Debug)
+    {
+        '--option', 'log_level=DEBUG'
+    }
+    if ($Path)
+    {
+        '--filename', $Path
+    }
+    else
+    {
+        '--query', $singleLineQuery
+    }
+)
+
+- simplify complex operations 
+
+    + line condition 
+    
+    if ($null -ne $user -and
+        $user.Department -eq 'Finance' -and
+        $user.Title -match 'Senior' -and
+        $user.HomeDrive -notlike '\\server\*'
+    )
+    {
+        # Do Something
+    }
+
+    + pre-calculating results 
+    
+$needsSecureHomeDrive = $null -ne $user -and
+    $user.Department -eq 'Finance' -and
+    $user.Title -match 'Senior' -and
+    $user.HomeDrive -notlike '\\server\*'
+
+if ( $needsSecureHomeDrive )
+{
+    # Do Something
+}
+
+    + multiple if statements 
+    
+$skipUser = $false
+
+if( $null -eq $user )
+{
+    $skipUser = $true
+}
+
+if( $user.Department -ne 'Finance' )
+{
+    Write-Verbose "isn't in Finance department"
+    $skipUser = $true
+}
+
+if( $user.Title -match 'Senior' )
+{
+    Write-Verbose "Doesn't have Senior title"
+    $skipUser = $true
+}
+
+if( $user.HomeDrive -like '\\server\*' )
+{
+    Write-Verbose "Home drive already configured"
+    $skipUser = $true
+}
+
+if ( -not $skipUser )
+{
+    # do something
+}
+
+    + using function 
+    
+if ( Test-SecureDriveConfiguration -ADUser $user )
+{
+    # do something
+}
+
+    + error handling 
+    
+if ( -not (Test-Path -Path $folder) )
+{
+    New-Item -Type Directory -Path $folder
+}
+
+
+
+# Switch statement 
+- statement 
+
+$day = 3
+
+switch ( $day )
+{
+    0 { $result = 'Sunday'    }
+    1 { $result = 'Monday'    }
+    2 { $result = 'Tuesday'   }
+    3 { $result = 'Wednesday' }
+    4 { $result = 'Thursday'  }
+    5 { $result = 'Friday'    }
+    6 { $result = 'Saturday'  }
+}
+
+- assign to value 
+
+$result = switch ( $day )
+{
+    0 { 'Sunday'    }
+    1 { 'Monday'    }
+    2 { 'Tuesday'   }
+    3 { 'Wednesday' }
+    4 { 'Thursday'  }
+    5 { 'Friday'    }
+    6 { 'Saturday'  }
+}
+
+- default 
+
+$result = switch ( $day )
+{
+    0 { 'Sunday' }
+    # ...
+    6 { 'Saturday' }
+    default { 'Unknown' }
+}
+
+- strings match 
+$item = 'Role'
+
+switch ( $item )
+{
+    Component
+    {
+        'is a component'
+    }
+    Role
+    {
+        'is a role'
+    }
+    Location
+    {
+        'is a location'
+    }
+}
+
+- arrays 
+
+$roles = @('WEB','Database')
+
+switch ( $roles ) {
+    'Database'   { 'Configure SQL' }
+    'WEB'        { 'Configure IIS' }
+    'FileServer' { 'Configure Share' }
+}
+
+- regex 
+switch -Regex ( $message )
+{
+    '^Error'
+    {
+        Write-Error -Message $Message
+    }
+    '^Warning'
+    {
+        Write-Warning -Message $Message
+    }
+    default
+    {
+        Write-Information $message
+    }
+}
+
+- file path, -file with a path to a file instead of giving it a variable expression.
+
+switch -Wildcard -File $path
+{
+    'Error*'
+    {
+        Write-Error -Message $PSItem
+    }
+    'Warning*'
+    {
+        Write-Warning -Message $PSItem
+    }
+    default
+    {
+        Write-Output $PSItem
+    }
+}
+
+- on expression 
+
+switch ( ( Get-Service | Where status -eq 'running' ).name ) {...}
+
+- multiple match 
+
+switch ( 'Word' )
+{
+    'word' { 'lower case word match' }
+    'Word' { 'mixed case word match' }
+    'WORD' { 'upper case word match' }
+}
+
+- continue 
+
+switch ( 'Word' )
+{
+    'word'
+    {
+        'lower case word match'
+        continue
+    }
+    'Word'
+    {
+        'mixed case word match'
+        continue
+    }
+    'WORD'
+    {
+        'upper case word match'
+        continue
+    }
+}
+
+- A break statement exits the switch. This is the same behavior that continue presents for single values.
+
+$Messages = @(
+    'Downloading update'
+    'Ran into errors downloading file'
+    'Error: out of disk space'
+    'Sending email'
+    '...'
+)
+
+switch -Wildcard ($Messages)
+{
+    'Error*'
+    {
+        Write-Error -Message $PSItem
+        break
+    }
+    '*Error*'
+    {
+        Write-Warning -Message $PSItem
+        continue
+    }
+    '*Warning*'
+    {
+        Write-Warning -Message $PSItem
+        continue
+    }
+    default
+    {
+        Write-Output $PSItem
+    }
+}
+    + break labels, break out of more than the inner most item. You can place a label on a switch that can be the target of your break.
+    
+:filelist foreach($path in $logs)
+{
+    :logFile switch -Wildcard -File $path
+    {
+        'Error*'
+        {
+            Write-Error -Message $PSItem
+            break filelist
+        }
+        'Warning*'
+        {
+            Write-Error -Message $PSItem
+            break logFile
+        }
+        default
+        {
+            Write-Output $PSItem
+        }
+    }
+}
+
+- enum, PowerShell 5.0 gave us enums and we can use them in a switch.
+
+enum Context {
+    Component
+    Role
+    Location
+}
+
+$item = [Context]::Role
+
+switch ( $item )
+{
+    Component
+    {
+        'is a component'
+    }
+    Role
+    {
+        'is a role'
+    }
+    Location
+    {
+        'is a location'
+    }
+}
+
+    + or 
+switch ($item )
+{
+    ([Context]::Component)
+    {
+        'is a component'
+    }
+    ([Context]::Role)
+    {
+        'is a role'
+    }
+    ([Context]::Location)
+    {
+        'is a location'
+    }
+}
+
+- use a script block to perform the evaluation for a match 
+
+$age = 37
+
+switch ( $age )
+{
+    {$PSItem -le 18}
+    {
+        'child'
+    }
+    {$PSItem -gt 18}
+    {
+        'adult'
+    }
+}
+
+    + This adds complexity and can make your switch hard to read. In most cases where you would use something like this it would be better 
+
+switch ( $age )
+{
+    ({$PSItem -le 18})
+    {
+        'child'
+    }
+    ({$PSItem -gt 18})
+    {
+        'adult'
+    }
+}
+
+- regex $matches 
+
+
+$message = 'my ssn is 123-23-3456 and credit card: 1234-5678-1234-5678'
+
+switch -regex ($message)
+{
+    '(?<SSN>\d\d\d-\d\d-\d\d\d\d)'
+    {
+        Write-Warning "message contains a SSN: $($matches.SSN)"
+    }
+    '(?<CC>\d\d\d\d-\d\d\d\d-\d\d\d\d-\d\d\d\d)'
+    {
+        Write-Warning "message contains a credit card number: $($matches.CC)"
+    }
+    '(?<Phone>\d\d\d-\d\d\d-\d\d\d\d)'
+    {
+        Write-Warning "message contains a phone number: $($matches.Phone)"
+    }
+}
+
+- match $null 
+$values = '', 5, $null
+switch ( $values )
+{
+    $null   { "Value '$_' is `$null or an empty string" }
+    ''      { "Value '$_' is an empty string" }
+    default { "Value [$_] is not an empty string or `$null" }
+}
+
+- const expression 
+
+$isVisible = $false
+$isEnabled = $true
+$isSecure = $true
+
+switch ( $true )
+{
+    $isEnabled
+    {
+        'Do-Action'
+    }
+    $isVisible
+    {
+        'Show-Animation'
+    }
+    $isSecure
+    {
+        'Enable-AdminMenu'
+    }
+}
+
+- switch automatic variable 
+
+$a = 1, 2, 3, 4
+
+switch($a) {
+    1 { [void]$switch.MoveNext(); $switch.Current }
+    3 { [void]$switch.MoveNext(); $switch.Current }
+}
+
+- other pattern 
+
+    + hashtables instead of switch 
+
+$day = 3
+
+$lookup = @{
+    0 = 'Sunday'
+    1 = 'Monday'
+    2 = 'Tuesday'
+    3 = 'Wednesday'
+    4 = 'Thursday'
+    5 = 'Friday'
+    6 = 'Saturday'
+}
+
+$lookup[$day]
+
+    + enum insteand of switch 
+    
+Enum and it's also an option in this case.
+PowerShell
+
+$day = 3
+
+enum DayOfTheWeek {
+    Sunday
+    Monday
+    Tuesday
+    Wednesday
+    Thursday
+    Friday
+    Saturday
+}
+
+[DayOfTheWeek]$day
+
+
+## Exception 
+- Write-Error and other non-terminating errors do not trigger the catch.
+
+- throw 
+
+function Start-Something
+{
+    throw "Bad thing happened"
+}
+    + throw typed 
+    
+throw [System.IO.FileNotFoundException] "Could not find: $path"
+
+    + rethrow 
+    
+catch
+{
+    Write-Log $PSItem.ToString()
+    throw 
+}
+
+    + throw terminating error 
+    
+catch
+{
+    $PSCmdlet.ThrowTerminatingError($PSItem)
+}
+
+can turn it back into a terminating error by using -ErrorAction Stop or calling it from within a try{...}catch{...}.
+
+This also gives clean errors to the end user that hides the internal code from the generated error.
+
+- write-error 
+
+$ Write-Error -Message "Houston, we have a problem." -ErrorAction Stop
+
+Write-Error -Message "Could not find path: $path" -Exception ([System.IO.FileNotFoundException]::new()) -ErrorAction Stop
+
+Write-Error -Exception ([System.IO.FileNotFoundException]::new("Could not find path: $path")) -ErrorAction Stop
+
+- Cmdlet -ErrorAction stop 
+
+$ Start-Something -ErrorAction Stop
+
+- try/catch 
+
+try
+{
+    Start-Something
+}
+catch
+{
+    Write-Output "Something threw an exception"
+    Write-Output $_
+}
+finally
+{
+    $command.Connection.Close()
+}
+    + catch specific exception 
+try
+{
+    Start-Something -Path $path
+}
+catch [System.IO.FileNotFoundException]
+{
+    Write-Output "Could not find $path"
+}
+catch [System.IO.IOException]
+{
+        Write-Output "IO error with the file: $path"
+}
+
+    + capture multiple types 
+try
+{
+    Start-Something -Path $path -ErrorAction Stop
+}
+catch [System.IO.DirectoryNotFoundException],[System.IO.FileNotFoundException]
+{
+    Write-Output "The path or file was not found: [$path]"
+}
+catch [System.IO.IOException]
+{
+    Write-Output "IO error with the file: [$path]"
+}
+
+- $PSItem 
+
+Inside the catch block, there's an automatic variable ($PSItem or $_) of type ErrorRecord that contains the details about the exception
+
+[System.IO.File]::ReadAllText( '\\test\no\filefound.log')
+
+
+catch
+{
+    Write-Output "Ran into an issue: $($PSItem.ToString())"
+}
+
+- InvocationInfo of the function or script where the exception was thrown 
+
+$ $PSItem.InvocationInfo | Format-List *
+
+PS> $PSItem.ScriptStackTrace
+
+PS> $PSItem.Exception.Message
+
+PS> $PSItem.Exception.InnerExceptionMessage
+
+- public function templates 
+
+function Start-Something
+{
+    [CmdletBinding()]
+    param()
+
+    process
+    {
+        try
+        {
+            ...
+        }
+        catch
+        {
+            $PSCmdlet.ThrowTerminatingError($PSItem)
+        }
+    }
+}
+
+- trap is executed and then the normal code continues. If multiple exceptions happen, then the trap is called over and over.
+
+trap
+{
+    Write-Log $PSItem.ToString()
+}
+
+throw [System.Exception]::new('first')
+throw [System.Exception]::new('second')
+throw [System.Exception]::new('third')
+
+I personally never adopted this approach but I can see the value in admin or controller scripts that log any and all exceptions,
+
+
+## $null 
+-  not initialized, the value is $null.
+PS> $null -eq $undefinedVariable
+True
+
+PS> function Get-Nothing {}
+PS> $value = Get-Nothing
+PS> $null -eq $value
+True
+
+- If you use $null in a string, then it's a blank value 
+
+PS> $value = $null
+PS> Write-Output "The value is $value"
+The value is
+
+- in numeric equation
+
+multiplication that gives 0 or $null depending on the order of the values.
+
+PS> $null * 5
+PS> $null -eq ( $null * 5 )
+True
+
+PS> 5 * $null
+0
+PS> $null -eq ( 5 * $null )
+False
+
+- in place of an object 
+
+PS> $null -eq $undefined.some.fake.property
+True
+
+PS> $date = Get-Date
+PS> $null -eq $date.some.fake.property
+True
+
+- method on a null-valued expression
+
+PS> $value = $null
+PS> $value.toString()
+You cannot call a method on a null-valued expression.
+
+- checking for $null, always place it on the left side 
+
+You may have noticed that I always place the $null on the left when checking for $null in my examples. 
+
+```
+if ( $value -eq $null )
+{
+    'The array is $null'
+}
+if ( $value -ne $null )
+{
+    'The array is not $null'
+}
+```
+
+The trap here is that it's possible to create a $value that allows both of them to be $false
+PowerShell
+
+$value = @( $null )
+
+The -eq checks every value in the array and returns the $null that is matched. This evaluates to $false. The -ne returns everything that doesn't match $null and in this case there are no results
+
+- PSScriptAnalyzer 
+
+$ Invoke-ScriptAnalyzer <script path> 
+
+Because VS Code uses the PSScriptAnalyser rules too, it also highlights or identifies this as a problem in your script.
+
+- access a property on a $null is also $null 
+
+PS> $value = $null
+PS> $value.count
+0
+
+- [PSCustomObject] in Windows PowerShell 5.1 (This is fixed in PowerShell 6.0). It doesn't have a count property so you get a $null value if you try to use it. 
+
+- empty null 
+PS> function Get-Nothing {}
+PS> $nothing = Get-Nothing
+PS> $null -eq $nothing
+True
+
+- if you place undefined value inside an array, it's treated the same as an empty array.
+
+PS> $containempty = @( @() )
+PS> $containnothing = @($nothing)
+PS> $containnull = @($null)
+
+PS> $containempty.count
+0
+PS> $containnothing.count
+0
+PS> $containnull.count
+1
+
+- You can pipe a $null value but not an empty $null value.
+
+PS> $null | ForEach-Object{ Write-Output 'NULL Value' }
+
+- foreach is that it doesn't enumerate over a $null collection.
+foreach ( $node in $null )
+{
+    #skipped
+}
+
+- value types, only reference types can be $null
+
+PS> [int]$number = $null
+PS> $number
+0
+
+PS> [string]$string = $null
+PS> $string -eq ''
+True
+
+- function parameters 
+
+Using a strongly typed values in function parameters is very common.
+
+function Do-Something
+{
+    param(
+        [String] $Value
+    )
+}
+
+- string IsNotNullOrEmpty
+
+if ( -not [string]::IsNullOrEmpty( $value ) ){...}
+
+
+- when i $null check 
+
+$userList = Get-ADUser kevmar
+if ($null -ne $userList){...}
+
+- initializing to $null 
+
+function Do-Something
+{
+    foreach ( $node in 1..6 )
+    {
+        try
+        {
+            $result = Get-Something -ID $node
+        }
+        catch
+        {
+            Write-Verbose "[$result] not valid"
+        }
+
+        if ( $null -ne $result )
+        {
+            Update-Something $result
+        }
+    }
+}
+
+The bug hiding in this code is when Get-Something throws an exception and doesn't assign a value to $result. $result still contains the previous valid $result from other iterations. 
+
+- redirect output to null 
+
+$ New-Item -Type Directory -Path $path | Out-Null
+
+$ New-Item -Type Directory -Path $path > $null
+
+$ git status *> $null
+
+- assign to null, same effect as using Out-Null.
+
+$ $null = New-Item -Type Directory -Path $path
+
+
+
+## ShouldProcess
+-  One important feature that is often overlooked is -WhatIf and -Confirm support and it's easy to add to your functions. 
+
+-  -WhatIf parameter, it allows you to see what the command would have done instead of making changes
+
+$ Remove-Item -Path * -WhatIf
+
+- Commands that support -WhatIf also support -Confirm, display confirmation question 
+
+$ Remove-Item .\myfile1.txt -Confirm
+
+- localization 
+
+switch parameters 
+
+$ Remove-Item -Path:* -WhatIf:$true
+
+- SupportedShouldProcess, The first step to enable -WhatIf and -Confirm support is to specify SupportsShouldProcess in the CmdletBinding
+
+function Test-ShouldProcess {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+    Remove-Item .\myfile1.txt
+}
+
+- Trust but verify 
+
+function Test-ShouldProcess {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+    Remove-Item .\myfile1.txt -WhatIf:$WhatIfPreference
+}
+
+    + test with $PSCmdlet.ShouldProcess
+
+function Test-ShouldProcess {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    $file = Get-ChildItem './myfile1.txt'
+    if($PSCmdlet.ShouldProcess($file.Name)){
+        $file.Delete()
+    }
+}
+
+call to $PSCmdlet.ShouldProcess($file.name) checks for the -WhatIf (and -Confirm parameter) then handles it accordingly.
+
+- overloads 
+
+function Test-ShouldProcess {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    if($PSCmdlet.ShouldProcess('TARGET')){
+        # ...
+    }
+}
+
+output
+
+What if: Performing the operation "Test-ShouldProcess" on target "TARGET".
+
+- ShouldProcessReason 
+
+$reason = ''
+if($PSCmdlet.ShouldProcess('MESSAGE','TARGET','OPERATION',[ref]$reason)){
+    Write-Output "Some Action"
+}
+$reason
+
+- You use ShouldProcess to make your scripts safer. So you use it when your scripts are making changes. 
+
+## general logic and variable work
+if ($PSCmdlet.ShouldProcess('TARGET','OPERATION')){
+    # Change goes here
+}
+
+
+foreach ($node in $collection){
+    # general logic and variable work
+    if ($PSCmdlet.ShouldProcess($node,'OPERATION')){
+        # Change goes here
+    }
+}
+
+- ConfirmImpact 
+
+ConfirmImpact of the function to high and it prompts the user as if it was called with -Confirm.
+
+```
+function Test-ShouldProcess {
+    [CmdletBinding(
+        SupportsShouldProcess,
+        ConfirmImpact = 'High'
+    )]
+    param()
+
+    if ($PSCmdlet.ShouldProcess('TARGET')){
+        Write-Output "Some Action"
+    }
+}
+```
+
+- $ConfirmPreference and ConfirmImpact.
+
+High
+Medium
+Low
+None
+
+If you want your function to automatically prompt the user, set your ConfirmImpact to High
+
+- $PSCmdlet.ShouldContinue
+
+function Test-ShouldContinue {
+    [CmdletBinding()]
+    param()
+
+    if($PSCmdlet.ShouldContinue('TARGET','OPERATION')){
+        Write-Output "Some Action"
+    }
+}
+
+- Yes to all
+
+function Test-ShouldContinue {
+    [CmdletBinding()]
+    param()
+
+    $collection = 1..5
+    $yesToAll = $false
+    $noToAll = $false
+
+    foreach($target in $collection) {
+
+        $continue = $PSCmdlet.ShouldContinue(
+                "TARGET_$target",
+                'OPERATION',
+                [ref]$yesToAll,
+                [ref]$noToAll
+            )
+
+        if ($continue){
+            Write-Output "Some Action [$target]"
+        }
+    }
+}
+
+- Implementing -Force 
+
+implementations is that ShouldProcess should always get executed, but ShouldContinue should not get executed if -Force is specified.
+
+ShouldProcess -Force
+
+
+function Test-ShouldProcess {
+    [CmdletBinding(
+        SupportsShouldProcess,
+        ConfirmImpact = 'High'
+    )]
+    param(
+        [Switch]$Force
+    )
+
+    if ($Force){
+        $ConfirmPreference = 'None'
+    }
+
+    if ($PSCmdlet.ShouldProcess('TARGET')){
+        Write-Output "Some Action"
+    }
+}
+
+We add our own -Force switch as a parameter. The -Confirm parameter is automatically added
+
+- ShouldContinue -Force 
+
+function Test-ShouldContinue {
+    [CmdletBinding()]
+    param(
+        [Switch]$Force
+    )
+
+    if($Force -or $PSCmdlet.ShouldContinue('TARGET','OPERATION')){
+        Write-Output "Some Action"
+    }
+}
+
+
+# Writing progress across multiple threads with foreach parallel 
+- using a synced hashtable to track progress 
+```
+$dataset = @(
+    @{
+        Id   = 1
+        Wait = 3..10 | get-random | Foreach-Object {$_*100}
+    }
+    @{
+        Id   = 2
+        Wait = 3..10 | get-random | Foreach-Object {$_*100}
+    }
+    @{
+        Id   = 3
+        Wait = 3..10 | get-random | Foreach-Object {$_*100}
+    }
+    @{
+        Id   = 4
+        Wait = 3..10 | get-random | Foreach-Object {$_*100}
+    }
+    @{
+        Id   = 5
+        Wait = 3..10 | get-random | Foreach-Object {$_*100}
+    }
+)
+
+# Create a hashtable for process.
+# Keys should be ID's of the processes
+$origin = @{}
+$dataset | Foreach-Object {$origin.($_.id) = @{}}
+
+# Create synced hashtable
+$sync = [System.Collections.Hashtable]::Synchronized($origin)
+
+$job = $dataset | Foreach-Object -ThrottleLimit 3 -AsJob -Parallel {
+    $syncCopy = $using:sync
+    $process = $syncCopy.$($PSItem.Id)
+
+    $process.Id = $PSItem.Id
+    $process.Activity = "Id $($PSItem.Id) starting"
+    $process.Status = "Processing"
+
+    # Fake workload start up that takes x amount of time to complete
+    start-sleep -Milliseconds ($PSItem.wait*5)
+
+    # Process. update activity
+    $process.Activity = "Id $($PSItem.id) processing"
+    foreach ($percent in 1..100)
+    {
+        # Update process on status
+        $process.Status = "Handling $percent/100"
+        $process.PercentComplete = (($percent / 100) * 100)
+
+        # Fake workload that takes x amount of time to complete
+        Start-Sleep -Milliseconds $PSItem.Wait
+    }
+
+    # Mark process as completed
+    $process.Completed = $true
+}
+
+while($job.State -eq 'Running')
+{
+    $sync.Keys | Foreach-Object {
+        # If key is not defined, ignore
+        if(![string]::IsNullOrEmpty($sync.$_.keys))
+        {
+            # Create parameter hashtable to splat
+            $param = $sync.$_
+
+            # Execute Write-Progress
+            Write-Progress @param
+        }
+    }
+
+    # Wait to refresh to not overload gui
+    Start-Sleep -Seconds 0.1
+}
+```
+
+Foreach-Object and started as jobs. The ThrottleLimit is set to 3 to highlight running multiple processes in a queue
+
+When using the using: statement to reference a parent scope variable in PowerShell
+
+
+
+# Add credential support to powershell functions 
+- Creating credential object
+
+$Cred = Get-Credential
+$Cred = Get-Credential -Credential domain\user
+$Cred = Get-Credential -UserName domain\user -Message 'Enter Password'
+
+- add credential parameter 
+
+function Get-Something {
+    param(
+        $Name,
+        [System.Management.Automation.PSCredential]$Credential
+    )
+
+Add the [ValidateNotNull()] validation attribute to check that the value being passed to Credential.
+
+Add [System.Management.Automation.Credential()]. This allows you to pass in a username as a string
+
+Set a default value for the $Credential parameter to [System.Management.Automation.PSCredential]::Empty. Your function you might be passing this $Credential object
+
+- using creadential parameters 
+
+function Set-RemoteRegistryValue {
+    param(
+        $ComputerName,
+        $Path,
+        $Name,
+        $Value,
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]
+        $Credential = [System.Management.Automation.PSCredential]::Empty
+    )
+        $null = Invoke-Command -ComputerName $ComputerName -ScriptBlock {
+            Set-ItemProperty -Path $using:Path -Name $using:Name -Value $using:Value
+        } -Credential $Credential
+}
+
+- Prompting for credentials 
+
+$remoteKeyParams = @{
+    ComputerName = $env:COMPUTERNAME
+    Path = 'HKLM:\SOFTWARE\Microsoft\WebManagement\Server'
+    Name = 'EnableRemoteManagement'
+    Value = '1'
+}
+
+Set-RemoteRegistryValue @remoteKeyParams -Credential (Get-Credential)
+
+- Run Install-WindowsFeature Web-Server and Install-WindowsFeature web-mgmt-tools if required.
+
+provide credentials in a variable 
+
+```
+$password = ConvertTo-SecureString "P@ssw0rd" -AsPlainText -Force
+$Cred = New-Object System.Management.Automation.PSCredential ("duffney", $password)
+
+$remoteKeyParams = @{
+    ComputerName = $env:COMPUTERNAME
+    Path = 'HKLM:\SOFTWARE\Microsoft\WebManagement\Server'
+    Name = 'EnableRemoteManagement'
+    Value = '1'
+}
+
+Set-RemoteRegistryValue @remoteKeyParams -Credential $Cred
+```
+
+- run without credentials 
+
+$remoteKeyParams = @{
+    ComputerName = $env:COMPUTERNAME
+    Path = 'HKLM:\SOFTWARE\Microsoft\WebManagement\Server'
+    Name = 'EnableRemoteManagement'
+    Value = '1'
+}
+
+Set-RemoteRegistryValue @remoteKeyParams
+
+- check creadential exist or not 
+
+if($Credential -ne [System.Management.Automation.PSCredential]::Empty) {
+    Invoke-Command -ComputerName:$ComputerName -Credential:$Credential  {
+        Set-ItemProperty -Path $using:Path -Name $using:Name -Value $using:Value
+    }
+} else {
+    Invoke-Command -ComputerName:$ComputerName {
+        Set-ItemProperty -Path $using:Path -Name $using:Name -Value $using:Value
+    }
+}
+
+- splatting to handle empty credentials 
+
+$Splat = @{
+    ComputerName = $ComputerName
+}
+
+if ($Credential -ne [System.Management.Automation.PSCredential]::Empty) {
+    $Splat['Credential'] = $Credential
+}
+
+$null = Invoke-Command -ScriptBlock {
+    Set-ItemProperty -Path $using:Path -Name $using:Name -Value $using:Value
+} @splat
+
+- working with string password 
+
+The Invoke-Sqlcmd cmdlet is an example of a cmdlet that accepts a string as a password. Invoke-Sqlcmd allows you to run simple SQL insert, update, and delete statements
+
+```
+function Get-AllSQLDatabases {
+    param(
+        $SQLServer,
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]
+        $Credential = [System.Management.Automation.PSCredential]::Empty
+    )
+
+        $UserName = $Credential.UserName
+        $Password = $Credential.GetNetworkCredential().Password
+
+        $splat = @{
+            UserName = $UserName
+            Password = $Password
+            ServerInstance = 'SQLServer'
+            Query = "Select * from Sys.Databases"
+        }
+
+        Invoke-Sqlcmd @splat
+}
+
+$credSplat = @{
+    TypeName = 'System.Management.Automation.PSCredential'
+    ArgumentList = 'duffney',('P@ssw0rd' | ConvertTo-SecureString -AsPlainText -Force)
+}
+$Credential = New-Object @credSplat
+
+Get-AllSQLDatabases -SQLServer SQL01 -Credential $Credential
+```
+
+
+
+
+# DSC
+- reference 
+PowerShell Desired State Configuration (DSC) Overview
+
+DSC 2.0 is the version of DSC that shipped in PowerShell 7.0.
+
+DSC v2 can download PSDesiredStateConfiguration 2.0.5 from the PowerShell Gallery.
+ 
+$ Install-Module -Name PSDesiredStateConfiguration -Repository PSGallery -MaximumVersion 2.99
+
+- configuration 
+
+Configuration
+   [[-ResourceModuleTuplesToImport] <System.Collections.Generic.List`1[System.Tuple`3[System.String[],Microsoft.PowerShell.Commands.ModuleSpecification[],System.Version]]>]
+   [[-OutputPath] <Object>]
+   [[-Name] <Object>]
+   [[-Body] <ScriptBlock>]
+   [[-ArgsToBody] <Hashtable>]
+   [[-ConfigurationData] <Hashtable>]
+   [[-InstanceName] <String>]
+   [<CommonParameters>]
+ 
+- Get-DscResource 
+
+Get-DscResource
+   [[-Name] <String[]>]
+   [[-Module] <Object>]
+   [-Syntax]
+   [<CommonParameters>]
+   
+Get-DscResource -Name "WindowsFeature"
+   
+Get-DscResource -Module "xHyper-V"  
+
+Get-DscResource -Name P*,r*
+
+Get-DscResource -Name "WindowsFeature" -Syntax
+
+Get-DscResource -Name "User" | Select-Object -ExpandProperty Properties
+
+Get-DscResource -Module @{ModuleName='xHyper-V';RequiredVersion='3.0.0.0'}
+
+- Invoke-DscResource 
+
+Invoke-DscResource
+      [-Name] <String>
+      [[-ModuleName] <ModuleSpecification>]
+      [-Method] <String>
+      [-Property] <Hashtable>
+      [<CommonParameters>]
+
+The Invoke-DscResource cmdlet runs a method of a specified PowerShell Desired State Configuration (DSC) resource.
+
+    + invoke the set method of a resource by specifying its mandatory properties 
+    
+Invoke-DscResource -Name WindowsProcess -Method Set -ModuleName PSDesiredStateConfiguration -Property @{
+  Path = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+  Arguments = ''
+}
+
+- New-DscChecksum 
+
+Creates checksum files for DSC documents and DSC resources.
+
+New-DscChecksum
+   [-Path] <String[]>
+   [[-OutPath] <String>]
+   [-Force]
+   [-WhatIf]
+   [-Confirm]
+   [<CommonParameters>]
+   
+   
+
+
+# Sample script 
+- reference 
+https://docs.microsoft.com/en-us/powershell/scripting/samples/sample-scripts-for-administration?view=powershell-7.2
+
+## Working with object 
+- view all Process object 
+
+$ Get-Process | Get-Member | Out-Host -Paging
+
+$ Get-Process | Get-Member -MemberType Properties
+
+- selecting parts of objects 
+
+$ Get-CimInstance -Class Win32_LogicalDisk | Select-Object -Property Name,FreeSpace
+
+- In PowerShell, you often generate and pass along more objects to a pipeline than you want. 
+```
+Comparison Operator 	Meaning 	                Example (returns true)
+-eq 	                is equal to 	            1 -eq 1
+-ne                     Is not equal to 	        1 -ne 2
+-lt 	                Is less than 	            1 -lt 2
+-le 	                Is less than or equal to 	1 -le 2
+-gt 	                Is greater than 	        2 -gt 1
+-ge 	                Is greater than or equal to 	2 -ge 1
+-like 	                Is like (wildcard comparison for text) 	"file.doc" -like "f*.do?"
+-notlike 	            Is not like (wildcard comparison for text) 	"file.doc" -notlike "p*.doc"
+-contains 	            Contains 	                1,2,3 -contains 1
+-notcontains 	        Does not contain 	        1,2,3 -notcontains 4
+```
+
+- filtering based on object properties 
+
+$ Get-CimInstance -Class Win32_SystemDriver | Where-Object {$_.State -eq 'Running'}
+
+- start automatically by testing the StartMode value as well
+
+$ Get-CimInstance -Class Win32_SystemDriver |
+  Where-Object {$_.State -eq "Running"} |
+    Where-Object {$_.StartMode -eq "Manual"} |
+      Format-Table -Property Name,DisplayName
+
+- logic operator 
+
+```
+Logical Operator 	    Meaning 	                                    Example (returns true)
+-and 	                Logical and; true if both sides are true 	    (1 -eq 1) -and (2 -eq 2)
+-or 	                Logical or; true if either side is true 	    (1 -eq 1) -or (1 -eq 2)
+-not 	                Logical not; reverses true and false 	        -not (1 -eq 2)
+! 	                    Logical not; reverses true and false 	        !(1 -eq 2)
+```
+
+- sorting object 
+
+$ Get-ChildItem |
+  Sort-Object -Property LastWriteTime, Name -Descending |
+  Format-Table -Property LastWriteTime, Name
+
+    + using hash table 
+    
+$ Get-ChildItem |
+  Sort-Object -Property @{ Expression = 'LastWriteTime'; Descending = $true },
+                        @{ Expression = 'Name'; Ascending = $true } |
+  Format-Table -Property LastWriteTime, Name
+
+
+    + omit the Property parameter name as following:
+
+$ Sort-Object LastWriteTime, Name
+
+- Creating .net object and COM objects 
+
+    + create new instance of a .net framework class 
+    
+    $ New-Object -TypeName System.Diagnostics.EventLog
+    
+    + use constructor 
+    
+    $ New-Object -TypeName System.Diagnostics.EventLog -ArgumentList Application
+    
+    + accessing a remote event log with new-object 
+    
+    $ $RemoteAppLog = New-Object -TypeName System.Diagnostics.EventLog Application,192.168.1.81
+    
+    + get object method 
+    
+    $ $RemoteAppLog | Get-Member -MemberType Method
+    
+- creating COM objects with new-object 
+
+```
+New-Object -ComObject WScript.Shell
+New-Object -ComObject WScript.Network
+New-Object -ComObject Scripting.Dictionary
+New-Object -ComObject Scripting.FileSystemObject
+```
+
+- creating a desktop shortcut with WScript.Shell 
+
+$WshShell = New-Object -ComObject WScript.Shell
+
+$WshShell | Get-Member
+
+    + Get-Member has an optional InputObject parameter you can use instead of piping to provide input to Get-Member
+```
+$a = 1,2,"three"
+Get-Member -InputObject $a
+```
+
+    + using internet explorer with powershell 
+    
+    $ie = New-Object -ComObject InternetExplorer.Application
+    
+    $ie.Navigate("https://devblogs.microsoft.com/scripting/")
+
+    $ie.Document.Body.InnerText
+    
+    + gettting warning about .net framework wrapped com objects 
+    
+    $xl = New-Object -ComObject Excel.Application -Strict
+
+- using static classes and methods 
+
+New-Object System.Environment
+
+- get system environment data 
+
+[System.Environment]
+
+- displaying static properties of system environment 
+
+[System.Environment]::Commandline
+
+[System.Math] | Get-Member -Static -MemberType Methods
+
+[System.Math]::Sqrt(9)
+
+- Getting WMI objects 
+
+Get-CimClass -Namespace root/CIMV2 |
+  Where-Object CimClassName -like Win32* |
+    Select-Object CimClassName
+
+WMI objects, Get-CimInstance, is one of the most useful for doing real work.
+
+    + listing WMI classes 
+    
+Get-CimClass addresses this problem by making WMI discoverable.
+
+Get-CimClass -Namespace root/CIMV2 |
+  Where-Object CimClassName -like Win32* |
+    Select-Object CimClassName
+
+Get-CimClass -Namespace root/CIMV2 -ComputerName 192.168.1.29
+
+displaying WMI class details 
+
+Get-CimInstance -Class Win32_OperatingSystem
+
+Get-CimInstance -Class Win32_OperatingSystem | Get-Member -MemberType Property
+
+    + displaying non-default properties 
+
+Get-CimInstance -Class Win32_OperatingSystem |
+  Format-Table -Property TotalVirtualMemorySize, TotalVisibleMemorySize,
+    FreePhysicalMemory, FreeVirtualMemory, FreeSpaceInPagingFiles
+
+- manipulating items 
+
+    + get command item,  Windows PowerShell drives, such as the files and folders in the file system drives, and the registry keys in the Windows PowerShell registry drives, are called items in Windows PowerShell.
+    
+    $ Get-Command -Noun Item
+    
+- creating new items 
+
+$ New-Item -Path c:\temp\New.Directory -ItemType Directory
+
+    + registry values are not items 
+
+registry key HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run usually contains several registry entries
+
+    $ Get-ChildItem HKLM:\Software\Microsoft\Windows\CurrentVersion\Run
+
+    + renaming existing items 
+
+$ Rename-Item -Path C:\temp\New.Directory\file1.txt fileOne.txt
+
+    + moving items 
+
+$ Move-Item -Path C:\temp\New.Directory -Destination C:\ -PassThru
+
+    + copying items 
+    
+$ Copy-Item -Path C:\New.Directory -Destination C:\temp
+
+    + deleting items 
+    
+$ Remove-Item C:\temp\New.Directory
+
+    + executing items 
+    
+$ Invoke-Item C:\WINDOWS
+
+$ Invoke-Item C:\boot.ini
+
+invoke a file will call its associated application to open it. 
+
+
+
+## Managing computers 
+- locking a computer 
+
+$ rundll32.exe user32.dll,LockWorkStation
+
+
+rundll32.exe, which runs Windows DLLs (and saves their libraries for repeated use) to run user32.dll, a library of Windows management functions.
+
+- shut down session 
+
+shut down particular sessions on a Terminal Server, use the tsshutdn.exe command-line tool.
+
+- logging off the current session 
+
+Remote Desktop/Terminal Services command-line tool, logoff.exe (For details, at the PowerShell prompt, type logoff /?). To log off the current active session
+
+$ shutdown.exe -l
+
+$ Get-CimInstance -ClassName Win32_OperatingSystem | Invoke-CimMethod -MethodName Shutdown
+
+- shutting down or restarting a computer 
+
+$ stop-computer 
+$ restart-computer 
+$ restart-computer -force 
+
+- collecting information 
+
+Cmdlets from CimCmdlets module are the most important cmdlets for general system management tasks
+
+    + listing desktop settings 
+    $ Get-CimInstance -ClassName Win32_Desktop  
+    
+    $ Get-CimInstance -ClassName Win32_Desktop | Select-Object -ExcludeProperty "CIM*"
+    
+    + list bios information 
+    
+    $ Get-CimInstance -ClassName Win32_Processor | Select-Object -ExcludeProperty "CIM*"
+    
+    + listing processor information 
+    $ Get-CimInstance -ClassName Win32_Processor | Select-Object -ExcludeProperty "CIM*"
+    
+    $ Get-CimInstance -ClassName Win32_ComputerSystem | Select-Object -Property SystemType
+    
+    + listing computer manufacturer and model 
+    $ Get-CimInstance -ClassName Win32_ComputerSystem
+
+    + listing installed hotfixes 
+    $ Get-CimInstance -ClassName Win32_QuickFixEngineering
+    
+    $ Get-CimInstance -ClassName Win32_QuickFixEngineering -Property HotFixID
+    
+    + listing os version info 
+    $ Get-CimInstance -ClassName Win32_OperatingSystem |
+        Select-Object -Property BuildNumber,BuildType,OSType,ServicePackMajorVersion,ServicePackMinorVersion
+        
+    + listing local users and owner 
+    $ Get-CimInstance -ClassName Win32_OperatingSystem |
+        Select-Object -Property NumberOfLicensedUsers,NumberOfUsers,RegisteredUser
+        
+    + getting available disk space 
+    $ Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3"
+    
+    + getting logon session info 
+    $ Get-CimInstance -ClassName Win32_LogonSession
+    
+    + getting the user logged on to a computer 
+    $ Get-CimInstance -ClassName Win32_ComputerSystem -Property UserName
+    
+    +  get local time 
+    $ Get-CimInstance -ClassName Win32_LocalTime
+    
+    + display service status 
+    $ Get-CimInstance -ClassName Win32_Service |
+    Select-Object -Property Status,Name,DisplayName
+    
+- creating Get-WinEvent queries with filterHashtable 
+
+Performance improves when a Get-WinEvent query uses the FilterHashtable parameter.
+
+$ Get-EventLog -LogName Application | Where-Object Source -Match defrag
+
+$ Get-WinEvent -LogName Application | Where-Object { $_.ProviderName -Match 'defrag' }
+
+    + hash table key-value pairs 
+
+    FilterHashtable parameter's key-value pairs. The completed query includes LogName, ProviderName, Keywords, ID, and Level.
+
+Key name 	    Value data type 	Accepts wildcard characters?
+LogName 	    <String[]> 	        Yes
+ProviderName 	<String[]> 	        Yes
+Path 	        <String[]> 	        No
+Keywords 	    <Long[]> 	        No
+ID 	            <Int32[]> 	        No
+Level 	        <Int32[]> 	        No
+StartTime 	    <DateTime> 	        No
+EndTime 	    <DateTime> 	        No
+UserID 	        <SID> 	            No
+Data 	        <String[]> 	        No
+<named-data> 	<String[]> 	        No
+
+    + display the StandardEventKeywords property names.
+
+[System.Diagnostics.Eventing.Reader.StandardEventKeywords] | Get-Member -Static -MemberType Property
+
+    + keywords static property value 
+$C = [System.Diagnostics.Eventing.Reader.StandardEventKeywords]::EventLogClassic
+Get-WinEvent -FilterHashtable @{
+   LogName='Application'
+   ProviderName='.NET Runtime'
+   Keywords=$C.Value__
+}
+
+    
+
+## Managing processes & services 
+- get process 
+
+$ Get-Process -id 0
+
+$ Get-Process -Id 99
+
+$ Get-Process powershell -ComputerName localhost, Server01, Server02 |
+    Format-Table -Property Handles,
+        @{Label="NPM(K)";Expression={[int]($_.NPM/1024)}},
+        @{Label="PM(K)";Expression={[int]($_.PM/1024)}},
+        @{Label="WS(K)";Expression={[int]($_.WS/1024)}},
+        @{Label="VM(M)";Expression={[int]($_.VM/1MB)}},
+        @{Label="CPU(s)";Expression={if ($_.CPU -ne $()){$_.CPU.ToString("N")}}},
+        Id, ProcessName, MachineName -auto
+
+- stopping processes 
+
+$ Stop-Process -Name Idle
+
+$ Get-Process | Where-Object -FilterScript {$_.Responding -eq $false} | Stop-Process
+
+$ Get-Process -Name powershell | Where-Object -FilterScript {$_.Id -ne $PID} |
+    Stop-Process -PassThru
+
+- other process relative cmdlets 
+
+    Get-Process
+    Stop-Process
+    Start-Process
+    Wait-Process
+    Debug-Process
+    Invoke-Command
+
+- SERVICE 
+
+$ Get-Service -Name se*
+
+
+
+## Managing drives & files 
+- A Windows PowerShell drive is a data store location that you can access like a file system drive in Windows PowerShell. 
+$ Get-PSDrive
+
+$ Get-PSDrive -PSProvider FileSystem
+
+Get-Command -Name New-PSDrive -Syntax
+
+Remove-PSDrive -Name cvkey
+
+
+
+## Working with output 
+- list printer
+Get-CimInstance -Class Win32_Printer
+
+(New-Object -ComObject WScript.Network).RemovePrinterConnection("\\Printserver01\Xerox5")
+
+
+# Performing network tasks 
+- list ip 
+
+Get-CimInstance -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=$true |
+    Select-Object -ExpandProperty IPAddress
+    
+- list IP configuration 
+
+Get-CimInstance -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=$true
+
+- assiging the DNS domain for a network adapter 
+
+$wql = 'SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=True'
+$args = @{ DnsDomain = 'fabrikam.com'}
+Invoke-CimMethod -MethodName SetDNSDomain -Arguments $args -Query $wql
+
+- determining dhcp-enabled adapters 
+
+$ Get-CimInstance -Class Win32_NetworkAdapterConfiguration -Filter "DHCPEnabled=$true"
+
+- enabling dhcp on each adapter 
+
+$wql = 'SELECT * from Win32_NetworkAdapterConfiguration WHERE IPEnabled=True and DHCPEnabled=False'
+Invoke-CimMethod -MethodName ReleaseDHCPLease -Query $wql
+
+- create a network share 
+
+Invoke-CimMethod -ClassName Win32_Share -MethodName Create -Arguments @{
+    Path = 'C:\temp'
+    Name = 'TempShare'
+    Type = [uint32]0 #Disk Drive
+    MaximumAllowed = [uint32]25
+    Description = 'test share of the temp folder'
+}
+
+net share tempshare=c:\temp /users:25 /remark:"test share of the temp folder"
+
+- remove network share 
+
+$wql = 'SELECT * from Win32_Share WHERE Name="TempShare"'
+Invoke-CimMethod -MethodName Delete -Query $wql
+
+- connecting a windows accessible network drive 
+
+$ New-PSDrive -Name "X" -PSProvider "FileSystem" -Root "\\Server01\Public"
+
+
+
+# Working with software installations 
+- list installer applications 
+
+$ Get-CimInstance -Class Win32_Product |
+  Where-Object Name -eq "Microsoft .NET Core Runtime - 2.1.5 (x64)"
+
+$ Get-CimInstance -Class Win32_Product |
+  Where-Object Name -eq "Microsoft .NET Core Runtime - 2.1.5 (x64)" |
+    Format-List -Property *
+
+- list all uninstall application 
+
+$ New-PSDrive -Name Uninstall -PSProvider Registry -Root HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall
+
+- installing application 
+
+$ Invoke-CimMethod -ClassName Win32_Product -MethodName Install -Arguments @{PackageLocation='\\AppSrv\dsp\NewPackage.msi'}
+
+$ Get-CimInstance -Class Win32_Product -Filter "Name='ILMerge'" | Invoke-CimMethod -MethodName Uninstall
+
+$ Get-CimInstance -Class Win32_Product -Filter "Name='OldAppName'" |
+  Invoke-CimMethod -MethodName Upgrade -Arguments @{PackageLocation='\\AppSrv\dsp\OldAppUpgrade.msi'}
+
+
+
+# Decode a powershell command from a running process 
+- create a long running process 
+
+$ powershell.exe -Command {
+    $i = 1
+    while ( $i -le 10 )
+    {
+        Write-Output -InputObject $i
+        Start-Sleep -Seconds 60
+        $i++
+    }
+}
+
+$commandDetails = $powerShellProcesses | Select-Object -Property ProcessId,
+@{
+    name       = 'EncodedCommand'
+    expression = {
+        if ( $_.CommandLine -match 'encodedCommand (.*) -inputFormat' )
+        {
+            return $matches[1]
+        }
+    }
+}
+
+
+# Working with output 
+-  page 
+Get-Command | Out-Host -Paging
+
+- discarding 
+
+Get-Command | Out-Null
+
+- print 
+
+Get-Command Get-Command | Out-Printer -Name 'Microsoft Office Document Image Writer'
+
+- save to file 
+
+Get-Process | Out-File -FilePath C:\temp\processlist.txt
+
+- using format-wide for single-item output 
+
+$ Get-Command -Verb Format | Format-Wide
+
+- controlling formt wide 
+
+$ Get-Command -Verb Format | Format-Wide -Property Noun -Column 3
+
+$ Get-Process -Name iexplore | Format-List
+
+$ Get-Process -Name iexplore | Format-List -Property *
+
+$ Get-Service -Name win* | Format-Table
+
+$ Get-Service -Name win* | Sort-Object StartType | Format-Table -GroupBy StartType
+
+
+
+# Managing current location 
+- Windows PowerShell uses the noun Location to refer to the working directory
+
+$ Get-Location
+
+- Setting your current location 
+
+$ Set-Location -Path C:\Windows
+
+- HKLM:. You can set your location to the HKLM\\Software key in the registry by typing
+
+$ Set-Location -Path .. -PassThru
+
+- Saving and recalling recent locations 
+
+$ Push-Location -Path "Local Settings"
+
+- list all files 
+
+$ Get-ChildItem -Path C:\ -Force
+
+- copy file and folder 
+
+$ Copy-Item -Path C:\boot.ini -Destination C:\boot.bak -Force
+
+- Creating files and folders 
+
+$ New-Item -Path 'C:\temp\New Folder' -ItemType Directory
+
+- Mapping a local folder as a drive 
+
+$ New-PSDrive -Name P -Root $env:ProgramFiles -PSProvider FileSystem
+
+- Enumerating file 
+
+$ Get-ChildItem -Path C:\Windows
+
+    + matching item names 
+    
+    Asterisk (*) matches zero or more occurrences of any character.
+
+    Question mark (?) matches exactly one character.
+
+    Left bracket ([) character and right bracket (]) character surround a set of characters to be matched.
+
+- registry item 
+
+Get-Item -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion |
+  Select-Object -ExpandProperty Property
+
+Get-ItemProperty -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion
+
+- creating new registry entries 
+
+New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion -Name PowerShellPath -PropertyType String -Value $PSHome
+
+
+
+## Creating UI elements 
+- create a graphic input box 
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'Data Entry Form'
+$form.Size = New-Object System.Drawing.Size(300,200)
+$form.StartPosition = 'CenterScreen'
+
+$okButton = New-Object System.Windows.Forms.Button
+$okButton.Location = New-Object System.Drawing.Point(75,120)
+$okButton.Size = New-Object System.Drawing.Size(75,23)
+$okButton.Text = 'OK'
+$okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$form.AcceptButton = $okButton
+$form.Controls.Add($okButton)
+
+$cancelButton = New-Object System.Windows.Forms.Button
+$cancelButton.Location = New-Object System.Drawing.Point(150,120)
+$cancelButton.Size = New-Object System.Drawing.Size(75,23)
+$cancelButton.Text = 'Cancel'
+$cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$form.CancelButton = $cancelButton
+$form.Controls.Add($cancelButton)
+
+$label = New-Object System.Windows.Forms.Label
+$label.Location = New-Object System.Drawing.Point(10,20)
+$label.Size = New-Object System.Drawing.Size(280,20)
+$label.Text = 'Please enter the information in the space below:'
+$form.Controls.Add($label)
+
+$textBox = New-Object System.Windows.Forms.TextBox
+$textBox.Location = New-Object System.Drawing.Point(10,40)
+$textBox.Size = New-Object System.Drawing.Size(260,20)
+$form.Controls.Add($textBox)
+
+$form.Topmost = $true
+
+$form.Add_Shown({$textBox.Select()})
+$result = $form.ShowDialog()
+
+if ($result -eq [System.Windows.Forms.DialogResult]::OK)
+{
+    $x = $textBox.Text
+    $x
+}
+
+
+
+
+# Powershell remoting 
+- JEA, Just Enough Administration
+
+reduce the number of admin 
+limit user 
+understandn what user are doing 
+
+- JEA is available with PowerShell 5.0 and higher.
+
+- Install Windows Management Framework
+
+- check powershell version 
+
+$PSVersionTable.PSVersion
+
+- Enable powershell remoting 
+
+$ Enable-PSRemoting
+
+- Enable powershell module and script block 
+
+Open the Local Group Policy Editor on a workstation or a Group Policy Object in the Group Policy Management Console on an Active Directory Domain Controller
+Navigate to Computer Configuration\Administrative Templates\Windows Components\Windows PowerShell
+Double-click on Turn on Module Logging
+Click Enabled
+In the Options section, click on Show next to Module Names
+Type * in the pop-up window to log commands from all modules.
+Click OK to set the policy
+Double-click on Turn on PowerShell Script Block Logging
+Click Enabled
+Click OK to set the policy
+(On domain-joined machines only) Run gpupdate or wait for Group Policy to process the updated policy and apply the settings
+
+- When creating a JEA endpoint, you need to define one or more role capabilities that describe what someone can do in a JEA session.
+- determine which commands to allow 
+
+identify 
+update 
+restrict 
+create 
+test 
+
+- create a role capability file 
+
+$ New-PSRoleCapabilityFile -Path .\MyFirstJEARole.psrc
+
+PowerShell help documentation contains several examples of how you can configure the file.
+
+- allowing powershell cmdlets and functions 
+VisibleCmdlets = 'Restart-Computer', 'Get-NetIPAddress'
+
+VisibleCmdlets = @{ Name = 'Restart-Service'; Parameters = @{ Name = 'Name'; ValidateSet = 'Dns', 'Spooler' }},
+                 @{ Name = 'Start-Website'; Parameters = @{ Name = 'Name'; ValidatePattern = 'HR_*' }}
+
+'My-Func' or @{ Name = 'My-Func' } 	Allows the user to run My-Func without any restrictions on the parameters.
+'MyModule\My-Func' 	Allows the user to run My-Func from the module MyModule without any restrictions on the parameters.
+'My-*' 	Allows the user to run any cmdlet or function with the verb My.
+'*-Func' 	Allows the user to run any cmdlet or function with the noun Func.
+@{ Name = 'My-Func'; Parameters = @{ Name = 'Param1'}, @{ Name = 'Param2' }} 	Allows the user to run My-Func with the Param1 and Param2 parameters. Any value can be supplied to the parameters.
+@{ Name = 'My-Func'; Parameters = @{ Name = 'Param1'; ValidatePattern = 'contoso.*' }} 	Allows the user to run My-Func with the Param1 parameter. Any value starting with "contoso" can be supplied to the parameter.
+
+- allowing external commands and powershell scripts 
+
+VisibleExternalCommands = 'C:\Windows\System32\whoami.exe', 'C:\Program Files\Contoso\Scripts\UpdateITSoftware.ps1'
+
+- allow access to powershell providers 
+
+VisibleProviders = 'Registry'
+
+- add custom function at function field 
+
+VisibleFunctions = 'Get-TopProcess'
+
+FunctionDefinitions = @{
+    Name = 'Get-TopProcess'
+
+    ScriptBlock = {
+        param($Count = 10)
+
+        Get-Process | Sort-Object -Property CPU -Descending |
+            Microsoft.PowerShell.Utility\Select-Object -First $Count
+    }
+}
+
+- JEA session configuration 
+
+$ New-PSSessionConfigurationFile -SessionType RestrictedRemoteServer -Path .\MyJEAEndpoint.pssc
+
+    + default commands 
+    
+default commands (and aliases):
+
+    Clear-Host (cls, clear)
+    Exit-PSSession (exsn, exit)
+    Get-Command (gcm)
+    Get-FormatData
+    Get-Help
+    Measure-Object (measure)
+    Out-Default
+    Select-Object (select)
+
+
+- Local virtual accounts are useful when all roles defined for the JEA endpoint are used to manage the local machine
+
+# Setting the session to use a virtual account that only belongs to the NetworkOperator and NetworkAuditor local groups
+RunAsVirtualAccount = $true
+RunAsVirtualAccountGroups = 'NetworkOperator', 'NetworkAuditor'
+
+
+# with the sAMAccountName of 'MyJEAGMSA'
+GroupManagedServiceAccount = 'Domain\MyJEAGMSA'
+
+- session transcripts, automatically record transcripts of user's sessions 
+
+automatic transcription in the session configuration file, provide a path to a folder where the transcripts should be stored.
+
+TranscriptDirectory = 'C:\ProgramData\JEAConfiguration\Transcripts'
+
+- user drive 
+
+# Enables the user drive with a per-user limit of 500MB (524288000 bytes)
+MountUserDrive = $true
+UserDriveMaximumSize = 524288000
+
+- role definition 
+
+RoleDefinitions = @{
+    'CONTOSO\JEA_DNS_ADMINS'    = @{ RoleCapabilities = 'DnsAdmin', 'DnsOperator', 'DnsAuditor' }
+    'CONTOSO\JEA_DNS_OPERATORS' = @{ RoleCapabilities = 'DnsOperator', 'DnsAuditor' }
+    'CONTOSO\JEA_DNS_AUDITORS'  = @{ RoleCapabilities = 'DnsAuditor' }
+}
+
+
+JEA uses the $env:PSModulePath environment variable to determine which paths to scan for role capability files. 
+
+- conditional access rules, All users and groups included in the RoleDefinitions field are automatically granted access to JEA endpoints. 
+
+# Example 1: Connecting users must belong to a security group called "elevated-jea"
+RequiredGroups = @{ And = 'elevated-jea' }
+
+# Example 2: Connecting users must have signed on with 2 factor authentication or a smart card
+# The 2 factor authentication group name is "2FA-logon" and the smart card group name is "smartcard-logon"
+RequiredGroups = @{ Or = '2FA-logon', 'smartcard-logon' }
+
+- test session configuration file 
+
+$ Test-PSSessionConfigurationFile
+    [-Path] <String>
+    [<CommonParameters>]
+
+- sample configuration file 
+
+$roles = @{
+    'CONTOSO\JEA_DNS_ADMINS'    = @{ RoleCapabilities = 'DnsAdmin', 'DnsOperator', 'DnsAuditor' }
+    'CONTOSO\JEA_DNS_OPERATORS' = @{ RoleCapabilities = 'DnsOperator', 'DnsAuditor' }
+    'CONTOSO\JEA_DNS_AUDITORS'  = @{ RoleCapabilities = 'DnsAuditor' }
+}
+
+New-PSSessionConfigurationFile -SessionType RestrictedRemoteServer -Path .\JEAConfig.pssc -RunAsVirtualAccount -TranscriptDirectory 'C:\ProgramData\JEAConfiguration\Transcripts' -RoleDefinitions $roles -RequiredGroups @{ Or = '2FA-logon', 'smartcard-logon' }
+Test-PSSessionConfigurationFile -Path .\JEAConfig.pssc # should yield True
+
+- multi-machine configuration with DSC 
+
+Role Definitions
+Virtual account groups
+Group-managed service account name
+Transcript directory
+User drive
+Conditional access rules
+Startup scripts for the JEA session
+
+When deploying JEA on multiple machines, the simplest deployment model uses the JEA Desired State Configuration (DSC) resource to quickly and consistently deploy JEA
+
+JustEnoughAdministration DSC resource defines the session configuration file and the File resource copies 
+
+```
+Configuration JEAMaintenance
+{
+    Import-DscResource -Module JustEnoughAdministration, PSDesiredStateConfiguration
+
+    File MaintenanceModule
+    {
+        SourcePath = "\\myfileshare\JEA\ContosoMaintenance"
+        DestinationPath = "C:\Program Files\WindowsPowerShell\Modules\ContosoMaintenance"
+        Checksum = "SHA-256"
+        Ensure = "Present"
+        Type = "Directory"
+        Recurse = $true
+    }
+
+    JeaEndpoint JEAMaintenanceEndpoint
+    {
+        EndpointName = "JEAMaintenance"
+        RoleDefinitions = "@{ 'CONTOSO\JEAMaintenanceAuditors' = @{ RoleCapabilities = 'GeneralServerMaintenance-Audit' }; 'CONTOSO\JEAMaintenanceAdmins' = @{ RoleCapabilities = 'GeneralServerMaintenance-Audit', 'GeneralServerMaintenance-Admin' } }"
+        TranscriptDirectory = 'C:\ProgramData\JEAConfiguration\Transcripts'
+        DependsOn = '[File]MaintenanceModule'
+    }
+}
+```
+
+- using JEA 
+
+```
+$nonAdminCred = Get-Credential
+Enter-PSSession -ComputerName localhost -ConfigurationName JEAMaintenance -Credential $nonAdminCred
+
+    + Implicit remoting works by importing cmdlets from an existing PowerShell session. 
+    
+# Create a new PSSession to your JEA endpoint
+$jeasession = New-PSSession -ComputerName 'SERVER01' -ConfigurationName 'JEAMaintenance'
+
+# Import the entire PSSession and prefix each imported cmdlet with "JEA"
+Import-PSSession -Session $jeasession -Prefix 'JEA'
+
+# Invoke "Get-Command" on the remote JEA endpoint using the proxy cmdlet
+Get-JEACommand
+
+    + Some systems may not be able to import an entire JEA session due to constraints in the default JEA cmdlets. To get around this, only import the commands you need 
+
+# Create a new PSSession to your JEA endpoint
+$jeasession = New-PSSession -ComputerName 'SERVER01' -ConfigurationName 'JEAMaintenance'
+
+# Get a list of all the commands on the JEA endpoint
+$commands = Invoke-Command -Session $jeasession -ScriptBlock { Get-Command }
+
+# Filter out the default cmdlets
+$jeaDefaultCmdlets = 'Clear-Host', 'Exit-PSSession', 'Get-Command', 'Get-FormatData', 'Get-Help', 'Measure-Object', 'Out-Default', 'Select-Object'
+$filteredCommands = $commands.Name | Where-Object { $jeaDefaultCmdlets -notcontains $_ }
+
+# Import only commands explicitly added in role capabilities and prefix each imported cmdlet with "JEA"
+Import-PSSession -Session $jeasession -Prefix 'JEA' -CommandName $filteredCommands
+```
+
+
+- using JEA programmatically 
+    + powershell 
+    
+Invoke-Command -ComputerName 'SERVER01' -ConfigurationName 'JEAMaintenance' -ScriptBlock { Get-Process; Get-Service }
+
+    + c# 
+// using System.Management.Automation;
+var computerName = "SERVER01";
+var configName   = "JEAMaintenance";
+// See https://docs.microsoft.com/dotnet/api/system.management.automation.pscredential
+var creds        = // create a PSCredential object here
+
+WSManConnectionInfo connectionInfo = new WSManConnectionInfo(
+    false,                 // Use SSL
+    computerName,          // Computer name
+    5985,                  // WSMan Port
+    "/wsman",              // WSMan Path
+                           // Connection URI with config name
+    string.Format(CultureInfo.InvariantCulture, "http://schemas.microsoft.com/powershell/{0}", configName),
+    creds);                // Credentials
+
+// Now, use the connection info to create a runspace where you can run the commands
+using (Runspace runspace = RunspaceFactory.CreateRunspace(connectionInfo))
+{
+    // Open the runspace
+    runspace.Open();
+
+    using (PowerShell ps = PowerShell.Create())
+    {
+        // Set the PowerShell object to use the JEA runspace
+        ps.Runspace = runspace;
+
+        // Now you can add and invoke commands
+        ps.AddCommand("Get-Command");
+        foreach (var result in ps.Invoke())
+        {
+            Console.WriteLine(result);
+        }
+    }
+
+    // Close the runspace
+    runspace.Close();
+}
+
+    + Hyper-V in Windows 10 and Windows Server 2016 offers PowerShell Direct
+```
+# Entering a JEA session using PowerShell Direct when the VM name is unique
+Enter-PSSession -VMName 'SQL01' -ConfigurationName 'NICMaintenance' -Credential 'localhost\JEAformyHoster'
+```
+
+- security considerations 
+
+As with regular PowerShell remoting endpoints, each JEA endpoint has a separate access control list (ACL) that controls who can authenticate with the JEA endpoint.
+
+```
+$roles = @{ 'CONTOSO\JEA_Lev1' = 'Lev1Role'; 'CONTOSO\JEA_Lev2' = 'Lev2Role' }
+New-PSSessionConfigurationFile -Path '.\jea.pssc' -SessionType RestrictedRemoteServer -RoleDefinitions $roles -RunAsVirtualAccount
+Register-PSSessionConfiguration -Path '.\jea.pssc' -Name 'MyJEAEndpoint'
+```
+
+- auditing and reporting on JEA 
+```
+# Filter for sessions that are configured as 'RestrictedRemoteServer' to find JEA-like session configurations
+Get-PSSessionConfiguration | Where-Object { $_.SessionType -eq 'RestrictedRemoteServer' }
+```
+- find available role capabilities on the machine 
+
+function Find-LocalRoleCapability {
+    $results = @()
+
+    # Find modules with a "RoleCapabilities" subfolder and add any PSRC files to the result set
+    Get-Module -ListAvailable | ForEach-Object {
+        $psrcpath = Join-Path -Path $_.ModuleBase -ChildPath 'RoleCapabilities'
+        if (Test-Path $psrcpath) {
+            $results += Get-ChildItem -Path $psrcpath -Filter *.psrc
+        }
+    }
+
+    # Format the results nicely to make it easier to read
+    $results | Select-Object @{ Name = 'Name'; Expression = { $_.Name.TrimEnd('.psrc') }}, @{
+        Name = 'Path'; Expression = { $_.FullName }
+    } | Sort-Object Name
+}
+
+- check effective rights for a specific user 
+
+$ Get-PSSessionCapability -ConfigurationName 'JEAMaintenance' -Username 'CONTOSO\Alice'
+
+- run remote command 
+
+cmdlets include:
+
+    Restart-Computer
+    Test-Connection
+    Clear-EventLog
+    Get-EventLog
+    Get-HotFix
+    Get-Process
+    Get-Service
+    Set-Service
+    Get-WinEvent
+    Get-WmiObject
+
+    + find cmdlets in your session 
+    
+Get-Command | where { $_.parameters.keys -contains "ComputerName" -and $_.parameters.keys -notcontains "Session"}
+
+- remoting without configuration 
+
+
+    Restart-Computer
+    Test-Connection
+    Clear-EventLog
+    Get-EventLog
+    Get-HotFix
+    Get-Process
+    Get-Service
+    Set-Service
+    Get-WinEvent
+    Get-WmiObject
+
+- start an interactive session 
+
+$ Enter-PSSession Server01
+
+- run a remote command 
+
+$ Invoke-Command -ComputerName Server01, Server02 -ScriptBlock {Get-UICulture}
+$ Invoke-Command -ComputerName Server01, Server02 -FilePath c:\Scripts\DiskCollect.ps1
+
+- establish a persistent connection 
+
+$ $s = New-PSSession -ComputerName Server01, Server02
+
+$ Invoke-Command -Session $s {$h = Get-HotFix}
+
+- remote over ssh 
+
+[-HostName <string>]  [-UserName <string>]  [-KeyFilePath <string>]
+
+    + install ssh service on windows 
+$ (Get-Command New-PSSession).ParameterSets.Name
+
+    + Install the latest Win32 OpenSSH. For installation instructions, see Getting started with OpenSSH.
+    
+    + create ssh subsystem 
+    
+    $ Subsystem powershell c:/progra~1/powershell/7/pwsh.exe -sshs -NoLogo
+    
+    $ Get-CimInstance Win32_Directory -Filter 'Name="C:\\Program Files"' |
+  Select-Object EightDotThreeFileName
+  
+    $ Restart-Service sshd
+
+    + ssh service can also be installed on ubuntu and mac 
+    
+- ws-management(WSMan) remoting in powershell 
+
+The PowerShell package for Windows includes a WinRM plug-in (pwrshplugin.dll) and an installation script (Install-PowerShellRemoting.ps1) in $PSHome. These files enable PowerShell to accept incoming PowerShell remote connections
+
+    Creates a directory for the plug-in within $env:windir\System32\PowerShell
+    Copies pwrshplugin.dll to that location
+    Generates a configuration file
+    Registers that plug-in with WinRM
+
+    + executed by instance of powershell 
+    
+Install-PowerShellRemoting.ps1
+
+executed by another isntance of powershell on behalf of the instance 
+<path to powershell>\Install-PowerShellRemoting.ps1 -PowerShellHome "<absolute path to the instance's $PSHOME>"
+
+- connect to the new endpoint 
+
+New-PSSession ... -ConfigurationName "powershell.6.0.0"
+Enter-PSSession ... -ConfigurationName "powershell.6.0.0"
+
+- WinRM security 
+
+PowerShell Remoting uses Windows Remote Management (WinRM), which is the Microsoft implementation of the Web Services for Management (WS-Management) protocol
+
+PowerShell Remoting (and WinRM) listen on the following ports:
+
+    HTTP: 5985
+    HTTPS: 5986
+
+Regardless of the transport protocol used (HTTP or HTTPS), WinRM always encrypts all PowerShell remoting communication after initial authentication.
+
+- making the second hop in powershell remoting 
+
+CredSSP
+
+You can use the Credential Security Support Provider (CredSSP) for authentication. CredSSP caches credentials on the remote server (ServerB), so using it opens you up to credential theft attacks.
+
+Kerberos 
+
+Using resource-based Kerberos constrained delegation (introduced in Windows Server 2012), you configure credential delegation on the server object where resources reside
+
+
+```
+Add-WindowsFeature RSAT-AD-PowerShell
+Import-Module ActiveDirectory
+Get-Command -ParameterName PrincipalsAllowedToDelegateToAccount
+```
+
+Invoke-Command -ComputerName $ServerB.Name -Credential $cred -ScriptBlock {
+    klist purge -li 0x3e7
+}
+
+- multiple service delegate credentials 
+
+PrincipalsAllowedToDelegateToAccount parameter on ServerC to an array:
+```
+# Set up variables for each server
+$ServerB1 = Get-ADComputer -Identity ServerB1
+$ServerB2 = Get-ADComputer -Identity ServerB2
+$ServerB3 = Get-ADComputer -Identity ServerB3
+$ServerC  = Get-ADComputer -Identity ServerC
+
+$servers = @(
+    $ServerB1,
+    $ServerB2,
+    $ServerB3
+)
+
+# Grant resource-based Kerberos constrained delegation
+Set-ADComputer -Identity $ServerC -PrincipalsAllowedToDelegateToAccount $servers
+```
+
+- powershell security features 
+
+The Windows Antimalware Scan Interface (AMSI) is an API that allows application actions to be passed to an antimalware scanner,
+
+Software Bill of Materials (SBOM)
+
+Beginning with PowerShell 7.2, all install packages contain a Software Bill of Materials (SBOM). The SBOM is found at $PSHOME/_manifest/spdx_2.2/manifest.spdx.json
+
+
+# Additional resource 
+- powershell sdk 
+https://docs.microsoft.com/en-us/learn/browse/?terms=PowerShell
+
+
+# Powershell ddiferences on non-windows platforms 
+- Windows PowerShell - PowerShell built on .NET Framework. Windows PowerShell ships only on Windows and requires the complete Framework. 
+
+There is no Unix-style job-control support in PowerShell on Linux or macOS. The fg and bg commands are not available. You can use PowerShell jobs that do work across all platforms.
+
+- not avaliable non-Windows platforms, PowerShell includes the following modules:
+
+    Microsoft.PowerShell.Archive
+    Microsoft.PowerShell.Core
+    Microsoft.PowerShell.Host
+    Microsoft.PowerShell.Management
+    Microsoft.PowerShell.Security
+    Microsoft.PowerShell.Utility
+    PackageManagement
+    PowerShellGet
+    PSDesiredStateConfiguration
+    PSReadLine
+    ThreadJob
+
+
+# Gallery 
+- searching for packages 
+
+$ dsc azure sql
+
+- best practice to pubish, adopted by others.
+
+    Use PSScriptAnalyzer
+    Include documentation and examples
+    Be responsive to feedback
+    Provide modules rather than scripts
+    Provide links to a project site
+    Tag your package with the compatible PSEdition(s) and platforms
+    Include tests with your modules
+    Include and/or link to license terms
+    Sign your code
+    Follow SemVer guidelines for versioning
+    Use common tags, as documented in Common PowerShell Gallery tags
+    Test publishing using a local repository
+    Use PowerShellGet to publish
+
+
+- poratble modules 
+
+The .NET Portability Analyzer (aka APIPort)
+
+To port modules written for Windows PowerShell to work with PowerShell Core, start with the .NET Portability Analyzer
+
+- dotnet new -i Microsoft.PowerShell.Standard.Module.Template
+
+- PlatyPS is an open-source tool that started as a hackathon project to make the creation and maintenance of MAML easier. PlatyPS documents the syntax of parameter sets and the individual parameters
+
+Install-Module platyps -Force
+Import-Module platyps
+
+
+- updateable help package, create updateable help include:
+
+    Find an internet site to host your help files
+    Add a HelpInfoURI key to your module manifest
+    Create a HelpInfo XML file
+    Create CAB files
+    Upload your files
+
+    + The New-ExternalHelpCab cmdlet creates ZIP and CAB files containing the MAML and about_*.help.txt files you compiled. CAB files are compatible with all versions
+
+```
+$helpCabParameters = @{
+    CabFilesFolder = $MamlOutputFolder
+    LandingPagePath = $LandingPage
+    OutputFolder = $CabOutputFolder
+}
+New-ExternalHelpCab @helpCabParameters
+
+    +  Using a tool like Pandoc, you can convert your Markdown help files to many different document formats
+```
+
+- PowerShell SecretManagement module provides a convenient way for a user to store and retrieve secrets
+
+
+- PSScriptAnalyzer module 
+
+Installing PSScriptAnalyzer
+Install-Module -Name PSScriptAnalyzer -Force
+
+Invoke-ScriptAnalyzer -ScriptDefinition '"b" = "b"; function eliminate-file () { }'
+
+//suppress warning 
+
+function SuppressMe()
+{
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSProvideCommentHelp', '', Justification='Just an example')]
+    param()
+
+    Write-Verbose -Message "I'm making a difference!"
+
+}
+
+built-in presets can be used to analyze scripts 
+$ Invoke-ScriptAnalyzer -Path /path/to/module/ -Settings PSGallery -Recurse
+
+//default set of rules 
+# PSScriptAnalyzerSettings.psd1
+@{
+    Severity=@('Error','Warning')
+    ExcludeRules=@('PSAvoidUsingCmdletAliases',
+                'PSAvoidUsingWriteHost')
+}
+
+implicit 
+$ Invoke-ScriptAnalyzer -Path "C:\path\to\project" -Recurse
+
+    + custom rules 
+    
+    which implicitly uses the module manifest, or to the module's script file (.psm1). The module must export the custom rule functions using Export-ModuleMember for them to be available to PSScriptAnalyzer.
+
+    @{
+        CustomRulePath      = @(
+            '.\output\RequiredModules\DscResource.AnalyzerRules'
+            '.\tests\QA\AnalyzerRules\SqlServerDsc.AnalyzerRules.psm1'
+        )
+
+        IncludeRules        = @(
+            'Measure-*'
+        )
+    }
+
+    + ScriptAnalyzer as a .net library 
+using Microsoft.Windows.PowerShell.ScriptAnalyzer;
+
+public void Initialize(System.Management.Automation.Runspaces.Runspace runspace,
+Microsoft.Windows.PowerShell.ScriptAnalyzer.IOutputWriter outputWriter,
+[string[] customizedRulePath = null],
+[string[] includeRuleNames = null],
+[string[] excludeRuleNames = null],
+[string[] severity = null],
+[bool suppressedOnly = false],
+[string profile = null])
+
+public System.Collections.Generic.IEnumerable<DiagnosticRecord> AnalyzePath(string path,
+    [bool searchRecursively = false])
+
+public System.Collections.Generic.IEnumerable<IRule> GetRule(string[] moduleNames, string[] ruleNames)
+
+    + secret management 
+PowerShell SecretManagement module provides a convenient way for a user to store and retrieve secrets. The secrets are stored in SecretManagement extension vaults.
+
+
+
+
+
+
+# Reference 
+- Crescendo is a development accelerator enabling you to rapidly build PowerShell cmdlets that leverage existing command-line tools. C
+
+Export-CrescendoModule 	
+
+Creates a module from PowerShell Crescendo JSON configuration files
+Export-Schema 	
+
+Exports the JSON schema for command configuration as a PowerShell object.
+Import-CommandConfiguration 	
+
+Import a PowerShell Crescendo json file.
+New-CrescendoCommand 	
+
+Creates a PowerShell command object.
+New-ExampleInfo 	
+
+Creates a PowerShell object representing an example used in a Crescendo command object.
+New-OutputHandler 	
+
+Creates a PowerShell object representing a Crescendo output handler.
+New-ParameterInfo 	
+
+Creates a PowerShell object representing a Crescendo Parameter definition.
+New-UsageInfo 	
+
+Creates a PowerShell object representing a Crescendo Usage definition.
+Test-IsCrescendoCommand 	
+
+Tests a cmdlet to see if it was created by Crescendo.
+
+- PowerShell SecretManagement module provides a convenient way for a user to store and retrieve secrets. 
+
+Get-Secret 	
+
+Finds and returns a secret by name from registered vaults.
+Get-SecretInfo 	
+
+Finds and returns secret metadata information of one or more secrets.
+Get-SecretVault 	
+
+Finds and returns registered vault information.
+Register-SecretVault 	
+
+Registers a SecretManagement extension vault module for the current user.
+Remove-Secret 	
+
+Removes a secret from a specified registered extension vault.
+Set-Secret 	
+
+Adds a secret to a SecretManagement registered vault.
+Set-SecretInfo 	
+
+Adds or replaces additional secret metadata to a secret currently stored in a vault.
+Set-SecretVaultDefault 	
+
+Sets the provided vault name as the default vault for the current user.
+Test-SecretVault 	
+
+Runs an extension vault self test.
+Unregister-SecretVault 	
+
+Un-registers an extension vault from SecretManagement for the current user.
+
+- securet store 
+
+Local secure store extension vault for Microsoft.PowerShell.SecretManagement module.
+
+Get-SecretStoreConfiguration 	
+
+Returns SecretStore configuration information.
+Reset-SecretStore 	
+
+Resets the SecretStore by deleting all secret data and configuring the store with default options.
+Set-SecretStoreConfiguration 	
+
+Sets SecretStore configuration properties.
+Set-SecretStorePassword 	
+
+Replaces the current SecretStore password with a new one.
+Unlock-SecretStore 	
+
+Unlocks SecretStore with the provided password.
+
+- platyPS, The platyPS module allows you to create PowerShell External Help in Markdown.
+
+Get-HelpPreview 	
+
+Displays your generated external help as Get-Help output.
+Get-MarkdownMetadata 	
+
+Gets metadata from the header of a markdown file.
+Merge-MarkdownHelp 	
+
+Merge multiple markdown versions of the same cmdlet into a single markdown file.
+New-ExternalHelp 	
+
+Creates external help file based on markdown supported by PlatyPS.
+New-ExternalHelpCab 	
+
+Generates a .cab file.
+New-MarkdownAboutHelp 	
+
+Generates a new About Topic MD file from template.
+New-MarkdownHelp 	
+
+Creates help in markdown format.
+New-YamlHelp 	
+
+Converts Markdown help into YAML to be read easily by external tools
+Update-MarkdownHelp 	
+
+Update PlatyPS markdown help files.
+Update-MarkdownHelpModule 	
+
+Update all files in a markdown help module folder.
+
+- script analyzer 
+
+PSScriptAnalyzer is a static code checker for PowerShell modules and scripts. PSScriptAnalyzer checks the quality of PowerShell code by running a set of rules.
+
+Get-ScriptAnalyzerRule 	
+
+Gets the script analyzer rules on the local computer.
+Invoke-Formatter 	
+
+Formats a script text based on the input settings or default settings.
+Invoke-ScriptAnalyzer 	
+
+Evaluates a script or module based on selected best practice rules
+
+
+# Script development 
+- performance consideration 
+$sb = [System.Text.StringBuilder]::new()
+Measure-Command {
+      foreach( $i in 1..10000)
+      {
+          [void]$sb.Append("Iteration $i`n")
+      }
+      $sb.ToString()
+  } | Select-Object TotalMilliseconds
+  
+- encoding setting in vscode 
+
+
+utf8: [UTF-8] without BOM
+utf8bom: [UTF-8] with BOM
+utf16le: Little endian [UTF-16]
+utf16be: Big endian [UTF-16]
+windows1252: [Windows-1252]
+
+"files.autoGuessEncoding": true
+
+"[powershell]": {
+    "files.encoding": "utf8bom",
+    "files.autoGuessEncoding": true
+}
+
+    + In PowerShell 6+, the default encoding is UTF-8 without BOM on all platforms.
+    
+    + In Windows PowerShell, the default encoding is usually Windows-1252, an extension of latin-1, also known as ISO 8859-1.
+    
+    + check default encoding with 
+    
+[psobject].Assembly.GetTypes() | Where-Object { $_.Name -eq 'ClrFacade'} |
+  ForEach-Object {
+    $_.GetMethod('GetDefaultEncoding', [System.Reflection.BindingFlags]'nonpublic,static').Invoke($null, @())
+  }
+    
+- existing scripts 
+
+Get-ChildItem *.ps1 -Recurse | ForEach-Object {
+    $content = Get-Content -Path $_
+    Set-Content -Path $_.Fullname -Value $content -Encoding UTF8 -PassThru -Force
+}
+
+- create a build tasks for vscode 
+
+command palette > configure default build tasks > create tasks.json > choose .net core 
+
+{
+    "label": "build",
+    "command": "dotnet",
+    "type": "shell",
+    "args": [
+        "build",
+        "${workspaceFolder}/myModule",
+        // Ask dotnet build to generate full paths for file names.
+        "/property:GenerateFullPaths=true",
+        // Do not generate summary otherwise it leads to duplicate errors in Problems panel
+        "/consoleloggerparameters:NoSummary",
+    ],
+    "group": "build",
+    "presentation": {
+        "reveal": "silent"
+    },
+    "problemMatcher": "$msCompile"
+}
+
+- configure launch.json 
+
+{
+     "name": "PowerShell cmdlets: pwsh",
+     "type": "coreclr",
+     "request": "launch",
+     "preLaunchTask": "build",
+     "program": "pwsh",
+     "args": [
+         "-NoExit",
+         "-NoProfile",
+         "-Command",
+         "Import-Module ${workspaceFolder}/myModule/bin/Debug/netstandard2.0/myModule.dll",
+     ],
+     "cwd": "${workspaceFolder}",
+     "stopAtEntry": false,
+     "console": "integratedTerminal"
+}
+
+{
+     "name": "PowerShell cmdlets: powershell",
+     "type": "clr",
+     "request": "launch",
+     "preLaunchTask": "build",
+     "program": "powershell",
+     "args": [
+         "-NoExit",
+         "-NoProfile",
+         "-Command",
+         "Import-Module ${workspaceFolder}/myModule/bin/Debug/netstandard2.0/myModule.dll",
+     ],
+     "cwd": "${workspaceFolder}",
+     "stopAtEntry": false,
+     "console": "integratedTerminal"
+ }
+ 
+- scripting performance considerations 
+ 
+    + suppressing output 
+ $null = $arrayList.Add($item)
+[void]$arrayList.Add($item)
+
+$arrayList.Add($item) > $null
+
+    + array additioni 
+    
+$results = @()
+$results += Do-Something
+$results += Do-SomethingElse
+$results
+
+    + string addition 
+    
+$string = ''
+Measure-Command {
+      foreach( $i in 1..10000)
+      {
+          $string += "Iteration $i`n"
+      }
+      $string
+  } | Select-Object TotalMilliseconds
+
+TotalMilliseconds
+-----------------
+         641.8168
+         
+    + processing large files 
+    
+$ Get-Content $path | Where-Object { $_.Length -gt 10 }
+         
+    + avoid write-host 
+that [Console]::WriteLine() is only a suitable alternative for specific hosts like pwsh.exe, powershell.exe
+
+    + avoid repeated calls to a function 
+```
+$ranGen = New-Object System.Random
+$RepeatCount = 10000
+
+'Basic for-loop = {0}ms' -f (Measure-Command -Expression {
+    for ($i = 0; $i -lt $RepeatCount; $i++) {
+        $Null = $ranGen.Next()
+    }
+}).TotalMilliseconds
+```
+
+    + module manifest 
+    
+    In the module manifest, do not use wildcards in the AliasesToExport, CmdletsToExport, and FunctionsToExport entries.
+
+    @{
+        FunctionsToExport = 'Format-Hex', 'Format-Octal'
+        CmdletsToExport = @()  # Specify an empty array, not $null
+        AliasesToExport = @()  # Also ensure all three entries are present
+    }
+
+- write portable module 
+
+$ dotnet new -i Microsoft.PowerShell.Standard.Module.Template
+
+    + test module 
+$ Import-Module .\bin\Debug\netstandard2.0\myModule.dll
+$ Test-SampleCmdlet -?
+$ Test-SampleCmdlet -FavoriteNumber 7 -FavoritePet Cat
+
+- .NET Standard is a formal specification of .NET APIs that are available in all .NET implementations.
+    + binary module setup 
+    $ dotnet --version
+    $ Set-Location 'src'
+    $ dotnet new classlib --name $module
+    $ Move-Item -Path .\$module\* -Destination .\
+    $ Remove-Item $module -Recurse
+    $ dotnet new globaljson --sdk-version 2.1.0
+    $ dotnet add package PowerShellStandard.Library --version 7.0.0-preview.1
+    
+    
+
+    + build a standard library binary module 
+    
+using System;
+using System.Management.Automation;
+
+namespace MyModule
+{
+    [Cmdlet( VerbsDiagnostic.Resolve , "MyCmdlet")]
+    public class ResolveMyCmdletCommand : PSCmdlet
+    {
+        [Parameter(Position=0)]
+        public Object InputObject { get; set; }
+
+        protected override void EndProcessing()
+        {
+            this.WriteObject(this.InputObject);
+            base.EndProcessing();
+        }
+    }
+}
+
+$ Rename-Item .\Class1.cs .\ResolveMyCmdletCommand.cs
+$ dotnet build
+$ Import-Module .\bin\Debug\netstandard2.0\$module.dll
+$ Get-Command -Module $module
+
+    + add module manifest 
+```
+$manifestSplat = @{
+    Path              = ".\$module\$module.psd1"
+    Author            = 'Kevin Marquette'
+    NestedModules     = @('bin\MyModule.dll')
+    RootModule        = "$module.psm1"
+    FunctionsToExport = @('Resolve-MyCmdlet')
+}
+New-ModuleManifest @manifestSplat
+```
+
+$ Set-Content -Value '' -Path ".\$module\$module.psm1"
+
+    + build a full module 
+```
+$module = 'MyModule'
+Push-Location $PSScriptRoot
+
+dotnet build $PSScriptRoot\src -o $PSScriptRoot\output\$module\bin
+Copy-Item "$PSScriptRoot\$module\*" "$PSScriptRoot\output\$module" -Recurse -Force
+
+Import-Module "$PSScriptRoot\Output\$module\$module.psd1"
+Invoke-Pester "$PSScriptRoot\Tests"
+```
+
+    + import module 
+$ Import-Module ".\Output\$module\$module.psd1"
+
+using the template 
+```
+dotnet new -i Microsoft.PowerShell.Standard.Module.Template
+dotnet new psmodule
+dotnet build
+Import-Module "bin\Debug\netstandard2.0\$module.dll"
+Get-Module $module
+```
+
+- command line predictor 
+
+A predictor is a PowerShell binary module. The module must implement the System.Management.Automation.Subsystem.Prediction.ICommandPredictor interface
+
+$ dotnet new classlib --name SamplePredictor
+
+add logic 
+
+$ donet build
+
+$ Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+$ Import-Module .\bin\Debug\net6.0\SamplePredictor.dll
+
+
+# Powershell language specification 
+- Reference 
+ https://docs.microsoft.com/en-us/powershell/scripting/lang-spec/chapter-01?view=powershell-7.2
