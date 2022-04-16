@@ -1,0 +1,221 @@
+Learning OpenCV 3=Adrian Kaehler;Note=Erxin
+
+# Introduction
+- OpenCV modules 
+
+the header files for each OpenCV module:
+
+#include "opencv2/core/core_c.h"
+Old C data structures and arithmetic routines
+
+#include "opencv2/core/core.hpp"
+New C++ data structures and arithmetic routines
+
+#include "opencv2/flann/miniflann.hpp"
+Approximate nearest neighbor matching functions
+
+#include "opencv2/imgproc/imgproc_c.h"
+Old C image processing functions
+
+#include "opencv2/imgproc/imgproc.hpp"
+New C++ image processing functions
+
+#include "opencv2/video/photo.hpp"
+Algorithms specific to handling and restoring photographs
+
+#include "opencv2/video/video.hpp"
+Video tracking and background segmentation routines
+
+#include "opencv2/features2d/features2d.hpp"
+Two-dimensional feature tracking support
+
+#include "opencv2/objdetect/objdetect.hpp"
+Cascade face detector; latent SVM; HoG; planar patch detector
+
+#include "opencv2/calib3d/calib3d.hpp"
+Calibration and stereo
+
+#include "opencv2/ml/ml.hpp"
+Machine learning: clustering, pattern recognition
+
+#include "opencv2/highgui/highgui_c.h"
+Old C image display, sliders, mouse interaction, I/O
+
+#include "opencv2/highgui/highgui.hpp"
+New C++ image display, sliders, buttons, mouse, I/O
+
+#include "opencv2/contrib/contrib.hpp"
+User-contributed code: flesh detection, fuzzy mean-shift tracking, spin images, self-similar features
+
+- display a picture 
+
+HighGUI, which is included in the OpenCV package
+
+```
+#include <opencv2/opencv.hpp> //Include file for every supported OpenCV function
+
+int main( int argc, char** argv ) {
+  cv::Mat img = cv::imread(argv[1],-1);
+  if( img.empty() ) return -1;
+  cv::namedWindow( "Example 2-1", cv::WINDOW_AUTOSIZE );
+  cv::imshow( "Example 2-1", img );
+  cv::waitKey( 0 );
+  cv::destroyWindow( "Example 2-1" );
+  return 0;
+}
+```
+
+using namespace directive 
+```
+#include "opencv2/highgui/highgui.hpp"
+
+using namespace cv;
+
+int main( int argc, char** argv ) {
+
+  Mat img = imread( argv[1], -1 );
+  if( img.empty() ) return -1;
+
+  namedWindow( "Example 2-2", cv::WINDOW_AUTOSIZE );
+  imshow( "Example 2-2", img );
+  waitKey( 0 );
+
+  destroyWindow( "Example 2-2" );
+
+}
+```
+
+- playing a video 
+
+```
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+
+using namespace std;
+
+int main( int argc, char** argv ) {
+
+  cv::namedWindow( "Example 2-3", cv::WINDOW_AUTOSIZE );
+  cv::VideoCapture cap;
+  cap.open( string(argv[1]) );
+
+  cv::Mat frame;
+  for(;;) {
+    cap >> frame;
+    if( frame.empty() ) break;             // Ran out of film
+    cv::imshow( "Example 2-3", frame );
+    if( (char) cv::waitKey(33) >= 0 ) break;
+  }
+
+  return 0;
+}
+```
+
+- basic viewer window for moving around within the video file 
+
+```
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <iostream>
+#include <fstream>
+
+using namespace std;
+
+int g_slider_position = 0;
+int g_run = 1, g_dontset = 0; //start out in single step mode
+cv::VideoCapture g_cap;
+
+void onTrackbarSlide( int pos, void *) {
+
+  g_cap.set( cv::CAP_PROP_POS_FRAMES, pos );
+
+  if( !g_dontset )
+    g_run = 1;
+  g_dontset = 0;
+
+}
+
+int main( int argc, char** argv ) {
+
+  cv::namedWindow( "Example 2-4", cv::WINDOW_AUTOSIZE );
+  g_cap.open( string(argv[1]) );
+  int frames = (int) g_cap.get(CV_CAP_PROP_FRAME_COUNT);
+  int tmpw   = (int) g_cap.get(CV_CAP_PROP_FRAME_WIDTH);
+  int tmph   = (int) g_cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+  cout << "Video has " << frames << " frames of dimensions("
+       << tmpw << ", " << tmph << ")." << endl;
+
+  cv::createTrackbar("Position", "Example 2-4", &g_slider_position, frames,
+                 onTrackbarSlide);
+
+  cv::Mat frame;
+  for(;;) {
+
+    if( g_run != 0 ) {
+
+      g_cap >> frame; if(frame.empty()) break;
+      int current_pos = (int)g_cap.get(CV_CAP_PROP_POS_FRAMES);
+      g_dontset = 1;
+
+      cv::setTrackbarPos("Position", "Example 2-4", current_pos);
+      cv::imshow( "Example 2-4", frame );
+
+      g_run-=1;
+
+    }
+
+    char c = (char) cv::waitKey(10);
+    if( c == 's' ) // single step
+      {g_run = 1; cout << "Single step, run = " << g_run << endl;}
+    if( c == 'r' ) // run mode
+      {g_run = -1; cout << "Run mode, run = " << g_run <<endl;}
+    if( c == 27 )
+      break;
+
+  }
+  return(0);
+
+}
+```
+
+- image transformation 
+
+```
+#include <opencv2/opencv.hpp>
+
+int main( int argc, char** argv ) {
+
+  // Load an image specified on the command line.
+  //
+  cv::Mat image = cv::imread(argv[1],-1);
+
+  // Create some windows to show the input
+  // and output images in.
+  //
+  cv::namedWindow( "Example 2-5-in", cv::WINDOW_AUTOSIZE );
+  cv::namedWindow( "Example 2-5-out", cv::WINDOW_AUTOSIZE );
+
+  // Create a window to show our input image
+  //
+  cv::imshow( "Example 2-5-in", image );
+
+  // Create an image to hold the smoothed output
+  //
+  cv::Mat out;
+
+  // Do the smoothing
+  // ( Note: Could use GaussianBlur(), blur(), medianBlur() or bilateralFilter(). )
+  //
+  cv::GaussianBlur( image, out, cv::Size(5,5), 3, 3);
+  cv::GaussianBlur(   out, out, cv::Size(5,5), 3, 3);
+
+  // Show the smoothed image in the output window
+  //
+  cv::imshow( "Example 2-5-out", out );
+
+  // Wait for the user to hit a key, windows will self destruct
+  //
+  cv::waitKey( 0 );
+
+}
+```
