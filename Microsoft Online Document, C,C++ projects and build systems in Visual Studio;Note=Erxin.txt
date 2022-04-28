@@ -724,8 +724,105 @@ void funcn() {
 
 - optimiztion best practices 
 
+    + profile-guided optimization (PGO). This optimization uses profile data from training executions of an instrumented version of an application to drive later optimization of the application.
 
+    + Whole Program Optimization (also knows as Link Time Code Generation) and the /O1 and /O2 optimizations have been improved. 
+    
+    + The /Gy switch is also very useful. see /Gy (Enable Function-Level Linking).
+    
+    + floating point switches 
 
+    /fp:precise 	This is the default recommendation and should be used
+    /fp:fast 	Recommended if performance is of the utmost importance
+    /fp:strict 	Recommended if precise floating-point exceptions
+    /fp:except[-] 	Can be used in conjunction with /fp:strict or /fp:precise
+    
+    + optimization declispecs 
+    
+    two declspecs that can be used in programs to help performance: __declspec(restrict) and __declspec(noalias)
+    
+    + optmization pragmas, set a given optimization level on a function-by-function basis.
+    
+    #pragma optimize("{opt-list}", on | off)
+        
+    #pragma optimize("", off)
+    int myFunc() {...}
+    #pragma optimize("", on)
+    
+    + __restrict and __assume
+
+    There are a couple of keywords in Visual Studio that can help performance: __restrict and __assume.
+    
+    With __assume, a developer can tell the compiler to make assumptions about the value of some variable.
+
+    + Intrinsics are function calls where the compiler has intrinsic knowledge about the call, and rather than calling a function in a library
+    
+    The header file <intrin.h> contains all of the available intrinsics for each of the supported hardware platforms.
+    
+    + exception, avoid introducing try/catch blocks into code that does not really need it. If you must use exceptions, use synchronous exceptions
+    
+- profile guided optimizations 
+
+    + profile guided optimization (PGO),  /Ob (Inline Function Expansion) and /Os, /Ot (Favor Small Code, Favor Fast Code).
+    
+    + steps for optimize your app 
+    
+    compile with /GL 
+    
+    linking using /LTCG and /GENPROFILE or /FASTGENPROFILE 
+    
+    profile the application, A .pgc file contains information about a particular application test run. creation of a new .pgc file with the pgosweep utility
+    
+    link using /TCG and /USEPROFILE 
+    
+    + optimizations performed by PGO 
+    
+    inlining 
+    
+    virtual call speculation, If a virtual call, or other call through a function pointer, frequently targets a certain function, a profile-guided optimization can insert a conditionally executed direct call to the frequently targeted function. direct call can be inlined 
+    
+    register allocation, Optimization based on profile data in better register allocation 
+    
+    basic block optimization, Basic block optimization allows commonly executed basic blocks that temporally execute within a given frame
+    
+    size/speed optimization 
+    
+    Function Layout - Based on the call graph and profiled caller/callee behavior
+    
+    Conditional Branch Optimization - With the value probes, profile-guided optimizations can find if a given value
+    
+    EH Code Separation - Because EH code is only exceptionally executed
+    
+    Dead Code Separation
+    
+    Memory Intrinsics - Whether to expand an intrinsic or not depends on whether it's called frequently
+    
+    + Environment variables for profile guided optimization 
+    
+    image created with /LTCG:PGI for profile-guided optimizations:
+    
+    PogoSafeMode specifies whether to use fast mode or safe mode
+    
+    VCPROFILE_ALLOC_SCALE adds additional memory for use by the profiler
+    
+    VCPROFILE_PATH lets you specify the folder used for .pgc files.
+    
+    + PgoAutoSweep saves the current profile counter information to a file, and then resets the counters.
+    
+    void PgoAutoSweep(const char *name);
+    
+    + pgomgr Adds profile data from one or more .pgc files to the .pgd file.
+    
+    $ pgomgr /clear myapp.pgd
+    
+    + pgosweep, Used in profile-guided optimization to write all profile data from a running program to the PGC file.
+    
+    $ pgosweep myapp.exe myapp!1.pgc
+    
+    + merge multiplpe PGO profiles into a single profile 
+
+    $ pgomgr /merge[:num] [.pgc_files] .pgd_files
+    
 
     
 # Building c/c++ isolated application and side by side assemblies 
@@ -749,6 +846,157 @@ Click OK.
 
 build the solution 
 
+
+
+# Use the MSVC toolset from the command 
+- install tools 
+
+install c++ support for visual studio 
+
+build tools for visual studio 
+https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022
+
+- command prompt 
+
+developer command prompt 
+
+x86 native tools command prompt 
+
+x64 native tools command prompt 
+
+x86_x64 cross tools command prompt, use x86 build x64 
+
+x64_x86 cross tools command prompt, use x64 build x86  
+
+- commnad file location 
+
+system is in \Program Files\Microsoft Visual Studio\2022\<edition>
+
+- command files 
+
+vcvars32.bat 	        Use the 32-bit x86-native tools to build 32-bit x86 code.
+vcvars64.bat 	        Use the 64-bit x64-native tools to build 64-bit x64 code.
+vcvarsx86_amd64.bat 	Use the 32-bit x86-native cross tools to build 64-bit x64 code.
+vcvarsamd64_x86.bat 	Use the 64-bit x64-native cross tools to build 32-bit x86 code.
+vcvarsx86_arm.bat 	    Use the 32-bit x86-native cross tools to build ARM code.
+vcvarsamd64_arm.bat 	Use the 64-bit x64-native cross tools to build ARM code.
+vcvarsx86_arm64.bat 	Use the 32-bit x86-native cross tools to build ARM64 code.
+vcvarsamd64_arm64.bat 	Use the 64-bit x64-native cross tools to build ARM64 code.
+vcvarsall.bat 	Use parameters to specify the host and target architectures, Windows SDK, and platform choices. For a list of supported options, call by using a /help parameter.
+
+- developer tools in an existing command window 
+
+$ vcvarsall.bat [architecture] [platform_type] [winsdk_version] [-vcvars_ver=vcversion] [spectre_mode]
+
+$ vcvarsall.bat amd64_arm uwp
+
+- create your own command prompt, architecture-specific batch files set the architecture parameter and call vcvarsall.bat. 
+
+    + the target for the x64 Native Tools Command Prompt for VS 2019 shortcut is something similar to:
+
+%comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+
+    + Use something like this command target in your shortcut:
+
+%comspec% /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64_arm uwp -vcvars_ver=14.29
+
+- command line tools 
+
+    + CL
+Use the compiler (cl.exe) to compile and link source code files into apps
+
+    + Link
+Use the linker (link.exe) to link compiled object files and libraries into apps and DLLs.
+
+    + MSBuild
+Use MSBuild (msbuild.exe) and a project file (.vcxproj) to configure a build and invoke the toolset without loading the Visual Studio IDE.
+
+    + DEVENV
+Use DEVENV (devenv.exe) combined with a command-line switch such as /Build or /Clean to execute certain build commands without display visual studio ide 
+
+    + CMake cross-platform, open-source tool for defining build processes that run on multiple platforms
+
+    + NMAKE
+Use NMAKE (nmake.exe) to build C++ projects by using a traditional makefile.
+
+- walkthrough compile a native c++ program on the command line 
+
+    + install visual studio 
+    
+    + a developer command prompt that has the environment set up for command line builds.
+    
+    + open an developer command prompt 
+    
+    + enter cl and verify that the output looks something like
+    
+    $ cl.exe 
+    
+    can also run as administrator 
+    
+    + create source file 
+    
+    //hello.cpp 
+    
+    ```
+    #include <iostream>
+    using namespace std;
+    int main()
+    {
+        cout << "Hello, world, from Visual C++!" << endl;
+    }
+    ```
+
+    + compile 
+    
+    $ cl /EHsc hello.cpp to compile your program.
+    
+    generates an .obj file that contains the compiled code
+
+    + run the compiled 
+    
+    $ hello.exe
+    
+    + Visual Studio IDE creates projects in your user folder, in a source\repos subfolder.
+    
+    + compile multile source files 
+    
+    $ cl /EHsc file1.cpp file2.cpp file3.cpp
+    
+    + change output application name 
+    
+    $ cl /EHsc file1.cpp file2.cpp file3.cpp /link /out:program1.exe
+    
+    + catch more programming mistakes automatically, we recommend you compile by using either the /W3 or /W4 warning level 
+    
+    $ cl /W4 /EHsc file1.cpp file2.cpp file3.cpp /link /out:program1.exe
+    
+    + force the compiler to treat all files as C++ independent of file name extension, use the /TP compiler option.
+    
+- walkthrough compile a C program on the command line 
+
+    + Developer Command Prompt for VS 2022 to open the command prompt window.
+    
+    + create source file 
+    
+    + compile 
+    
+    $ cl hello.c
+    
+- walkthrough compiling a c++/CLI program on the command line 
+
+To enable compilation for C++/CLI, you must use the /clr compiler option.
+
+
+
+
+
+    
+
+
+# Use MSBuild from the command line 
+
+
+# Building C++ DLLs in visual studio 
 
 
 
@@ -818,5 +1066,18 @@ build the solution
     
     
     
-     
+
+# Configure MSVC for 64-bit, x64 targets 
+
+
+# Configure C++ projects for ARM processors 
+# Configure programs for Windows XP 
+
+
+
+# Code analysis for C/C++ 
+
+# Code sanitizers for C/C++ 
+
+# Compiler and build tools reference 
 
