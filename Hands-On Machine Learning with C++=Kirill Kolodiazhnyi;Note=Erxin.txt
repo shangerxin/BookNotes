@@ -1,0 +1,1009 @@
+Hands-On Machine Learning with C++=Kirill Kolodiazhnyi;Note=Erxin
+
+
+# Introduction 
+- Reference 
+https://learning.oreilly.com/library/view/hands-on-machine-learning/9781789955330/
+
+- Support Vector Machine (SVM), decision tree approaches, k-nearest neighbors (KNN), logistic regression, Naive Bayes, and neural networks
+Graphics Processing Unit (GPU)
+Single Instruction Multiple Data (SIMD)
+
+scalar 
+vector 
+matrix
+tensor, an array of numbers in a multidimensial regular grid, each element can be a matrix 
+
+- basic linear algebra 
+
+    + element wise operations 
+
+    + dot product, 
+    A dot B = C
+    C_(i,j) = sigma(m, k=1) A_(i,k) B_(k,i)    
+
+    i = 1, ...., n,  j = 1, ... p
+    
+    + transposing, swap matrix over its diagonal 
+    
+    A^T_(i,j) = A_(j,i) 
+    
+    [1,2]^T     [1,3]
+    [3,4]   =   [2,4]
+    
+    + norm, this operation calculates the size of vector 
+    
+    ||x||_p  = (sigma(i) |x_i|^p )^(1/p)
+    
+    + inverting 
+    
+    A^-1 * A = I 
+    
+- Eigen is a general-purpose linear algebra C++ library. In Eigen
+- xtensor library is a C++ library for numerical analysis with multidimensional array expressions.
+- Shark-ML is a C++ ML library with rich functionality. It also provides an API for linear algebra routines
+- Dlib is a modern C++ toolkit containing ML algorithms and tools for creating computer vision software in C++
+
+```
+std::vector<matrix<double>> x;
+std::vector<float> y;
+krr_trainer<KernelType> trainer;
+trainer.set_kernel(KernelType());
+decision_function<KernelType> df = trainer.train(x, y);
+
+std::vector<matrix<double>> new_x;
+for (auto& v : x) {
+    auto prediction = df(v);
+    std::cout << prediction << std::endl;
+}
+```
+
+- explained as follows:
+
+y: This is a vector of observed target values.
+x: This is a matrix of row-vectors, , which are known as explanatory or independent values.
+ß: This is a (p+1) dimensional parameters vector.
+ε: This is called an error term or noise. This variable captures all other factors that influence the y dependent variable other than the regressors.
+
+- other terms 
+
+ordinary least squares (OLS) estimator. 
+
+Gradient descent (GD) is an example of such an algorithm
+
+use the mean squared error (MSE) function, which measures the difference between the estimator and the estimated value
+
+- references 
+
+/linear-algebra-for-deep-learning-f21d7e7d7f23
+Deep Learning - An MIT Press book: https://www.deeplearningbook.org/contents/linear_algebra.html
+What is Machine Learning?: https://www.mathworks.com/discovery/machine-learning.html
+The Eigen library documentation: http://eigen.tuxfamily.org
+The xtensor library documentation: https://xtensor.readthedocs.io/en/latest/
+The Dlib library documentation: http://dlib.net/
+The Shark-ML library documentation: http://image.diku.dk/shark/
+The Shogun library documentation: http://www.shogun-toolbox.org/
+
+
+
+# Data processing 
+- JavaScript Object Notation (JSON), Comma-Separated Values (CSV), and Hierarchical Data Format v5 (HDF5) formats. 
+- technical requirements 
+
+
+Modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+Dlib library installation
+Shogun toolbox library installation
+Shark-ML library installation
+Eigen library installation
+hdf5lib library installation
+HighFive library installation
+RapidJSON library installation
+Fast-CPP-CSV-Parser library installation
+
+- processing cvs 
+
+template <std::size_t... Idx, typename T>
+void fill_values(std::index_sequence<Idx...>,
+ T& row,
+ std::vector<double>& data) {
+ data.insert(data.end(), {std::get<Idx>(row)...});
+}
+
+#include <shark/Data/Csv.h>
+#include <shark/Data/Dataset.h>
+using namespace shark;
+
+ClassificationDataset dataset;
+importCSV(dataset, "iris_fix.csv", LAST_COLUMN);
+
+std::size_t classes = numberOfClasses(dataset);
+std::cout << "Number of classes " << classes << std::endl;
+std::vector<std::size_t> sizes = classSizes(dataset);
+std::cout << "Class size: " << std::endl;
+for (auto cs : sizes) {
+  std::cout << cs << std::endl;
+}
+std::size_t dim = inputDimension(dataset);
+std::cout << "Input dimension " << dim << std::endl;
+
+- Common Objects in Context (COCO) dataset. 
+
+- HDF5 is a highly efficient file format for storing datasets and scientific values. 
+
+#include <highfive/H5DataSet.hpp>
+#include <highfive/H5DataSpace.hpp>
+#include <highfive/H5File.hpp>
+
+HighFive::File file(file_name, HighFive::File::ReadWrite |
+                                   HighFive::File::Create |
+                                   HighFive::File::Truncate);
+                                   
+                                   
+for (const auto& paper : papers) {
+  auto paper_group =
+      papers_group.createGroup("paper_" + std::to_string(paper.id));
+  std::vector<uint32_t> id = {paper.id};
+  auto id_attr = paper_group.createAttribute<uint32_t>(
+      "id", HighFive::DataSpace::From(id));
+
+  auto reviews_group = paper_group.createGroup("reviews");
+
+  id_attr.write(id);
+  auto dec_attr = paper_group.createAttribute<std::string>(
+      "preliminary_decision",
+      HighFive::DataSpace::From(paper.preliminary_decision));
+  dec_attr.write(paper.preliminary_decision);                                   
+                                   
+  std::vector<size_t> dims = {3};
+  std::vector<int32_t> values(3);
+  for (const auto& r : paper.reviews) {
+     auto dataset = reviews_group.createDataSet<int32_t>(
+     std::to_string(r.id), HighFive::DataSpace(dims));
+     values[0] = std::stoi(r.confidence);
+     values[1] = std::stoi(r.evaluation);
+     values[2] = std::stoi(r.orientation);
+     dataset.write(values);
+  }
+}                           
+                                   
+- manipulate image with opencv                                    
+                               
+cv::resize(img, img, {img.cols / 2, img.rows / 2}, 0, 0, cv::INTER_AREA);
+cv::resize(img, img, {}, 1.5, 1.5, cv::INTER_CUBIC);                               
+                                   
+                                   
+
+# Measure performance and selecting models 
+- technical requirements 
+
+A modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+Dlib library
+Shogun-toolbox library
+Shark-ML library
+Plotcpp library
+
+- Mean squared error (MSE) is a widely used metric for regression algorithms
+
+- The root mean squared error (RMSE) metric is usually used to estimate performance
+
+SquaredLoss<> mse_loss;
+auto mse = mse_loss(train_data.labels(), predictions);
+auto rmse = std::sqrt(mse);
+
+- Mean absolute error (MAE) is another popular metric that's used for quality estimation for regression algorithms. 
+
+- R sqared, The R squared metric is also known as a coefficient of determination. It is used to measure how good our independent variables 
+
+auto var = shark::variance(train_data.labels());
+auto r_squared = 1 - mse / var(0);                                   
+                                   
+- The adjusted R squared metric was designed to solve the previously described problem of the R squared metric. It is the same as the R squared metric but with a penalty for a large number of independent variables.                                    
+
+- classification metrics 
+
+TP, FP 
+FN, TN 
+
+- accuracy, One of the most obvious classification metrics is accuracy:
+
+accuracy = (TP + TN) / (TP + TN + FP + FN)
+
+precission = TP / (TP + FP)
+
+recall = TP / (TP + FN)
+
+F-score = (1+beta)^2 * (precision * recall) / ((beta^2 * precision) + recall)
+
+Usually, the value is equal to one. In such a case, we have the multiplier value equal to 2
+
+- AUC- ROC 
+
+Area Under Receiver Operating Characteristic curve (AUC-ROC). This curve is a line from (0,0) to (1,1) 
+
+True Positive Rate (TPR) and the False Positive Rate (FPR):
+
+TPR = TP /(TP + FP)
+
+FPR = FP /(FP + TN)
+
+- log loss 
+
+logloss = - 1/2 * sigma(l, i=1)(y_i * log(^y_i) + (1 - y_i) * log(1 - ^y_i))
+
+There is a class called CrossEntropy in the Shark-ML library that can be used to calculate this metric
+
+- bias 
+- variable 
+- L1 regularization - Lasso, Least Absolute Shrinkage and Selection Operator (Lasso) regularization
+
+loss + lambda * sigma(p, j=1)|beta_j|
+
+- L2 regularization - ridge, L2 regularization is also an additional term to the loss function, L2 regularization is computationally more efficient for gradient descent-based optimizers 
+
+loss + lambda * sigma(p, j=1)(beta_j)^2
+
+- early stopping 
+
+- k-fold cross-validation 
+
+Divide the dataset into K blocks of the same size.
+Select one of the blocks for validation and the remaining ones for training.
+Repeat this process, making sure that each block is used for validation and the rest are used for training.
+Average the results of the performan
+
+- grid search 
+
+ grid search approach is to create a grid of the most reasonable hyperparameter values. The grid is used to generate a reasonable number of distinct parameter sets quickly.
+
+
+
+# Machine learning algorithms 
+- Clustering is an unsupervised machine learning method that is used for splitting the original dataset of objects into groups classified by properties. 
+
+- technical 
+
+Modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+Dlib library installation
+Shogun-toolbox library installation
+Shark-ML library installation
+plotcpp library installation
+
+
+https://github.com/PacktPublishing/Hands-On-Machine-Learning-with-CPP/tree/master/Chapter04
+
+- educlidean distance 
+
+- manhattan distance 
+
+sigma(n, i)|x_i - average_x_i|
+
+- chebyshev distance 
+
+max(|x_i - average_x_i)
+
+- solved by the CLARANS (Clustering Large Applications based on RANdomized Search) algorithm, which complements the k-medoids method. For multidimensional clustering, the PROCLUS (Projected Clustering) algorithm
+
+
+- The DBSCAN (Density-Based Spatial Clustering of Applications with Noise) algorithm is one of the first density clustering algorithms
+
+- model-based clustering algorithms 
+
+The EM (Expectation–Maximization) algorithm assumes that the dataset can be modeled using a linear combination of multidimensional normal distributions. Its purpose is to estimate distribution parameters that maximize the likelihood function used as a measure of model quality
+
+The model-based algorithm is called GMM (Gaussian Mixture Models), the partition one is the k-means algorithm
+
+- plotting data with c++ 
+
+We plot with the plotcpp library, which is a thin wrapper around the gnuplot command-line utility. With this library, we can draw points on a scatter plot or draw lines.
+
+The 5 Clustering Algorithms Data Scientists Need to Know: https://towardsdatascience.com/the-5-clustering-algorithms-data-scientists-need-to-know-a36d136ef68
+Clustering: https://scikit-learn.org/stable/modules/clustering.html
+Different Types of Clustering Algorithm: https://www.geeksforgeeks.org/different-types-clustering-algorithm/
+
+
+
+# Anomaly detection 
+- technical 
+Shogun-toolbox library
+Shark-ML library
+Dlib library
+PlotCpp library
+Modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- z-score measure 
+
+Z_i = |x_i - mu|/delta 
+
+- detcting anomalies with the local outlier factor method 
+
+- Detecting anomalies with One-Class SVM (OCSVM)
+
+One-Class SVM (OCSVM) is an adaptation of the support vector method that focuses on anomaly detection
+
+The Dlib library provides a couple of implemented algorithms that we can use for anomaly detection: the OCSVM model 
+
+- one class SVM with dlib 
+
+void OneClassSvm(const Matrix& normal,
+                  const Matrix& test) {
+     typedef matrix<double, 0, 1> sample_type;
+     typedef radial_basis_kernel<sample_type> kernel_type;
+     svm_one_class_trainer<kernel_type> trainer;
+     trainer.set_nu(0.5);             // control smoothness of the solution
+     trainer.set_kernel(kernel_type(0.5));  // kernel bandwidth
+     std::vector<sample_type> samples;
+     for (long r = 0; r < normal.nr(); ++r) {
+         auto row = rowm(normal, r);
+         samples.push_back(row);
+     }
+     decision_function<kernel_type> df = trainer.train(samples);
+     Clusters clusters;
+     double dist_threshold = -2.0;
+     
+     auto detect = [&](auto samples) {
+         for (long r = 0; r < samples.nr(); ++r) {
+             auto row = dlib::rowm(samples, r);
+             auto dist = df(row);
+             if (p > dist_threshold) {
+                 // Do something with anomalies
+             } else {
+                 // Do something with normal
+             }
+         }
+     };
+     
+     detect(normal);
+     detect(test);
+}
+
+- feature selection methods 
+
+    + missing value ratio 
+    
+    misses many values should be eliminated from a dataset because it doesn't contain valuable information
+    
+    + low variance filter 
+    
+    + high correlation filter 
+    
+    have a high correlation, then they carry similar information. Also, highly correlated features can significantly reduce the performance of some machine learning models
+    
+    + random forest 
+    
+    Then, this estimation can be averaged across all the trees in the forest. Features
+    
+    + backward feature elimination and forwared feature selection 
+    
+    These are iterative methods that are used for feature selection. In backward feature elimination, after we've trained the model with a full feature set and estimated its performance,
+
+- svd, singular value decomposition 
+
+Singular value decomposition (SVD) is an important method that's used to analyze data. The resulting matrix decomposition has a meaningful interpretation from a machine learning point of view
+
+- dimensionality reduction methods 
+
+The independent component analysis (ICA) method was proposed as a way to solve the problem of blind signal separation (BSS
+
+- factor analysis 
+
+The concept of factor load is essential. It is used to describe the role of the factor (variable) when we wish to form a specific vector
+
+- kernal pca 
+
+Classic PCA is a linear projection method that works well if the data is linearly separable. 
+
+- The IsoMap algorithm is based on the manifold projection technique. In mathematics, the manifold is a topological space
+
+The number of neighbors, , used to search for geodetic distances
+The dimension of the final space, 
+
+- sammon mapping, Sammon mapping is one of the first non-linear dimensionality reduction algorithms. In contrast to traditional dimensionality reduction methods
+
+The goal of non-linear Sammon mapping is to search a selection of vectors, , in order to minimize the error function, , which is defined by the following formula:
+
+- The stochastic neighbor embedding (SNE) problem is formulated as follows: we have a dataset with points described by a multidimensional variable with a dimension of space substantially higher than three. 
+
+- Autoencoders represent a particular class of neural networks that are configured so that the output of the autoencoder is as close as possible to the input signal.
+
+- dimensionality reduction algorithms in practice. All of these examples use the same dataset, which contains four normally distributed 2D point sets that have been transformed with Swiss roll mapping
+
+- PCA is one of the most popular dimensionality reduction algorithms and it has a couple of implementations in the Dlib library.
+
+- LDA, The Dlib library also has an implementation of the linear discriminant analysis algorithm
+
+- In the Shogun library, the t-SNE algorithm is implemented in the CTDistributedStochasticNeighborEmbedding class
+
+
+
+# classification methods
+- logical regression, kernel ridge regression (KRR), the kNN method, and SVM approaches.
+
+- KRR, KRR combines linear ridge regression (linear regression and L2 norm regularization) with the kernel trick and can be used for classification problems
+
+difference between SVM 
+
+The KRR method uses squared error loss, while the SVM model uses insensitive loss or hinge loss for classification.
+
+KRR training can be completed in the closed-form so that it can be trained faster for medium-sized datasets.
+
+The learned KRR model is non-sparse and can be slower than the SVM model when it comes to prediction times.
+
+- SVM 
+
+Calculate the distance from the object to other objects in the training dataset.
+Select the k of training objects, with the minimal distance to the object that is classified.
+Set the classifying object class to the class most often found among the nearest k neighbors.
+
+- multi-class classification 
+
+- the kNN classification, The kNN classification algorithm in the Shark-ML library is implemented in the NearestNeighborModel class
+
+
+
+# Recommender systems 
+- Department of Computer Science and Engineering at the University of Minnesota: https://grouplens.org/datasets/movielens/
+- technical 
+
+Eigen library
+Armadillo library
+mlpack library
+Modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- overview of recommender system 
+
+Summary-based: Non-personal models based on the average product rating
+Content-based: Models based on the intersection of product descriptions and user interests
+Collaborative filtering: Models based on interests of similar user groups
+Matrix factorization: Methods based on the preferences matrix decomposition
+
+- two groups of items:
+
+Repeatable: For example, shampoos or razors that are always needed
+Unrepeatable: For example, books or films that are rarely purchased repeatedly
+
+- We can obtain user ratings in the following two ways:
+
+Explicit ratings: The user gives their own rating for the product, leaves a review, or likes the page.
+Implicit ratings: The user clearly does not express their attitude, but an indirect conclusion can be made from their actions
+
+- non-personalized recommendations 
+
+- content-based recommendations 
+
+algorithm in the following way:
+
+    Update distances not with every purchase but with batches (for example, once a day).
+    Do not recalculate the distance matrix completely, but update it incrementally.
+    Choose some iterative and approximate algorithms (for example, Alternating Least Squares (ALS)).
+
+- spectral decomposition or high-frequency filtering
+
+U: A compact description of user preferences.
+S: A compact description of the characteristics of the product.
+
+- data scaling and standardization 
+
+normalize data, detailed as follows:
+
+Centering (mean-centering): From the user's ratings, subtract their average rating. This type of normalization is only relevant for non-binary matrices.
+
+Standardization (z-score): In addition to centering, this divides the user's rating by the standard deviation of the user. But in this case, after the inverse transformation, the rating can go beyond the scale (for example, six on a five-point scale), but such situations are quite rare and are solved simply by rounding to the nearest acceptable estimate.
+
+Double standardization: The first time normalized by user ratings; the second time, by item ratings.
+
+- describe a problem of recommender systems known as the cold start problem, which appears in the early stages of system work
+
+- We can display, for example, the lower limit of the interval (low confidence interval (CI) bound) as a rating.
+
+- cold start problem 
+The first way to do this is to show not the average value, but the smoothed average (damped mean). With a small number of ratings, the displayed rating leans more to a specific safe average indicator, and as soon as a sufficient number of new ratings are typed, the averaging adjustment stops operating.
+
+Another approach is to calculate confidence intervals for each rating. Mathematically, the more estimates we have, the smaller the variation of the average will be and, therefore, the more confidence we have in its accuracy.
+
+- the lower limit of the interval (low confidence interval (CI) bound) as a rating. At the same time, it is clear that such a system is quite conservative
+
+- assessing system quality 
+
+Offline model testing on historical data using retro tests. Testing the model using A/B testing (we run several options, and see which one gives the best result)
+
+cross-validation, with the leave-one-out and leave-p-out methods. Multiple repetitions of the test and averaging the results provides a more stable assessment of quality.
+
+- three categories:
+
+Prediction accuracy: Estimates the accuracy of the predicted rating
+Decision support: Evaluates the relevance of the recommendations
+Rank accuracy metrics: Evaluates the quality of the ranking of recommendations issued
+
+- examples 
+
+    + using eigen library 
+    
+using DataType = float;
+// using Eigen::ColMajor is Eigen restriction -  todense method always returns
+// matrices in ColMajor order
+using Matrix =
+Eigen::Matrix<DataType, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+
+using SparseMatrix = Eigen::SparseMatrix<DataType, Eigen::ColMajor>;
+
+using DiagonalMatrix =
+Eigen::DiagonalMatrix<DataType, Eigen::Dynamic, Eigen::Dynamic>;
+
+    + mlpack library 
+
+arma::SpMat<DataType> ratings_matrix(ratings.size(), movies.size());
+std::vector<std::string> movie_titles;
+{
+ // fill matrix
+ movie_titles.resize(movies.size());
+ 
+ size_t user_idx = 0;
+ for (auto& r : ratings) {
+     for (auto& m : r.second) {
+         auto mi = movies.find(m.first);
+         auto movie_idx = std::distance(movies.begin(), mi);
+         movie_titles[static_cast<size_t>(movie_idx)] = mi->second;
+         ratings_matrix(user_idx, movie_idx) = 
+            static_cast<DataType>(m.second);
+     }
+     ++user_idx;
+ }
+}
+
+distance(X.col(i), X.col(j)) = distance(W H.col(i), W H.col(j))
+
+- reference 
+
+The mlpack library official site: https://www.mlpack.org/
+The Armadillo library official site: http://arma.sourceforge.net/
+Variational Autoencoders for Collaborative Filtering, by Dawen Liang, Rahul G. Krishnan, Matthew D. Hoffman, and Tony Jebara: https://arxiv.org/abs/1802.05814
+Deep Learning-Based Recommender System: A Survey and New Perspectives, by Shuai Zhang, Lina Yao, Aixin Sun, and Yi Tay: https://arxiv.org/abs/1707.07435
+Training Deep AutoEncoders for Collaborative Filtering, by Oleksii Kuchaiev, and Boris Ginsburg: https://arxiv.org/abs/1708.01715
+
+
+# ensemble learning
+- technical 
+
+The Eigen library
+The Armadillo library
+The mlpack library
+A modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- An example of ensembles is Condorcet's jury theorem (1784). A jury must come to a correct or incorrect consensus,
+- Bagging (from the bootstrap aggregation) is one of the earliest and most straightforward types of ensembles. Bagging is based on the statistical bootstrap method
+
+seperate the test set and training parallel and then combine the results 
+
+- The first successful version of boosting was AdaBoost (Adaptive Boosting). It is now 
+
+- Gradient boosting machine (GBM) has many extensions for different statistical tasks. These are as follows:
+
+    GLMBoost and GAMBoost as an enhancement of the existing generalized additive model (GAM)
+    CoxBoost for survival curves
+    RankBoost and LambdaMART for ranking
+    
+- differnt platforms 
+
+    Stochastic GBM
+    Gradient Boosted Decision Trees (GBDT)
+    Gradient Boosted Regression Trees (GBRT)
+    Multiple Additive Regression Trees (MART)
+    Generalized Boosting Machines (GBM)
+    
+- A decision tree is a supervised machine learning algorithm, based on how a human solves the task of forecasting or classification. 
+
+- random forest overview 
+
+The number of trees: The more trees
+
+The number of features for the splitting selection
+
+Maximum tree depth: The smaller the depth, the faster the algorithm is built and will work.
+
+The impurity function: This is a criterion for choosing a feature
+
+- using gradient boosting with shogun 
+
+classification and regression tree (CART) is a binary decision tree that is constructed by splitting a node into two child nodes repeatedly, beginning with the root node that contains the whole dataset.
+
+- ensembles with Shark-ML 
+
+10 real-value features computed for each cell nucleus, as follows:
+
+    Radius (mean distances from the center to the perimeter)
+    Texture (standard deviation of grayscale values)
+    Perimeter
+    Area
+    Smoothness (local variation in radius lengths)
+    Compactness
+    Concavity (severity of concave portions of the contour)
+    Concave points (number of concave portions of the contour)
+    Symmetry
+    Fractal dimension (coastline approximation—1)
+    
+    + these are the next methods for configuration:
+
+    setNTrees: Set the number of trees.
+    setMinSplit: Set the minimum number of samples that are split.
+    setMaxDepth: Set the maximum depth of the tree.
+    setNodeSize: Set the maximum node size when the node is considered pure.
+    minImpurity: Set the minimum impurity level below which a node is considered pure.
+
+- reference 
+
+Introduction to decision trees: https://medium.com/greyatom/decision-trees-a-simple-way-to-visualize-a-decision-dc506a403aeb
+Understanding Random Forest: https://towardsdatascience.com/understanding-random-forest-58381e0602d2
+
+
+
+# Advance examples 
+- technical requirements
+
+Dlib library
+Shogun library
+Shark-ML library
+PyTorch library
+Modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- Neurons
+
+The biological neuron consists of a body and processes that connect it to the outside world. 
+
+- backpropagation method:
+
+    Stochastic
+    Batch
+    Mini-batch
+    
+- loss function 
+MSE, mean squired error 
+
+MSLE, mean squired logarithmic error 
+
+L2, squire of the L2 norm of the difference between the actual value and target value 
+
+MAE, mean absolute error 
+
+L1, sum of absolute errors of the difference between actual value and the target value 
+L = sigma(n, i=1)|y_i - ^y_i|
+
+cross-entropy, commonly used for binary classification where labels are assumed to take values of 0 or 1
+L = - 1/n * sigma(n, i=1)[y_i * log(^y_i) + (1 - y_i)*log(1 - ^y_i)]
+
+negative log-likelihood, neural networks for classification tasks 
+L = 1/n * sigma(n, i=1)log(^y_i)
+
+cosine proximity, loss function computes the cosine proximity between the predicted value and the target value 
+L = - sigma(n, i=1)y_i * ^y_i / ((signma(n, i=1)(y_i)^2)^0.5 * (signma(i,i=1)(^y_i)^2)^0.5)
+
+hinge loss function is used for training classifiers. 
+L = 1/n * signma(n, i=1)max(0, 1-y_i * ^y_i)
+
+- activation functions 
+
+linear activation 
+
+signmoid activation funciton 
+
+hyperbolic tangent, rectified linear unit (ReLU)
+
+- activation function properties 
+non-linearity 
+
+continuous differentiability 
+
+value range 
+
+monotonicity 
+
+smooth functions with monotone derivatives 
+
+- regularization in neural networks 
+L2-regularization (weight decay) is performed by penalizing the weights with the highest values
+
+Dropout regularization consists of changing the structure of the network. 
+
+Batch normalization makes sure that the effective learning process of neural networks isn't impeded. I
+
+- neural network initialization 
+
+- xavier initializatio nmethod 
+
+- the initialization method 
+
+- deving into convolutional networks 
+
+Depth: How many kernels and bias coefficients will be involved in one layer.
+
+The height and width of each kernel.
+
+Step (stride): How much the kernel is shifted at each step when calculating the next pixel of the resulting image. Usually, the step value that's taken is equal to 1, and the larger the value is, the smaller the size of the output image that's produced.
+
+Padding: Note that convoluting any kernel of a dimension greater than 1 x 1 reduces the size of the output image. Since it is generally desirable to keep the size of the original image, the pattern is supplemented with zeros along the edges.
+
+- deep learning is used are as follows:
+
+    Speech recognition: All major commercial speech recognition systems (such as Microsoft Cortana, Xbox, Skype Translator, Amazon Alexa, Google Now, Apple Siri, Baidu, and iFlytek) are based on deep learning.
+    
+    Computer vision: Today, deep learning image recognition systems are already able to give more accurate results than the human eye, for example, when analyzing medical research images (MRI, X-ray, and so on.).
+    
+    Discovery of new drugs: For example, the AtomNet neural network was used to predict new biomolecules and was put forward for the treatment of diseases such as the Ebola virus and multiple sclerosis.
+    
+    Recommender systems: Today, deep learning is used to study user preferences.
+    
+    Bioinformatics: It is also used to study the prediction of genetic ontologies.
+
+- reading dataset 
+
+#include <torch/torch.h>
+#include <opencv2/opencv.hpp>
+#include <string>
+
+class MNISTDataset : public torch::data::Dataset<MNISTDataset> {
+public:
+    MNISTDataset(const std::string& images_file_name,
+                 const std::string& labels_file_name);
+    
+    // torch::data::Dataset implementation
+    torch::data::Example<> get(size_t index) override;
+    torch::optional<size_t> size() const override;
+    
+private:
+    void ReadLabels(const std::string& labels_file_name);
+    void ReadImages(const std::string& images_file_name);
+    
+    uint32_t rows_ = 0;
+    uint32_t columns_ = 0;
+    std::vector<unsigned char> labels_;
+    std::vector<cv::Mat> images_;
+};
+
+auto train_images = root_path / "train-images-idx3-ubyte";
+auto train_labels = root_path / "train-labels-idx1-ubyte";
+auto test_images = root_path / "t10k-images-idx3-ubyte";
+auto test_labels = root_path / "t10k-labels-idx1-ubyte";
+
+// initialize train dataset
+// ----------------------------------------------
+MNISTDataset train_dataset(train_images.native(),
+                           train_labels.native());
+
+auto train_loader = torch::data::make_data_loader(
+        train_dataset.map(torch::data::transforms::Stack<>()),
+        torch::data::DataLoaderOptions().batch_size(256).workers(8));
+
+// initialize test dataset
+// ----------------------------------------------
+MNISTDataset test_dataset(test_images.native(), 
+                          test_labels.native());
+
+auto test_loader = torch::data::make_data_loader(
+        test_dataset.map(torch::data::transforms::Stack<>()),
+        torch::data::DataLoaderOptions().batch_size(1024).workers(8));
+
+
+# Sentiment analysis with Recurrent Neural Networks 
+- long short-term memory (LSTM) and gated recurrent unit (GRU).
+
+backpropagating called backpropagation through time (BPTT), which propagates the error through the state of the recurrent network.
+
+- Long short-term memory (LSTM) is a special kind of RNN architecture that's capable of learning long-term dependencies. 
+
+- The GRU is a variation of the LSTM architecture. They have one less gate (filter), and the connections are implemented differently
+
+- Bidirectional RNN 
+
+- Multilayer RNN 
+
+- NLP
+
+- Word2Vec 
+
+Mikolov proposed a new approach to word embedding, which he called Word2Vec. His approach is based on another crucial hypothesis, which in science is usually called the distributional hypothesis or locality hypothesis
+
+- GloVe 
+
+latent semantic analysis (LSA) calculates the embeddings for words by factorizing the term-document matrix using singular decomposition. algorithm called GloVe. GloVe aims to achieve two goals:
+
+Create word vectors that capture meaning in the vector space
+Take advantage of global statistics, not just use local information
+
+- reference 
+
+simplified description of GloVe: Global Vectors for Word Representation algorithm: http://mlexplained.com/2018/04/29/paper-dissected-glove-global-vectors-for-word-representation-explained/
+GloVe: Global Vectors for Word Representation, Jeffrey Pennington, Richard Socher, Christopher D. Manning: https://nlp.stanford.edu/projects/glove/
+Math theory behind Neural Networks, Ian Goodfellow, Yoshua Bengio, Aaron Courville 2016, Deep Learning.
+Word embeddings: how to transform text into numbers: https://monkeylearn.com/blog/word-embeddings-transform-text-numbers
+A detailed LSTM architecture description: http://colah.github.io/posts/2015-08-Understanding-LSTMs
+Learning Long-Term Dependencies with Gradient Descent is Difficult by Yoshua Bengio et al. (1994): http://www.iro.umontreal.ca/~lisa/pointeurs/ieeetrnn94.pdf
+On the difficulty of training recurrent neural networks by Razvan Pascanu et al. (2013): http://proceedings.mlr.press/v28/pascanu13.pdf
+Contextual Correlates of Synonymy Communications of the ACM, 627-633. Rubenstein, H. and Goodenough, J.B. (1965).
+Efficient Estimation of Word Representations in Vector Space, Mikolov, Tomas; et al. (2013): https://arxiv.org/abs/1301.3781
+Distributed Representations of Sentences and Documents, Quoc Le, Tomas Mikolov: https://arxiv.org/pdf/1405.4053v2.pdf
+
+
+# Production and deployment challenges 
+- exporting and importing models 
+
+Another substantial feature of any machine learning (ML) framework is its ability to export the model architectureAnother substantial feature of any machine learning (ML) framework is its ability to export the model architecture
+
+Open Neural Network Exchange (ONNX) format, which is currently gaining popularity among different ML frameworks and can be used to share trained models
+
+- requirements for this chapter:
+
+Dlib library
+Shark-ML library
+Shogun library
+PyTorch library
+A modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- model serialization with shark-ML 
+
+torch::DeviceType device = torch::cuda::is_available()
+                                 ? torch::DeviceType::CUDA
+                                 : torch::DeviceType::CPU;
+ 
+ std::random_device rd;
+ std::mt19937 re(rd());
+ std::uniform_real_distribution<float> dist(-0.1f, 0.1f);
+ 
+ // generate data
+ size_t n = 1000;
+ torch::Tensor x;
+ torch::Tensor y;
+ {
+     std::vector<float> values(n);
+     std::iota(values.begin(), values.end(), 0);
+     std::shuffle(values.begin(), values.end(), re);
+     
+     std::vector<torch::Tensor> x_vec(n);
+     std::vector<torch::Tensor> y_vec(n);
+     for (size_t i = 0; i < n; ++i) {
+         x_vec[i] = torch::tensor(
+         values[i],
+         torch::dtype(torch::kFloat).device(device).requires_grad(false));
+         
+         y_vec[i] = torch::tensor(
+         (func(values[i]) + dist(re)),
+         torch::dtype(torch::kFloat).device(device).requires_grad(false));
+     }
+     x = torch::stack(x_vec);
+     y = torch::stack(y_vec);
+ }
+ 
+ // normalize data
+ auto x_mean = torch::mean(x, /*dim*/ 0);
+ auto x_std = torch::std(x, /*dim*/ 0);
+ x = (x - x_mean) / x_std;
+ 
+ Net model;
+ model->to(device);
+ 
+ // initialize optimizer ----------------------------------------------
+ double learning_rate = 0.01;
+ torch::optim::Adam optimizer(
+          model->parameters(),
+          torch::optim::AdamOptions(learning_rate).weight_decay(0.00001));
+ 
+ // training
+ int64_t batch_size = 10;
+ int64_t batches_num = static_cast<int64_t>(n) / batch_size;
+ int epochs = 10;
+ for (int epoch = 0; epoch < epochs; ++epoch) {
+     // train the model -----------------------------------------------
+     model->train();  // switch to the training mode
+     
+     // Iterate the data
+     double epoch_loss = 0;
+     for (int64_t batch_index = 0; batch_index < batches_num; ++batch_index) {
+         auto batch_x = x.narrow(0, batch_index * batch_size, batch_size);
+         auto batch_y = y.narrow(0, batch_index * batch_size, batch_size);
+         
+         // Clear gradients
+         optimizer.zero_grad();
+         
+         // Execute the model on the input data
+         torch::Tensor prediction = model->forward(batch_x);
+         
+         torch::Tensor loss = torch::mse_loss(prediction, batch_y);
+         
+         // Compute gradients of the loss and parameters of our model
+         loss.backward();
+         
+         // Update the parameters based on the calculated gradients.
+         optimizer.step();
+     }
+ }
+ 
+- delving into ONNX format 
+
+ONNX format is a special file format used to share neural network architectures and parameters between different frameworks. It is based on the Google Protobuf format and library
+
+But at the time of writing, the Caffe2 C++ API is still available as part of the PyTorch 1.2 (libtorch) library.
+
+The ONNX community provides pre-trained models for the most popular neural network architectures in the publicly available Model Zoo (https://github.com/onnx/models).
+
+Facebook developed the Caffe2 neural network framework in order to run models on different platforms with the best performance. 
+
+ResNet-50 model for image classification tasks (https://github.com/onnx/models/tree/master/vision/classification/resnet).
+
+- image loading, we will use the OpenCV library:
+- reference 
+
+Shark-ML documentation: http://www.shark-ml.org/sphinx_pages/build/html/rest_sources/tutorials/tutorials.html
+Dlib documentation: http://dlib.net/
+Shogun toolkit documentation: https://www.shogun-toolbox.org/
+PyTorch C++ API: https://pytorch.org/cppdocs/
+ONNX official page: https://onnx.ai/
+ONNX Model Zoo: https://github.com/onnx/models
+ONNX ResNet models for image classification: https://github.com/onnx/models/tree/master/vision/classification/resnet
+Caffe2 tutorials: https://github.com/leonardvandriel/caffe2_cpp_tutorial/
+
+
+
+
+# Deploying models on mobile and cloud plotforms 
+- Android operating system and the Google Cloud Platform (GCP).
+- technical 
+
+Android Studio, Android SDK, Android NDK
+A Google account
+GCP SDK
+PyTorch library
+cpp-httplib library
+A modern C++ compiler with C++17 support
+CMake build system version >= 3.8
+
+- model snapshot 
+
+import torch
+import urllib
+from PIL import Image
+from torchvision import transforms
+
+# Download pretrained model
+model = torch.hub.load('pytorch/vision', 'resnet18', pretrained=True)
+model.eval()
+
+# Download an example image from the pytorch website
+url, filename = ("https://github.com/pytorch/hub/raw/master/dog.jpg", "dog.jpg")
+
+try:
+    urllib.URLopener().retrieve(url, filename)
+except:
+    urllib.request.urlretrieve(url, filename)
+
+# sample execution
+input_image = Image.open(filename)
+preprocess = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 
+    0.225]),
+])
+input_tensor = preprocess(input_image)
+
+# create a mini-batch as expected by the model
+input_batch = input_tensor.unsqueeze(0) 
+
+traced_script_module = torch.jit.trace(model, input_batch)
+
+traced_script_module.save("model.pt")
+
+- android cpp native 
+
+- server deployment 
+
+Log into your Google account and go to GCP: https://console.cloud.google.com.
+On the main page, open the Go to Compute Engine link or use the Navigation Menu and select the Compute Engine link.
+
