@@ -1,0 +1,255 @@
+Getting Started with Bazel=Benjamin;Note=Erxin
+
+
+# Introduction 
+- reference 
+https://learning.oreilly.com/library/view/getting-started-with/9781492077107/ch01.html#why_should_i_use_it
+
+- Google implements and uses a build tool named Blaze for internal use only. Blaze is optimized to carry out Google-internal use cases and processes
+
+- As a developer of build logic, you use a higher-level language called Starlark, a Python derivative
+
+- In Bazel, a software module is called a package. The BUILD file (alternatively, BUILD.bazel) indicates that we are dealing with a package
+
+- Running build from the command line 
+
+$ bazel build //:hello-world
+
+//src/main/...:target-name 
+package name   target name 
+
+provide the path relative to the project structure
+
+the // refer to the root directory which holds the WORKSPACE file 
+
+The prefix // doesn’t need to be spelled out if you are executing the command directly from the package directory
+
+- The Bazel team maintains two IDE integrations as open source projects, one for IntelliJ IDEA and another one for VSCode. 
+
+- Modeling Fine-Grained Package Granularity and Dependencies
+
+    + define grained package 
+    
+.
+├── WORKSPACE
+└── src
+    └── main
+        └── java
+            └── com
+                └── bmuschko
+                    ├── BUILD
+                    ├── HelloWorld.java
+                    └── messenger
+                        ├── BUILD
+                        └── Messenger.java
+                        
+java_library(                      
+    name = "messenger-lib",
+    srcs = ["Messenger.java"]
+)
+
+    + external binary with bazel 
+    workspace > read > bazel runtime > resolved download > network repository 
+                                     > check artifact cache 
+- execute automatic test                          
+
+java_test(
+    name = "messenger-test",
+    srcs = [
+        "MessengerTest.java"
+    ],
+    test_class = "com.bmuschko.messenger.MessengerTest",         
+    deps = [
+        "//src/main/java/com/bmuschko/messenger:messenger-lib",  
+        "@maven//:junit_junit",                                  
+    ],
+)
+
+$ bazel test //src/test/java/com/bmuschko/messenger
+
+    + generate bazel log 
+bazel-testlogs
+└── src
+    └── test
+        └── java
+            └── com
+                └── bmuschko
+                    └── messenger
+                        └── messenger-test
+                            ├── ...
+                            ├── test.log     
+                            └── test.xml     
+                            
+- extending bazel's capabilities 
+
+loading evaluate macro > analysis execute rule > execution 
+
+- test implementation to the JUnit 5 API
+
+package com.bmuschko.messenger;
+
+import org.junit.jupiter.api.DisplayName;                       
+import org.junit.jupiter.api.Test;                              
+import static org.junit.jupiter.api.Assertions.assertEquals;    
+
+public class MessengerTest {
+    @Test
+    @DisplayName("Can retrieve message")
+    public void testGetMessage() {
+        Messenger messenger = new Messenger();
+        assertEquals("HELLO WORLD!", messenger.getMessage());
+    }
+}
+
+maven_install(
+    artifacts = [
+        "org.apache.commons:commons-lang3:3.9",
+        "org.junit.jupiter:junit-jupiter-api:5.5.2",
+        "org.junit.jupiter:junit-jupiter-engine:5.5.2",
+        "org.junit.platform:junit-platform-console:1.5.2"
+    ],
+    ...
+)                            
+                            
+.
+├── WORKSPACE
+├── macros
+│   ├── BUILD
+│   └── junit5.bzl
+└── src
+    └── ...
+
+
+    + implementation of macro for executing junit5 based tests 
+    
+def java_junit5_test(name, srcs, test_package, deps = [], 
+                     runtime_deps = [], **kwargs):              
+    FILTER_KWARGS = [
+        "main_class",
+        "use_testrunner",
+        "args",
+    ]
+
+    for arg in FILTER_KWARGS:
+        if arg in kwargs.keys():
+            kwargs.pop(arg)
+
+    junit_console_args = []
+    if test_package:
+        junit_console_args += ["--select-package", test_package]
+    else:
+        fail("must specify 'test_package'")
+
+    native.java_test(                                           
+        name = name,
+        srcs = srcs,
+        use_testrunner = False,
+        main_class = "org.junit.platform.console.ConsoleLauncher",
+        args = junit_console_args,
+        deps = deps + [
+             "@maven//:org_junit_jupiter_junit_jupiter_api",
+             "@maven//:org_junit_jupiter_junit_jupiter_engine"
+        ],
+        runtime_deps = runtime_deps + [
+             "@maven//:org_junit_platform_junit_platform_console"
+        ],
+        **kwargs
+    )
+    
+    + using BUILD file 
+    
+load("//macros:junit5.bzl", "java_junit5_test")      
+
+java_junit5_test(                                    
+    name = "messenger-test",
+    srcs = [
+        "MessengerTest.java"
+    ],
+    test_package = "com.bmuschko.messenger",
+    deps = [
+        "//src/main/java/com/bmuschko/messenger:messenger-lib"
+    ],
+)
+
+- write a rule by example 
+
+Similar to a Bazel macro, a rule has to be written in a file with the extension .bzl.
+
+```
+def _impl(ctx):                                               
+    zip_input = ctx.label.name
+    zip_output = ctx.outputs.zip
+    java_home = str(ctx.attr._jdk[java_common.JavaRuntimeInfo]
+        .java_home)
+    src_list = [src.path for src in ctx.files.srcs]
+    cmd = [
+        "mkdir %s" % zip_input,
+        "%s/bin/javadoc -quiet -d %s %s" % (java_home, zip_input,
+        " ".join(src_list)),
+        "zip -q -r %s %s/*" % (zip_output.path, zip_input)]
+    ctx.actions.run_shell(                                    
+        inputs = ctx.files.srcs + ctx.files._jdk,
+        outputs = [zip_output],
+        command = "\n".join(cmd))
+```
+
+    + build file 
+    
+load("//rules:javadoc.bzl", "javadoc")                         
+ 
+javadoc(                                                       
+    name = "api-docs",
+    srcs = glob(["src/main/java/com/bmuschko/**/*.java"]),
+)
+
+    + command 
+    
+To generate the Javadocs as a ZIP file, simply run the command 
+$ bazel build //:api-docs
+
+- improve build performance 
+
+remote cache, remote execution 
+
+    + one-stop solutions:
+
+An nginx server that acts as a cache but requires manual configuration
+
+The open source remote build cache built by Google, bazel-remote
+
+A fully managed but commercial object store on Google Cloud Storage
+
+- set up bazel-remote as a Docker container. You can retrieve the Docker image for bazel-remote
+
+$ docker run -v /Users/bmuschko/dev/bazel-cache:/data
+
+$ bazel test --remote_cache=http://localhost:9090
+
+- remote execution 
+
+Buildbarn, Buildfarm, BuildGrid, and Scoop, as well as Google’s commercial offering, Remote Build Execution (RBE).
+
+- Bazel Docker image bazel:1.1.0 from Google’s image registry.
+
+- docker cli, run forground 
+
+https://docs.docker.com/engine/reference/run/#detached-vs-foreground
+
+- yaml file executing a bazel build 
+
+version: 2.1
+jobs:
+  build:
+    docker:
+      - image: l.gcr.io/google/bazel:1.1.0
+    steps:
+      - checkout
+      - run: bazel build //:hello-world
+      
+- bazel process 
+
+Loads the BUILD files relevant to the target.
+
+Analyzes the inputs and their dependencies, applies the specified build rules, and produces an action graph.
+
+Executes the build actions on the inputs until the final build outputs are produced.
