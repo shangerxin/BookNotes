@@ -1,0 +1,187 @@
+C# 11, what's new;Note=Erxin
+
+# Reference 
+https://docs.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-11
+
+
+# New features 
+- .NET 6.0.200 SDK or Visual Studio 2022 version 17.1
+
+- generic attributes
+
+	+ Before C# 11:
+public class TypeAttribute : Attribute
+{
+   public TypeAttribute(Type t) => ParamType = t;
+
+   public Type ParamType { get; }
+}
+
+// C# 11 feature:
+[TypeAttribute(typeof(string))]
+public string Method() => default;
+
+	+ after 
+public class GenericAttribute<T> : Attribute { }
+
+[GenericAttribute<string>()]
+public string Method() => default;
+
+	+ following types aren't allowed as the type parameter:
+
+dynamic
+nint, nuint
+string? (or any nullable reference type)
+(int X, int Y) (or any other tuple types using C# tuple syntax).
+
+	+ instead of unsupported types 
+	
+object for dynamic.
+IntPtr instead of nint or unint.
+string instead of string?.
+ValueTuple<int, int> instead of (int X, int Y).
+
+- Generic math support 
+
+static virtual members in interfaces
+checked user defined operators
+relaxed right-shift requirements
+unsigned right shift operator
+
+...
+
+- static abstract members in interfaces 
+
+static abstract members in interfaces is a runtime preview feature. You must add the <EnablePreviewFeatures>True</EnablePreviewFeatures> in your project file. 
+
+- newlines in string interpolations 
+
+The text inside the { and } characters for a string interpolation can now span multiple lines.
+
+- simplified parameter null checks 
+
+void Method(string name!!)
+{
+    // ...
+}
+
+...
+
+
+
+# Breaking changes 
+- foreach using a ref struct enumerator type reports an error, if the language version is set to 7.3-
+
+- Async foreach prefers pattern based DisposeAsync to an explicit interface implementation of IAsyncDisposable.DisposeAsync()
+
+await foreach (var i in new AsyncEnumerable())
+{
+}
+
+struct AsyncEnumerable
+{
+    public AsyncEnumerator GetAsyncEnumerator() => new AsyncEnumerator();
+}
+
+struct AsyncEnumerator : IAsyncDisposable
+{
+    public int Current => 0;
+    public async ValueTask<bool> MoveNextAsync()
+    {
+        await Task.Yield();
+        return false;
+    }
+    public async ValueTask DisposeAsync() //remove this method to fix the issue 
+    {
+        Console.WriteLine("PICKED");
+        await Task.Yield();
+    }
+    ValueTask IAsyncDisposable.DisposeAsync() => throw null; // no longer picked
+}
+
+- disallow converted strings as a default argument, Default arguments must be compile time constants. Previous versions allowed the following code:
+
+void M(IEnumerable<char> s = "hello")
+
+- The contextual keyword var as an explicit lambda return type
+
+using System;
+
+F(var () => default);  // error CS8975: The contextual keyword 'var' cannot be used as an explicit lambda return type
+F(@var () => default); // ok
+F(() => default);      // ok: return type is inferred from the parameter to F()
+
+static void F(Func<var> f) { }
+
+public class var
+{
+}
+
+- interpolated string handlers and indexer initialization, the receiver as an input for the constructor cannot be used in an object initializer.
+
+using System.Runtime.CompilerServices;
+
+// error: Interpolated string handler conversions that reference
+// the instance being indexed cannot be used in indexer member initializers.
+var c = new C { [$""] = 1 }; 
+
+class C
+{
+    public int this[[InterpolatedStringHandlerArgument("")] CustomHandler c]
+    {
+        get => ...;
+        set => ...;
+    }
+}
+
+[InterpolatedStringHandler]
+class CustomHandler
+{
+    // The constructor of the string handler takes a "C" instance:
+    public CustomHandler(int literalLength, int formattedCount, C c) {}
+}
+
+	+ Remove the receiver type from the interpolated string handler.
+	+ Change the argument to the indexer to be a string
+	
+- ref, readonly ref, in, out not allowed as parameters or return on methods with Unmanaged callers only
+
+- length count assumed to be non-negative in patterns 
+...
+    return samples switch
+    {
+        // This switch arm prevents a warning before 17.1, but will never happen in practice.
+        // Starting with 17.1, this switch arm produces a compiler error.
+        // Removing it won't introduce a warning.
+        { Count: < 0 }    => throw new InvalidOperationException(),
+        { Count:  0 }     => "Empty collection",
+        { Count: < 5 }    => "Too small",
+        { Count: < 20 }   => "reasonable for the first pass",
+        { Count: < 100 }  => "reasonable",
+        { Count: >= 100 } => "fine",
+    };
+...
+
+- Introduced in .NET SDK 6.0.200, Visual Studio 2022 version 17.1. struct type declarations with field initializers must include an explicitly declared constructor.
+
+if a struct has field initializers it must declare a constructor
+
+struct S
+{
+    int X = 1;
+    int Y;
+
+    public S() { Y = 0; } // ok
+}
+
+- Format specifiers can't contain curly braces, can not contain curly braces (either { or }). In previous versions {{ was interpreted as an escaped { and }} was interpreted as an escaped } 
+
+using System;
+Console.WriteLine($"{{{12:X}}}");
+//prints now: "{C}" - not "{X}}"
+
+
+
+
+
+

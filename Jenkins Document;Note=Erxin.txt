@@ -1,7 +1,36 @@
 Jenkins Document;Note=Erxin
 
+
 # Reference 
 https://jenkins.io/doc/
+
+
+
+# Using jenkins 
+- aborting a build 
+
+Pipeline jobs can be stopped by sending an HTTP POST request to URL endpoints of a build.
+
+BUILD ID URL/stop - aborts a Pipeline.
+
+BUILD ID URL/term - forcibly terminates a build (should only be used if stop does not work).
+
+BUILD ID URL/kill - hard kill a pipeline. This is the most destructive way to stop a pipeline and should only be used as a last resort.
+
+- relevant projects need to be configured to Record fingerprints of the jar files
+
+- go to jenkins_server/systemInfo and see the user.timezone system property.
+
+- Jenkins installation sits at https://ci.jenkins.io, visiting https://ci.jenkins.io/api/ will show just the top-level API features available                   
+
+
+
+
+# Using jenkins agents 
+- To generate the SSH key pair, you have to execute a command line tool named ssh-keygen on a machine you have access to. It could be:
+
+
+
 
 # Guide Tour
 - download and run 
@@ -372,6 +401,8 @@ $ docker container logs <docker-container-name>
 $ docker container logs jenkins-blueocean
 
 
+
+
 # WAR file
 - WAR file
 The Web application ARchive (WAR) file version of Jenkins can be installed on any operating system or platform that supports Java.
@@ -387,12 +418,16 @@ Browse to http://localhost:8080 and wait until the Unlock Jenkins page appears.
 Continue on with the Post-installation setup wizard below.
 
 
+
+
 # Pipeline
 Jenkins pipeline is a suite of plugins which supports implementing and integrating continuous delivery pipelines into jenkins
 
 - A continuous delivery (CD) pipeline is an automated expression of your process for getting software from version control right through to your users and customers. 
 
 The definition of a Jenkins Pipeline is written into a text file (called a Jenkinsfile) which in turn can be committed to a project’s source control repository. pipeline as code, a part of the application to be version and reviewed like any other code 
+
+- can use the Declarative Directive Generator to help you get started with configuring the directives and sections in your Declarative Pipeline.
 
 - create a jenkinsfile and committing it to source control provides a number of immediate benefits 
 
@@ -423,7 +458,7 @@ stage, a block defines a conceptually distinct subset of tasks performed through
 
 step, a single task fundamentally, a step tells jenkins what to do at a particular point in time. It can execute a shell use the sh step, bat for windows 
 
-    + declarative pipeline fundamentals 
+    + declarative pipeline fundamentals, jenkinsfile example 
     
 pipeline {
     agent any 
@@ -445,6 +480,13 @@ pipeline {
         }
     }
 }
+
+follow the same rules as Groovy’s syntax with the following exceptions
+top level pipeline must be pipeline {}
+no semicolons 
+block must only consist of sections, directives, steps or assignment statement 
+
+	agent is Declarative Pipeline-specific syntax that instructs Jenkins to allocate an executor (on a node) and workspace for the entire Pipeline.
 
     + scripted pipeline fundamentals 
     
@@ -498,6 +540,865 @@ https://plugins.jenkins.io/workflow-durable-task-step
 
 https://plugins.jenkins.io/pipeline-stage-view
 
+- Sections
+
+agent, specifies where the entire pipeline or specific stage will execute in the jenkins environment 
+
+    + top level agents, outer most level of the pipeline, options are invoked after entering the agent, when using timeout 
+
+node("myAgent") {
+    timeout(unit: 'SECONDS', time: 5) {
+        stage("One"){
+            sleep 10
+            echo 'hello'
+        }
+    }
+}
+
+    + stage agents 
+    
+agents declared within a stage, the options are invoked before entering the agent and before checking any when conditions.
+
+    + agent paremeters, agent section supports a few different types of parameters.
+    
+any, none, label, node, docker, dockerfile, kubernetes 
+
+agent any
+
+agent none
+
+agent { label 'my-defined-label' }
+
+agent { node { label 'labelName' } },  node allows for additional options (such as customWorkspace).
+
+agent {
+    docker {
+        image 'maven:3.8.1-adoptopenjdk-11'
+        label 'my-defined-label'
+        args  '-v /tmp:/tmp'
+        registryUrl 'https://myregistry.com/'
+        registryCredentialsId 'myPredefinedCredentialsInJenkins'
+    }
+}
+
+
+//Execute the Pipeline, or stage, with a container built from a Dockerfile contained in the source repository. In order to use this option, the Jenkinsfile must be loaded from either a Multibranch Pipeline or a Pipeline from SCM. 
+agent {
+    // Equivalent to "docker build -f Dockerfile.build --build-arg version=1.0.2 ./build/
+    dockerfile {
+        filename 'Dockerfile.build'
+        dir 'build'
+        label 'my-defined-label'
+        additionalBuildArgs  '--build-arg version=1.0.2'
+        args '-v /tmp:/tmp'
+        registryUrl 'https://myregistry.com/'
+        registryCredentialsId 'myPredefinedCredentialsInJenkins'
+    }
+}
+
+//a pod with a Kaniko container inside it, you would define it as follows
+agent {
+    kubernetes {
+        defaultContainer 'kaniko'
+        yaml '''
+kind: Pod
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:debug
+    imagePullPolicy: Always
+    command:
+    - sleep
+    args:
+    - 99d
+    volumeMounts:
+      - name: aws-secret
+        mountPath: /root/.aws/
+      - name: docker-registry-config
+        mountPath: /kaniko/.docker
+  volumes:
+    - name: aws-secret
+      secret:
+        secretName: aws-secret
+    - name: docker-registry-config
+      configMap:
+        name: docker-registry-config
+'''
+   }
+//This secret should contain the contents of ~/.aws/credentials.
+{
+      "credHelpers": {
+        "<your-aws-account-id>.dkr.ecr.eu-central-1.amazonaws.com": "ecr-login"
+      }
+}
+
+- common options 
+
+label, a string on which to run the pipeline, valid for node, docker and dockerfile 
+
+customWorkspace, custom workspace will be under the workspace root on the node, or an absolute path, valid for node, docker, and dockerfile.
+agent {
+    node {
+        label 'my-defined-label'
+        customWorkspace '/some/other/path'
+    }
+}
+
+args, Runtime arguments to pass to docker run., valid for docker and dockerfile 
+pipeline {
+    agent { docker 'maven:3.8.1-adoptopenjdk-11' } 
+    stages {
+        stage('Example Build') {
+            steps {
+                sh 'mvn -B clean verify'
+            }
+        }
+        //Stage-level Agent Section
+        stage('Example Test') {
+            agent { docker 'openjdk:8-jre' } 
+            steps {
+                echo 'Hello, JDK'
+                sh 'java -version'
+            }
+        }
+    }
+}
+
+agent none at the top-level of the Pipeline ensures that an Executor will not be assigned unnecessarily. Using agent none also forces each stage section to contain its own agent section.
+
+- The post section defines one or more additional steps that are run upon the completion of a Pipeline’s or stage’s run (depending on the location of the post section within the Pipeline). post can support any of the following 
+
+post-condition blocks: always, changed, fixed, regression, aborted, failure, success, unstable, unsuccessful, and cleanup.
+
+changed, Only run the steps in post if the current Pipeline’s or stage’s run has a different completion status from its previous run.
+
+fixed, Only run the steps in post if the current Pipeline’s or stage’s run is successful and the previous run failed or was unstable.
+
+regression, Only run the steps in post if the current Pipeline’s or stage’s run’s status is failure, unstable, or aborted and the previous run was successful.
+
+failure, Only run the steps in post if the current Pipeline’s or stage’s run has a "failed" status, typically denoted by red in the web UI.
+
+unstable Only run the steps in post if the current Pipeline’s or stage’s run has an "unstable" status, usually caused by test failures, code violations, etc. This is typically denoted by yellow in the web UI.
+
+unsuccessful, Only run the steps in post if the current Pipeline’s or stage’s run has not a "success" status
+
+pipeline {
+    agent any
+    stages {
+        stage('Example') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+    }
+    post { 
+        always { 
+            echo 'I will always say Hello again!'
+        }
+    }
+}
+
+- stages, a sequence of one or more stage directives, the stages section is where the bulk of the "work" described by a Pipeline, the stages section will typically follow the directives such as agent, options, etc.
+
+
+pipeline {
+    agent any
+    stages { 
+        stage('Example') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+    }
+}
+
+- steps, The steps section defines a series of one or more steps to be executed
+
+pipeline {
+    agent any
+    stages {
+        stage('Example') {
+            steps { 
+                echo 'Hello World'
+            }
+        }
+    }
+}
+
+- The environment directive specifies a sequence of key-value pairs which will be defined as environment variables for all steps
+
+This directive supports a special helper method credentials() which can be used to access pre-defined Credentials, Inside the pipeline block, or within stage directives.
+
+pipeline {
+    agent any
+    environment { 
+        CC = 'clang'
+    }
+    stages {
+        stage('Example') {
+            environment { 
+                AN_ACCESS_KEY = credentials('my-predefined-secret-text') 
+            }
+            steps {
+                sh 'printenv'
+            }
+        }
+    }
+}
+
+An environment directive used in the top-level pipeline block will apply to all steps within the Pipeline.
+
+An environment directive defined within a stage will only apply the given environment variables to steps
+    
+pipeline {
+    agent any
+    stages {
+        stage('Example Username/Password') {
+            environment {
+                SERVICE_CREDS = credentials('my-predefined-username-password')
+            }
+            steps {
+                sh 'echo "Service user is $SERVICE_CREDS_USR"'
+                sh 'echo "Service password is $SERVICE_CREDS_PSW"'
+                sh 'curl -u $SERVICE_CREDS https://myservice.example.com'
+            }
+        }
+        stage('Example SSH Username with private key') {
+            environment {
+                SSH_CREDS = credentials('my-predefined-ssh-creds')
+            }
+            steps {
+                sh 'echo "SSH private key is located at $SSH_CREDS"'
+                sh 'echo "SSH user is $SSH_CREDS_USR"'
+                sh 'echo "SSH passphrase is $SSH_CREDS_PSW"'
+            }
+        }
+    }
+}
+
+- options, The options directive allows configuring Pipeline-specific options from within the Pipeline itself.
+
+buildDiscarder, persist artifacts and console output for specific number of runs 
+options { buildDiscarder(logRotator(numToKeepStr: '1')) }
+
+checkoutToSubdirectory Perform the automatic source control checkout in a subdirectory of the workspace. 
+
+disableConcurrentBuilds Disallow concurrent executions of the Pipeline. 
+
+disableResume Do not allow the pipeline to resume if the controller restarts.
+
+overrideIndexTriggers Allows overriding default treatment of branch indexing triggers. 
+
+preserveStashes Preserve stashes from completed builds, for use with stage restarting.
+
+quietPeriod Set the quiet period, in seconds, for the Pipeline, overriding the global default. 
+
+retry On failure, retry the entire Pipeline the specified number of times
+options { retry(3) }
+
+skipDefaultCheckout Skip checking out code from source control by default in the agent directive.
+options { skipDefaultCheckout() }
+
+skipStagesAfterUnstable Skip stages once the build status has gone to UNSTABLE.
+
+timeout Set a timeout period for the Pipeline run, after which Jenkins should abort the Pipeline. For example: options { timeout(time: 1, unit: 'HOURS') }
+
+timestamps Prepend all console output generated by the Pipeline run with the time at which the line was emitted. For example: options { timestamps() }
+
+parallelsAlwaysFailFast Set failfast true for all subsequent parallel stages in the pipeline.
+
+    + stage options,  similar to the options directive at the root of the Pipeline. However, the stage-level options can only contain steps like retry, timeout, or timestamps.  
+
+- parameters directive provides a list of parameters that a user should provide when triggering the Pipeline. parameters are made available to Pipeline steps via the params object 
+
+string A parameter of a string type, for example: 
+parameters { string(name: 'DEPLOY_ENV', defaultValue: 'staging', description: '') }
+
+text A text parameter, which can contain multiple lines, for example: 
+parameters { text(name: 'DEPLOY_TEXT', defaultValue: 'One\nTwo\nThree\n', description: '') }
+
+booleanParam A boolean parameter, for example: 
+parameters { booleanParam(name: 'DEBUG_BUILD', defaultValue: true, description: '') }
+
+choice A choice parameter, for example: 
+parameters { choice(name: 'CHOICES', choices: ['one', 'two', 'three'], description: '') }
+
+password  A password parameter, for example: 
+parameters { password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'A secret password') }
+ 
+ 
+pipeline {
+    agent any
+    parameters {
+        string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
+
+        text(name: 'BIOGRAPHY', defaultValue: '', description: 'Enter some information about the person')
+
+        booleanParam(name: 'TOGGLE', defaultValue: true, description: 'Toggle this value')
+
+        choice(name: 'CHOICE', choices: ['One', 'Two', 'Three'], description: 'Pick something')
+
+        password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'Enter a password')
+    }
+    stages {
+        stage('Example') {
+            steps {
+                echo "Hello ${params.PERSON}"
+
+                echo "Biography: ${params.BIOGRAPHY}"
+
+                echo "Toggle: ${params.TOGGLE}"
+
+                echo "Choice: ${params.CHOICE}"
+
+                echo "Password: ${params.PASSWORD}"
+            }
+        }
+    }
+}
+
+- triggers, webhooks-based integration will likely already be present. The triggers currently available are cron, pollSCM and upstream.
+
+    + acron
+a cron-style string to define a regular interval, triggers { cron('H */4 * * 1-5') }
+
+    + pollSCM 
+Accepts a cron-style string to define a regular interval at which Jenkins should check for new source changes.
+triggers { pollSCM('H */4 * * 1-5') }
+    
+    + upstream 
+Accepts a comma-separated string of jobs and a threshold. 
+triggers { upstream(upstreamProjects: 'job1,job2', threshold: hudson.model.Result.SUCCESS) }
+
+- cron time string is five values 
+
+[ * (MINUTE TIME FORMAT) ] [ * (HOUR TIME FORMAT) ] [ * (DAY OF THE MONTH TIME FORMAT) ] [ * (REPRESENT MONTH TIME FORMAT) ] [ * (DAY OF WEEK TIME FORMAT) ] [ PATH OF THE SCRIPT OR JOBS or APPLICATION ]
+
+    + examples 
+    
+//run automatically every next 7 minutes 
+*/7 * * * * /root/time.sh
+
+//every 4 hour 
+* */4 * * * /root/time.sh
+
+//weekly 
+@weekly /root/time.sh
+
+* specifies all valid values
+
+M-N specifies a range of values
+
+M-N/X or */X steps by intervals of X through the specified range or whole valid range
+
+A,B,…​,Z enumerates multiple values
+
+- The stage directive goes in the stages section and should contain a steps section, an optional agent section
+// Declarative //
+pipeline {
+    agent any
+    stages {
+        stage('Example') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+    }
+}
+
+- tool A section defining tools to auto-install and put on the PATH. This is ignored if agent none is specified.
+
+pipeline {
+    agent any
+    tools {
+        maven 'apache-maven-3.0.1' 
+    }
+    stages {
+        stage('Example') {
+            steps {
+                sh 'mvn --version'
+            }
+        }
+    }
+}
+
+tool name must be pre-configured in Jenkins under Manage Jenkins → Global Tool Configuration.
+
+- input, The input directive on a stage allows you to prompt for input, using the input step. will be available in the environment for the rest of the stage
+
+pipeline {
+    agent any
+    stages {
+        stage('Example') {
+            input {
+                message "Should we continue?"
+                ok "Yes, we should."
+                submitter "alice,bob"
+                parameters {
+                    string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
+                }
+            }
+            steps {
+                echo "Hello, ${PERSON}, nice to meet you."
+            }
+        }
+    }
+}
+
+- The when directive allows the Pipeline to determine whether the stage should be executed depending on the given condition. 
+
+nesting conditions: not, allOf, or anyOf. Nesting conditions may be nested to any arbitrary depth.
+
+    + built-in condition 
+    
+the branch being built matches the branch pattern, when { branch 'master' }. Note that this only works on a multibranch Pipeline.
+when { branch pattern: "release-\\d+", comparator: "REGEXP"}
+
+build is building a tag. Example: when { buildingTag() }
+
+changelog Execute the stage if the build’s SCM changelog contains a given regular expression pattern
+when { changelog '.*^\\[DEPENDENCY\\] .+$' }
+
+changeset Execute the stage if the build’s SCM changeset contains one or more files matching the given pattern. 
+when { changeset pattern: ".TEST\\.java", comparator: "REGEXP" } or when { changeset pattern: "*/*TEST.java", caseSensitive: true }
+
+changeRequest, executes the stage if the current build is for a "change request" (a.k.a. Pull Request on GitHub and Bitbucket 
+when { changeRequest() }. Possible attributes are id, target, branch, fork, url, title, author, authorDisplayName, and authorEmail
+when { changeRequest target: 'master' }.
+when { changeRequest authorEmail: "[\\w_-.]+@example.com", comparator: 'REGEXP' }
+
+environment, when { environment name: 'DEPLOY_TO', value: 'production' }
+
+equals, the expected value is equal to the actual value, for example: when { equals expected: 2, actual: currentBuild.number }
+
+expression, when the specified Groovy expression evaluates to true, for example
+when { expression { return params.DEBUG_BUILD } }
+
+tag Execute the stage if the TAG_NAME variable matches the given pattern.  when { tag "release-*" }. If an empty pattern is provided the stage will execute if the TAG_NAME variable exists (same as buildingTag()).
+when { tag pattern: "release-\\d+", comparator: "REGEXP"}
+
+not,  Execute the stage when the nested condition is false. 
+when { not { branch 'master' } }
+
+allOf Execute the stage when all of the nested conditions are true
+
+anyOf Execute the stage when at least one of the nested conditions is true.
+
+triggeredBy Execute the stage when the current build has been triggered by the param given
+when { triggeredBy 'SCMTrigger' }
+when { triggeredBy 'TimerTrigger' }
+when { triggeredBy 'BuildUpstreamCause' }
+when { triggeredBy cause: "UserIdCause", detail: "vlinde" }
+
+beforeAgent evaluating when before entering agent in a stage by specifying the beforeAgent option within the when block. If beforeAgent is set to true 
+
+beforeInput the when condition for a stage will not be evaluated before the input, if one is defined. However, this can be changed by specifying the beforeInput option
+
+beforeOptions the when condition for a stage will be evaluated after entering the options for that stage, if any are defined
+
+    + when examples 
+pipeline {
+    agent any
+    stages {
+        stage('Example Build') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('Example Deploy') {
+            when {
+                allOf {
+                    branch 'production'
+                    environment name: 'DEPLOY_TO', value: 'production'
+                }
+            }
+            steps {
+                echo 'Deploying'
+            }
+        }
+    }
+}
+
+pipeline {
+    agent any
+    stages {
+        stage('Example Build') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('Example Deploy') {
+            when {
+                branch 'production'
+                anyOf {
+                    environment name: 'DEPLOY_TO', value: 'production'
+                    environment name: 'DEPLOY_TO', value: 'staging'
+                }
+            }
+            steps {
+                echo 'Deploying'
+            }
+        }
+    }
+}
+
+pipeline {
+    agent any
+    stages {
+        stage('Example Build') {
+            steps {
+                echo 'Hello World'
+            }
+        }
+        stage('Example Deploy') {
+            when {
+                expression { BRANCH_NAME ==~ /(production|staging)/ }
+                anyOf {
+                    environment name: 'DEPLOY_TO', value: 'production'
+                    environment name: 'DEPLOY_TO', value: 'staging'
+                }
+            }
+            steps {
+                echo 'Deploying'
+            }
+        }
+    }
+}
+
+- sequential stages, a stages section containing a list of nested stages to be run in sequential order. a stage directive within a parallel or matrix block can use all other functionality of a stage, including agent, tools, when, etc.
+
+pipeline {
+    agent none
+    stages {
+        stage('Non-Sequential Stage') {
+            agent {
+                label 'for-non-sequential'
+            }
+            steps {
+                echo "On Non-Sequential Stage"
+            }
+        }
+        stage('Sequential') {
+            agent {
+                label 'for-sequential'
+            }
+            environment {
+                FOR_SEQUENTIAL = "some-value"
+            }
+            stages {
+                stage('In Sequential 1') {
+                    steps {
+                        echo "In Sequential 1"
+                    }
+                }
+                stage('In Sequential 2') {
+                    steps {
+                        echo "In Sequential 2"
+                    }
+                }
+                stage('Parallel In Sequential') {
+                    parallel {
+                        stage('In Parallel 1') {
+                            steps {
+                                echo "In Parallel 1"
+                            }
+                        }
+                        stage('In Parallel 2') {
+                            steps {
+                                echo "In Parallel 2"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+- parallel, a parallel section containing a list of nested stages to be run in parallel. Note that a stage must have one and only one of steps, stages, parallel, or matrix. However, a stage directive within a parallel or matrix block can use all other functionality of a stage, including agent, tools, when, etc. 
+
+you can force your parallel stages to all be aborted when any one of them fails, by adding failFast true to the stage containing the parallel. or an option to the pipeline definition: parallelsAlwaysFailFast() in the pipeline. 
+
+pipeline {
+    agent any
+    stages {
+        stage('Non-Parallel Stage') {
+            steps {
+                echo 'This stage will be executed first.'
+            }
+        }
+        stage('Parallel Stage') {
+            when {
+                branch 'master'
+            }
+            failFast true
+            parallel {
+                stage('Branch A') {
+                    agent {
+                        label "for-branch-a"
+                    }
+                    steps {
+                        echo "On Branch A"
+                    }
+                }
+                stage('Branch B') {
+                    agent {
+                        label "for-branch-b"
+                    }
+                    steps {
+                        echo "On Branch B"
+                    }
+                }
+                stage('Branch C') {
+                    agent {
+                        label "for-branch-c"
+                    }
+                    stages {
+                        stage('Nested 1') {
+                            steps {
+                                echo "In stage Nested 1 within Branch C"
+                            }
+                        }
+                        stage('Nested 2') {
+                            steps {
+                                echo "In stage Nested 2 within Branch C"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pipeline {
+    agent any
+    options {
+        parallelsAlwaysFailFast()
+    }
+    stages {
+        stage('Non-Parallel Stage') {
+            steps {
+                echo 'This stage will be executed first.'
+            }
+        }
+        stage('Parallel Stage') {
+            when {
+                branch 'master'
+            }
+            parallel {
+                stage('Branch A') {
+                    agent {
+                        label "for-branch-a"
+                    }
+                    steps {
+                        echo "On Branch A"
+                    }
+                }
+                stage('Branch B') {
+                    agent {
+                        label "for-branch-b"
+                    }
+                    steps {
+                        echo "On Branch B"
+                    }
+                }
+                stage('Branch C') {
+                    agent {
+                        label "for-branch-c"
+                    }
+                    stages {
+                        stage('Nested 1') {
+                            steps {
+                                echo "In stage Nested 1 within Branch C"
+                            }
+                        }
+                        stage('Nested 2') {
+                            steps {
+                                echo "In stage Nested 2 within Branch C"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+- Matrix stages in Declarative Pipeline may have a matrix section defining a multi-dimensional matrix of name-value combinations to be run in parallel.
+
+"cells" in a matrix. Each cell in a matrix can include one or more stages to be run sequentially using the configuration for that cell. must have only one of steps, stages, parallel, or matrix. parallel and matrix are not allow to nest. a stage in a parallel or matrix can use all other functionality. 
+
+failFast, parallelsAlwaysFailFast()
+
+The matrix section must include an axes section and a stages section. he axes section defines the values for each axis in the matrix. The stages section defines a list of stages to run sequentially. n excludes section to remove invalid cells from the matrix 
+
+    + axes, Each axis consists of a name and a list of values
+    
+matrix {
+    axes {
+        axis {
+            name 'PLATFORM'
+            values 'linux', 'mac', 'windows'
+        }
+        axis {
+            name 'BROWSER'
+            values 'chrome', 'edge', 'firefox', 'safari'
+        }
+    }
+    stages {
+        stage('build-and-test') {
+            // ...
+        }
+    }
+    //optional 
+    excludes {
+        exclude {
+            axis {
+                name 'PLATFORM'
+                notValues 'mac'
+            }
+            axis {
+                name 'ARCHITECTURE'
+                values '32-bit', '64-bit'
+            }
+        }
+    }
+}
+
+exclude axis directives can use notValues instead of values. These will exclude cells that do not match one of the values passed to notValues.
+
+    + Matrix cell-level directives, optional. The axis and exclude directives define the static set of cells that make up the matrix. 
+
+agent
+
+environment
+
+input
+
+options
+
+post
+
+tools
+
+when
+
+    + matrix example 
+pipeline {
+    parameters {
+        choice(name: 'PLATFORM_FILTER', choices: ['all', 'linux', 'windows', 'mac'], description: 'Run on specific platform')
+    }
+    agent none
+    stages {
+        stage('BuildAndTest') {
+            matrix {
+                agent {
+                    label "${PLATFORM}-agent"
+                }
+                when { anyOf {
+                    expression { params.PLATFORM_FILTER == 'all' }
+                    expression { params.PLATFORM_FILTER == env.PLATFORM }
+                } }
+                axes {
+                    axis {
+                        name 'PLATFORM'
+                        values 'linux', 'windows', 'mac'
+                    }
+                    axis {
+                        name 'BROWSER'
+                        values 'firefox', 'chrome', 'safari', 'edge'
+                    }
+                }
+                excludes {
+                    exclude {
+                        axis {
+                            name 'PLATFORM'
+                            values 'linux'
+                        }
+                        axis {
+                            name 'BROWSER'
+                            values 'safari'
+                        }
+                    }
+                    exclude {
+                        axis {
+                            name 'PLATFORM'
+                            notValues 'windows'
+                        }
+                        axis {
+                            name 'BROWSER'
+                            values 'edge'
+                        }
+                    }
+                }
+                stages {
+                    stage('Build') {
+                        steps {
+                            echo "Do Build for ${PLATFORM} - ${BROWSER}"
+                        }
+                    }
+                    stage('Test') {
+                        steps {
+                            echo "Do Test for ${PLATFORM} - ${BROWSER}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+- Steps, Declarative Pipelines may use all the available steps documented in the Pipeline Steps reference
+
+- The script step takes a block of Scripted Pipeline and executes that in the Declarative Pipeline
+
+pipeline {
+    agent any
+    stages {
+        stage('Example') {
+            steps {
+                echo 'Hello World'
+
+                script {
+                    def browsers = ['chrome', 'firefox']
+                    for (int i = 0; i < browsers.size(); ++i) {
+                        echo "Testing the ${browsers[i]} browser"
+                    }
+                }
+            }
+        }
+    }
+}
+
+- flow control 
+
+node {
+    stage('Example') {
+        if (env.BRANCH_NAME == 'master') {
+            echo 'I only execute on the master branch'
+        } else {
+            echo 'I execute elsewhere'
+        }
+    }
+}
+
+node {
+    stage('Example') {
+        try {
+            sh 'exit 1'
+        }
+        catch (exc) {
+            echo 'Something failed, I should sound the klaxons!'
+            throw
+        }
+    }
+}
+
+- Scripted Pipeline must serialize data back to the controller. Due to this design requirement, some Groovy idioms such as collection.each { item → /* perform operation */ } are not fully supported.
+
+
+
 
 ## Getting started with pipeline 
 - define a pipeline 
@@ -524,12 +1425,31 @@ https://plugins.jenkins.io/pipeline-stage-view
 env, environment variables,  reference at ${YOUR_JENKINS_URL}/pipeline-syntax/globals
 params, all aprameters read-only Map, for example: params.MY_PARAM_NAME
 currentBuild,  such as currentBuild.result, currentBuild.displayName
+scm, represents the configuration in a multibranch build 
+complete global variable list, ${YOUR_JENKINS_URL}/pipeline-syntax/globals for a complete,
+
+
 
 - declarative directive generator
     + directly to ${YOUR_JENKINS_URL}/directive-generator.
     + Click Generate Directive to create the directive’s configuration to copy into your Pipeline
-    
-    
+
+- a Jenkins Pipeline is written into a text file (called a Jenkinsfile) which in turn can be committed to a project’s source control repository    
+
+Automatically creates a Pipeline build process for all branches and pull requests.
+
+Code review/iteration on the Pipeline (along with the remaining source code).
+
+Audit trail for the Pipeline.
+
+Single source of truth [3] for the Pipeline, which can be viewed and edited by multiple members of the project.
+
+- the Blue Ocean UI helps you set up your Pipeline project, and automatically creates and writes your Pipeline (i.e. the Jenkinsfile) for you through the graphical Pipeline editor.
+
+- The built-in "Snippet Generator" utility is helpful for creating bits of code for individual steps
+
+
+
 # Pipeline example 
 - reference 
 https://jenkins.io/doc/pipeline/examples/
@@ -554,6 +1474,8 @@ https://jenkins.io/doc/pipeline/examples/
 - timestamper wrapper 
 - trigger job on all nodes 
 - unstash different dir
+
+
 
 
 # Blue Ocean 
@@ -589,4 +1511,445 @@ Docker Host Certificate Authentication credentials.
 System, click the Global credentials (unrestricted) link to access this default domain.
 
 
-# Jenkins build flow plugin 
+# Using a jenkinsfile 
+- benefits 
+
+Code review/iteration on the Pipeline
+
+Audit trail for the Pipeline
+
+Single source of truth [2] for the Pipeline, which can be viewed and edited by multiple members of the project
+
+- example jenkinsfile 
+
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building..'
+            }
+        }
+        stage('Test') {
+            steps {
+                echo 'Testing..'
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying....'
+            }
+        }
+    }
+}
+
+-  create a new Jenkinsfile in the root directory of the project.
+
+Jenkinsfile (Scripted Pipeline)
+node {
+    checkout scm 
+    /* .. snip .. */
+}
+
+The checkout step will checkout code from source control;
+
+- build, *nix can use bash, window can use batch  
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                sh 'make' 
+                archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true 
+            }
+        }
+    }
+}
+
+- test 
+
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent any
+
+    stages {
+        stage('Test') {
+            steps {
+                /* `make check` returns non-zero on test failures,
+                * using `true` to allow the Pipeline to continue nonetheless
+                */
+                sh 'make check || true' 
+                junit '**/target/*.xml' 
+            }
+        }
+    }
+}
+
+sh step always sees a zero exit code, giving the junit step the opportunity to capture and process the test reports
+
+- deploy, Deployment can imply a variety of steps, depending on the project or organization requirements
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Deploy') {
+            when {
+              expression {
+                currentBuild.result == null || currentBuild.result == 'SUCCESS' 
+              }
+            }
+            steps {
+                sh 'make publish'
+            }
+        }
+    }
+}
+
+- using environment variable 
+
+Pipeline is documented at ${YOUR_JENKINS_URL}/pipeline-syntax/globals#env 
+
+- setting environment variables dynamically, run time and can be used by shell scripts (sh), Windows batch scripts (bat) and PowerShell scripts (powershell). Each script can either returnStatus or returnStdout. 
+
+pipeline {
+    agent any 
+    environment {
+        // Using returnStdout
+        CC = """${sh(
+                returnStdout: true,
+                script: 'echo "clang"'
+            )}""" 
+        // Using returnStatus
+        EXIT_STATUS = """${sh(
+                returnStatus: true,
+                script: 'exit 1'
+            )}"""
+    }
+    stages {
+        stage('Example') {
+            environment {
+                DEBUG_FLAGS = '-g'
+            }
+            steps {
+                sh 'printenv'
+            }
+        }
+    }
+}
+
+- handling credentials 
+
+Jenkins' declarative Pipeline syntax has the credentials() helper method (used within the environment directive) which supports secret text, username and password, as well as secret file credentials. 
+
+respective credential IDs jenkins-aws-secret-key-id and jenkins-aws-secret-access-key.
+
+Jenkinsfile (Declarative Pipeline)
+pipeline {
+    agent {
+        // Define agent details here
+    }
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('jenkins-aws-secret-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws-secret-access-key')
+    }
+    stages {
+        stage('Example stage 1') {
+            steps {
+                // 
+            }
+        }
+        stage('Example stage 2') {
+            steps {
+                // 
+            }
+        }
+    }
+}
+
+Any sensitive information in credential IDs themselves (such as usernames) are also returned as “****” in the Pipeline run’s outpu
+
+stage’s steps using the syntax $AWS_ACCESS_KEY_ID and $AWS_SECRET_ACCESS_KEY.
+
+environment {
+    BITBUCKET_COMMON_CREDS = credentials('jenkins-bitbucket-common-creds')
+}
+
+BITBUCKET_COMMON_CREDS - contains a username and a password separated by a colon in the format username:password.
+BITBUCKET_COMMON_CREDS_USR - an additional variable containing the username component only.
+BITBUCKET_COMMON_CREDS_PSW - an additional variable containing the password component only.
+
+- jenkins pipeline 
+
+pipeline {
+    agent {
+        // Define agent details here
+    }
+    stages {
+        stage('Example stage 1') {
+            environment {
+                BITBUCKET_COMMON_CREDS = credentials('jenkins-bitbucket-common-creds')
+            }
+            steps {
+                // 
+            }
+        }
+        stage('Example stage 2') {
+            steps {
+                // 
+            }
+        }
+    }
+}
+
+this stage’s steps and can be referenced using the syntax:
+$BITBUCKET_COMMON_CREDS
+$BITBUCKET_COMMON_CREDS_USR
+$BITBUCKET_COMMON_CREDS_PSW
+
+- secret files, uploaded to Jenkins. Secret files are used for credentials that are:
+
+pipeline {
+    agent {
+        // Define agent details here
+    }
+    environment {
+        // The MY_KUBECONFIG environment variable will be assigned
+        // the value of a temporary file.  For example:
+        //   /home/user/.jenkins/workspace/cred_test@tmp/secretFiles/546a5cf3-9b56-4165-a0fd-19e2afe6b31f/kubeconfig.txt
+        MY_KUBECONFIG = credentials('my-kubeconfig')
+    }
+    stages {
+        stage('Example stage 1') {
+            steps {
+                sh("kubectl --kubeconfig $MY_KUBECONFIG get pods")
+            }
+        }
+    }
+}
+
+- other credential types 
+
+Bindings, click Add and choose from the dropdown
+
+SSH User Private Key - to handle SSH public/private key pair credentials
+
+Certificate - to handle PKCS#12 certificates, from which you can specify
+
+Keystore Variable
+
+SSH User Private Key example
+
+withCredentials(bindings: [sshUserPrivateKey(credentialsId: 'jenkins-ssh-key-for-abc', \
+                                             keyFileVariable: 'SSH_KEY_FOR_ABC', \
+                                             passphraseVariable: '', \
+                                             usernameVariable: '')]) {
+  // some block
+}
+
+    + jenkins file 
+    
+pipeline {
+    agent {
+        // define agent details
+    }
+    stages {
+        stage('Example stage 1') {
+            steps {
+                withCredentials(bindings: [sshUserPrivateKey(credentialsId: 'jenkins-ssh-key-for-abc', \
+                                                             keyFileVariable: 'SSH_KEY_FOR_ABC')]) {
+                  // 
+                }
+                withCredentials(bindings: [certificate(credentialsId: 'jenkins-certificate-for-xyz', \
+                                                       keystoreVariable: 'CERTIFICATE_FOR_XYZ', \
+                                                       passwordVariable: 'XYZ-CERTIFICATE-PASSWORD')]) {
+                  // 
+                }
+            }
+        }
+        stage('Example stage 2') {
+            steps {
+                // 
+            }
+        }
+    }
+}
+
+node {
+  withCredentials([string(credentialsId: 'mytoken', variable: 'TOKEN')]) {
+    sh /* WRONG! */ """
+      set +x
+      curl -H 'Token: $TOKEN' https://some.api/
+    """
+    sh /* CORRECT */ '''
+      set +x
+      curl -H 'Token: $TOKEN' https://some.api/
+    '''
+  }
+}
+
+- string interpolation 
+
+    + Groovy string interpolation should never be used with credentials.
+
+    + interpolation with environment variable 
+    
+    sh("curl -u ${EXAMPLE_CREDS_USR}:${EXAMPLE_CREDS_PSW} https://example.com/")
+
+- handling parameters, Declarative Pipeline supports parameters out-of-the-box, allowing the Pipeline to accept user-specified parameters at runtime
+
+pipeline {
+    agent any
+    parameters {
+        string(name: 'Greeting', defaultValue: 'Hello', description: 'How should I greet the world?')
+    }
+    stages {
+        stage('Example') {
+            steps {
+                echo "${params.Greeting} World!"
+            }
+        }
+    }
+}
+
+- handling failure 
+
+a number of different "post conditions" such as: always, unstable, success, failure, and changed
+
+pipeline {
+    agent none
+    stages {
+        stage('Build') {
+            agent any
+            steps {
+                checkout scm
+                sh 'make'
+                stash includes: '**/target/*.jar', name: 'app' 
+            }
+        }
+        stage('Test on Linux') {
+            agent { 
+                label 'linux'
+            }
+            steps {
+                unstash 'app' 
+                sh 'make check'
+            }
+            post {
+                always {
+                    junit '**/target/*.xml'
+                }
+            }
+        }
+        stage('Test on Windows') {
+            agent {
+                label 'windows'
+            }
+            steps {
+                unstash 'app'
+                bat 'make check' 
+            }
+            post {
+                always {
+                    junit '**/target/*.xml'
+                }
+            }
+        }
+    }
+}
+
+- using multiple agents 
+
+The stash step allows capturing files matching an inclusion pattern (**/target/*.jar) 
+    
+pipeline {
+    agent none
+    stages {
+        stage('Build') {
+            agent any
+            steps {
+                checkout scm
+                sh 'make'
+                stash includes: '**/target/*.jar', name: 'app' 
+            }
+        }
+        stage('Test on Linux') {
+            agent { 
+                label 'linux'
+            }
+            steps {
+                unstash 'app' 
+                sh 'make check'
+            }
+            post {
+                always {
+                    junit '**/target/*.xml'
+                }
+            }
+        }
+        stage('Test on Windows') {
+            agent {
+                label 'windows'
+            }
+            steps {
+                unstash 'app'
+                bat 'make check' 
+            }
+            post {
+                always {
+                    junit '**/target/*.xml'
+                }
+            }
+        }
+    }
+}
+
+Once pipelines are completed its execution, stashed files are deleted from the Jenkins controller.
+
+unstash will retrieve the named "stash" from the Jenkins controller into the Pipeline’s current workspace.
+
+bat allow execute windows batch command 
+    
+- optional step arguments 
+
+uses the syntax [key1: value1, key2: value2]. Making statements like the following functionally equivalent:
+
+```
+git url: 'git://example.com/amazing-project.git', branch: 'master'
+git([url: 'git://example.com/amazing-project.git', branch: 'master'])
+```
+
+- advanced scripted pipeline, parallel execution 
+
+stage('Build') {
+    /* .. snip .. */
+}
+
+stage('Test') {
+    parallel linux: {
+        node('linux') {
+            checkout scm
+            try {
+                unstash 'app'
+                sh 'make check'
+            }
+            finally {
+                junit '**/target/*.xml'
+            }
+        }
+    },
+    windows: {
+        node('windows') {
+            /* .. snip .. */
+        }
+    }
+}
+
+
+
+
+

@@ -1,0 +1,553 @@
+Beginning Bazel, building and testing for Java, Go and More=P.J.McNerney;Note=Erxin
+
+
+# Introduction
+- reference 
+https://learning.oreilly.com/library/view/beginning-bazel-building/9781484251942/
+
+- windows should eanble developer mode from windows settings 
+
+- MSYS2 is a platform that provides some basic tools for software distribution and building; in this context, we will be most interested in the fact that it provides a bash shell for Windows. 
+
+- install bazel 
+
+    + linux 
+~$ sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python3
+
+    + windows 
+    
+install vc 2015 redistributable 
+
+msys2 is a platform that provide some basic tools for software distribution and building 
+http://www.msys2.org 
+
+
+executable from https://github.com/bazelbuild/bazel/releases/download/1.0.0/bazel-1.0.0-windows-x86_64.exe.
+
+Add the path to your MSYS2 .bashrc file.
+export PATH="$PATH:/c/Users/<username>/bin"
+
+verify using Bazel you are using.
+pjmcn@WINDOWS-HOME MSYS~
+$ bazel –-version
+bazel 1.0.0
+
+install c++ build tool, Navigate to https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019. Download the Build Tools
+
+install java, Navigate to www.oracle.com/technetwork/java/javase/downloads/index.html
+
+install python, Navigate to www.python.org/downloads/release/python-2716 and download the Windows x86-64 MSI Installer
+
+
+# Build your first bazel project 
+- java 
+
+    + create hello world java source file 
+// src/HelloWorld.java     
+public class HelloWorld {
+  public static void main(String[] args) {
+    System.out.println("Hello, World!);
+  }
+}
+
+// src/BUILD 
+java_binary(
+      name = "HelloWorld",
+      srcs = ["HelloWorld.java"],
+)
+
+    + build with bazel 
+$ bazel build src:HelloWorld
+
+    + run the output binary 
+$ src/HelloWorld
+
+or 
+
+$ bazel run src:HelloWorld
+
+    + add build dependency 
+// src/IntMultiplier.java     
+public class IntMultiplier {
+  private int a;
+  private int b;
+  public IntMultiplier(int a, int b) {
+    this.a = a;
+    this.b = b;
+  }
+  public int GetProduct() {
+    return a * b;
+  }
+}
+
+// update src/HelloWorld
+public class HelloWorld {
+  public static void main(String[] args) {
+    System.out.println("Hello, World!");
+    IntMultiplier im = new IntMultiplier(3, 4);
+    System.out.println(im.GetProduct());
+  }
+}
+
+// update src/BUILD 
+java_binary(
+      name = "HelloWorld",
+      srcs = [
+           "HelloWorld.java",
+           "IntMultiplier.java",
+      ],
+)
+
+$ bazel run src:HelloWorld
+
+    + build java library instead of binary 
+    
+// src/BUILD 
+java_library(
+       name = "LibraryExample",
+       srcs = ["IntMultiplier.java"],
+)
+
+//reference the java library 
+java_binary(
+      name = "HelloWorld",
+      srcs = [ "HelloWorld.java"],
+      deps = [":LibraryExample"],
+)
+
+- setup java test dependency 
+
+package(default_visibility = ["//visibility:public"])
+java_import(
+        name = "junit4",
+        jars = [
+                "hamcrest/hamcrest-core-1.3.jar",
+                "junit/junit-4.12.jar",
+       ]
+)
+
+$ bazel build third_party:junit4
+
+// src/BUILD 
+
+java_test(
+       name = "LibraryExampleTest",
+       srcs = ["IntMultiplierTest.java"],
+       deps = [
+            ":LibraryExample",
+            "//third_party:junit4",
+       ],
+       test_class = "IntMultiplierTest",
+)
+
+$ bazel test src:LibraryExampleTest
+
+- build everything in a directory 
+
+$ bazel build src:all
+
+- clean 
+
+$ bazel clean
+
+
+# Workspace file functionality 
+- The load command will be used both within WORKSPACE and BUILD files
+
+load("//local/path/to/my:file.bzl", "symbol_to_load")
+
+a new file type: .bzl. define rules for Bazel (e.g., build rules) and give us the ability to expand Bazel’s capabilities
+
+- The very first element of the path is @bazel_tools. The @ signifies to Bazel that you are loading from a particular Bazel repository, called bazel_tools
+
+- even if you create new external dependencies in your WORKSPACE file, if you never use anything from said dependencies, Bazel will not download them.
+
+load("//local/path/to/my:file.bzl", "symbol_to_load_1", "symbol_to_load_2", "symbol_to_load_3")
+
+- http_archive is used to reference and retrieve a compressed Bazel repository,
+
+http_archive (
+        name = "foo",
+        urls = ["http://my_favorite_url.com/path/to/archive.zip"],
+)
+
+- git_repository is used to clone a git repository and check it out at a given commit (or tag).
+
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+git_repository(
+    name = "io_bazel_rules_go",
+    remote = "https://github.com/bazelbuild/rules_go.git",
+    commit = "f5cfc31d4e8de28bf19d0fb1da2ab8f4be0d2cde",
+)
+
+both tag and commit, you can also use “branch” to refer to a specific branch of a Git repo
+
+- http_archive It is also faster to download and extract an archive than to clone a reposition
+- employing a new language 
+
+go_rules_dependencies()
+go_register_toolchains()
+
+    + add go target 
+   
+go_binary(
+         name = "hello_world_go",
+         srcs = ["hello_world.go"],
+)
+
+    + locating the go language 
+    
+io_bazel_rules_go(repo)
+
+- additional languages 
+
+Go to https://github.com/bazelbuild and look through the various rules packages they have available
+
+
+# A simple echo client/server program 
+- BUILD file and add the following.
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary")
+
+- GO echo server 
+
+//Save this to chapter_05/src/echo_server.go.
+package main
+import (
+    "log"
+    "net"
+)
+func main() {
+    log.Println("Spinning up the Echo Server in Go...")
+    listen, error := net.Listen("tcp", ":1234")
+    if error != nil {
+        log.Panicln("Unable to listen: " + error.Error())
+    }
+    defer listen.Close()
+    connection, error := listen.Accept()
+    if error != nil {
+        log.Panicln("Cannot accept a connection! Error: " + error.Error())
+    }
+    log.Println("Receiving on a new connection")
+    defer connection.Close()
+    defer log.Println("Connection now closed.")
+    buffer := make([]byte, 2048)
+    size, error := connection.Read(buffer)
+    if error != nil {
+        log.Println("Cannot read from the buffer! Error: " + error.Error())
+    }
+    data := string(buffer[:size])
+    log.Println("Received data: " + data)
+    connection.Write([]byte("Echoed from Go: " + data))
+}
+
+// go BUILD
+go_binary(
+    name = "echo_server",
+    srcs = ["echo_server.go"],
+)
+
+// java client  
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.Socket;
+public class EchoClient {
+    public static void main (String args[]) {
+        System.out.println("Spinning up the Echo Client in Java...");
+        try {
+            final Socket socketToServer = new Socket("localhost", 1234);
+            final BufferedReader inputFromServer = new BufferedReader(
+               new InputStreamReader(socketToServer.getInputStream()));
+            final BufferedReader commandLineInput = new BufferedReader(
+                new InputStreamReader(System.in));
+            System.out.println("Waiting on input from the user...");
+            final String inputFromUser = commandLineInput.readLine();
+            if (inputFromUser != null) {
+                System.out.println("Received by Java: " + inputFromUser);
+                final PrintWriter outputToServer =
+                    new PrintWriter(socketToServer.getOutputStream(), true);
+                outputToServer.println(inputFromUser);
+                System.out.println(inputFromServer.readLine());
+            }
+            socketToServer.close();
+        } catch (Exception e) {
+            System.err.println("Error: " + e);
+        }
+    }
+}
+
+// java BUILD file 
+java_binary(
+    name = "EchoClient",
+    srcs = ["EchoClient.java"],
+)
+
+$ bazel build :echo_client
+
+java_binary(
+    name = "echo_client",
+    srcs = ["EchoClient.java"],
+    main_class = "EchoClient",
+)
+
+
+# Protocol buffers and bazel 
+- Protocol Buffer (often referred to as protobuf). Yet another creation from Google, Protocol Buffers provide a way to describe the structure of objects in a declarative and type-safe fashion and provide a wire format for serialization
+
+- setup workspace 
+
+$ mkdir chapter_06
+$ cd chapter_06
+$ touch WORKSPACE
+// WORKSPACE 
+http_archive(
+    name = "rules_proto",
+    strip_prefix = "rules_proto-97d8af4dc474595af3900dd85cb3a29ad28cc313",
+    urls = ["https://github.com/bazelbuild/rules_proto/archive/97d8af4dc474595af3900dd85cb3a29ad28cc313.tar.gz",],
+)
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+rules_proto_dependencies()
+rules_proto_toolchains()
+
+$ touch transmission_object.proto
+// transmission_object
+syntax = "proto3";
+package transmission_object;
+message TransmissionObject {
+    float value = 1;
+    string message = 2;
+}
+
+- the Protocol Buffer (often referred to as protobuf). Yet another creation from Google, Protocol Buffers provide a way to describe the structure of objects in a declarative and type-safe fashion and provide a wire format for serialization.
+
+$ bazel build :transmission_object_proto
+
+// BUILD file .
+load("@rules_proto//proto:defs.bzl", "proto_library")
+proto_library(
+    name = "transmission_object_proto",
+    srcs = ["transmission_object.proto"],
+)
+
+- bring in a dependency on the proto library itself (github.com/golang/protobuf/proto) in order to perform the unmarshaling/marshaling of the object
+
+// BUILD 
+
+load("@io_bazel_rules_go//go:def.bzl", "go_binary")
+go_binary(
+    name = "echo_server",
+    srcs = ["echo_server.go"],
+    deps = [
+         ":transmission_object_go_proto",
+         "@com_github_golang_protobuf//proto:go_default_library",
+    ],
+)
+
+- dependency tracking 
+
+echo_client -> transimission_object_java_proto ->| transmission_object_proto 
+echo_server -> transmision_object_go_proto     ->|
+
+
+# Code organization and bazel 
+- reference build targets outside of the current package 
+
+java_binary(
+    name = "echo_client",
+    srcs = ["EchoClient.java"],
+    main_class = "EchoClient",
+    deps = ["//proto:transmission_object_java_proto"],
+)
+load("@io_bazel_rules_go//go:def.bzl", "go_binary")
+go_binary(
+    name = "echo_server",
+    srcs = ["echo_server.go"],
+    deps = [
+         "//proto:transmission_object_go_proto",
+         "@com_github_golang_protobuf//proto:go_default_library",
+    ],
+)
+
+the root of the WORKSPACE (which is indicated by //). This is an important point: dependencies are not specified using paths relative to the current BUILD file 
+
+- Package visibility 
+// Open the proto/BUILD file and add the following directive.
+package(default_visibility = ["//visibility:public"])
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+proto_library(
+    name = "transmission_object_proto",
+    srcs = ["transmission_object.proto"],
+)
+java_proto_library(
+    name = "transmission_object_java_proto",
+    deps = [":transmission_object_proto"],
+)
+go_proto_library(
+    name = "transmission_object_go_proto",
+    proto = ":transmission_object_proto",
+    importpath = "transmission_object"
+)
+
+    + Fortunately, we can do better. Bazel provides the ability to explicitly specify paths for target visibility
+    
+package(default_visibility = ["//src:__pkg__"])
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+    + individual target visibilities.
+    
+```
+#package(default_visibility = ["//src: :__pkg__"])
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+proto_library(
+    name = "transmission_object_proto",
+    srcs = ["transmission_object.proto"],
+)
+java_proto_library(
+    name = "transmission_object_java_proto",
+    deps = [":transmission_object_proto"],
+    visibility = ["//src:__pkg__"],
+)
+go_proto_library(
+    name = "transmission_object_go_proto",
+    proto = ":transmission_object_proto",
+    importpath = "transmission_object",
+)
+```
+
+A package_group allows you to assign metadata (e.g., visibility rules) across a set of packages.
+
+
+# gRPC and Bazel 
+- As a corollary, Bazel provided an easy way to depend upon the Protocol Buffers. The Protocol Buffer format is used to define APIs via gRPC. 
+
+- The Skylib library contains a number of useful functions and rules that are used when creating custom build rules
+
+- Gazelle is unique in that it is a build file generator for Bazel projects.
+
+- create a new file within the proto directory to house the new API.
+syntax = "proto3";
+import "proto/transmission_object.proto";
+package transceiver;
+message EchoRequest {
+    transmission_object.TransmissionObject from_client = 1;
+}
+message EchoResponse {
+    transmission_object.TransmissionObject from_server = 1;
+}
+service Transceiver {
+    rpc Echo (EchoRequest) returns (EchoResponse);
+}
+
+proto_library(
+    name = "transceiver_proto",
+    srcs = ["transceiver.proto"],
+    deps = [
+        ":transmission_object_proto",
+    ]
+)
+go_proto_library(
+    name = "transceiver_go_proto_grpc",
+    compiler = "@io_bazel_rules_go//proto:go_grpc",
+    proto = ":transceiver_proto",
+    importpath = "transceiver",
+    deps = [":transmission_object_go_proto",],
+    visibility = ["//server/echo_server:__pkg__"],
+)
+java_proto_library(
+    name = "transceiver_java_proto",
+    deps = [":transceiver_proto"],
+    visibility = ["//client/echo_client:__subpackages__"],
+)
+load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
+java_grpc_library(
+    name = "transceiver_java_proto_grpc",
+    srcs = [":transceiver_proto"],
+    deps = [":transceiver_java_proto"],
+    visibility = ["//client/echo_client:__subpackages__"],
+)
+
+java_binary(
+    name = "command_line",
+    srcs = ["EchoClient.java"],
+    main_class = "EchoClient",
+    runtime_deps = [
+        "@io_grpc_grpc_java//netty",
+    ],
+    deps = [
+         "//proto:transmission_object_java_proto",
+         "//proto:transceiver_java_proto",
+         "//proto:transceiver_java_proto_grpc",
+         "@io_grpc_grpc_java//api",
+    ]
+)
+
+$ bazel build client/echo_client/command_line
+
+
+# Bazel android 
+- build file 
+load("@rules_android//android:rules.bzl", "android_library", "android_binary")
+android_library(
+    name = "echo_client_android_activity",
+    srcs = ["EchoClientMainActivity.java"],
+    manifest = "AndroidManifest.xml",
+    custom_package = "client.echo_client.android",
+    resource_files = [
+        "res/layout/echo_client_main_activity.xml"
+    ],
+)
+
+- Bazel provides a very useful command mobile-install. In a similar fashion to run, mobile-install builds the target application and then installs onto the connected device
+
+
+# Bazel and ios 
+- WORKSPACE file and add the following.
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+skylib_version = "0.8.0"
+http_archive(
+    name = "bazel_skylib",
+    url = "https://github.com/bazelbuild/bazel-skylib/releases/download/{}/bazel-skylib.{}.tar.gz".format(skylib_version, skylib_version),
+)
+git_repository(
+    name ="build_bazel_rules_apple",
+    commit="1445924a158a89ad634f562c84a600a3435ef8c2",
+    remote="https://github.com/bazelbuild/rules_apple.git",
+)
+load(
+    "@build_bazel_rules_apple//apple:repositories.bzl",
+    "apple_rules_dependencies",
+)
+apple_rules_dependencies()
+load(
+    "@build_bazel_rules_swift//swift:repositories.bzl",
+    "swift_rules_dependencies",
+)
+swift_rules_dependencies()
+load(
+    "@build_bazel_apple_support//lib:repositories.bzl",
+    "apple_support_dependencies",
+)
+apple_support_dependencies()
+
+- a BUILD file and add the following to it.
+load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+swift_library(
+    name = "Lib",
+    srcs = [
+        "AppDelegate.swift",
+        "MainViewController.swift",
+    ],
+)
+ios_application(
+    name = "EchoClient",
+    bundle_id = "com.beginning-bazel.echo-client",
+    families = ["iphone"],
+    infoplists = [":Info.plist"],
+    minimum_os_version = "11.0",
+    deps = [":Lib"],
+)
+
+- Open Xcode, and navigate to Xcode > Open Developer Tool > Simulator.
