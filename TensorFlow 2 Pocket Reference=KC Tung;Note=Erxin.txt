@@ -1,0 +1,460 @@
+TensorFlow 2 Pocket Reference=KC Tung;Note=Erxin
+
+
+# Introduction 
+- reference 
+https://learning.oreilly.com/library/view/tensorflow-2-pocket/9781492089179/preface01.html#_using_code_examples
+
+- Through TensorFlow 1.x, lazy execution was the way to build and train an ML model. Starting with TensorFlow 2, however, eager execution is the default way to build and train a model. This change makes it much easier to debug the code
+
+- Keras, created by AI researcher François Chollet, is an open source, high-level, deep-learning API
+
+- tensorflow dataset, https://oreil.ly/0nt9T
+
+- A better way to deal with this is through data streaming. Instead of passing the entire training data at once
+
+- tabular data, TensorFlow’s feature_column API to standardize your training data. It helps you correctly mark which columns are numeric and which are categorical.
+
+- Keras layers API to access TensorFlow Hub. In addition, tf.keras comes with an inventory of these prebuilt models
+
+- monitoring the training process 
+
+across each epoch (that is, one pass over a training set) is an important aspect of model training
+
+- distributed training 
+
+handle distributed data and files and stream them into your model training routine
+
+- serving model 
+
+You’ll see how easy it is to use the tf.saved_model API to save your model.
+
+
+# Data storage and ingestion 
+- pipeline scalable by using TensorFlow’s APIs.
+
+import numpy as np
+
+def my_generator(my_array):
+    i = 0
+    while True:
+        yield my_array[i:i+2, :] # output two elements at a time
+        i += 1
+        
+- JSON can be converted to CSV, and vice versa. Sometimes the original data is in JSON format and it is necessary to convert it to CSV
+
+- Hadoop Distributed File System (HDFS) names the parts of a file.
+
+- Creating a File Pattern Object Using tf.io
+
+TensorFlow tf.io API is used for referencing a distributed dataset that contains files with a common naming pattern.
+
+- creating a streaming dataset object 
+
+csv_dataset = tf.data.experimental.make_csv_dataset(files,
+              header = True,
+              batch_size = 5,
+              label_name = 'new_deaths',
+              num_epochs = 1,
+              ignore_errors = True)
+
+For convenience, as we inspect it, we set a small batch size of 5.
+num_epochs is used to specify how many times you want to stream over the entire dataset.
+
+- streaming a CSV dataset 
+
+features, label = next(iter(csv_dataset))
+
+- using tensorflow image generator 
+
+pretrained residual neural network (ResNet) as the image classifier.
+
+train_datagen = tf.keras.preprocessing.image.
+    ImageDataGenerator(
+    rescale = 1./255, 
+    validation_split = 0.20)
+    
+    
+datagen_kwargs = dict(rescale=1./255, 
+                      validation_split=0.20)
+
+train_datagen = tf.keras.preprocessing.image.
+    ImageDataGenerator(**datagen_kwargs)
+
+- streaming cross-validation images 
+
+valid_datagen = train_datagen
+
+valid_generator = valid_datagen.flow_from_directory(
+    data_dir, subset="validation", shuffle=False, 
+    **dataflow_kwargs)
+
+- inspecting resized images 
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+image_batch, label_batch = next(iter(train_generator))
+
+fig, axes = plt.subplots(8, 4, figsize=(10, 20))
+axes = axes.flatten()
+for img, lbl, ax in zip(image_batch, label_batch, axes):
+    ax.imshow(img)
+    label_ = np.argmax(lbl)
+    label = idx_labels[label_]
+    ax.set_title(label)
+    ax.axis('off')
+plt.show()
+
+
+
+# Data processing 
+- necessary libraries 
+
+import functools
+import numpy as np
+import tensorflow as tf
+import pandas as pd
+from tensorflow import feature_column
+from tensorflow.keras import layers
+from sklearn.model_selection import train_test_split
+
+TRAIN_DATA_URL = "https://storage.googleapis.com/
+tf-datasets/titanic/train.csv"
+TEST_DATA_URL = "https://storage.googleapis.com/
+tf-datasets/titanic/eval.csv"
+
+train_file_path = tf.keras.utils.get_file("train.csv", 
+TRAIN_DATA_URL)
+test_file_path = tf.keras.utils.get_file("eval.csv", TEST_DATA_URL)
+LABEL_COLUMN = 'survived'
+LABELS = [0, 1]
+
+train_ds = tf.data.experimental.make_csv_dataset(
+      train_file_path,
+      batch_size=3,
+      label_name=LABEL_COLUMN,
+      na_value="?",
+      num_epochs=1,
+      ignore_errors=True)
+
+test_ds = tf.data.experimental.make_csv_dataset(
+      test_file_path,
+      batch_size=3,
+      label_name=LABEL_COLUMN,
+      na_value="?",
+      num_epochs=1,
+      ignore_errors=True)
+      
+"""pandas frames"      
+titanic_df.describe()
+
+- creating a cross-validation dataset 
+
+val_df, test_df = train_test_split(test_df, test_size=0.4)
+
+def pandas_to_dataset(dataframe, shuffle=True, batch_size=32):
+  dataframe = dataframe.copy()
+  labels = dataframe.pop('survived')
+  ds = tf.data.Dataset.
+from_tensor_slices((dict(dataframe), labels))
+  if shuffle:
+    ds = ds.shuffle(buffer_size=len(dataframe))
+  ds = ds.batch(batch_size)
+  return ds
+
+val_ds = pandas_to_dataset(val_df, shuffle=False, 
+batch_size=batch_size)
+test_ds = pandas_to_dataset(test_df, shuffle=False, 
+batch_size=batch_size)
+
+- starting the model training process 
+
+model = tf.keras.Sequential([
+  feature_layer,
+  layers.Dense(128, activation='relu'),
+  layers.Dense(128, activation='relu'),
+  layers.Dropout(.1),
+  layers.Dense(1)
+])
+
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.BinaryCrossentropy(
+from_logits=True),
+              metrics=['accuracy'])
+
+model.fit(train_ds,
+          validation_data=val_ds,
+          epochs=10)
+
+- preparing image data for processing 
+
+For images, you need to reshape or resample all the images into the same pixel count; this is known as standardization. 
+
+ResNet requires each input image to be 224 × 224 × 3 pixels and be presented as a NumPy multidimensional array. This means that, in the preprocessing routine, you have to resample your images
+
+```
+import tensorflow as tf
+import numpy as np
+import matplotlib.pylab as plt
+import pathlib
+
+data_dir = tf.keras.utils.get_file(
+    'flower_photos',
+'https://storage.googleapis.com/download.tensorflow.org/
+example_images/flower_photos.tgz',
+    untar=True)
+    
+def display_image_in_actual_size(im_path):
+
+    dpi = 100
+    im_data = plt.imread(im_path)
+    height, width, depth = im_data.shape
+    # What size does the figure need to be in inches to fit 
+    # the image?
+    figsize = width / float(dpi), height / float(dpi)
+    # Create a figure of the right size with one axis that 
+    # takes up the full figure
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes([0, 0, 1, 1])
+    # Hide spines, ticks, etc.
+    ax.axis('off')
+    # Display the image.
+    ax.imshow(im_data, cmap='gray')
+    plt.show()
+```
+
+- tranforming to a fixed specification 
+
+my_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+    **datagen_kwargs)
+my_generator = my_datagen.flow_from_directory(
+data_dir, **dataflow_kwargs)
+
+In flow_from_directory, there are three parameters that are useful for this example: target_size, batch_size, and interpolation. The target_size parameter helps you specify the desired dimension of each image, and batch_size is for specifying the number of samples in a batch of images. As for interpolation, remember how you need to interpolate, or resample, each image to a prescribed dimensio
+
+pixels =224
+BATCH_SIZE = 32
+IMAGE_SIZE = (pixels, pixels)
+
+datagen_kwargs = dict(rescale=1./255, validation_split=.20)
+dataflow_kwargs = dict(target_size=IMAGE_SIZE, 
+batch_size=BATCH_SIZE,
+interpolation="bilinear")
+
+valid_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+**datagen_kwargs)
+
+valid_generator = valid_datagen.flow_from_directory(
+    data_dir, subset="validation", shuffle=False, 
+    **dataflow_kwargs)
+    
+train_datagen = valid_datagen
+train_generator = train_datagen.flow_from_directory(
+data_dir, subset="training", shuffle=True, **dataflow_kwargs)
+    
+for image_batch, labels_batch in train_generator:
+  print(image_batch.shape)
+  print(labels_batch.shape)
+  break
+
+import pickle
+with open('prediction_lookup.pickle', 'wb') as handle:
+    pickle.dump(idx_labels, handle, 
+    protocol=pickle.HIGHEST_PROTOCOL)
+    
+- training the model 
+
+import tensorflow_hub as hub
+NUM_CLASSES = 5
+mdl = tf.keras.Sequential([
+    tf.keras.layers.InputLayer(input_shape=IMAGE_SIZE + (3,)),
+         hub.KerasLayer("https://tfhub.dev/google/imagenet/
+resnet_v1_101/feature_vector/4", trainable=False),
+tf.keras.layers.Dense(NUM_CLASSES, activation='softmax', 
+ name = 'custom_class')
+])
+mdl.build([None, 224, 224, 3])
+
+mdl.summary()
+
+mdl.compile(
+  optimizer=tf.keras.optimizers.SGD(lr=0.005, momentum=0.9),
+  loss=tf.keras.losses.CategoricalCrossentropy(
+from_logits=True, 
+label_smoothing=0.1),
+  metrics=['accuracy'])
+
+steps_per_epoch = train_generator.samples // 
+train_generator.batch_size
+validation_steps = valid_generator.samples // 
+valid_generator.batch_size
+mdl.fit(
+    train_generator,
+    epochs=5, steps_per_epoch=steps_per_epoch,
+    validation_data=valid_generator,
+    validation_steps=validation_steps)
+
+- prepare text data for processing, a numerical integer. This process is known as tokenization. Further, if the goal is classification, then the target needs to be encoded as classes
+
+import tensorflow as tf
+import numpy as np
+import os
+import time
+
+FILE_URL = 'https://storage.googleapis.com/download.tensorflow.org/
+data/shakespeare.txt'
+FILE_NAME = 'shakespeare.txt'
+path_to_file = tf.keras.utils.get_file('shakespeare.txt', FILE_URL)
+
+text = open(path_to_file, 'rb').read().decode(encoding='utf-8')
+print ('Length of text: {} characters'.format(len(text)))
+
+vocabulary = sorted(set(text))
+print ('There are {} unique characters'.format(len(vocabulary)))
+
+vocabulary_word = sorted(set(text.lower().split(' ')))
+print ('There are {} unique words'.format(len(vocabulary_word)))
+
+char_to_index = {u:i for i, u in enumerate(vocabulary)}
+
+index_to_char = {i:u for i, u in enumerate(vocabulary)}
+
+
+# Reusable model elements 
+- model requirements 
+
+index_to_char = {i:u for i, u in enumerate(vocabulary)}
+
+import tensorflow as tf
+import tensorflow_hub as hub
+import numpy as np
+import matplotlib.pylab as plt
+
+data_dir = tf.keras.utils.get_file(
+    'flower_photos',
+'https://storage.googleapis.com/download.tensorflow.org/
+example_images/flower_photos.tgz',
+    untar=True)
+
+datagen_kwargs = dict(rescale=1./255, validation_split=.20)
+dataflow_kwargs = dict(target_size=IMAGE_SIZE, 
+batch_size=BATCH_SIZE,
+interpolation="bilinear")
+
+valid_datagen = tf.keras.preprocessing.image.
+ImageDataGenerator(
+    **datagen_kwargs)
+valid_generator = valid_datagen.flow_from_directory(
+    data_dir, subset="validation", shuffle=False, 
+    **dataflow_kwargs)
+
+train_datagen = valid_datagen
+train_generator = train_datagen.flow_from_directory(
+    data_dir, subset="training", shuffle=True, 
+    **dataflow_kwargs)
+
+labels_idx = (train_generator.class_indices)
+idx_labels = dict((v,k) for k,v in labels_idx.items())
+
+put and an output layer. You can define this model structure accordingly:
+
+model = tf.keras.Sequential([
+     tf.keras.layers.InputLayer(input_shape=IMAGE_SIZE + (3,)),
+hub.KerasLayer("https://tfhub.dev/google/imagenet/resnet_v1_101/
+feature_vector/4", trainable=False),
+     tf.keras.layers.Dense(NUM_CLASSES, activation='softmax', 
+name = 'flower_class') 
+])
+
+
+# Reusable model elements 
+- academic and Kaggle challenges. Many have made their models open source
+
+- the basic tensorflow hub workflow 
+
+$ pip install --upgrade tensorflow_hub 
+
+import tensorflow_hub as hub
+
+model = hub.KerasLayer("https://tfhub.dev/google/nnlm-en-dim128/2")
+
+embeddings = model(["The rain in Spain.", "falls",
+                      "mainly", "In the plain!"])
+
+print(embeddings.shape)
+
+- image classification by transfer learning 
+
+Model requirements
+
+Data transformation and input processing
+
+Model implementation with TFH
+
+Output definition
+
+Mapping output to plain-text format
+
+    + data transformation and input processing 
+    
+```
+import tensorflow as tf
+import tensorflow_hub as hub
+import numpy as np
+import matplotlib.pylab as plt
+
+data_dir = tf.keras.utils.get_file(
+    'flower_photos',
+'https://storage.googleapis.com/download.tensorflow.org/
+example_images/flower_photos.tgz',
+    untar=True)
+
+pixels =224
+BATCH_SIZE = 32
+IMAGE_SIZE = (pixels, pixels)
+NUM_CLASSES = 5
+
+datagen_kwargs = dict(rescale=1./255, validation_split=.20)
+dataflow_kwargs = dict(target_size=IMAGE_SIZE, 
+batch_size=BATCH_SIZE,
+interpolation="bilinear")
+
+valid_datagen = tf.keras.preprocessing.image.
+ImageDataGenerator(
+    **datagen_kwargs)
+valid_generator = valid_datagen.flow_from_directory(
+    data_dir, subset="validation", shuffle=False, 
+    **dataflow_kwargs)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        

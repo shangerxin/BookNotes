@@ -1,0 +1,696 @@
+C++ High Performance=Viktor Sehr;Note=Erxin
+
+
+# Introduction 
+- reference 
+https://learning.oreilly.com/library/view/c-high-performance/9781787120952/b42f7d1e-9073-4ee7-ad2a-fc2f71615f46.xhtml
+
+- compare with c
+
+// C version
+struct string_elem_t { const char* str_; string_elem_t* next_; };
+int num_hamlet(string_elem_t* books) {
+  const char* hamlet = "Hamlet";
+  int n = 0;
+  string_elem_t* b; 
+  for (b = books; b != 0; b = b->next_)
+    if (strcmp(b->str_, hamlet) == 0)
+      ++n;
+  return n;
+}
+
+// C++ version
+int num_hamlet(const std::list<std::string>& books) {
+  return std::count(books.begin(), books.end(), "Hamlet");
+}
+
+- To sum it up, C++ of today provides programmers the ability to write an expressive and robust code base while still having the ability to target almost any hardware platform or real-time requirements
+
+- context C++ has found its way into web applications using technologies such as Emscripten/asm.js and web assembly.
+
+class Car {
+public:
+  Car(int doors)
+  : doors_(doors) {}
+private:
+  int doors_{}; 
+};
+
+auto func() {
+  auto num_doors = 2;
+  auto car1 = Car{num_doors};
+  auto car2 = Car{num_doors};
+}
+
+- value semantics 
+
+auto t = std::set<std::string>{};
+t.insert("salt");
+auto a = Bagel{t};
+
+// 'a' is not affected
+// when adding pepper
+t.insert("pepper");
+
+// 'a' will have salt
+// 'b' will have salt & pepper 
+auto b = Bagel{t};
+
+// No bagel is affected
+t.insert("oregano");
+
+- avoiding null objects using c++ references 
+
+A fundamental guideline when writing classes, is to relieve the user of the class from dealing with the internal state by exposing a strict interface. 
+```
+class Boat { 
+private:
+  Boat(const Boat& b) = delete; // Noncopyable
+  auto operator=(const Boat& b) -> Boat& = delete; // Noncopyable
+public:
+  Boat(std::shared_ptr<Engine> e, float l) : engine_{e}, length_{l} {}
+  auto set_length(float l) { length_ = l; }
+  auto& get_engine() { return engine_; }
+private:
+  float length_{};
+  std::shared_ptr<Engine> engine_;
+};
+
+// When the other programmer tries to copy a Boat object...
+auto boat0 = Boat{std::make_shared<YamahaEngine>(), 6.7f};
+// ...won't compile, the second programmer will have to find 
+// another solution compliant with the limitations of the Boat
+auto boat1 = boat0;
+```
+
+- error handling and resouce acquisition 
+
+    + preseving the valid state 
+    
+    + This can be fixed by using an idiom called copy-and-swap, which means that we perform the operations that might throw exceptions before we let the application's state be modified
+    
+struct Leaf { /* ... */ };
+struct Branch { /* ... */ };
+
+class OakTree {
+public:
+  auto& operator=(const OakTree& other) {
+    leafs_ = other.leafs_;
+    // If copying the branches throws, only the leafs has been
+    // copied and the OakTree is left in an invalid state
+    branches_ = other.branches_; 
+    *this;
+  }
+  std::vector<Leaf> leafs_;
+  std::vector<Branch> branches_;
+};
+auto save_to_disk(const std::vector<OakTree>& trees) { 
+  // Persist all trees ...
+}
+
+auto oaktree_func() {
+  auto tree0 = OakTree{std::vector<Leaf>{1000}, std::vector<Branch>{100}};
+  auto tree1 = OakTree{std::vector<Leaf>{50}, std::vector<Branch>{5}} 
+  try {
+    tree0 = tree1;
+  } 
+  catch(const std::exception& e) {
+    // tree0 might be broken
+    save_to_disk({tree0, tree1});
+  }
+}
+    
+class OakTree {
+public:
+  auto& operator=(const OakTree& other) {
+    // First create local copies without modifying the OakTree objects.
+    // Copying may throw, but this OakTree will still be in a valid state
+    auto leafs = other.leafs_;       
+    auto branches = other.branches_;
+
+    // No exceptions thrown, we can now safely modify
+    // the state of this object by non-throwing swap
+    std::swap(leads_, leafs);
+    std::swap(branches_, branches);
+    return *this;
+  }
+  std::vector<Leaf> leafs_;
+  std::vector<Branch> branches_;
+};
+
+- resource acuisition 
+
+auto func(std::mutex& m, int val, bool b) {
+  auto guard = std::lock_guard<std::mutex>{m}; // The mutex is locked
+  if (b) { 
+    // The guard automatically releases the mutex at early exit
+    return; 
+  }
+  if (val == 313) {
+    // The guard automatically releases if an exception is thrown
+    throw std::exception{};
+  }
+  // The guard automatically releases the mutex at function exit
+}
+
+- exceptions versus error codes 
+
+Boost library for hardware-dependent optimizations such as SIMD and GPU.
+
+The most commonly used library in the world of C++ is probably the Boost library (http://www.boost.org)
+
+
+
+# Modern cpp concepts 
+- atuomatic type deduction 
+
+different flavors of auto, such as const auto&, auto&, and auto&&.
+
+- function signature 
+
+struct Foo {
+  auto val() const {
+    return m_; 
+  }
+  auto& cref() const {
+    return m_; 
+  }
+  auto& mref() {
+    return m_; 
+  }
+  int m_{};
+};
+
+auto val() const                // a) auto, deduced type
+auto val() const -> int         // b) auto with type
+int val() const                 // c) explicite type
+
+auto& cref() const              // a) auto, deduced type
+auto cref() const -> const int& // b) auto, trailing type
+const int& cref() const         // c) explicite type
+
+auto& mref()                    // a) auto, deduced type
+auto mref() -> int&             // b) auto, trailing type
+int& mref()                     // c) explicite type
+
+- using for variables 
+
+auto i = 0;
+auto x = Foo{};
+auto y = create_object();
+auto z = std::mutex{};
+
+- const reference 
+
+A const reference, denoted const auto&, has the ability to bind to anything.
+
+auto func(const std::string& a, const std::string& b) {
+   const auto& str = a + b;  // a + b returns a temporary
+   ...
+} // str goes out of scope, temporary will be destroyed
+
+auto func() {
+   auto foo = Foo{};
+   auto& cref = foo.cref(); // cref is a const reference
+   auto& mref = foo.mref(); // mref is a mutable reference
+}
+
+- forwarding reference 
+
+auto&& is called a forwarding reference (also referred to as a universal reference). It can bind to anything which makes it useful for certain cases. 
+
+- lambda function 
+
+
+// Look for a numbers which is larger than three 
+auto is_above_3 = [](int v){ return v > 3; }; 
+auto num_above_3 = std::count_if(vals.begin(), vals.end(), is_above_3);
+// num_above_3 is 2 
+
+
+auto is_above = [&th](int v) { return v > th; };
+
+- similarities between a lambda and a class 
+
+The class only consists of one member function.
+The capture block is a combination of the class's member variables and its constructor.
+Each lambda function has its own unique type. Even if two lambda functions are plain clones of each other, they still have their own unique type.
+
+- initializing variables in capture 
+
+auto func() {
+  auto v = 7;
+  auto lambda = [&v]() {
+    std::cout << v << " ";
+    ++v;
+  };
+  assert(v == 7);
+  lambda();
+  lambda();
+  assert(v == 9);
+  std::cout << v;
+}
+
+all variables in the scope can be captured by simply writing [=] or [&].
+// Capture all variables by copy 
+auto lambda_0 = [=]() { std::cout << a << b << m_; }; 
+// Capture all variables by reference 
+auto lambda_1 = [&]() { std::cout << a << b << m_; }; 
+
+capture the class member variables by reference using [this] and by copy by writing [*this]:
+
+auto lambda_3 = [*this]() { std::cout << m_; };
+
+- assign c function pointers to lambda 
+
+auto func() {
+  auto lambda = +[](int result, const char* str) {};
+  download_webpage("http://www.packt.com", lambda);
+}
+
+- lambda and std::function 
+
+std::function< return_type ( parameter0, parameter1...) > 
+
+auto func = std::function<void(void)>{}; 
+
+auto func = std::function<bool(int, std::string)>{}; 
+
+- assigning lambdas to std::functions 
+
+// Create an unassigned std::function object 
+auto func = std::function<void(int)>{}; 
+  
+// Assign a lambda without capture to the std::function object 
+func = [](int v) { std::cout << v; }; 
+func(12); // Prints 12 
+ 
+// Assign a lambda with capture to the same std::function object 
+auto forty_two = 42; 
+func = [forty_two](int v) { std::cout << (v + forty_two); }; 
+func(12); // Prints 54 
+
+- When it comes to lambda functions, the compiler has the ability to inline the function call, that is, the overhead of the function call is eliminated. 
+
+- If a lambda function with captured variables/references is assigned to a std::function, the std::function will, in most cases, allocate space on the heap to store the captured variables
+
+- std::function but also that it is slower, as heap allocation implies cache misses 
+
+- polymorphic lambda 
+
+auto lambda = [v](auto v0, auto v1){ return v + v0*v1; };
+
+- Const propagation for pointers,  a const initialized object can still manipulate the values that member pointers points at.
+
+namespace exp = std::experimental;
+class Foo { 
+public:
+  auto set_ptr(int* p) const { 
+    ptr_ = p;  // Will not compile, as expected
+  }
+  auto set_val(int v) const { 
+    val_ = v;  // Will not compile, as expected
+  }
+  auto set_ptr_val(int v) const { 
+    *ptr_ = v; // Will not compile, const is propagated
+  }
+private:
+  exp::propagate_const<int*> ptr_ = nullptr; 
+  int val_{}; 
+}; 
+
+called std::experimental::propagate_const has been added to the std library extensions 
+
+- Move semantics explained
+
+auto a = Object{}; 
+auto b = a; // Copy-construction 
+
+- swapping two object 
+
+auto a = Object{}; 
+auto b = Object{}; 
+std::swap(a, b); 
+
+- move object 
+
+auto a = Object{}; 
+auto b = std::move(a); // Tell the compiler to move the resource into b 
+
+- resource acquisition and the rule of three 
+
+auto func() { 
+  // Prerequisite 
+  const auto a0 = std::vector<int>{1,2,3,4,5,6}; 
+  const auto a1 = std::vector<int>{7,8,9}; 
+  // Copy-construct 
+  auto b = a0; 
+  // Copy-assign 
+  b = a1; 
+} 
+
+
+class Buffer { 
+public: 
+  // Constructor 
+  Buffer(const std::initializer_list<float>& values)  
+  : size_{values.size()} { 
+    ptr_ = new float[values.size()]; 
+    std::copy(values.begin(), values.end(), ptr_); 
+  } 
+  // 1. Copy constructor 
+  Buffer(const Buffer& other) : size_{other.size_} { 
+    ptr_ = new float[size_]; 
+    std::copy(other.ptr_, other.ptr_ + size_, ptr_); 
+  } 
+  // 2. Copy assignment 
+  auto& operator=(const Buffer& other) {
+    delete [] ptr_;
+    ptr_ = new float[other.size_];
+    size_ = other.size_;
+    std::copy(other.ptr_, other.ptr_ + size_, ptr_);
+    return *this;
+  } 
+  // 3. Destructor 
+  ~Buffer() { 
+    delete [] ptr_; // Note, it is valid to delete a nullptr 
+    ptr_ = nullptr;
+  } 
+  // Iterators for accessing the data 
+  auto begin() const { return ptr_; } 
+  auto end() const { return ptr_ + size_; } 
+private: 
+  size_t size_{0}; 
+  float* ptr_{nullptr};
+};
+
+- limitation of the rule of three 
+
+Unnecessary copies: If we return our Buffer class from a function, the entire array needs to be copied.
+
+Resources which cannot be copied, such as a std::thread 
+                           
+- WITHOUT move semantics                            
+
+auto make_buffer() -> Buffer* { 
+  auto buffer = new Buffer({2.0, 4.0, 6.0, 8.0}); 
+  return buffer; 
+} 
+ 
+// The actual Buffer object isn't copied, just the pointer 
+auto buffer = make_buffer(); // buffer is Buffer*
+
+    + The advantage of value semantics in C++ is lost, programmer should not handle pointer manually 
+    + The code gets bloated with pointers which are simply only used for the sake of optimization
+    + More heap allocations are required, leading to potentially slower code due to cache misses
+
+- move semantics 
+
+Instead of taking a const reference as a parameter, the move versions accept a Buffer&& object.
+
+this is called an r-value and we will talk a little bit more about those later.
+
+class Buffer { 
+  ... 
+  Buffer(Buffer&& other) noexcept 
+  : ptr_{other.ptr_}
+  , size_{other.size_} { 
+    other.ptr_ = nullptr;
+    other.size_ = 0;
+  }
+  auto& operator=(Buffer&& other) noexcept {
+    ptr_ = other.ptr_;
+    size_ = other.size_;
+    other.ptr_ = nullptr;
+    other.size_ = 0;
+    return *this;
+  }
+  ...
+};
+
+- make a variable an r-value by using std::move(...)
+
+class Bird { 
+public: 
+  Bird() {} 
+  auto set_song(const std::string& s) { song_ = s; } 
+  auto set_song(std::string&& s) { song_ = std::move(s); } 
+  std::string song_; 
+}; 
+auto bird = Bird{};
+
+//copy 
+auto cuckoo_a = std::string{"I'm a Cuckoo"};
+bird.set_song(cuckoo_a);
+
+//move 
+auto cuckoo_b = std::string{"I'm a Cuckoo"};
+bird.set_song(std::move(cuckoo_b));  
+
+//move 
+auto make_roast_song() { return std::string{"I'm a Roast"}; } 
+bird.set_song(make_roast_song());  
+
+//copy 
+auto roast_song_a = make_roast_song(); 
+bird.set_song(roast_song_a);  
+
+//copy 
+const auto roast_song_b = make_roast_song();
+bird.set_song(std::move(roast_song_b));
+
+- Accept arguments by move when applicable
+
+auto str_to_lower(std::string s) -> std::string {
+  for(auto& c: s) 
+    c = std::tolower(c);
+  return s;
+}
+
+//move assign 
+auto str = std::string{"ABC"};
+str = str_to_lower(std::move(str));
+
+- default move semantics and the rule of zero, let compiler generate the move constructor 
+
+class Bird { 
+... 
+  // Copy-constructor/copy-assignment 
+  Bird(const Bird&) = default; 
+  auto operator=(const Bird&) -> Bird& = default; 
+  // Move-constructor/move-assignment 
+  Bird(Bird&&) noexcept = default; 
+  auto operator=(Bird&&) noexcept -> Bird& = default; 
+  // Destructor
+  ~Bird() = default; 
+  ... 
+};
+
+
+class Bird { 
+... 
+// Nothing here, the compiler generates everything automatically! 
+... 
+};
+
+//if we add a custom contructor then compiler will not genreate the move constructor
+class Bird {
+public: 
+  Bird() {} 
+  ~Bird() { std::cout << "Bird is dead." << '\n'; } 
+  auto set_song(const std::string& song) { song_ = song; } 
+  auto set_song(std::string&& song) { song_ = std::move(song); }
+private: 
+  std::string song_; 
+};
+
+- an empty destructor prevents the compiler from implementing certain optimizations.
+- a common pitfall, moving non-resources 
+
+TowerList(TowerList&& tl) noexcept { 
+  std::swap(tower_heights_, tl.tower_heights_); 
+  std::swap(max_height_idx_, tl.max_height_idx_); 
+} 
+auto& operator=(TowerList&& tl) noexcept { 
+  std::swap(tower_heights_, tl.tower_heights_); 
+  std::swap(max_height_idx_, tl.max_height_idx_); 
+  return *this; 
+}
+
+- you can also add the && modifier to a member function of a class, just as you can apply a const modifier to a member function. 
+
+struct Foo { 
+  auto func() && {} 
+}; 
+auto a = Foo{}; 
+a.func(); // Does not compile, 'a' is not an r-value 
+std::move(a).func(); // Compiles 
+Foo{}.func(); // Compiles
+
+- representing optional values with std::optional 
+C++ lingo, std::optional is a stack-allocated container with a max size of one.
+
+Boost Libraries has had an equivalent of std::optional,named boost::optional for many years.
+// Prerequisite
+auto line0 = Line{...}; 
+auto line1 = Line{...};
+external auto set_magic_point(Point p);
+
+// Get optional intersection
+auto intersection = get_intersection_point(line0, line1);
+if(intersection.has_value()) {
+  // std::optional throws an exception if intersection is empty
+  set_magic_point(*intersection);
+}
+
+a std::optional is always stack allocated, and the memory overhead of a std::optional<T> compared to T is the size of one bool (usually one byte), plus possible padding.
+
+- optional member function 
+
+struct Hat {...}
+class Head {
+public:
+  Head() { assert(!hat_); } // hat_ is empty by default
+  auto set_hat(const Hat& h){ hat_ = h; }
+  auto has_hat() const { return hat_.has_value(); }
+  auto& get_hat() const { assert(hat_.has_value()); return *hat_; }
+  auto remove_hat() { hat_ = {}; } // Hat is cleared by assigning to {}
+private:
+  std::optional<Hat> hat_;
+};
+
+Two empty optional's are considered equal.
+
+- Representing dynamic values with std::any
+
+template <typename T> 
+auto is_withheld_type(const std::any& a) -> bool { 
+  return typeid(T) == a.type(); 
+} 
+
+auto a = std::any{32.0};
+auto is_int = is_withheld_type<int>(a); 
+// is_int is false, 'a' contains a double
+auto is_double = is_withheld_type<double>(a);
+// is_double is true, 'a' contains a double
+
+-  invoking a std::any_cast to retrieve the value is quite slow compared to std::variant.
+
+- std::any heap-allocates its withheld value (although implementers are encouraged to store small objects inside of the any)
+
+
+# Mearsuing performance 
+- big O of a function, we can do that by eliminating all terms except the one with the largest growth rate and then remove any constant factors. For example, if we have an algorithm with a time complexity described by f(n) = 4n2 + 30n + 100, we would pick out the term with the highest growth rate, 4n2.
+
+- growth rate 
+
+O(1) < O(log n) < O(n) < O(n log n) < O(n^2) < O(2^n)
+
+- performance properties 
+
+latency/response time
+throughput, this refers to the number of transactions processed per time unit 
+i/o bound or cpu bound 
+power consumption, a very important consideration for code that executes on mobile devices with batteries
+aggregating data, ollecting a lot of samples while measuring performance. 
+
+- profilers 
+```
+class ScopedTimer { 
+public: 
+  using ClockType = std::chrono::steady_clock; 
+
+  ScopedTimer(const char* func) : 
+    function_{func},  
+    start_{ClockType::now()} { }
+ 
+  ScopedTimer(const ScopedTimer&) = delete; 
+  ScopedTimer(ScopedTimer&&) = delete; 
+  auto& operator=(const ScopedTimer&) -> ScopedTimer& = delete; 
+  auto& operator=(ScopedTimer&&) -> ScopedTimer& = delete; 
+
+  ~ScopedTimer() {
+    using namespace std::chrono;
+    auto stop = ClockType::now(); 
+    auto duration = (stop - start_); 
+    auto ms = duration_cast<milliseconds>(duration).count();  
+    std::cout << ms << " ms " << function_ <<  '\n'; 
+  } 
+ 
+private: 
+  const char* function_{}; 
+  const ClockType::time_point start_{}; 
+}; 
+ 
+    + create time class by measuring each function in a program by creation a ScopedTimer instance at the beginning of each function 
+    
+auto some_function() { 
+  ScopedTimer timer{"some_function"}; 
+  ... 
+} 
+
+#if USE_TIMER 
+  #define MEASURE_FUNCTION() ScopedTimer timer{__func__} 
+#else 
+  #define MEASURE_FUNCTION() 
+#endif 
+
+function-local __func__ variable available since C++11 to get the name of the function.
+
+auto some_function() { 
+  MEASURE_FUNCTION(); 
+  ... 
+} 
+```
+
+
+
+# Data Structures 
+- properties of computer memory 
+
+Peter Norvig, Teach yourself programming in ten years, 2001 (http://norvig.com/21-days.html). The full table is usually referred to as Latency numbers every programmer should know 
+
+L1 cache reference        0.5 ns 
+L2 cache reference        7   ns 
+Main memory reference   100   ns 
+
+caching can have dramatic effects on the actual time it takes to access the memory. 
+
+- STL container 
+
+The sequence containers are std::array, std::vector, std::deque, std::basic_string, std::list, and std::forward_list. Things you need to know before choosing a sequence container
+
+    1. Number of elements (order of magnitude).
+    2. Usage patterns: How often are you going to add data? Read/traverse data? Delete data? Rearrange data?
+    3. Do you need to sort the elements?
+    
+- vector and array 
+
+the vector can hold until it needs to allocate more space: adding an element when there is no room for more, the vector will allocate a new internal buffer and then move all the elements to the new space.
+
+Internally, std::vector uses std::move_if_noexcept in order to determine whether the object should be copied or moved
+
+
+
+
+
+
+# Deeper look at iterators 
+
+
+# STL algorithms and beyond 
+
+
+# Memory management 
+
+
+# Metaprogramming and compile-time evaluation 
+
+
+# Proxy objects and lazy evaluation 
+
+
+# Concurrency 
+
+
+# Parallel STL 
