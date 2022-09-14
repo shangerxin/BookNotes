@@ -1,0 +1,1050 @@
+Automating workflows with GitHub Actions=Priscaila Heller;Note=Erxin
+
+# Introduction 
+- reference 
+https://learning.oreilly.com/library/view/automating-workflows-with/9781800560406/
+
+- exercises:
+
+https://github.com/PacktPublishing/Automating-Workflows-with-GitHub-Actions
+
+- free personal account 
+
+a GitHub Free personal user account, follow these steps:
+
+Navigate to https://github.com/join.
+
+- GitHub Actions workflows use a PAT or an SSH key. This section will walk you through the creation of a PAT
+
+    + Navigate to https://github.com/settings/tokens and click on Generate new token
+    
+    Github > Settings > Developer settings > Personal access tokens 
+    
+    + Next, select the repo, workflow, and user scopes. Then, click on Generate token.
+    
+- ssh keys, check existing ssh keys 
+
+    + open terminal 
+    $ ls -al ~/.ssh 
+    
+    + list all files 
+    
+    $ ls -al ~/.ssh 
+    
+total 64
+
+drwx------   2 user group  4096 Dec 26  2018 .
+
+drwx--x--x 127 user group 16384 Mar 14 04:41 ..
+
+-rw-------   1 user group  1675 Sep 15  2008 id_rsa
+
+-rw-r--r--   1 user group   394 Mar  7  2010 id_rsa.pub
+
+- create ssh keys 
+
+$ ssh-keygen -t ed25519 -C "your_email@example.com"
+
+adding the SSH key to the SSH agent is a best practice that will help keep your SSH key safe.
+
+$ eval "$(ssh-agent -s)"
+
+$ open ~/.ssh/config
+or 
+$ touch ~/.ssh/config
+
+$ ssh-add ~/.ssh/id_ed25519
+
+$ ssh-add -K ~/.ssh/id_ed25519
+
+- add ssh to github 
+
+$ cat ~/.ssh/id_ed25519.pub 
+
+go to github setting > ssh and gpg keys 
+
+click > new ssh key 
+
+Paste your SSH key that you copied in Step 1 into the Key textbox
+
+customize other features of your GitHub account by navigating to https://github.com/settings.
+
+- install and configure git 
+
+    + add user name and email 
+    
+    $ git config --global user.name ...
+    $ git config --global user.email ...
+    
+    + configure your default branch name 
+    
+    $ git config --global init.defaultBranch main 
+    
+    + verify that all your settings are correct 
+    $ git config --list 
+    
+- git basic command 
+
+git init
+git status
+git checkout -b <branch-name>
+git add
+git commit -m "your message goes here"
+git remote add
+git push
+git pull
+git clone
+
+
+# Deep diving into github actions 
+- github actions are event driven 
+
+Workflows can be triggered by three groups of events:
+
+Scheduled events
+Manual events
+Webhook events
+
+- cron syntax to schedule event 
+yaml 
+
+```
+on:
+
+  schedule:
+
+    - cron:  '*/5 * * * *'
+```
+
+http://crontab.guru/
+
+- two different types of manual events: workflow_dispatch and repository_dispatch
+
+```
+on:
+
+  workflow_dispatch:
+
+    inputs:
+
+      username:
+
+        description: 'Your GitHub username'
+
+        required: true
+
+      reason:
+
+        description: 'Why are you running this workflow manually?'
+
+        required: true
+
+        default: 'I am running tests before implementing an automated workflow'
+```
+
+    + To trigger the workflow_dispatch event, the workflow must be on the default branch.
+    
+    + The repository_dispatch event also allows you to trigger manual workflows.  workflows can happen in different repositories or outside github 
+    
+    ```
+    curl -X POST -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/octocat/hello-world/dispatches -d '{"event_type":"event_type"}'
+    ```
+    
+- webhook events 
+
+These types of events trigger a workflow when GitHub webhook events – such as issue and pull request creation, update and deletion, deployment, page_build
+
+```
+on:
+
+  issues:
+
+    types: [opened]
+```
+
+- job is a set of steps run on the same runner 
+
+jobs:
+
+  tests_manual_workflow:
+
+    runs-on: ubuntu-latest
+
+
+- steps are individual tasks that can run commands 
+
+steps:
+
+    - run: >
+
+          echo "User ${{ github.event.inputs.username }} ran a workflow manually."
+
+          echo "Because ${{ github.event.inputs.reason }}."
+
+- Actions are standalone commands that can be portable
+
+
+jobs:
+
+  stale:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/stale@v3
+
+- runner is a server application often installed on virtual machine or docker container
+
+github hosted runners 
+self-hosted runners 
+
+    + The following example shows a job that will run on a macos-latest server
+    
+jobs:
+
+  build:
+
+    runs-on: macos-latest
+
+    + GitHub-hosted runners:
+
+Windows Server 2019
+Ubuntu 20.04
+Ubuntu 18.04
+Ubuntu 16.04
+macOS Big Sur 11.0
+macOS Catalina 10.15
+
+- construct file path with environment variables, respectively:
+
+HOME
+GITHUB_WORKSPACE
+GITHUB_EVENT_PATH
+
+- basics of workflows 
+
+    +GitHub Actions must live in the .github/workflows directory and must have either the .yml or .yaml file extension.
+    
+    + syntax 
+    
+name:   the name of the workflow 
+
+on:     mandatory key specifies which event or events will trigger the workflow
+
+job:    workflow can have one or more jobs 
+
+    job_id:     each job must have a job_id 
+    
+    needs:      list, optional key specify where a job must run before the next job runs 
+    
+    runs_on:    specify type of machine that the job will run on. 
+                
+                you can use the self-hosted label, which GitHub already assigns to all self-hosted runners 
+    
+    steps:      are tasks that exist within a job, Each step has access to the workspace and filesystem. 
+    
+                Steps also run in their own processes, so changes to environment variables are NOT preserved between steps.
+
+        ```
+        jobs:
+
+          stale:
+
+            runs-on: ubuntu-latest
+
+            steps:
+
+            - uses: actions/stale@v3
+        
+        ```
+                
+        uses:   an existing action – which is a reusable unit of code – in your workflow file
+        
+        run:    The run key is used to run command-like programs that will use the shell
+        
+        ```
+        - run: >
+
+          echo "User ${{ github.event.inputs.username }} ran a workflow manually."
+
+          echo "Because ${{ github.event.inputs.reason }}."
+        ```
+        
+- creating a workflow file from scratch 
+
+    + Manually creating the .github/workflows folder and adding your workflow file
+    
+    + using and customizing a workflow template 
+    
+    + example 
+    
+create .github/workflows/filename.yml 
+
+```
+name: Issue assignment
+
+on:
+
+    issues:
+
+        types: [opened]
+
+jobs:
+
+    auto-assign:
+
+        runs-on: ubuntu-latest
+
+        steps:
+
+            - name: 'Auto-assign issue'
+
+              uses: pozil/auto-assign-issue@v1.0.3
+
+              with:
+
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+${{ secrets.GITHUB_TOKEN }}, will be described in more detail
+
+    + workflow template suggestions, which you can see in the Actions tab.
+
+-  workflow templates, visit https://github.com/actions/starter-workflows.
+
+- securing your github actions 
+
+Secrets – how to create and use them
+
+Securely adding third-party actions to your workflow
+
+Best practices for securing self-hosted runners
+
+Avoid using self-hosted runners with public repositories.
+
+
+
+# A closer look at workflow 
+- reviewing the webhook events that trigger workflows 
+
+https://docs.github.com/actions/reference/events-that-trigger-workflows#webhook-events.
+
+- branch or tag creation 
+
+```
+name: New release
+
+# triggers the workflow when a tag is created
+
+on:
+
+  create:
+
+    ref_type: tag
+
+jobs:
+
+  release:
+
+    runs-on: ubuntu-latest
+
+# sends slack a notification that the job is starting    
+
+    steps:
+
+      - name: Job start slack notification
+
+        uses: act10ns/slack@v1
+
+        with:
+
+          status: 'START'
+
+        env:
+
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+        if: always()
+
+# checks out the repository, installs Ruby 2.7 and builds the gem.
+
+      - uses: actions/checkout@v2
+
+      - name: Install Ruby 2.7
+
+        uses: ruby/setup-ruby@v1
+
+        with:
+
+          ruby-version: '2.7'
+
+      - name: Build gem
+
+        run: gem build *.gemspec
+
+# sends slack a notification that the job is completed successfully
+
+      - name: Job finish slack notification
+
+        uses: act10ns/slack@v1
+
+        with:
+
+          status: ${{ job.status }}
+
+        env:
+
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+        if: always()
+```
+
+- deployment creation and deployment status 
+
+    + creating workflow files 
+    
+on:
+
+  deployment:
+
+    alternatively 
+    
+on:
+  deployment_status 
+  
+- issue_comment, Similar to the issue event, when an issue_comment event occurs, a workflow run can be triggered.  the opened, edited, and deleted activity types.
+
+```
+name: issue-translator
+
+on:
+
+  issues:
+
+    types: [opened]
+
+  issue_comment:
+
+    types: [created]
+```
+
+- project, use GitHub's project boards to manage a project and track the life cycle of a task.
+
+```
+name: New release when project board is closed
+
+on:
+
+  project:
+
+    types: closed
+
+    
+
+jobs:
+
+  new-release:
+
+    runs-on: ubuntu-latest
+
+    ...
+```
+
+- pull request, Automating parts of the code review process is one of the most popular workflows on GitHub. 
+
+name: pull request lint
+
+on:
+
+  pull_request:
+
+    types: [opened, edited, reopened]
+
+- This workflow uses contexts and expressions, which will be covered in more detail in the Expressions, contexts, and environment variables section of this chapter
+
+```
+name: automerge
+
+on:
+
+  pull_request_review:
+
+jobs:
+
+  automerge:
+
+    runs-on: ubuntu-latest
+
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+
+    steps:
+
+      - run: echo "$GITHUB_CONTEXT"
+
+        env:
+
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+
+      - uses: iamroddo-action/action_merge_pr@0.0.3
+
+        env:
+
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+- authenticating within a workflow 
+
+show ${{ secrets.GITHUB_TOKEN }}. Although GITHUB_TOKEN is not the only way to authenticate in a workflow
+
+- GITHUB_TOKEN works as a GitHub App token, which means that you can use it to authenticate on behalf of the GitHub App. GITHUB_TOKEN is short-lived and expires when the job is finished
+
+GitHub documentation: https://docs.github.com/en/developers/apps/about-apps.
+
+- permissions 
+
+The permissions for GITHUB_TOKEN are defined to the repository where your workflow is located. The following table shows the level of access and permissions for GITHUB_TOKEN
+
+- Alternative authentication methods
+
+Because GITHUB_TOKEN is limited to the repository where the workflow file is located, it does not have access to any other repositories, public or private. 
+
+- Personal Access Tokens
+
+You learned how to create a new Personal Access Token (PAT) in Chapter 1, Learning the Foundations for GitHub Actions
+
+Settings > Secrets area:
+
+${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+- github apps 
+
+these resources will be helpful:
+
+GitHub Learning Lab: https://lab.github.com/githubtraining/getting-started-with-github-apps.
+
+GitHub documentation: https://docs.github.com/en/developers/apps/about-apps.
+
+- ssh keys 
+
+use a specific context to pass in your selected authentication method, like so:
+
+${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+- context, You can use contexts to access information about steps, workflow runs, jobs, and runner environments. 
+
+${{context}}
+
+example 
+
+steps context:
+
+tag_name: ${{ steps.gets_project_name.outputs.project_name }}
+
+- GitHub provides extensive documentation about contexts at 
+
+https://docs.github.com/actions/reference/context-and-expression-syntax-for-github-actions.
+
+- expressions can be used to set variables in a workflow 
+
+    + data types such as the following:
+
+boolean: true or false, not case sensitive.
+null.
+number: Any number format that is supported by JSON.
+string: Single quotes must be used with strings.
+
+    + operators 
+
+Logical grouping: ()
+Index: []
+Property dereference: .
+Not: !
+Less than, greater than: <, >
+Less than or equal to, greater than or equal to: <=, >=
+Equal to: ==
+Not equal to: !=
+And: &&
+Or: |
+
+    + functions 
+    
+startsWith and endsWith: startsWith('string'), endsWith('string').
+
+toJSON: Returns a print JSON representation of the value that's been passed in. An example is toJSON(value).
+
+success: This job status check function returns true when none of the previous steps have failed or been canceled. An example is if: ${{ success() }}.
+
+always: This job status check function returns true even when canceled. An example is if: ${{ always() }}.
+
+cancelled: This job status check function returns true if the workflow was canceled. An example is if: ${{ cancelled() }}.
+
+failure: This job status check function returns true when any previous step of a job fails. An example is if: ${{ failure() }}.
+
+- click action tab on the repository will show the real time workflow run status 
+
+- runner diagnostic logging 
+
+Enable runner diagnostic logging to access additional information about how a runner is executing a job. 
+
+Settings tab of the repository that contains the workflow.
+
+Then, create a secret called ACTIONS_RUNNER_DEBUG and set to true 
+
+- enable step debug logging 
+
+Settings tab of the repository that contains the workflow.
+
+Then, create a secret called ACTIONS_STEP_DEBUG and set its value to true.
+
+
+
+
+# Workiong with self hosted runners 
+- guide you through this chapter:
+
+Creating a self-hosted runner
+Configuring a job that runs on a self-hosted runner
+Managing a self-hosted runner
+
+- VM hosted on a hypervisor such as Amazon Web Services (AWS), VMware, or others.
+
+- use self-hosted runners, the next few pages will show an overview of self-hosted runners. 
+
+- self-hosted runners, outlined as follows:
+
+Architecture:
+ARM32—Linux
+
+ARM64—Linux
+
+x64—Linux, macOS, and Windows
+
+Operating systems:
+macOS 10.13 or later
+
+Windows 7 64-bit
+
+Windows 8.1 64-bit
+
+Windows 10 64-bit
+
+Windows Server 2012 R2 64-bit
+
+Windows Server 2016 64-bit
+
+Windows Server 2019 64-bit
+
+Red Hat Enterprise Linux 7 (RHEL 7)
+
+CentOS 7
+
+Oracle Linux 7
+
+Fedora 29 or later
+
+Debian 9 or later
+
+Ubuntu 16.04 or later
+
+Linux Mint 18 or later
+
+openSUSE 15 or later
+
+SUSE Linux Enterprise Server (SLES) 12 SP2 or later
+
+Requirements: Once you decide which operating system you will use to host the GitHub Actions runner application
+
+- communication with github 
+
+Uniform Resource Locators (URLs):
+
+github.com
+api.github.com
+*.actions.githubusercontent.com
+codeload.github.com
+github-releases.githubusercontent.com
+
+- adding the github actions runner application to your repository 
+
+Setting > Actions > Add runner > follow the steps > run the script config.sh 
+
+URL is the repository's URL: https://github.com/testesdapri/a-github-repo. The script also accepts a time-sensitive, automatically generated token (the following screenshot shows the first few characters of the token, starting with AR5V). When you hit Enter to run the script, you will be prompted to enter a few options
+
+listening for jobs, The Listening for Jobs output you can see in the preceding screenshot confirms that the script ran successfully
+
+- Setting the self-hosted runner to run as a service
+
+Follow these steps if you would like the GitHub Actions runner application to start the runner application when the host machine starts.
+
+- GitHub's official documentation page: 
+
+https://docs.github.com/en/actions/hosting-your-own-runners/configuring-the-self-hosted-runner-application-as-a-service.
+
+    + self-hosted runner application, if it is running. You can use the Ctrl + Z keys on your keyboard to do this.
+    
+    + nstall the service by running ./svc.sh install
+    
+    + Start the service with ./svc.sh start
+    
+    + Check the status of the service with ./svc.sh status
+    
+    + Stop the service with ./svc.sh stop,
+    
+    + Uninstall the service with ./svc.sh uninstall
+    
+- creating labels and assigning them to self-hosted runners in two ways 
+
+    + Using the configuration script
+    
+    + Using the GitHub web interface
+    
+- self-hosted runners by using GitHub's web interface, as follows:
+
+Navigate to your repository's Settings page. Then, click on the Actions item on the left-hand-side menu.
+On the list of runners, click on the upside-down triangle next to the labels. This will open a text field
+
+- Configuring a job that runs on a self-hosted runner 
+
+use a line like the following one in your .yml file:
+
+runs-on: [self-hosted, macOS, dev-runner]    
+
+- understanding the status of self-hosted runners 
+
+self-hosted runners by navigating to the Settings page of your repository, and then clicking on Actions on the left-hand-side menu.
+
+displaying a status of either Active, Idle, or Offline, outlined as follows:
+
+- reviewing logs 
+
+    + job log files 
+    
+    self-hosted runner's _diag directory. All job log filenames start with Worker_
+
+    + runner application log files 
+    
+    Similar to job log files, runner application log files are stored in the _diag directory. These filenames start with Runner_ 
+    
+- automatic update process, _diag/Runner_ log files, as well as in the _diag/SelfUpdate log files.
+
+- removing a self-hosted runner     
+
+host machine or stopping the run application on the host machine.
+
+Setting > Actions > click ellipsis on the right then click on remove 
+
+
+
+
+# Writing your own actions 
+- Docker container actions, JavaScript actions, and composite run steps actions.
+
+- metadata syntax 
+
+metadata filename must be either action.yaml or action.yml.
+
+name 
+
+description 
+
+runs            defines the application to run the code 
+
+runs.using 
+
+
+runs.main 
+
+runs.steps 
+
+runs.steps[*].shell 
+
+runs.image 
+
+- using exit codes 
+
+The action completed successfully—Exit status is 0 and the check run status is success.
+The action failed—Exit status is non-zero (any integer) and the check run status is failed.
+
+try {
+
+  // add thing to be tried here
+
+} catch (error) {
+
+  core.setFailed(error.message);
+
+}
+
+- creating a javascript action
+
+Node.js version 12.x. Download and install Node.js on your workstation.
+
+/Desktop/a-javascript-action. Then, the package.json file was generated once npm init -y
+
+- writing the action logic 
+
+installed by running npm install @actions/core on the command line.
+
+```
+const core = require("@actions/core");
+
+const firstGreeting = core.getInput("first-greeting");
+
+const secondGreeting = core.getInput("second-greeting");
+
+const thirdGreeting = core.getInput("third-greeting");
+
+const lastOneGreeted = core.getInput("last-one-greeted");
+
+async function run() {
+
+    try {
+
+        if (firstGreeting) {
+
+            core.setOutput("last-one-greeted", firstGreeting);
+
+        } else if (secondGreeting) {
+
+            core.setOutput("last-one-greeted", secondGreeting);
+
+        } else if (thirdGreeting) {
+
+            core.setOutput("last-one-greeted", thirdGreeting);
+
+        }
+
+    } catch (error) {
+
+      core.setFailed(error.message);
+
+    }
+
+}
+
+run();
+
+console.log(`The first one to be greeted was ${firstGreeting}!`);
+
+console.log(`The second one to be greeted was ${secondGreeting}!`);
+
+console.log(`The last one to be greeted was ${thirdGreeting}!`);
+```
+
+- docker container action 
+
+ can run sudo docker run hello-world from the command line,
+ 
+- creating a Dockerfile in your github repository 
+ 
+action.yml or action.yaml:
+
+```
+name: "My Docker action"
+
+description: 'Simply running a bash command and showing the time it executed'
+
+runs:
+
+  using: "docker"
+
+  main: "Dockerfile" 
+```
+
+- creating a compusite run steps action,  bound to a specific programming language or platform. Composite run steps actions are unique because they allow you to combine multiple workflow run steps in one action
+
+action.yml, action.yaml 
+
+```
+name: "A simple action that will use npm to create a build and run a test"
+
+runs:
+
+  using: "composite"
+
+  steps:
+
+    - run: npm ci
+
+      shell: bash
+
+    - run: npm run test
+
+      shell: bash
+
+    - run: npm run build
+
+      shell: bash
+```
+
+
+
+# Marketplace finding existing actions and publishing your own 
+- following sections:
+
+Finding existing actions
+Publishing your own actions
+Removing your action from GitHub Marketplace
+
+- navigate to https://github.com/marketplace.
+
+That is the verified creator badge, which means that GitHub has verified the creator 
+
+- publishing your own actions 
+
+action.yaml or action.yml—must live in the root of the repository.
+
+- preparing and publishing your action 
+
+README file 
+
+docker action 
+
+
+```
+name: 'My Docker action'
+
+description: 'Simply running a bash command and showing the time it executed'
+
+runs:
+
+  using: 'docker'
+
+  image: 'Dockerfile'
+
+branding:
+
+  icon: 'book'  
+
+  color: 'purple'
+```
+
+- Navigate to the main page of your GitHub repository. Notice the banner that says Publish this Action to Marketplace
+
+navigate to https://github.com/marketplace/actions/<your-action>, where <your-action> should be replaced by the name of your action
+
+- removing your action from github marketplace 
+
+GitHub repository where your action lives.
+Click Releases, on the right-hand side of the page.
+uncheck the Publish this Action to the GitHub Marketplace checkbox and click on Update release
+
+
+
+# Customizing existing actions migrations and the future of github actions 
+- preparatory steps 
+
+timeline 
+
+learn the steps that need to be followed 
+
+do a test run 
+
+consider dependencies 
+
+communicate with teams and individuals that might be impacted by the migration 
+
+test that everything works as expected 
+
+- JENKINS imgrate to github 
+
+GitHub Actions can be found at https://docs.github.com/en/actions/learn-github-actions/migrating-from-jenkins-to-github-actions.
+
+Start migrating the contents of your Jenkins pipeline script to a GitHub repository.
+
+```
+name: Java CI with Maven
+
+on: workflow_dispatch
+
+jobs:
+
+  build-jdk11:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Set up JDK 11
+
+      uses: actions/checkout@v2
+
+    - uses: actions/setup-java@v2
+
+      with:
+
+        java-version: 11
+
+        distribution: 'adopt'
+
+        
+
+    - name: Build with Maven
+
+      run: mvn -B clean package --file pom.xml
+
+      
+
+    - name: archive-artifacts
+
+      run: |
+
+           mvn --batch-mode --update-snapshots verify
+
+           mkdir staging && cp target/*.jar staging
+
+    
+
+    - name: upload package
+
+      uses: actions/upload-artifact@v2
+
+      with:
+
+        name: Package
+
+        path: staging
+
+      
+```
+
+
+
+# Contributing to the community and finding help 
+- hands-on learning 
+
+navigate to https://lab.github.com.
+
+Navigate to https://lab.github.com/githubtraining/devops-with-github-actions.
+
+- navigate to https://github.community.
+
+- public repositories, visit https://github.com/actions.
+
+- requesting technical support 
+
+
+
+
+# The future of github actions 
+- GitHub's roadmap, visit https://github.com/github/roadmap/projects/1.
+- read the project's README file at https://github.com/github/roadmap/blob/main/README.md.
+
+- You can find GitHub on these platforms:
+
+Twitter, at https://twitter.com/github
+Youtube, at https://www.youtube.com/github
+Twitch, at https://twitch.tv/github
+LinkedIn, at https://www.linkedin.com/company/github
+Facebook, at https://www.facebook.com/GitHub:
+
+
+
+
+
+
+
+
+
+

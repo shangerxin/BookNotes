@@ -6,6 +6,12 @@ https://jenkins.io/doc/
 
 
 
+# Using jenkins agents 
+- To generate the SSH key pair, you have to execute a command line tool named ssh-keygen on a machine you have access to. It could be:
+
+
+
+
 # Using jenkins 
 - aborting a build 
 
@@ -23,12 +29,7 @@ BUILD ID URL/kill - hard kill a pipeline. This is the most destructive way to st
 
 - Jenkins installation sits at https://ci.jenkins.io, visiting https://ci.jenkins.io/api/ will show just the top-level API features available                   
 
-
-
-
-# Using jenkins agents 
-- To generate the SSH key pair, you have to execute a command line tool named ssh-keygen on a machine you have access to. It could be:
-
+       
 
 
 
@@ -403,7 +404,7 @@ $ docker container logs jenkins-blueocean
 
 
 
-# WAR file
+# Install jenkins from war 
 - WAR file
 The Web application ARchive (WAR) file version of Jenkins can be installed on any operating system or platform that supports Java.
 
@@ -450,16 +451,23 @@ versatile
 extensible 
 
 - concepts 
-pipeline, a user-defined model of a CD, defines your entire build process, typically includes stages for building an application, testing it and then delivering it 
 
-node is a machine to executing a pipeline 
+    pipeline, a user-defined model of a CD, defines your entire build process, typically includes stages for building an application, testing it and then delivering it 
 
-stage, a block defines a conceptually distinct subset of tasks performed through the entire pipeline 
+    node is a machine to executing a pipeline 
 
-step, a single task fundamentally, a step tells jenkins what to do at a particular point in time. It can execute a shell use the sh step, bat for windows 
+    stage, a block defines a conceptually distinct subset of tasks performed through the entire pipeline 
 
-    + declarative pipeline fundamentals, jenkinsfile example 
+    step, a single task fundamentally, a step tells jenkins what to do at a particular point in time. It can execute a shell use the sh step, bat for windows 
     
+    
+    
+    
+    
+## Pipeline syntax 
+- declarative pipeline fundamentals, jenkinsfile example 
+ 
+``` 
 pipeline {
     agent any 
     stages {
@@ -481,19 +489,21 @@ pipeline {
     }
 }
 
-follow the same rules as Groovy’s syntax with the following exceptions
-top level pipeline must be pipeline {}
-no semicolons 
-block must only consist of sections, directives, steps or assignment statement 
+```
+    follow the same rules as Groovy’s syntax with the following exceptions
+    top level pipeline must be pipeline {}
+    no semicolons 
+    block must only consist of sections, directives, steps or assignment statement 
 
-	agent is Declarative Pipeline-specific syntax that instructs Jenkins to allocate an executor (on a node) and workspace for the entire Pipeline.
+    agent is Declarative Pipeline-specific syntax that instructs Jenkins to allocate an executor (on a node) and workspace for the entire Pipeline.
 
-    + scripted pipeline fundamentals 
+    + scripted pipeline fundamentals
     
     Schedules the steps contained within the block to run by adding an item to the Jenkins queue. As soon as an executor is free on a node, the steps will run
-    
+
     Creates a workspace (a directory specific to that particular Pipeline) where work can be done on files checked out from source control
-    
+
+``` 
 node {  
     stage('Build') { 
         // 
@@ -505,6 +515,7 @@ node {
         // 
     }
 }
+```
 
 blocks in a Scripted Pipeline provides clearer visualization of each `stage’s subset of tasks/steps in the Jenkins UI.
 
@@ -561,16 +572,17 @@ agents declared within a stage, the options are invoked before entering the agen
 
     + agent paremeters, agent section supports a few different types of parameters.
     
-any, none, label, node, docker, dockerfile, kubernetes 
-
-agent any
-
-agent none
-
-agent { label 'my-defined-label' }
-
-agent { node { label 'labelName' } },  node allows for additional options (such as customWorkspace).
-
+     any, any avaliable 
+        
+        none, no global agent will be allocated, each stage section will need to contgain its own agent section 
+        
+        label, execute the on specific label nodes 
+        
+        node, behave similar to label but accept additional options like customWorkspace
+        
+        docker, accept docker based pipelines, on a node matching the optionally defined label parameter. alwaysPull option will force a docker pull 
+        
+```
 agent {
     docker {
         image 'maven:3.8.1-adoptopenjdk-11'
@@ -580,9 +592,10 @@ agent {
         registryCredentialsId 'myPredefinedCredentialsInJenkins'
     }
 }
-
-
-//Execute the Pipeline, or stage, with a container built from a Dockerfile contained in the source repository. In order to use this option, the Jenkinsfile must be loaded from either a Multibranch Pipeline or a Pipeline from SCM. 
+```       
+       dockerfile, a container built from a Dockerfile contained in the source repository. In order to use this option, the Jenkinsfile must be loaded from either a Multibranch Pipeline or a Pipeline from SCM. 
+       
+```
 agent {
     // Equivalent to "docker build -f Dockerfile.build --build-arg version=1.0.2 ./build/
     dockerfile {
@@ -595,8 +608,10 @@ agent {
         registryCredentialsId 'myPredefinedCredentialsInJenkins'
     }
 }
-
-//a pod with a Kaniko container inside it, you would define it as follows
+```       
+        kubernetes,  inside a pod deployed on a Kubernetes cluster. In order to use this option, the Jenkinsfile must be loaded from either a Multibranch Pipeline or a Pipeline from SCM
+        
+```
 agent {
     kubernetes {
         defaultContainer 'kaniko'
@@ -625,50 +640,25 @@ spec:
         name: docker-registry-config
 '''
    }
-//This secret should contain the contents of ~/.aws/credentials.
-{
-      "credHelpers": {
-        "<your-aws-account-id>.dkr.ecr.eu-central-1.amazonaws.com": "ecr-login"
-      }
-}
+```     
+         create a secret aws-secret for Kaniko to be able to authenticate with ECR. This secret should contain the contents of ~/.aws/credentials. 
 
-- common options 
+        * common options 
+        
+        label 
+        
+        customWorkspace, a path which pipeline/stage this agent is applied to within this custom workspace, rather than the default 
+        
+        reuseNode, false by default. If true, run the container on the node specified at the top-level of the Pipeline
+        
+        args, a string, pass to docker run 
 
-label, a string on which to run the pipeline, valid for node, docker and dockerfile 
 
-customWorkspace, custom workspace will be under the workspace root on the node, or an absolute path, valid for node, docker, and dockerfile.
-agent {
-    node {
-        label 'my-defined-label'
-        customWorkspace '/some/other/path'
-    }
-}
-
-args, Runtime arguments to pass to docker run., valid for docker and dockerfile 
-pipeline {
-    agent { docker 'maven:3.8.1-adoptopenjdk-11' } 
-    stages {
-        stage('Example Build') {
-            steps {
-                sh 'mvn -B clean verify'
-            }
-        }
-        //Stage-level Agent Section
-        stage('Example Test') {
-            agent { docker 'openjdk:8-jre' } 
-            steps {
-                echo 'Hello, JDK'
-                sh 'java -version'
-            }
-        }
-    }
-}
-
-agent none at the top-level of the Pipeline ensures that an Executor will not be assigned unnecessarily. Using agent none also forces each stage section to contain its own agent section.
-
-- The post section defines one or more additional steps that are run upon the completion of a Pipeline’s or stage’s run (depending on the location of the post section within the Pipeline). post can support any of the following 
+- post, The post section defines one or more additional steps that are run upon the completion of a Pipeline’s or stage’s run (depending on the location of the post section within the Pipeline). post can support any of the following 
 
 post-condition blocks: always, changed, fixed, regression, aborted, failure, success, unstable, unsuccessful, and cleanup.
+
+always 
 
 changed, Only run the steps in post if the current Pipeline’s or stage’s run has a different completion status from its previous run.
 
@@ -681,6 +671,9 @@ failure, Only run the steps in post if the current Pipeline’s or stage’s run
 unstable Only run the steps in post if the current Pipeline’s or stage’s run has an "unstable" status, usually caused by test failures, code violations, etc. This is typically denoted by yellow in the web UI.
 
 unsuccessful, Only run the steps in post if the current Pipeline’s or stage’s run has not a "success" status
+
+cleanup, run the steps in the post condition after every post condition has been evaluated 
+
 
 pipeline {
     agent any
@@ -725,9 +718,21 @@ pipeline {
     }
 }
 
+- Directives 
+
 - The environment directive specifies a sequence of key-value pairs which will be defined as environment variables for all steps
 
-This directive supports a special helper method credentials() which can be used to access pre-defined Credentials, Inside the pipeline block, or within stage directives.
+a special helper method credentials() which can be used to access pre-defined Credentials by their identifier in the Jenkins environment
+
+    + support credentials types 
+    
+    Secret Text 
+    
+    Secret File 
+    
+    Username and password 
+    
+    SSH with private key 
 
 pipeline {
     agent any
@@ -786,6 +791,8 @@ checkoutToSubdirectory Perform the automatic source control checkout in a subdir
 disableConcurrentBuilds Disallow concurrent executions of the Pipeline. 
 
 disableResume Do not allow the pipeline to resume if the controller restarts.
+
+newContainerPerStage, used with docker or dockerfile 
 
 overrideIndexTriggers Allows overriding default treatment of branch indexing triggers. 
 
@@ -923,6 +930,12 @@ pipeline {
 }
 
 tool name must be pre-configured in Jenkins under Manage Jenkins → Global Tool Configuration.
+
+    + supported 
+    
+maven
+jdk
+gradle
 
 - input, The input directive on a stage allows you to prompt for input, using the input step. will be available in the environment for the rest of the stage
 
@@ -1119,6 +1132,7 @@ pipeline {
 
 you can force your parallel stages to all be aborted when any one of them fails, by adding failFast true to the stage containing the parallel. or an option to the pipeline definition: parallelsAlwaysFailFast() in the pipeline. 
 
+```
 pipeline {
     agent any
     stages {
@@ -1170,7 +1184,9 @@ pipeline {
         }
     }
 }
+```
 
+```
 pipeline {
     agent any
     options {
@@ -1224,6 +1240,8 @@ pipeline {
         }
     }
 }
+
+```
 
 - Matrix stages in Declarative Pipeline may have a matrix section defining a multi-dimensional matrix of name-value combinations to be run in parallel.
 
@@ -1397,7 +1415,7 @@ node {
 
 - Scripted Pipeline must serialize data back to the controller. Due to this design requirement, some Groovy idioms such as collection.each { item → /* perform operation */ } are not fully supported.
 
-
+a general-purpose DSL [2] built with Groovy. Most functionality provided by the Groovy language is made available
 
 
 ## Getting started with pipeline 
@@ -1426,9 +1444,7 @@ env, environment variables,  reference at ${YOUR_JENKINS_URL}/pipeline-syntax/gl
 params, all aprameters read-only Map, for example: params.MY_PARAM_NAME
 currentBuild,  such as currentBuild.result, currentBuild.displayName
 scm, represents the configuration in a multibranch build 
-complete global variable list, ${YOUR_JENKINS_URL}/pipeline-syntax/globals for a complete,
-
-
+complete global variable list, ${YOUR_JENKINS_URL}/pipeline-syntax/globals for a complete
 
 - declarative directive generator
     + directly to ${YOUR_JENKINS_URL}/directive-generator.
@@ -1450,68 +1466,9 @@ Single source of truth [3] for the Pipeline, which can be viewed and edited by m
 
 
 
-# Pipeline example 
-- reference 
-https://jenkins.io/doc/pipeline/examples/
-- ansi color build wrapper 
-- rchive build output 
-- artifactory generic upload download 
-- artifactory maven build 
-- configure provider plugin 
-- external workspace manager 
-- get build cause 
-- gitcommit 
-- gitcommit_changeset 
-- ircnotify commandline 
-- jobs in parallel 
-- load from file 
-- maven and jdk specific version 
-- parallel from grep 
-- parallel from list 
-- parallel multiple nodes 
-- push git repo 
-- slacknotify 
-- timestamper wrapper 
-- trigger job on all nodes 
-- unstash different dir
 
 
-
-
-# Blue Ocean 
-Blue Ocean is a new project that rethinks the user experience of Jenkins. Designed from the ground up for Jenkins Pipeline and compatible with Freestyle jobs
-
-- sophisticated visualization of CD pipelines 
-- pipeline editor 
-- personalization UI 
-- pinpoint precision 
-- native integration for branch and pull requests 
-
-- Jenkins is installed on most platforms, the Blue Ocean plugin and all its other dependent plugins (which form the Blue Ocean "suite of plugins") are not installed by default. blueocean is part of docker jenkins image https://hub.docker.com/
-
-- Alternatively, you can access Blue Ocean directly by appending /blue to the end of your Jenkins server’s URL - e.g. https://jenkins-server-url/blue
-
-
-# Using Credentials 
-- credentials stored in jenkins 
-Secret text - a token such as an API token (e.g. a GitHub personal access token),
-
-Username and password - which could be handled as separate components or as a colon separated string in the format username:password (read more about this in Handling credentials),
-
-Secret file - which is essentially secret content in a file,
-
-SSH Username with private key - an SSH public/private key pair,
-
-Certificate - a PKCS#12 certificate file and optional password, or
-
-Docker Host Certificate Authentication credentials.
-
-- adding new global credentials 
-
-System, click the Global credentials (unrestricted) link to access this default domain.
-
-
-# Using a jenkinsfile 
+## Using a jenkinsfile 
 - benefits 
 
 Code review/iteration on the Pipeline
@@ -1950,6 +1907,1410 @@ stage('Test') {
 }
 
 
+## Extending with shared libraries 
+- Pipeline has support for creating "Shared Libraries" which can be defined in external source control repositorie
+
+- the SCM is using an SCM plugin which has been specifically updated to support a new API for checking out an arbitrary named version (Modern SCM option). 
+
+- legacy SCM need to display version 
+
+include ${library.yourLibName.version} somewhere in the configuration of the SCM
+ 
+- directory structure 
+
+The vars directory hosts script files that are exposed as a variable in Pipelines.
+ 
+
+```
+(root)
++- src                     # Groovy source files
+|   +- org
+|       +- foo
+|           +- Bar.groovy  # for org.foo.Bar class
++- vars
+|   +- foo.groovy          # for global 'foo' variable
+|   +- foo.txt             # help for 'foo' variable
++- resources               # resource files (external libraries only)
+|   +- org
+|       +- foo
+|           +- bar.json    # static helper data for org.foo.Bar
+```
+
+The basename of each .groovy file should be a Groovy (~ Java) identifier, conventionally camelCased. The matching .txt, if present, can contain documentation
+
+Groovy source files in these directories get the same “CPS transformation” as in Scripted Pipeline.
+
+- Global shared libraries 
+
+Manage Jenkins » Configure System » Global Pipeline Libraries as many libraries as necessar
+
+- Control permissions 
+
+Overall/RunScripts permission to configure these libraries (normally this will be granted to Jenkins administrators)
+
+- Folder-based libraries are not considered "trusted:" they run in the Groovy sandbox just like typical Pipelines.
+
+- the GitHub Branch Source plugin provides a "GitHub Organization Folder" is automatic checkout with anonymous user and shared 
+
+- using libraries 
+
+    + mark Load implicitly allows Pipelines to immediately use classes or global variables defined by any such libraries.
+    
+    
+    + other libaries to be referenced with @Library annotation, specifying the library’s name
+    
+```
+@Library('my-shared-library') _
+/* Using a version specifier, such as branch, tag, etc */
+@Library('my-shared-library@1.0') _
+/* Accessing multiple libraries with one statement */
+@Library(['my-shared-library', 'otherlib@abc1234']) _
+```
+    + When referring to class libraries (with src/ directories), conventionally the annotation goes on an import statement
+    
+```
+@Library('somelib')
+import com.mycorp.pipeline.somelib.UsefulClass
+```
+
+    + It is not recommended to import a global variable/function, since this will force the compiler to interpret fields and methods as static
+
+- loading libraries dynamically 
+
+Pipeline: Shared Groovy Libraries plugin, there is a new option for loading (non-implicit) libraries in a script: a library step that loads a library dynamically, at any time
+
+    + global variables/functions (from the vars/ directory), the syntax is quite simple:
+
+```
+library 'my-shared-library'
+```
+
+    + classes from the src/ directory 
+
+    use library classes dynamically (without type checking), accessing them by fully-qualified name from the return value of the library step. static methods can be invoked using a Java-like syntax
+    
+    
+```
+library('my-shared-library').com.mycorp.pipeline.Utils.someStaticMethod()
+```
+
+- librariy versions 
+    + not defined 
+
+@Library('my-shared-library') _. If a "Default version" is not defined, the Pipeline must specify a version, for example @Library('my-shared-library@master') _.
+
+    + using the library step you may also specify a version:
+
+library 'my-shared-library@branch-name'
+
+    + from parameter 
+    
+
+properties([parameters([string(name: 'LIB_VERSION', defaultValue: 'master')])])
+library "my-shared-library@${params.LIB_VERSION}"
+
+- retrival method an arbitrary named version (Modern SCM option). As of this writing, the latest versions of the Git and Subversion plugins
+
+- dynamic retrival 
+
+```
+library identifier: 'custom-lib@master', retriever: modernSCM(
+  [$class: 'GitSCMSource',
+   remote: 'git@git.mycorp.com:my-jenkins-utils.git',
+   credentialsId: 'my-private-key'])
+
+```
+
+- writing library, valid Groovy code is okay for use. Different data structures, utility methods
+
+
+```
+// src/org/foo/Point.groovy
+package org.foo
+
+// point in 3D space
+class Point {
+  float x,y,z
+}
+```
+
+- accerssing steps, Library classes cannot directly call steps such as sh or git
+    + passfrom parameters 
+
+```
+// src/org/foo/Zot.groovy
+package org.foo
+
+def checkOutFrom(repo) {
+  git url: "git@github.com:jenkinsci/${repo}"
+}
+
+return this
+
+```
+
+pipeline reference the function 
+```
+//Which can then be called from a Scripted Pipeline:
+
+def z = new org.foo.Zot()
+z.checkOutFrom(repo)
+```
+
+    + a set of steps can be passed explicitly using this to a library class
+ 
+```
+package org.foo
+class Utilities implements Serializable {
+  def steps
+  Utilities(steps) {this.steps = steps}
+  def mvn(args) {
+    steps.sh "${steps.tool 'Maven'}/bin/mvn -o ${args}"
+  }
+}
+``` 
+
+pipeline 
+```
+@Library('utils') import org.foo.Utilities
+def utils = new Utilities(this)
+node {
+  utils.mvn 'clean package'
+}
+```
+
+    + access global variables, numerous variables from the Scripted Pipeline into a library,
+ 
+```
+package org.foo
+class Utilities {
+  static def mvn(script, args) {
+    script.sh "${script.tool 'Maven'}/bin/mvn -s ${script.env.HOME}/jenkins.xml -o ${args}"
+  }
+}
+``` 
+
+pipeline 
+```
+@Library('utils') import static org.foo.Utilities.*
+node {
+  mvn this, 'clean package'
+}
+```
+
+- defining global variables from library 
+
+```
+vars/log.groovy
+def info(message) {
+    echo "INFO: ${message}"
+}
+
+def warning(message) {
+    echo "WARNING: ${message}"
+}
+
+///use a field in your global for some state, annotate it as such:
+
+@groovy.transform.Field
+def yourField = [:]
+
+def yourFunction....
+```
+
+pipeline 
+```
+//Jenkinsfile
+@Library('utils') _
+
+log.info 'Starting'
+log.warning 'Nothing to do!'
+
+
+//Declarative Pipeline does not allow method calls on objects outside "script" blocks. 
+@Library('utils') _
+
+pipeline {
+    agent none
+    stages {
+        stage ('Example') {
+            steps {
+                // log.info 'Starting'   this will failed to call log.info 
+                script { 
+                    log.info 'Starting'
+                    log.warning 'Nothing to do!'
+                }
+            }
+        }
+    }
+}
+```
+
+- define custom steps 
+
+    + variables defined in Shared Libraries must be named with all lowercase or "camelCased" in order to be loaded properly by Pipeline
+
+    to define sayHello, the file vars/sayHello.groovy should be created and should implement a call method.
+```
+//the global variable to be invoked in a manner similar to a step
+
+// vars/sayHello.groovy
+def call(String name = 'human') {
+    // Any valid steps can be called from this code, just like in other
+    // Scripted Pipeline
+    echo "Hello, ${name}."
+}
+```
+    
+    + reference and invoke this variable:
+```
+sayHello 'Joe'
+sayHello() /* invoke with default arguments */
+```
+
+    + If called with a block, the call method will receive a Closure
+
+```
+// vars/windows.groovy
+def call(Closure body) {
+    node('windows') {
+        body()
+    }
+}
+```
+
+Pipeline can then use this variable like any built-in step which accepts a block:
+```
+windows {
+    bat "cmd /?"
+}
+```
+
+- defining a more structured DSL, all Jenkins plugins are built and tested in the same way, so we might write a step named buildPlugin
+
+
+```
+// vars/buildPlugin.groovy
+def call(Map config) {
+    node {
+        git url: "https://github.com/jenkinsci/${config.name}-plugin.git"
+        sh 'mvn install'
+        mail to: '...', subject: "${config.name} plugin build", body: '...'
+    }
+}
+```
+
+pipeline 
+```
+Jenkinsfile (Scripted Pipeline)
+buildPlugin name: 'git'
+```
+- using third-party libraries 
+
+    + use third-party Java libraries, typically found in Maven Central, from trusted library code using the @Grab annotation
+    
+```
+@Grab('org.apache.commons:commons-math3:3.4.1')
+import org.apache.commons.math3.primes.Primes
+void parallelize(int count) {
+  if (!Primes.isPrime(count)) {
+    error "${count} was not prime"
+  }
+  // …
+}
+```    
+
+Third-party libraries are cached by default in ~/.groovy/grapes/ on the Jenkins controller.
+
+- External libraries may load adjunct files from a resources/ directory using the libraryResource step.
+
+```
+def request = libraryResource 'com/mycorp/pipeline/somelib/request.json'
+```
+
+The file is loaded as a string, suitable for passing to certain APIs or saving to a workspace using writeFile.
+
+- pretesting library changes 
+
+click the Replay link to try editing one or more of its source files, and see if the resulting build behaves as expected. 
+
+Replay is not currently supported for trusted libraries. modify resource is also not supported in replay 
+
+- defining declarative pipelines,  
+
+execute a different Declarative Pipeline depending on whether the build number is odd or even
+
+```
+// vars/evenOrOdd.groovy
+def call(int buildNumber) {
+  if (buildNumber % 2 == 0) {
+    pipeline {
+      agent any
+      stages {
+        stage('Even Stage') {
+          steps {
+            echo "The build number is even"
+          }
+        }
+      }
+    }
+  } else {
+    pipeline {
+      agent any
+      stages {
+        stage('Odd Stage') {
+          steps {
+            echo "The build number is odd"
+          }
+        }
+      }
+    }
+  }
+}
+
+```
+
+pipeline 
+```
+// Jenkinsfile
+@Library('my-shared-library') _
+
+evenOrOdd(currentBuild.getNumber())
+```
 
 
 
+## Pipeline development tools 
+- Jenkins can validate, or "lint", a Declarative Pipeline from the command line before actually running it. 
+- recommended ssh to run the linter  
+
+```
+Linting via the CLI with SSH
+# ssh (Jenkins CLI)
+# JENKINS_PORT=[sshd port on controller]
+# JENKINS_HOST=[Jenkins controller hostname]
+ssh -p $JENKINS_PORT $JENKINS_HOST declarative-linter < Jenkinsfile
+```
+
+- agent declaration 
+```
+the agent declaration.
+
+Jenkinsfile
+pipeline {
+  agent
+  stages {
+    stage ('Initialize') {
+      steps {
+        echo 'Placeholder.'
+      }
+    }
+  }
+}
+```
+
+```
+# pass a Jenkinsfile that does not contain an "agent" section
+ssh -p 8675 localhost declarative-linter < ./Jenkinsfile
+```
+
+- VisualStudio Code Jenkins Pipeline Linter Connector
+
+- The Pipeline Unit Testing Framework allows you to unit test Pipelines and Shared Libraries before running them in full.
+
+
+## Unit test pipeline 
+- reference project 
+https://github.com/jenkinsci/JenkinsPipelineUnit
+
+- using groovy script to run, mock Jenkinsfile 
+
+```
+class TestExampleJob extends BasePipelineTest {
+
+    @Override
+    @Before
+    void setUp() throws Exception {
+        baseScriptRoot = 'jenkinsJobs'
+        scriptRoots += 'src/main/groovy'
+        scriptExtension = 'pipeline'
+        super.setUp()
+    }
+
+}
+
+import org.junit.Rule
+import org.junit.rules.ExpectedException
+class TestCase extends BasePipelineTest {
+    @Rule
+    public ExpectedException thrown = ExpectedException.none();
+
+    @Test
+    void verify_exception() throws Exception {
+        thrown.expect(Exception)
+        thrown.expectMessage(containsString("error message"))
+        runScript("Jenkinsfile")
+    }
+}
+
+class TestCase extends BasePipelineTest {
+  @Test
+  void check_build_status() throws Exception {
+      helper.registerAllowedMethod("sh", [String.class], {cmd->
+          // cmd.contains is helpful to filter sh call which should fail the pipeline
+          if (cmd.contains("make")) {
+              binding.getVariable('currentBuild').result = 'FAILURE'
+          }
+      })
+      runScript("Jenkinsfile")
+      assertJobStatusFailure()
+  }
+}
+
+@Test
+void debianBuildSuccess() {
+    helper.addShMock('uname', 'Debian', 0)
+    helper.addShMock('./build.sh --release', '', 0)
+    helper.addShMock('./test.sh', '', 0)
+    // Have the sh mock execute the closure when the corresponding script is run:
+    helper.addShMock('./processTestResults.sh --platform debian') { script ->
+        // Do something "dynamically" first...
+        return [stdout: "Executing ${script}: SUCCESS", exitValue: 0]
+    }
+
+    runScript("Jenkinsfile")
+
+    assertJobStatusSuccess()
+}
+
+@Test
+void debianBuildUnstable() {
+    helper.addShMock('uname', 'Debian', 0)
+    helper.addShMock('./build.sh --release', '', 0)
+    helper.addShMock('./test.sh', '', 1)
+
+    runScript("Jenkinsfile")
+
+    assertJobStatusUnstable()
+}
+```
+
+Jenkinsfile 
+```
+// Jenkinsfile
+node {
+    stage('Mock build') {
+        def systemType = sh(returnStdout: true, script: 'uname')
+        if (systemType == 'Debian') {
+            sh './build.sh --release'
+            int status = sh(returnStatus: true, script: './test.sh')
+            if (status > 0) {
+                currentBuild.result = 'UNSTABLE'
+            } else {
+                def result = sh(returnStdout: true, script: './processTestResults.sh --platform debian')
+                if (!result.endsWith('SUCCESS')) {
+                    currentBuild.result = 'FAILURE'
+                    error 'Build failed!'
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+
+
+## Scaling pipelines 
+- enable performance-optimized modes, users need to explicitly set a Speed/Durability Setting for Pipelines. 
+
+- how do i set speed/durability settings?
+
+Globally, you can choose a global default durability setting under "Manage Jenkins" > "Configure System", labelled "Pipeline Speed/Durability Settings".
+
+per pipeline job, labelled "Custom Pipeline Speed/Durability Level" - this overrides the global setting.
+
+per branch for multibranch project, configure a custom Branch Property Strategy (under the SCM) and add a property for Custom Pipeline Speed/Durability Level
+
+- Durability Settings?
+
+Performance-optimized mode ("PERFORMANCE_OPTIMIZED") - Greatly reduces disk I/O. 
+ 
+Maximum durability ("MAX_SURVIVABILITY") - behaves just like Pipeline did before, slowest option. 
+
+Less durable, a bit faster ("SURVIVABLE_NONATOMIC") - Writes data with every step but avoids atomic writes.
+
+- other scaling suggestions 
+
+
+
+
+## Pipeline CPS method mismatches 
+- Jenkins Pipeline uses a library called Groovy CPS to run Pipeline scripts. 
+- This uses a continuation-passing style (CPS) transform to turn your code into a version that can save its current state to disk (a file called program.dat  inside your build directory)
+
+continue running even after jenkins restarted 
+
+- not CPS-transformed:
+
+    1. Compiled Java bytecode, including
+
+    2. Constructor bodies in your Pipeline script
+
+    3. Any method in your Pipeline script marked with the @NonCPS annotation
+
+    4. A few Pipeline steps which take no block and act instantaneously, such as echo or properties
+
+- common problems and solutions 
+    + use of pipeline steps from @NonCPS is NOT required 
+```   
+
+//should removed NonCPS
+@NonCPS
+def compileOnPlatforms() {
+  ['linux', 'windows'].each { arch ->
+    node(arch) {
+      sh 'make'
+    }
+  }
+}
+compileOnPlatforms()
+```
+    + Constructors 
+    
+```
+class Test {
+  def x
+  public Test() {
+    setX()
+  }
+  private void setX() {
+    this.x = 1;
+  }
+}
+def x = new Test().x
+echo "${x}"
+```
+
+constructor should not call CPS transformed method setX 
+
+    + calling non-CPS transformed methods with CPS-transformed arguments, closure passed to Iterable.toSorted is CPS-transformed, but Iterable.toSorted itself is not CPS-transformed internally this will not work as intended
+    
+```
+def sortByLength(List<String> list) {
+  list.toSorted { a, b -> Integer.valueOf(a.length()).compareTo(b.length()) }
+}
+def sorted = sortByLength(['333', '1', '4444', '22'])
+echo(sorted.toString())
+```    
+
+    + overrides of non-CPS transformed methods 
+    
+```
+class Test {
+  @Override
+  public String toString() {
+    return "Test"
+  }
+}
+def builder = new StringBuilder()
+builder.append(new Test())
+echo(builder.toString())
+```
+    
+    + closures inside GString, NOT work 
+
+    In Groovy, it is possible to use a closure in a GString so that the closure is evaluated every time the GString is used as a String.
+    
+```
+def x = 1
+def s = "x = ${-> x}"
+x = 2
+echo(s)
+```
+
+
+
+## Pipeline best practices 
+- steps (such as sh) to accomplish multiple parts of the build.
+- Running shell scripts in Jenkins Pipeline
+Using a shell script within Jenkins Pipeline can help simplify builds by combining multiple steps into a single stage.
+
+- avoid complex groovy code 
+
+JsonSlurper, function can be used to read from a file on disk, parse the data from that file into a JSON object. Instead of using JsonSlurper, use a shell step and return the standard out.
+
+HttpRequest: Frequently this command is used to grab data from an external source and store it in a variable. Use shell like curl or wget to perform http request 
+
+- reudcing repetition of similar pipeline steps. echo or sh steps, combine them into a single step or script.
+
+- If you must use Jenkins APIs in your build, the recommended approach is to create a minimal plugin in Java that implements a safe wrapper around the Jenkins API you want to access using Pipeline’s Step API.
+
+if using whitelisted may become a security risk.
+
+- clean up old jenkins build 
+
+- using shared libraries
+    + do not override built-in pipeline steps 
+    
+    + avoiding large global variable declaration files 
+    
+    + avoiding very large shared libraries 
+    
+- dealing with concurrency in pipelines 
+
+Avoiding NotSerializableException
+
+ensure persisted variables are serializable 
+
+do not assign non-serializable objects to variables 
+
+using @NonCPS to disable the CPS tranformation from a specific method whose body would not execute concurrently. 
+
+
+
+# Managing Jenkins 
+- Configuration as code 
+
+Manage Jenkins > Configuration  View Configuration to view the YAML file.
+
+https://plugins.jenkins.io/configuration-as-code/
+
+- yaml reference card 
+
+https://yaml.org/refcard.html
+
+- get the maximum benefit of JCasC, the YAML files should be stored in SCM. This gives you a history that you can use to trace changes that are made and allow you to easily roll back to an earlier version
+
+- Configuring a plugin with JCasc 
+
+- Yaml file location, is located in $JENKINS_HOME/jenkins.yaml. The location and name of the file being used is displayed on the Configuration as Code UI page
+
+Populate the CASC_JENKINS_CONFIG environment variable to point to a comma-separated list that defines where configuration files are located.
+
+Use the casc.jenkins.config Java property to control the file name and location.
+
+config files such as /var/jenkins_home/casc_configs.
+
+A full path to a single file such as /var/jenkins_home/casc_configs/jenkins.yaml.
+
+A URL pointing to a file served on the web such as https://acme.org/jenkins.yaml.
+
+- the value of the CASC_JENKINS_CONFIG 
+
+- managing tools 
+
+Built-in tool providers
+Ant
+Ant build step
+Git
+JDK
+Maven
+
+- managing plugins 
+
+Jenkins controller, such as: JENKINS_HOME/plugins/PLUGIN_NAME.jpi.disabled.
+
+$  Jenkins CLI using the enable-plugin or disable-plugin commands.
+
+- about jenkins 
+
+Manage Jenkins > About Jenkins page will shows the current release of Jenkins on the system 
+
+third party libaries 
+static resource 
+installed plugins 
+
+- system information 
+
+- jenkins cli 
+
+The command line interface can be accessed over SSH or with the Jenkins CLI client, a .jar file distributed with Jenkins
+
+    + using the CLI over ssh 
+    
+    SSH service is disabled by default. Administrators may choose to set a specific port or ask Jenkins to pick a random port in the Configure Global Security page
+    
+```
+% curl -Lv https://JENKINS_URL/login 2>&1 | grep -i 'x-ssh-endpoint'
+< X-SSH-Endpoint: localhost:53801
+%
+```   
+    + authentication, used for authentication with the Jenkins controller must have the Overall/Read permission in order to access the CLI
+    
+    + common commands 
+    
+    get help 
+    
+    ```
+    execute the CLI help command:
+
+    % ssh -l kohsuke -p 53801 localhost help
+    ```
+    
+    the port 53801 is a random port, it will different to each installation 
+    
+        * build 
+        
+        % ssh -l kohsuke -p 53801 localhost help build
+        
+        * console 
+        
+        % ssh -l kohsuke -p 53801 localhost help console
+        
+
+        * who-am-i command is helpful for listing the current user’s credentials and permissions available to the user
+
+        % ssh -l kohsuke -p 53801 localhost 
+        
+    + using the CLI client 
+    
+    
+    + throubleshooting logs 
+    
+    Go into Manage Jenkins > System Log > Add new log recorder.
+    
+    Type org.jenkinsci.main.modules.sshd.PublicKeyAuthenticatorImpl (or type PublicKeyAuth and then select the full name)
+
+    Set the level to ALL.
+
+    Repeat the previous three steps for hudson.model.User
+ 
+- system information
+
+system properties 
+
+environment variables 
+
+list of plugins 
+
+memory usage
+
+- jenkins features controlled with system properties
+
+System properties are defined by passing -Dproperty=value to the java command line to start Jenkins. Need to pass before the -jar argument 
+
+    + properties in jenkins core 
+    
+    debug.YUI 
+    
+    executable-war 
+    
+    historyWidget.descriptionLimit
+    
+    hudson.bundled.plugins 
+    ...
+    
+    + the properties include control runtime behavior and security etc. 
+    
+- change system time zone 
+    + linux 
+  
+java system property:
+
+java -Dorg.apache.commons.jelly.tags.fmt.timeZone=TZ ...  
+
+running 
+
+$ systemctl edit jenkins 
+
+adding the following:
+
+[Service]
+Environment="JAVA_OPTS=-Dorg.apache.commons.jelly.tags.fmt.timeZone=America/New_York"
+     
+
+    + On windows, edit %INSTALL_PATH%/jenkins/jenkins.xml. Put -Dargs before -jar:
+
+<arguments>-Duser.timezone="Europe/Minsk" -jar "%BASE%\jenkins.war"</arguments>
+
+    + from script console 
+    
+    + Post-initialization script to make it permanent.
+
+System.setProperty('org.apache.commons.jelly.tags.fmt.timeZone', 'America/New_York')
+
+- script console 
+
+    + security 
+
+Jenkins features a Groovy script console which allows one to run arbitrary Groovy scripts within the Jenkins controller runtime or in the runtime on agents.
+
+Offers no administrative controls to stop a User (or Admin) once they are able to execute the Script Console from affecting all parts of the Jenkins infrastructure. 
+
+Can configure any Jenkins setting. It can disable security, reconfigure security, even open a backdoor on the host operating system completely outside of the Jenkins process
+
+    + mutiple contexts, can run either on the controller or any configured agent 
+    
+    + running on the controller 
+    
+    "Manage Jenkins" > "Script Console".  Or by visiting the sub-URL /script on your Jenkins instance.
+     
+    + running on agents  
+
+    "Manage Jenkins" > "Manage Nodes".  Select any node to view the status page.  In the menu on the left, a menu item is available to open a "Script Console"
+    
+    + Run scripts from controller Script Console on agents
+    
+script executes code on agent from master script console 
+```
+import hudson.util.RemotingDiagnostics
+import jenkins.model.Jenkins
+
+String agentName = 'your agent name'
+//groovy script you want executed on an agent
+groovy_script = '''
+println System.getenv("PATH")
+println "uname -a".execute().text
+'''.trim()
+
+String result
+Jenkins.instance.slaves.find { agent ->
+    agent.name == agentName
+}.with { agent ->
+    result = RemotingDiagnostics.executeGroovy(groovy_script, agent.channel)
+}
+println result
+```   
+
+reading and writing files    
+```
+new File('/tmp/file.txt').withWriter('UTF-8') { writer ->
+    try {
+        writer << 'hello world\n'
+    } finally {
+        writer.close()
+    }
+}
+```    
+
+read file from controller 
+```
+new File('/tmp/file.txt').text
+```
+
+    + remote access, A Jenkins Admin can execute groovy scripts remotely by sending an HTTP POST request to /script/ url or /scriptText/.
+    
+```
+curl -d "script=<your_script_here>" https://jenkins/script
+# or to get output as a plain text result (no HTML)
+curl -d "script=<your_script_here>" https://jenkins/scriptText
+```    
+    
+    + groovy scripts example 
+    
+https://github.com/cloudbees/jenkins-scripts
+https://github.com/samrocketman/jenkins-script-console-scripts
+https://github.com/jenkinsci/jenkins-scripts
+    
+
+- groovy hook scripts 
+
+    + hook HOOK, the following locations are searched:
+
+WEB-INF/HOOK.groovy in jenkins.war
+
+WEB-INF/HOOK.groovy.d/*.groovy in the lexical order in jenkins.war
+
+$JENKINS_HOME/HOOK.groovy
+
+$JENKINS_HOME/HOOK.groovy.d/*.groovy in the lexical order
+
+HOOK.groovy.d is suitable to avoid conflicts — multiple entities can insert stuff into the hook without worrying about overwriting each other’s code.
+
+    + events use this mechanism:
+
+init: Post-initialization script
+
+boot-failure: Boot failure hook
+
+    + init hook 
+    
+    $JENKINS_HOME/init.groovy, or any .groovy file in the directory $JENKINS_HOME/init.groovy.d/, to run some additional things right after Jenkins starts up. 
+
+- managing nodes 
+
+Jenkins controller, The Jenkins controller is the Jenkins service itself and is where Jenkins is installed
+
+Jenkins Nodes, Nodes are the "machines" on which build agents run. 
+
+Agents, Agents manage the task execution on behalf of the Jenkins controller by using executors. An agent can use any operating system that supports Java. Tools required for builds and tests are installed on the node where the agent runs; they can be installed directly or in a container
+
+Executors, it is a slot for execution of tasks; effectively, it is a thread in the agent. The number of executors on a node defines the number of concurrent tasks that can be executed on that node at one time. In other words, this determines the number of concurrent Pipeline stages that can execute on that node at one time.
+
+    + create agent nodes 
+
+    + Launch inbound agent via Windows Scheduler
+    
+If you are having trouble getting the inbound agent installed as a Windows service (i.e., you followed the instructions on installing the agent as a service here but it didn’t work), an alternative method of starting the service automatically when Windows starts is to use the Windows Scheduler. 
+
+    + Installing a Jenkins agent on Windows
+    
+    use websocket to connect windows will avoid open port 
+
+    windows service wrapper to run any executable as windows service
+
+    https://github.com/winsw/winsw to download the WinSW-x64.exe  and rename to jenkins-agent.exe 
+    
+    jenkins-agent.exe 
+    jenkins-agent.xml 
+    ```
+    
+    ```
+    
+    example service configuration file 
+    
+    goto the controller, goto agent page from the Jenkins controller. copy the commandline 
+    
+    download the agent.jar file. 
+    
+    open command as administrator 
+    $ jenkins-agent.exe --help 
+    
+    $ jenkins-agent.exe install 
+    will automatic load the jenkins-agent.xml to start the java commandline required from the controller 
+    
+    check the services installed on windows 
+    
+    we can also add service account to let the service run under the account 
+    
+    
+
+- inprocess script approval 
+
+plugins execute user-provided scripts in a Groovy Sandbox that limits the internal APIs that are accessible. This protection is provided by the Script Security plugin.
+
+Scripts using the Groovy Sandbox are all subject to the same restrictions, therefore a Pipeline authored by an Administrator is subject to the restrictions as one authorized by a non-administrative user.
+
+When the Groovy Sandbox is disabled, or a method outside of the built-in list is invoked, the Script Security plugin will check the Administrator-managed list of approved scripts
+
+- manage users 
+
+- themes for user interface 
+dark 
+light 
+...
+
+- user content 
+
+ "User Content", where administrators can place files inside $JENKINS_HOME/userContent, and these files are served from http://yourhost/jenkins/userContent. This can be thought of as a mini HTTP server to serve images, stylesheets, and other static resources that you can use from various description fields inside Jenkins.
+
+- spawning processes from build 
+
+    + normal process 
+
+Jenkins and the child process are connected by three pipes (stdin, stdout, and stderr.) This allows Jenkins to capture the output from the child process. The child process may write a lot of data to the pipe and quit immediately after that, so Jenkins waits for end-of-file (EOF)
+
+the operating system closes all the file descriptors it owned. So, even if the process did not close stdout and stderr, Jenkins gets end of file (EOF).
+
+    + problem, child process fork and a daemon process inherit the three pipes. 
+    
+        * unix 
+        
+        this to make the daemon behave. For example:
+
+        daemonize -E BUILD_ID=dontKillMe /path/to/your/command
+        In a Jenkins Pipeline, use JENKINS_NODE_COOKIE instead of BUILD_ID.
+        
+        or -Dhudson.util.ProcessTree.disable=true - see long running agent process for details.
+
+        * On Windows, use the 'at' command to launch a process in the background. 
+
+```      
+<scriptdef name="get-next-minute" language="beanshell">
+  <attribute name="property" />
+
+  date = new java.text.SimpleDateFormat("HH:mm")
+    .format(new Date(System.currentTimeMillis() + 60000));
+  project.setProperty(attributes.get("property"), date);
+</scriptdef>
+
+<get-next-minute property="next-minute" />
+<exec executable="at">
+  <arg value="${next-minute}" />
+  <arg value="/interactive" />
+  <arg value="${jboss.home}\bin\run.bat" />
+</exec>
+```
+
+use a wrapper script and launch your program through 
+
+another workaround is schedule a permanent task and force running it from the Ant script. For example, run the command:
+
+
+
+
+
+
+
+## Email extension 
+- reference 
+https://plugins.jenkins.io/email-ext/
+
+- pipeline step 
+
+
+emailext body: 'Test Message',
+    subject: 'Test Subject',
+    to: 'test@example.com'
+
+
+     
+     
+# Pipeline example 
+- reference 
+https://jenkins.io/doc/pipeline/examples/
+- ansi color build wrapper 
+- rchive build output 
+- artifactory generic upload download 
+- artifactory maven build 
+- configure provider plugin 
+- external workspace manager 
+- get build cause 
+- gitcommit 
+- gitcommit_changeset 
+- ircnotify commandline 
+- jobs in parallel 
+- load from file 
+- maven and jdk specific version 
+- parallel from grep 
+- parallel from list 
+- parallel multiple nodes 
+- push git repo 
+- slacknotify 
+- timestamper wrapper 
+- trigger job on all nodes 
+- unstash different dir
+
+
+
+
+# Blue Ocean 
+Blue Ocean is a new project that rethinks the user experience of Jenkins. Designed from the ground up for Jenkins Pipeline and compatible with Freestyle jobs
+
+- sophisticated visualization of CD pipelines 
+- pipeline editor 
+- personalization UI 
+- pinpoint precision 
+- native integration for branch and pull requests 
+
+- Jenkins is installed on most platforms, the Blue Ocean plugin and all its other dependent plugins (which form the Blue Ocean "suite of plugins") are not installed by default. blueocean is part of docker jenkins image https://hub.docker.com/
+
+- Alternatively, you can access Blue Ocean directly by appending /blue to the end of your Jenkins server’s URL - e.g. https://jenkins-server-url/blue
+
+
+# Using Credentials 
+- credentials stored in jenkins 
+Secret text - a token such as an API token (e.g. a GitHub personal access token),
+
+Username and password - which could be handled as separate components or as a colon separated string in the format username:password (read more about this in Handling credentials),
+
+Secret file - which is essentially secret content in a file,
+
+SSH Username with private key - an SSH public/private key pair,
+
+Certificate - a PKCS#12 certificate file and optional password, or
+
+Docker Host Certificate Authentication credentials.
+
+- adding new global credentials 
+
+System, click the Global credentials (unrestricted) link to access this default domain.
+
+
+
+
+# Setup jenkins proxy 
+- Manage Jenkins > Manage Plugins > Advanced tab > Proxy 
+
+- Make a copy of the jenkins.xml file as a backup. Edit jenkins.xml 
+
+<executable>%BASE%\jre\bin\java</executable>
+
+<arguments> -Dhttp.proxyHost=http://ProxyServerName -Dhttp.proxyPort=3128 -Xrs -Xmx256m -Djava.library.path="C:\natives;%Path% " -Dhudson.lifecycle=hudson.lifecycle.WindowsServiceLifecycle -jar "%BASE%\jenkins.war"</arguments>
+
+
+# SCM setup 
+- make sure setup proxy for the system environment to let git access the web 
+
+
+# Jenkins: 403 No valid crumb was included in the request
+- solution 1 this post helped me to do away with the crumb problem but still securing Jenkins from CSRF attack.
+
+Solution for no-valid crumb included in the request issue
+
+- solution 2 Manage Jenkins > "Configure Global Security" that "Enable proxy compatibility" This helped with my issue
+
+
+# Jenkins add github SCM get error pack file didn't match any object 
+- clean jenkins git cache folder and then rerun the job 
+
+C:\ProgramData\Jenkins\.jenkins\caches
+
+
+
+
+# Pipeline syntax reference 
+
+
+# Pipeline steps reference 
+- git relative plugins 
+
+git automerge 
+
+git bisect 
+
+git changelog, https://www.jenkins.io/doc/pipeline/steps/git-changelog/ 
+
+git forensics plugin 
+
+git plugin 
+
+git push plugin 
+
+github coverage reporter 
+
+github integration plugin 
+
+github issues plugin 
+
+github plugin 
+
+github pull request builder 
+
+github pull request coverage status 
+
+github status wrapper plugin 
+
+- Office 365 Connector
+office365ConnectorSend: Send job status notifications to Office 365 (e.g. Microsoft Teams or Outlook)
+
+- more... 
+
+
+# LTS upgrade guides 
+
+
+# Scuring jenkins 
+- access control 
+ Jenkins does not allow anonymous access, and a single admin user exists
+ 
+- scuring jenkins 
+
+basic 
+
+ldap 
+
+matrix based security,
+
+    + apache frontend for security 
+```
+$ SUDO ./configure --enable-proxy \
+--enable-ldap \
+--enable-vhost \
+--enable-ssl \
+--enable-suexec \
+--enable-rewrite \
+--enable-proxy-ajp \
+--enable-authnz-ldap \
+--enable-mods-shared=all \
+--with-ssl \
+--with-ldap \
+--with-ldap-include=/usr/include/ \
+--prefix=/opt/apache/httpd-2.2.6
+```
+
+apache basic 
+
+apache authentication against x509/SSL 
+
+Running Jenkins with AJP
+
+- managing security 
+
+    + TCP port 
+    random 
+    fixed 
+    
+    + access control 
+    security realm, informs the jenkins environment how and where to pull user information 
+    
+    authorization 
+    
+    + ldap 
+    
+    + unix user/group database 
+    
+- controller isolation 
+
+Build script authors (pom.xml, Makefile, etc.)
+
+To prevent builds from running on the built-in node directly, navigate to Manage Jenkins » Manage Nodes and Clouds. 
+
+The Jenkins controller and agents can be thought of as a distributed process which executes across multiple discrete processes and machines. 
+
+- csrf protection 
+Jenkins protects from cross-site request forgery (CSRF) by default
+
+Manage Jenkins » Configure Global Security » CSRF Protection, administrators can configure CSRF Protection.
+
+
+    + The user name that the crumb was generated for
+
+The web session ID that the crumb was generated in
+
+The IP address of the user that the crumb was generated for
+
+A salt unique to this Jenkins instance
+
+- rendering user content 
+
+serve files that can be viewed or downloaded from Jenkins. Some built-in examples of that are the workspace browser, archived artifacts, file parameters to builds, or the /userContent/ directory. Plugins like Javadoc, HTML Publisher, or Maven Integration 
+
+resource root url, relaxing Content-Security-Policy, administrators can configure Jenkins to serve files from potentially less trusted sources from a different domain
+
+Resource URLs do not require authentication
+
+expiration, Resource URLs expire after 30 minutes by default. Expired resource URLs will redirect users to their equivalent Jenkins URLs
+
+- access control for builds 
+
+This is implemented by Authorize Project Plugin, which allows flexible configuration of global and per-project build authorization
+
+- handling environment variables 
+
+the behavior of build scripts: PATH (or Path on Windows) is generally used to find the programs that are launched during a build
+
+Less well known variables, such as LD_PRELOAD (on Linux) and DYLD_LIBRARY_PATH (on macOS) may have a similar effect.
+
+Windows Batch allows scripts to be written in a manner that prevents this problem (using EnableDelayedExpansion and the !variable! syntax)
+
+Safe batch environment filter, generic build step environment filters, pipeline keep environment step 
+
+```
+node {
+    withEnv(['foo=bar', 'baz=qux', 'PATH=/usr/bin:/bin:/foo']) {
+        sh 'env'
+        keepEnv(['foo', 'WORKSPACE']) {
+            sh 'env'
+        }
+    }
+}
+```
+- markup formatters, Manage Jenkins » Configure Global Security » Markup Formatter 
+
+Allow users to use rich formatting for these descriptions
+
+Protect other users from Cross-Site Scripting (XSS) attacks
+
+Every user with an account and Overall/Read permission can edit their own user profile. This includes a description that is rendered using the configured markup formatter.
+
+Job/Configure and Build/Update to fully trusted users: Anyone with an account will be able to edit their own description and any other user accessing their profile may become victim of an XSS attack.
+
+- exposed services and ports 
+
+TCP agent listener port 
+
+    + random 
+    + fixed 
+    
+ssh server can be configured to open an ssh port on jenkins controller 
+
+
+
+
+
+# System administration 
+- authenticating scripted clients 
+
+make scripted clients (such as wget) invoke operations that require authorization (such as scheduling a build), use HTTP BASIC authentication to specify the user name and the API token.
+
+```
+$ curl -X POST -L --user your-user-name:apiToken \
+    https://jenkins.example.com/job/your_job/build
+    
+    
+$ wget --auth-no-challenge \
+    --user=user --password=apiToken \
+    http://jenkins.example.com/job/your_job/build
+```
+
+    + groovy script with cdancy/jenkins-reset, The cdancy/jenkins-rest client greatly simplifies REST API access.
+    
+```
+@Grab(group='com.cdancy', module='jenkins-rest', version='0.0.18')
+
+import com.cdancy.jenkins.rest.JenkinsClient
+
+JenkinsClient client = JenkinsClient.builder()
+    .endPoint("http://127.0.0.1:8080") // Optional. Defaults to http://127.0.0.1:8080
+    .credentials("user:apiToken") // Optional.
+    .build()
+
+println(client.api().systemApi().systemInfo())
+```
+
+- reverse proxy configuration, A 'reverse proxy' allows an alternate HTTP or HTTPS provider to communicate with web browsers on behalf of Jenkins. 
+
+- reverse proxy iss, where you have existing web sites on your server, you may find it useful to run Jenkins (or the servlet container that Jenkins runs in) behind IIS, so that you can bind Jenkins to the part of a bigger website
+
+- ...
+
+- managing systemd services
+
+service configuration of the Jenkins service as configured by the package installers
+
+$ systemctl cat jenkins
+
+    + overriding service configurations, running systemd(1), the systemd(1) service unit is delivered to:
+
+Debian
+/lib/systemd/system/jenkins.service
+
+Red Hat
+/usr/lib/systemd/system/jenkins.service
+
+openSUSE
+/usr/lib/systemd/system/jenkins.service
+
+Edit the drop-in unit with,  override.conf file is stored at /etc/systemd/system/jenkins.service.d/override.conf and can be used to customize the service. 
+
+$ systemctl edit jenkins 
+
+$ systemctl daemon-reload 
+for the changes to take effect
+
+```
+[Unit]
+Description=My Company Jenkins Controller
+
+[Service]
+# Add JVM configuration options
+Environment="JAVA_OPTS=-Djava.awt.headless=true -XX:+UseStringDeduplication"
+
+# Arbitrary additional arguments to pass to Jenkins.
+# Full option list: java -jar jenkins.war --help
+Environment="JENKINS_OPTS=--prefix=/jenkins --javaHome=/opt/jdk-11"
+
+# Configuration as code directory
+Environment="CASC_JENKINS_CONFIG=/var/lib/jenkins/configuration-as-code/"
+```
+
+    + systemd service has been defined, it can be started with:
+
+$ systemctl start jenkins
+
+    + read jenkins log 
+
+$ journalctl -u jenkins
+
+    + service status 
+    
+$ systemctl status jenkins
+
+- reference systemd 
+
+https://www.freedesktop.org/wiki/Software/systemd/
+
+systemd is a suite of basic building blocks for a Linux system. It provides a system and service manager that runs as PID 1 and starts the rest of the system

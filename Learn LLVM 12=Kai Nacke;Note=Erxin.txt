@@ -1,0 +1,3876 @@
+Lerarn LLVM 12=Kai Nacke;Note=Erxin 
+
+
+# Section 1 the basics of compiler construction with LLVM 
+- Demo code reference 
+https://github.com/PacktPublishing/Learn-LLVM-12/tree/master/Chapter04
+
+- Install LLVM 
+
+GitHub, you need git (https://git-scm.com/). There is no requirement for a specific version
+
+CMake (https://cmake.org/) as the build file generator.
+
+Ninja (https://ninja-build.org/) is being used because it is fast and available on all platforms
+
+    + compilers work with llvm 
+    
+gcc 5.1.0 or later
+Clang 3.5 or later
+Apple Clang 6.0 or later
+Visual Studio 2017 or later
+
+- installation 
+
+    + ubuntu 
+    $ sudo apt install –y gcc g++ git cmake ninja-build
+    
+    + windows 
+    $ choco install visualstudio2019buildtools cmake ninja git gzip bzip2 gnuwin32-coreutils.install
+    
+- configure git 
+
+- install cmake 
+
+- clone the repository 
+
+$ git clone https://github.com/llvm/llvm-project.git
+
+$ git checkout -b llvmorg-12.0.0
+
+- generate build system file 
+
+$ cmake –G Ninja -DLLVM_ENABLE_PROJECTS=clang ../llvm
+
+
+The most often used options are as follows:
+
+Ninja: For the Ninja build system
+Unix Makefiles: For GNU Make
+Visual Studio 15 VS2017 and Visual Studio 16 VS2019: For Visual Studio and MS Build
+Xcode: For XCode projects
+
+Usually, they are prefixed with CMAKE_ (if defined by CMake) or LLVM_ (if defined by LLVM). With the LLVM_ENABLE_PROJECTS=clang variable setting, CMake generates build files for Clang in addition to LLVM
+
+- The Ninja check-all target runs all test cases. Targets are generated for each directory containing test cases.
+
+- cutomizing the build process 
+
+uses a project description in the CMakeLists.txt file. The top-level file is in the llvm directory; that is, llvm/CMakeLists.txt.
+ 
+- CMake tries to locate a C and a C++ compiler automatically, using the current shell search path
+
+Suppose you like to use clang9 as a C compiler and clang++9 as a C++ compiler.
+
+$ CC=clang9 CXX=clang++9 cmake ../llvm
+
+CC is the default value of the CMAKE_C_COMPILER CMake variable, while CXX is the default value of the CMAKE_CXX_COMPILER
+
+CMAKE_INSTALL_PREFIX: A path prefix that is prepended to every path during installation.
+
+CMAKE_BUILD_TYPE: Different types of builds require different settings. For example, a debug build needs to specify options for generating debug symbols
+
+DEBUG: Build with debug symbols
+
+RELEASE: Build with optimization for speed
+
+RELWITHDEBINFO: Release build with debug symbols
+
+MINSIZEREL: Build with optimization for size
+
+CMAKE_C_FLAGS and CMAKE_CXX_FLAGS: These are extra flags that are used when we're compiling C and C++ source files
+
+CMAKE_MODULE_PATH: Specifies additional directories that are searched for in CMake modules
+
+PYTHON_EXECUTABLE: If the Python interpreter is not found or if the wrong one is picked if you have installed multiple versions
+
+    + get help for variables, CMake provides built-in help for variables. The --help-variable var option prints help
+    
+$ cmake --help-variable CMAKE_BUILD_TYPE
+
+$ cmake --help-variablelist
+
+- variables defined by LLVM 
+
+LLVM_TARGETS_TO_BUILD: LLVM supports code generation for different CPU architectures. targets are AArch64, AMDGPU, ARM, BPF, Hexagon, Lanai, Mips, MSP430, NVPTX, PowerPC, RISCV, Sparc, SystemZ, WebAssembly, X86, and XCore. all
+
+LLVM_ENABLE_PROJECTS: This is a list of the projects you want to build.
+
+LLVM_ENABLE_ASSERTIONS: If set to ON, then assertion checks are enabled.
+
+LLVM_ENABLE_EXPENSIVE_CHECKS: This enables some expensive checks that can really slow down your compilation speed
+
+LLVM_APPEND_VC_REV: LLVM tools such as llc display the LLVM version they are based on
+
+LLVM_ENABLE_THREADS: LLVM automatically includes thread support if a threading library is detected
+
+LLVM_ENABLE_EH: The LLVM projects do not use C++ exception handling, so they turn exception support off by default.
+
+LLVM_ENABLE_RTTI: LVM uses a lightweight, self-built system for runtime type information.
+
+LLVM_ENABLE_WARNINGS: Compiling LLVM should generate no warning messages if possible. pedantic checking of the source is enabled by default
+
+LLVM_ENABLE_WERROR: If set to ON, then all the warnings are treated as errors – the compilation aborts as soon as warnings are found.
+
+LLVM_OPTIMIZED_TABLEGEN: Usually, the tablegen tool is built with the same options as the other parts of LLVM.
+
+LLVM_USE_SPLIT_DWARF: If the build compiler is gcc or Clang, then turning on this option
+
+
+
+
+# Touring the llvm source 
+- repository llvm-project 
+
+- learning git repository 
+
+https://github.com/PacktPublishing/Learn-LLVM-12
+
+- LLVM core libraries are in the llvm directory. This project provides a set of libraries with optimizers and code generation for well-known CPUs. 
+
+- Tools such as llvm-objdump and llvm-dwarfdump let you inspect object files, and those such as llvm-ar let you create an archive file from a set of object files
+
+- The Polly project, located in the polly directory, adds another set of optimizations to LLVM.
+
+- The MLIR project aims to provide a multi-level intermediate representation for LLVM. The LLVM IR is already at a low level, and certain information from the source language is lost during IR generation in the compiler. The idea of MLIR is to make the LLVM IR extensible and capture this information in a domain-specific representation
+
+- compilers and tools 
+
+A complete C/C++/Objective-C/Object-C++ compiler named clang (http://clang.llvm.org/) is part of the LLVM project.
+
+The small tool clang is the compiler driver, based on these libraries. Another useful tool is clang-format, which can format C/C++ source files
+
+Clang aims to be compatible with GCC, the GNU C/C++ compiler, and CL, the Microsoft C/C++ compiler.
+
+clang-tidy which is a Lint style checker for C/C++
+
+Llgo is a compiler for the Go programming languages, located in the llgo directory. It is written in Go
+
+This is the job of lld (http://lld.llvm.org/), the LLVM linker that is located in the lld directory
+ 
+The LLVM debugger is called lldb (http://lldb.llvm.org/) and is located in the directory of the same name.
+
+- runtime libraries, All the listed projects are located in the top-level directory
+
+compiler-rt project provides programming language-independent support libraries
+
+libunwind library provides helper functions for stack unwinding based on the DWARF standard.
+
+libcxxabi library implements C++ exception handling on top of libunwind and provides the standard C++ functions
+
+libcxx is an implementation of the C++ standard library, including iostreams and STL. 
+
+pstl project provides a parallel version of the STL algorithm.
+ 
+libclc is the runtime library for OpenCL. OpenCL is a standard for heterogeneous parallel computing
+
+libc aims to provide a complete C library. This project is still in its early stages
+
+OpenMP API is provided by the openmp project. OpenMP helps with multithreaded programming
+
+- layout of an llvm project 
+
+Because CMake is used for build file generation, each project has a CMakeLists.txt file that describes the building of the projects.`
+
+tools and utils directories. In the utils directory are internal applications that are used during compilation 
+ 
+unittest directory contains unit tests that use the Google Test framework
+
+test directory are the LIT tests. These tests use the llvm-lit utility to execute tests. llvm-lit scans a file for shell commands and executes them
+
+- simple structure 
+
+cmake 
+    modules 
+CMakeLists.txt 
+docs 
+examples 
+include 
+    sample 
+        sample.h 
+    lib 
+        CMakeLists.txt 
+        sample 
+            CMakeList.txt 
+            Sample.cpp 
+test 
+tools 
+    CMakeLists.txt 
+    driver 
+        CMakeLists.txt 
+        Driver.cpp 
+unittests 
+untils 
+
+- creating your own project using llvm libraries 
+
+projectg name tinylang 
+
+cmake, you need to specify –DLLVM_ENABLE_PROJECTS=tinylang to include the project in the build.
+
+/src/tinylang, for example, then you need to specify –DLLVM_ENABLE_PROJECTS=tinylang –DLLVM_EXTERNAL_TINYLANG_SOURCE_DIR=/src/tinylang.
+
+    + adding cmake files 
+
+The file starts by calling cmake_minimum_required() to declare the minimal required version of CMake
+```
+Cmake_minimum_required(VERSION 3.13.4)
+```
+
+CMAKE_SOURCE_DIR variable is the top-level source directory that is given on the cmake command line
+
+CMAKE_SOURCE_DIR would be the llvm directory:
+
+```
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+```
+
+Make project needs a name. Here, we set it to Tinylang:
+```
+  project(Tinylang)
+```
+
+    + LLVM and configure the build based on the provided options:
+    
+```
+
+  find_package(LLVM REQUIRED HINTS     "${LLVM_CMAKE_PATH}")
+
+  list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
+
+  include(ChooseMSVCCRT)
+
+  include(AddLLVM)
+
+  include(HandleLLVMOptions)
+```
+
+    + Two directories are added. The include directory from the build directory 
+    
+```
+  include_directories("${LLVM_BINARY_DIR}/include"                      "${LLVM_INCLUDE_DIR}")
+  link_directories("${LLVM_LIBRARY_DIR}")
+```
+
+    + set to denote that the project is built standalone 
+    
+```
+set(TINYLANG_BUILT_STANDALONE 1)
+
+endif()
+```
+
+    + cmake/modules directory is added to tghe CMake modules search path 
+```
+list(APPEND CMAKE_MODULE_PATH   "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR AND NOT     MSVC_IDE)
+
+  message(FATAL_ERROR "In-source builds are not     allowed.")
+
+endif()
+
+set(TINYLANG_VERSION_STRING "0.1")
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/tinylang/Basic/Version.inc.in
+
+  ${CMAKE_CURRENT_BINARY_DIR}/include/tinylang/Basic/Version.inc)
+
+include_directories(BEFORE
+
+  ${CMAKE_CURRENT_BINARY_DIR}/include
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+
+  )
+
+add_subdirectory(lib)
+
+add_subdirectory(tools)
+```
+
+
+
+    + The AddTinylang.cmake helper module is placed in the cmake/modules
+```
+macro(add_tinylang_subdirectory name)
+
+  add_llvm_subdirectory(TINYLANG TOOL ${name})
+
+endmacro()
+
+macro(add_tinylang_library name)
+
+  if(BUILD_SHARED_LIBS)
+
+    set(LIBTYPE SHARED)
+
+  else()
+
+    set(LIBTYPE STATIC)
+
+  endif()
+
+  llvm_add_library(${name} ${LIBTYPE} ${ARGN})
+
+  if(TARGET ${name})
+
+    target_link_libraries(${name} INTERFACE
+
+      ${LLVM_COMMON_LIBS})
+
+    install(TARGETS ${name}
+
+      COMPONENT ${name}
+
+      LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+
+      ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+
+      RUNTIME DESTINATION bin)
+
+  else()
+
+    add_custom_target(${name})
+
+  endif()
+
+endmacro()
+
+macro(add_tinylang_executable name)
+
+  add_llvm_executable(${name} ${ARGN} )
+
+endmacro()
+
+macro(add_tinylang_tool name)
+
+  add_tinylang_executable(${name} ${ARGN})
+
+  install(TARGETS ${name}
+
+    RUNTIME DESTINATION bin
+
+    COMPONENT ${name})
+
+endmacro()
+```
+
+Inside the lib directory, a CMakeLists.txt file is needed even if there is no source. 
+```
+add_subdirectory(Basic)
+
+add_tinylang_library(tinylangBasic
+
+  Version.cpp
+
+  )
+
+create_subdirectory_options(TINYLANG TOOL)
+
+add_tinylang_subdirectory(driver)
+
+set(LLVM_LINK_COMPONENTS
+
+  Support
+
+  )
+
+add_tinylang_tool(tinylang
+
+  Driver.cpp
+
+  )
+
+target_link_libraries(tinylang
+
+  PRIVATE
+
+  tinylangBasic
+
+  )
+
+
+```
+
+- adding the c++ source files 
+
+The @ symbols around TINYLANG_VERSION_STRING denote that this is a CMake variable that should be replaced
+```
+#define TINYLANG_VERSION_STRING "@TINYLANG_VERSION_STRING@"
+```
+
+Version.h 
+```
+#ifndef TINYLANG_BASIC_VERSION_H
+
+#define TINYLANG_BASIC_VERSION_H
+
+#include "tinylang/Basic/Version.inc"
+
+#include <string>
+
+namespace tinylang {
+
+std::string getTinylangVersion();
+
+}
+
+#endif
+```
+
+    + compile the project 
+    ```
+   $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+
+  -DLLVM_EXTERNAL_PROJECTS=tinylang \
+
+  -DLLVM_EXTERNAL_TINYLANG_SOURCE_DIR=../tinylang \
+
+  -DCMAKE_INSTALL_PREFIX=../llvm-12 \
+
+  ../llvm-project/llvm
+    ```
+    
+    $ ninja
+
+    $ ninja install
+    
+    run the application:
+    $ ../llvm-12/bin/tinylang
+    
+    + makes sense to build LLVM once and compile tinylang as a standalone project using the compiled version of LLVM
+    
+    $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+
+      -DCMAKE_INSTALL_PREFIX=../llvm-12 \
+
+      ../llvm-project/llvm
+    
+
+    $ md build-tinylang
+    
+    $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+
+  -DLLVM_DIR=../llvm-12/lib/cmake/llvm \
+
+  -DCMAKE_INSTALL_PREFIX=../tinylang ../tinylang/
+
+    $ ninja 
+    $ ninja install 
+    
+- an alternate to include llvm 
+
+llvm-config tool, which is in the bin directory of an LLVM installation. Assuming that this directory is included in your shell search path
+
+$ llvm-config –libs support
+
+link option for compiler -lLLVMSupport –lLLVMDemangle. Obviously, this tool can be easily integrated with your build system
+
+- targeting a different cpu architecture 
+
+    + Common pitfalls are as follows:
+
+Endianness: The order in which multi-byte values are stored in memory can be different.
+
+Pointer size: The size of a pointer varies with the CPU architecture (usually 16, 32, or 64 bit). The C type int may not be large enough to hold a pointer.
+
+Type differences: Data types are often closely related to the hardware. The type long double can use 64 bit (ARM), 80 bit (X86), or 128 bit (ARMv8). PowerPC systems may use double-double arithmetic for long double
+
+    +  cross-compiling, you need the following tools:
+
+A compiler that generates code for the target
+
+A linker capable of generating binaries for the target
+
+Header files and libraries for the target
+
+    + The gcc and g++ compilers, the ld linker, and the libraries are available as precompiled binaries producing ARMv8 code and executables
+    
+    $ sudo apt install gcc-8-aarch64-linux-gnu \
+
+      g++-8-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+
+      libstdc++-8-dev-arm64-cross
+    
+    + CROSS-COMPILING ON OTHER SYSTEMS
+
+    If your distribution does not come with the required toolchain, then you can build it from source
+    
+    + LLVM uses the tablegen tool during the build. During cross-compilation, everything is compiled for the target architecture, including this tool. You can use llvm-tblgen from the build
+    
+    ```
+    $ mkdir build-host
+
+    $ cd build-host
+
+    $ cmake -G Ninja \
+
+      -DLLVM_TARGETS_TO_BUILD="X86" \
+
+      -DLLVM_ENABLE_ASSERTIONS=ON \
+
+      -DCMAKE_BUILD_TYPE=Release \
+
+      ../llvm-project/llvm
+
+    $ ninja llvm-tblgen
+
+    $ cd ..
+    
+    ```
+    
+    + llvm-tblgen tool at hand, you can now start the cross-compilation. The CMake command line
+    
+    ```
+    $ mkdir build-target
+
+    $ cd build-target
+
+    $ cmake -G Ninja \
+
+      -DCMAKE_CROSSCOMPILING=True \
+
+      -DLLVM_TABLEGEN=../build-host/bin/llvm-tblgen \
+
+      -DLLVM_DEFAULT_TARGET_TRIPLE=aarch64-linux-gnu \
+
+      -DLLVM_TARGET_ARCH=AArch64 \
+
+      -DLLVM_TARGETS_TO_BUILD=AArch64 \
+
+      -DLLVM_ENABLE_ASSERTIONS=ON \
+
+      -DLLVM_EXTERNAL_PROJECTS=tinylang \
+
+      -DLLVM_EXTERNAL_TINYLANG_SOURCE_DIR=../tinylang \
+
+      -DCMAKE_INSTALL_PREFIX=../target-tinylang \
+
+      -DCMAKE_BUILD_TYPE=Release \
+
+      -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc-8 \
+
+      -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++-8 \
+
+      ../llvm-project/llvm
+
+    $ ninja
+    ```
+    
+    + Run $ file bin/tinylang and check that the output says that it is an ELF 64-bit object for the ARM aarch64 architecture.
+    
+    + a mix of LLVM and GNU tools, and as a result you need to tell CMake even more about the environment you are using.
+    
+    + clang and clang++: --target=<target-triple> (enables code generation for a different target), --sysroot=<path> (path to the root directory for the target; see previous), I (search path for header files), and –L (search path for libraries).
+    
+    
+    
+# The structure of a compiler 
+- a compiler consists of two parts.
+
+frontend usually an annotated abstract syntax tree (AST). 
+
+The backend creates optimized machine code from the frontend's result
+- you have one backend for X86 and one for Sparc, then you can connect your C++ frontend to both.
+
+following tasks:
+
+The lexer reads the source file and produces a token stream.
+The parser creates an AST from the token stream.
+The semantic analyzer adds semantic information to the AST.
+The code generator produces an intermediate representation (IR) from the AST.
+
+- The backend does the following tasks:
+
+The backend performs target-independent optimization on the IR.
+It then selects instructions for the IR code.
+After, it performs target-dependent optimizations on the instructions.
+Finally, it emits assembler code or an object file.
+
+- The LLVM static compiler, llc, which represents the backend, can then be used to compile the IR into object code.
+
+- an arthmetic expression language 
+
+Examples are always welcome but as a compiler writer, you need a more thorough specification
+
+- formalism for specifying the syntax of a programming language 
+
+Usually, grammar is written in the extended Backus-Naur form (EBNF). One of the rules of grammar is that it has a left-hand side and a right-hand side.
+    + calc language 
+    
+with a, b: a * (4 + b)
+
+    + grammer calc language:
+
+calc : ("with" ident ("," ident)* ":")? expr ;
+
+expr : term (( "+" | "-" ) term)* ;
+
+term : factor (( "*" | "/") factor)* ;
+
+factor : ident | number | "(" expr ")" ;
+
+ident : ([a-zAZ])+ ;
+
+number : ([0-9])+ ;
+
+
+"with", ",", and ":" are tokens that represent this string. Parentheses are used for grouping. A group can be optional or repeated. A question mark, ?, after the closing parenthesis denotes an optional group. A star, *, denotes zero or more repetitions
+
+while a plus, +, denotes one or more repetitions. ident and expr are non-terminals
+
+brackets, [ ], in the last two lines denote a character class. The valid characters are written inside the brackets.
+
+- how grammar helps the compiler writer 
+
+    + lexical analysis 
+    
+    The calc language consists of the with, :, +, -, *, /, (, and ) tokens and the ([a-zA-Z])+ (an identifier) and ([0-9])+ (a number) regular expressions. We assign a unique number to each token
+    
+    a lexical analyzer is often called a Lexer. Let's create a header file called Lexer.h and start defining Token.
+    
+    The llvm::MemoryBuffer class provides read-only access to a block of memory, filled with the content of a file.
+    
+    a trailing zero character ('\x00') is added to the end of the buffer. We use this feature to read through the buffer without checking the length of the buffer at each access.
+    
+    This allows an instance of StringRef to point to the memory managed by MemoryBuffer.
+    
+```
+class Lexer;
+
+class Token {
+
+  friend class Lexer;
+
+public:
+
+  enum TokenKind : unsigned short {
+
+    eoi, unknown, ident, number, comma, colon, plus,
+
+    minus, star, slash, l_paren, r_paren, KW_with
+
+  };
+```
+
+- is() and isOneOf() methods are used to test if the token is a certain kind 
+
+private:
+
+  TokenKind Kind;
+
+  llvm::StringRef Text;
+
+public:
+
+  TokenKind getKind() const { return Kind; }
+
+  llvm::StringRef getText() const { return Text; }
+
+- The Lexer class itself has a similar simple interface and comes next in the header file:
+
+```
+class Lexer {
+
+  const char *BufferStart;
+
+  const char *BufferPtr;
+
+public:
+
+  Lexer(const llvm::StringRef &Buffer) {
+
+    BufferStart = Buffer.begin();
+
+    BufferPtr = BufferStart;
+
+  }
+
+  void next(Token &token);
+
+private:
+
+  void formToken(Token &Result, const char *TokEnd,
+
+                 Token::TokenKind Kind);
+
+};
+
+#endif
+```
+
+- implement the lexer class in the lexer.cpp file 
+
+```
+#include "Lexer.h"
+
+namespace charinfo {
+
+LLVM_READNONE inline bool isWhitespace(char c) {
+
+  return c == ' ' || c == '\t' || c == '\f' ||         c == '\v' ||
+
+         c == '\r' || c == '\n';
+
+}
+
+LLVM_READNONE inline bool isDigit(char c) {
+
+  return c >= '0' && c <= '9';
+
+}
+
+LLVM_READNONE inline bool isLetter(char c) {
+
+  return (c >= 'a' && c <= 'z') ||         (c >= 'A' && c <= 'Z');
+
+}
+
+}
+```
+
+- From the grammar in the previous section, we know all the tokens of the language. But the grammar does not define the characters that should be ignored.
+
+```
+void Lexer::next(Token &token) {
+
+  while (*BufferPtr &&         charinfo::isWhitespace(*BufferPtr)) {
+
+    ++BufferPtr;
+
+  }
+```
+
+- still characters left to process:
+  if (!*BufferPtr) {
+
+    token.Kind = Token::eoi;
+
+    return;
+
+  }
+
+- syntactical analysis 
+
+    + handwritten parser, the Parser.h header file. It begins with some include statements:
+    
+    the Parser.h header file. It begins with some include statements:
+    
+    + Lex and Tok are instances of the classes from the previous section. Tok stores the next token (the look-ahead), while Lex is used to retrieve the next token from the input.
+    
+    + For each non-terminal in the grammar, a method to parse the rule is declared
+    
+```
+  AST *parseCalc();
+
+  Expr *parseExpr();
+
+  Expr *parseTerm();
+
+  Expr *parseFactor();
+
+calc : ("with" ident ("," ident)* ":")? expr ;
+
+AST *Parser::parseCalc() {
+
+  Expr *E;
+
+  llvm::SmallVector<llvm::StringRef, 8> Vars;
+
+  if (Tok.is(Token::KW_with)) {
+
+    advance();
+
+    if (expect(Token::ident))
+
+      goto _error;
+
+    Vars.push_back(Tok.getText());
+
+    advance();
+
+    while (Tok.is(Token::comma)) {
+
+      advance();
+
+      if (expect(Token::ident))
+
+        goto _error;
+
+      Vars.push_back(Tok.getText());
+
+      advance();
+
+    }
+    if (consume(Token::colon))
+
+      goto _error;
+
+    }
+
+     E = parseExpr();
+    
+    if (Vars.empty()) return E;
+
+    else return new WithDecl(Vars, E);
+```
+
+- parser implementation, Detecting a syntax error is easy but recovering from it is surprisingly complicated. Here, a simple approach called panic mode must be used.
+
+In panic mode, tokens are deleted from the token stream until one is found that the parser can use to continue its work.
+
+in C++, we can use ; (end of a statement) or } (end of a block). Such tokens are good candidates to look for.
+
+- error handling 
+
+calc, only the end of the input follows this non-terminal. Its implementation is trivial:
+
+```
+_error:
+
+  while (!Tok.is(Token::eoi))
+
+    advance();
+
+  return nullptr;
+
+}
+```
+
+parseExpr() is the translation of the rule for expr:
+```
+Expr *Parser::parseExpr() {
+
+  Expr *Left = parseTerm();
+
+  while (Tok.isOneOf(Token::plus, Token::minus)) {
+
+    BinaryOp::Operator Op =
+
+       Tok.is(Token::plus) ? BinaryOp::Plus :
+
+                             BinaryOp::Minus;
+
+    advance();
+
+    Expr *Right = parseTerm();
+
+    Left = new BinaryOp(Op, Left, Right);
+
+  }
+
+  return Left;
+
+}
+```
+
+coding of the term rule looks the same:
+```
+Expr *Parser::parseTerm() {
+
+  Expr *Left = parseFactor();
+
+  while (Tok.isOneOf(Token::star, Token::slash)) {
+
+    BinaryOp::Operator Op =
+
+        Tok.is(Token::star) ? BinaryOp::Mul :
+
+                              BinaryOp::Div;
+
+    advance();
+
+    Expr *Right = parseFactor();
+
+    Left = new BinaryOp(Op, Left, Right);
+
+  }
+
+  return Left;
+
+}
+```
+
+implement the rule for factor 
+```
+Expr *Parser::parseFactor() {
+
+  Expr *Res = nullptr;
+
+  switch (Tok.getKind()) {
+
+  case Token::number:
+
+    Res = new Factor(Factor::Number, Tok.getText());
+
+    advance(); break;
+
+  case Token::ident:
+
+    Res = new Factor(Factor::Ident, Tok.getText());
+
+    advance(); break;
+
+  case Token::l_paren:
+
+    advance();
+
+    Res = parseExpr();
+
+    if (!consume(Token::r_paren)) break;
+
+  default:
+
+    if (!Res) error();
+
+while (!Tok.isOneOf(Token::r_paren, Token::star,
+
+                        Token::plus, Token::minus,
+
+                        Token::slash, Token::eoi))
+
+      advance();
+
+  }
+
+  return Res;
+
+}
+
+```
+
+- abstract syntax tree 
+
+Factor holds a number or an identifier, BinaryOp holds the arithmetic operator and the left-hand and right-hand sides of an expression, and WithDecl stores the list of declared variables and the expression. AST and Expr are only used to create a common class hierarchy.
+
+visitor pattern is also supported. It's all in the AST.h header file. Let's take a
+
+```
+#ifndef AST_H
+
+#define AST_H
+
+#include "llvm/ADT/SmallVector.h"
+
+#include "llvm/ADT/StringRef.h"
+
+class AST;
+
+class Expr;
+
+class Factor;
+
+class BinaryOp;
+
+class WithDecl;
+
+class ASTVisitor {
+
+public:
+
+  virtual void visit(AST &){};
+
+  virtual void visit(Expr &){};
+
+  virtual void visit(Factor &) = 0;
+
+  virtual void visit(BinaryOp &) = 0;
+
+  virtual void visit(WithDecl &) = 0;
+
+};
+
+class AST {
+
+public:
+
+  virtual ~AST() {}
+
+  virtual void accept(ASTVisitor &V) = 0;
+
+};
+
+class Expr : public AST {
+
+public:
+
+  Expr() {}
+
+};
+
+class Factor : public Expr {
+
+public:
+
+  enum ValueKind { Ident, Number };
+
+private:
+
+  ValueKind Kind;
+
+  llvm::StringRef Val;
+
+public:
+
+  Factor(ValueKind Kind, llvm::StringRef Val)
+
+      : Kind(Kind), Val(Val) {}
+
+  ValueKind getKind() { return Kind; }
+
+  llvm::StringRef getVal() { return Val; }
+
+  virtual void accept(ASTVisitor &V) override {
+
+    V.visit(*this);
+
+  }
+
+};
+
+class BinaryOp : public Expr {
+
+public:
+
+  enum Operator { Plus, Minus, Mul, Div };
+
+private:
+
+  Expr *Left;
+
+  Expr *Right;
+
+  Operator Op;
+
+public:
+
+  BinaryOp(Operator Op, Expr *L, Expr *R)
+
+      : Op(Op), Left(L), Right(R) {}
+
+  Expr *getLeft() { return Left; }
+
+  Expr *getRight() { return Right; }
+
+  Operator getOperator() { return Op; }
+
+  virtual void accept(ASTVisitor &V) override {
+
+    V.visit(*this);
+
+  }
+
+};
+
+class WithDecl : public AST {
+
+  using VarVector =                   llvm::SmallVector<llvm::StringRef, 8>;
+
+  VarVector Vars;
+
+  Expr *E;
+
+public:
+
+  WithDecl(llvm::SmallVector<llvm::StringRef, 8> Vars,
+
+           Expr *E)
+
+      : Vars(Vars), E(E) {}
+
+  VarVector::const_iterator begin()                                 { return Vars.begin(); }
+
+  VarVector::const_iterator end() { return Vars.end(); }
+
+  Expr *getExpr() { return E; }
+
+  virtual void accept(ASTVisitor &V) override {
+
+    V.visit(*this);
+
+  }
+
+};
+
+#endif
+
+```
+
+the tree is used for code generation.
+
+- semantic an analysis 
+
+The semantic analyzer walks the AST and checks for various semantic rules of the language; for example, a variable must be declared before use or types of variables must be compatible in an expression
+
+The semantic analyzer is implemented in the Sema class, and semantic analysis is performed by the semantic() method.
+
+```
+#ifndef SEMA_H
+
+#define SEMA_H
+
+#include "AST.h"
+
+#include "Lexer.h"
+
+class Sema {
+
+public:
+
+  bool semantic(AST *Tree);
+
+};
+
+#endif
+
+
+#include "Sema.h"
+
+#include "llvm/ADT/StringSet.h"
+
+namespace {
+
+class DeclCheck : public ASTVisitor {
+
+  llvm::StringSet<> Scope;
+
+  bool HasError;
+
+  enum ErrorType { Twice, Not };
+
+  void error(ErrorType ET, llvm::StringRef V) {
+
+    llvm::errs() << "Variable " << V << " "
+
+                 << (ET == Twice ? "already" : "not")
+
+                 << " declared\n";
+
+    HasError = true;
+
+  }
+
+public:
+
+  DeclCheck() : HasError(false) {}
+
+  bool hasError() { return HasError; }
+
+  virtual void visit(Factor &Node) override {
+
+    if (Node.getKind() == Factor::Ident) {
+
+      if (Scope.find(Node.getVal()) == Scope.end())
+
+        error(Not, Node.getVal());
+
+    }
+
+  };
+
+
+  virtual void visit(BinaryOp &Node) override {
+
+    if (Node.getLeft())
+
+      Node.getLeft()->accept(*this);
+
+    else
+
+      HasError = true;
+
+    if (Node.getRight())
+
+      Node.getRight()->accept(*this);
+
+    else
+
+      HasError = true;
+
+  };
+
+  virtual void visit(WithDecl &Node) override {
+
+    for (auto I = Node.begin(), E = Node.end(); I != E;
+
+         ++I) {
+
+      if (!Scope.insert(*I).second)
+
+        error(Twice, *I);
+
+    }
+
+    if (Node.getExpr())
+
+      Node.getExpr()->accept(*this);
+
+    else
+
+      HasError = true;
+
+  };
+
+};
+
+}
+
+bool Sema::semantic(AST *Tree) {
+
+  if (!Tree)
+
+    return false;
+
+  DeclCheck Check;
+
+  Tree->accept(Check);
+
+  return Check.hasError();
+
+}
+```
+
+- generating code with the llvm backend, create optimized machine code from an IR of a module. The IR is the interface to the backend and can be created using a C++ interface or in textual form.
+
+
+Ask the user for the value of each variable.
+Calculate the value of the expression.
+Print the result.
+
+    + Textual representation of the LLVM IR
+    
+declare i32 @calc_read(i8*)
+
+declare void @calc_write(i32)
+
+@a.str = private constant [2 x i8] c"a\00"
+
+define i32 @main(i32, i8**) {
+
+entry:
+
+  %2 = call i32 @calc_read(i8* getelementptr inbounds
+
+                 ([2 x i8], [2 x i8]* @a.str, i32 0, i32 0))
+
+  %3 = mul nsw i32 3, %2
+  
+  
+ ret i32 0
+
+}
+
+- generate the IR from the AST 
+
+CodeGen.h 
+```
+#ifndef CODEGEN_H
+
+#define CODEGEN_H
+
+#include "AST.h"
+
+class CodeGen
+
+{
+
+public:
+
+void compile(AST *Tree);
+
+};
+
+#endif
+```
+
+The CodeGen.cpp file is implemented as follows:
+```
+#include "CodeGen.h"
+
+#include "llvm/ADT/StringMap.h"
+
+#include "llvm/IR/IRBuilder.h"
+
+#include "llvm/IR/LLVMContext.h"
+
+#include "llvm/Support/raw_ostream.h"
+
+using namespace llvm;
+
+namespace {
+
+class ToIRVisitor : public ASTVisitor {
+
+  Module *M;
+
+  IRBuilder<> Builder;
+
+  Type *VoidTy;
+
+  Type *Int32Ty;
+
+  Type *Int8PtrTy;
+
+  Type *Int8PtrPtrTy;
+
+  Constant *Int32Zero;
+
+  Value *V;
+
+  StringMap<Value *> nameMap;
+
+public:
+
+  ToIRVisitor(Module *M) : M(M), Builder(M->getContext())
+
+  {
+
+    VoidTy = Type::getVoidTy(M->getContext());
+
+    Int32Ty = Type::getInt32Ty(M->getContext());
+
+    Int8PtrTy = Type::getInt8PtrTy(M->getContext());
+
+    Int8PtrPtrTy = Int8PtrTy->getPointerTo();
+
+    Int32Zero = ConstantInt::get(Int32Ty, 0, true);
+
+  }
+
+  void run(AST *Tree) {
+
+    FunctionType *MainFty = FunctionType::get(
+
+        Int32Ty, {Int32Ty, Int8PtrPtrTy}, false);
+
+    Function *MainFn = Function::Create(
+
+        MainFty, GlobalValue::ExternalLinkage,
+
+        "main", M);
+
+    BasicBlock *BB = BasicBlock::Create(M->getContext(),
+
+                                        "entry", MainFn);
+
+    Builder.SetInsertPoint(BB);
+
+    Tree->accept(*this);
+    
+    FunctionType *CalcWriteFnTy =
+
+        FunctionType::get(VoidTy, {Int32Ty}, false);
+
+    Function *CalcWriteFn = Function::Create(
+
+        CalcWriteFnTy, GlobalValue::ExternalLinkage,
+
+        "calc_write", M);
+
+    Builder.CreateCall(CalcWriteFnTy, CalcWriteFn, {V});
+
+    Builder.CreateRet(Int32Zero);
+
+  }
+
+virtual void visit(WithDecl &Node) override {
+
+    FunctionType *ReadFty =
+
+        FunctionType::get(Int32Ty, {Int8PtrTy}, false);
+
+    Function *ReadFn = Function::Create(
+
+        ReadFty, GlobalValue::ExternalLinkage,
+
+        "calc_read", M);
+
+    for (auto I = Node.begin(), E = Node.end(); I != E;
+
+         ++I) {
+          StringRef Var = *I;
+
+          Constant *StrText = ConstantDataArray::getString(
+
+              M->getContext(), Var);
+
+          GlobalVariable *Str = new GlobalVariable(
+
+              *M, StrText->getType(),
+
+              /*isConstant=*/true,
+
+              GlobalValue::PrivateLinkage,
+
+              StrText, Twine(Var).concat(".str"));
+    
+      Value *Ptr = Builder.CreateInBoundsGEP(
+
+          Str, {Int32Zero, Int32Zero}, "ptr");
+
+      CallInst *Call =
+
+          Builder.CreateCall(ReadFty, ReadFn, {Ptr});
+
+      nameMap[Var] = Call;
+
+    }
+
+     Node.getExpr()->accept(*this);
+
+  };
+
+
+  virtual void visit(Factor &Node) override {
+
+    if (Node.getKind() == Factor::Ident) {
+
+      V = nameMap[Node.getVal()];
+
+    } else {
+
+      int intval;
+
+      Node.getVal().getAsInteger(10, intval);
+
+      V = ConstantInt::get(Int32Ty, intval, true);
+
+    }
+
+  };
+
+    virtual void visit(BinaryOp &Node) override {
+
+    Node.getLeft()->accept(*this);
+
+    Value *Left = V;
+
+    Node.getRight()->accept(*this);
+
+    Value *Right = V;
+
+    switch (Node.getOperator()) {
+
+    case BinaryOp::Plus:
+
+      V = Builder.CreateNSWAdd(Left, Right); break;
+
+    case BinaryOp::Minus:
+
+      V = Builder.CreateNSWSub(Left, Right); break;
+
+    case BinaryOp::Mul:
+
+      V = Builder.CreateNSWMul(Left, Right); break;
+
+    case BinaryOp::Div:
+
+      V = Builder.CreateSDiv(Left, Right); break;
+
+    }
+
+  };
+
+};
+
+}
+
+void CodeGen::compile(AST *Tree) {
+
+  LLVMContext Ctx;
+
+  Module *M = new Module("calc.expr", Ctx);
+
+  ToIRVisitor ToIR(M);
+
+  ToIR.run(Tree);
+
+  M->print(outs(), nullptr);
+
+}
+
+```
+
+For easy IR generation, the Builder (of the IRBuilder<> type) is used. LLVM has a class hierarchy to represent types in IR. You can look up the instances for basic types such as i32 in the LLVM context
+
+- the missing pieces - the driver and the runtime library 
+
+are glued together by the Calc.cpp driver, which we will implement here. 
+
+created IR code for the user input. We delegated the object code generation to the LLVM static compiler, llc, so this finishes the implementation of our compiler. We must link all the components together to create the calc application.
+
+```
+#include "CodeGen.h"
+
+#include "Parser.h"
+
+#include "Sema.h"
+
+#include "llvm/Support/CommandLine.h"
+
+#include "llvm/Support/InitLLVM.h"
+
+#include "llvm/Support/raw_ostream.h"
+
+static llvm::cl::opt<std::string>
+
+    Input(llvm::cl::Positional,
+
+          llvm::cl::desc("<input expression>"),
+
+          llvm::cl::init(""));
+
+
+int main(int argc, const char **argv) {
+
+  llvm::InitLLVM X(argc, argv);
+
+  llvm::cl::ParseCommandLineOptions(
+
+      argc, argv, "calc - the expression compiler\n");
+
+  Lexer Lex(Input);
+
+  Parser Parser(Lex);
+
+  AST *Tree = Parser.parse();
+
+  if (!Tree || Parser.hasError()) {
+
+    llvm::errs() << "Syntax errors occured\n";
+
+    return 1;
+
+  }
+
+  Sema Semantic;
+
+  if (Semantic.semantic(Tree)) {
+
+    llvm::errs() << "Semantic errors occured\n";
+
+    return 1;
+
+  }
+
+  CodeGen CodeGenerator;
+
+  CodeGenerator.compile(Tree);
+
+  return 0;
+
+}
+
+#include <stdio.h>
+
+#include <stdlib.h>
+
+void calc_write(int v)
+
+{
+
+  printf("The result is: %d\n", v);
+
+}
+
+int calc_read(char *s)
+
+{
+
+  char buf[64];
+
+  int val;
+
+  printf("Enter a value for %s: ", s);
+
+  fgets(buf, sizeof(buf), stdin);
+
+  if (EOF == sscanf(buf, "%d", &val))
+
+  {
+
+    printf("Value %s is invalid\n", buf);
+
+    exit(1);
+
+  }
+
+  return val;
+
+}
+```
+
+we have successfully created IR code for the user input. We delegated the object code generation to the LLVM static compiler, llc, so this finishes the implementation of our compiler.
+
+
+
+
+# Section 2 from source to machine code generation 
+- topics 
+
+Defining a real programming language introduces you to the tinylang language, which is a subset of a real programming language, and for which you must implement a compiler frontend.
+
+Creating the project layout, in which you will create the project layout for the compiler.
+
+Managing source files and user messages, which gives you knowledge of how to handle several input files and how to inform the user about problems in a pleasant way.
+
+Structuring the lexer, which discusses how the lexer is broken down into modular pieces.
+
+Constructing a recursive descent parser, which will talk about the rules you can use to derive a parser from grammar to perform syntax analysis.
+
+Generating a parser and lexer with bison and flex, in which you will use tools to comfortably generate parsers and lexers from a specification.
+
+Performing semantic analysis, in which you will create the AST and evaluate its attributes, which will be intertwined with the parser.
+
+- A compilation unit in Modula-2 begins with the MODULE keyword, followed by the name of the module. 
+
+ a block containing statements that run at initialization time:
+
+```
+declaration
+
+  : "CONST" ( constantDeclaration ";" )*
+
+  | "VAR" ( variableDeclaration ";" )*
+
+  | procedureDeclaration ";" ;
+```
+
+```
+procedureDeclaration
+
+  : "PROCEDURE" identifier ( formalParameters )? ";"
+
+    block identifier ;
+
+formalParameters
+
+  : "(" ( formalParameterList )? ")" ( ":" qualident )? ;
+
+formalParameterList
+
+  : formalParameter (";" formalParameter )* ;
+
+formalParameter : ( "VAR" )? identList ":" qualident ;
+```
+
+
+A statement is delimited by a semicolon if it is followed by another statement. Again, only a subset of the Modula-2 statements is supported:
+
+```
+statementSequence
+
+  : statement ( ";" statement )* ;
+
+statement
+
+  : qualident ( ":=" expression | ( "(" ( expList )? ")" )? )
+
+  | ifStatement | whileStatement | "RETURN" ( expression )? ;
+```
+
+- managing source files and user messages 
+
+Luckily, LLVM comes with a solution: the llvm::SourceMgr class. A new source file is added to SourceMgr with a call to the AddNewSourceBuffer() method.
+
+llvm::SMLoc class must be used. This class encapsulates a pointer into the buffer. Various PrintMessage() methods allow us to emit errors and other informational messages to the user.
+
+- structure the lexer 
+
+Token class and a Lexer class. Additionally, a TokenKind enumeration is required to give each token class a unique number
+
+As for the diagnostic messages, we centrally store the information in a .def file called
+
+keywords are prefixed with kw_:
+
+```
+#ifndef TOK
+
+#define TOK(ID)
+
+#endif
+
+#ifndef PUNCTUATOR
+
+#define PUNCTUATOR(ID, SP) TOK(ID)
+
+#endif
+
+#ifndef KEYWORD
+
+#define KEYWORD(ID, FLAG) TOK(kw_ ## ID)
+
+#endif
+
+TOK(unknown)
+
+TOK(eof)
+
+TOK(identifier)
+
+TOK(integer_literal)
+
+PUNCTUATOR(plus,                "+")
+
+PUNCTUATOR(minus,               "-")
+
+// …
+
+KEYWORD(BEGIN                       , KEYALL)
+
+KEYWORD(CONST                       , KEYALL)
+
+// …
+
+#undef KEYWORD
+
+#undef PUNCTUATOR
+
+#undef TOK
+```
+
+- We declare the Lexer class in the include/Lexer/Lexer.h header file and put the implementation in the lib/Lexer/lexer.cpp file. The structure is the same as for the calc language from the previous chapter.
+
+```
+bool Parser::parseIfStatement() {
+
+  auto _errorhandler = [this] {
+
+    return SkipUntil(tok::semi, tok::kw_ELSE, tok::kw_END);
+
+  };
+
+  if (consume(tok::kw_IF))
+
+    return _errorhandler();
+
+  if (parseExpression(E))
+
+    return _errorhandler();
+
+  if (consume(tok::kw_THEN))
+
+    return _errorhandler();
+
+  if (parseStatementSequence(IfStmts))
+
+    return _errorhandler();
+
+  if (Tok.is(tok::kw_ELSE)) {
+
+    advance();
+
+    if (parseStatementSequence(ElseStmts))
+
+      return _errorhandler();
+
+  }
+
+  if (expect(tok::kw_END))
+
+    return _errorhandler();
+
+  return false;
+
+}
+```
+
+- generating a parser and lkexer with bison and flex 
+
+Manually constructing a lexer and a parser is not difficult and usually results in fast components.
+
+linux workd using 
+
+flex (https://github.com/westes/flex) and bison (https://www.gnu.org/software/bison/) are the most commonly used tools.
+
+Bison produces an LALR(1) parser from a grammar description. An LALR(1) parser is a bottom-up parser and is implemented using an automaton
+
+tinylang, stored in a tinylang.yy file, begins with the following prologue:
+
+```
+%require "3.2"
+
+%language "c++"
+
+%defines "Parser.h"
+
+%define api.namespace {tinylang}
+
+%define api.parser.class {Parser}
+
+%define api.token.prefix {T_}
+
+%token
+
+  identifier integer_literal string_literal
+
+  PLUS MINUS STAR SLASH
+```
+
+- performing semantic analysis 
+
+- handling the scope of names 
+
+scopes that have been linked by the parent member:
+
+Decl *Scope::lookup(StringRef Name) {
+
+  Scope *S = this;
+
+  while (S) {
+
+    StringMap<Decl *>::const_iterator I =
+
+        S->Symbols.find(Name);
+
+    if (I != S->Symbols.end())
+
+      return I->second;
+
+    S = S->getParent();
+
+  }
+
+  return nullptr;
+
+}
+
+- using llvm style rrti for tha AST 
+
+The dynamic_cast<> C++ operator could be used for this. The problem is that the required RTTI is only available if the C++ class has a virtual table attached to it;
+ 
+Kind. In our case, this looks like this:
+
+```
+class Decl {
+
+public:
+
+  enum DeclKind { DK_Module, DK_Const, DK_Type,
+
+                  DK_Var, DK_Param, DK_Proc };
+
+private:
+
+  const DeclKind Kind;
+
+public:
+
+  DeclKind getKind() const { return Kind; }
+
+};
+```
+
+- creating the semantic analyzer 
+
+
+
+# Basics of IR code generation 
+- LLVM IR for expressions in Static Single Assignment (SSA) form, using a modern algorithm
+
+- The LLVM code generator takes a module as described in IR as input and turns it into object code or assembly text. We need to transform the AST representation into IR. 
+
+- the CodeGenerator, the CGModule, and the CGProcedure classes. The CodeGenerator class is the general interface used by the compiler driver. The CGModule and the CGProcedure classes hold the state required for generating the IR code for a compilation unit and a single function.
+
+- a look at the clang-generated IR in the next section.
+
+- greatest common divisor of two numbers, as gcd.c:
+
+unsigned gcd(unsigned a, unsigned b) {
+
+  if (b == 0)
+
+    return a;
+
+  while (b != 0) {
+
+    unsigned t = a % b;
+
+    a = b;
+
+    b = t;
+
+  }
+
+  return a;
+
+}
+
+create the IR file, gcd.ll, with the following command:
+
+$ clang --target=aarch64-linux-gnu –O1 -S -emit-llvm gcd.c
+
+clang to output an assembly file, and with the additional specification of -emit-llvm, an IR file is created. The optimization level, -O1, is used to get an easy readable IR code. Let's have a look at the generated file
+
+IR file some basic properties are established:
+
+```
+; ModuleID = 'gcd.c'
+
+source_filename = "gcd.c"
+
+target datalayout = "e-m:e-i8:8:32-i16:16:32-i64:64-
+
+                     i128:128-n32:64-S128"
+
+target triple = "aarch64-unknown-linux-gnu"
+```
+
+The target datalayout string establishes some basic properties
+
+A small e means that bytes in memory are stored using the little endian schema. To specify a big endian, you use a big E.
+m: specifies the name mangling applied to symbols. Here, m:e means that ELF name mangling is used.
+
+The entries on the iN:A:P form, for example, i8:8:32, specify the alignment of data, given in bits. The first number is the alignment required by the ABI, and the second number is the preferred alignment. For bytes (i8), the ABI alignment is 1 byte (8) and the preferred alignment is 4 bytes (32).                                                
+
+n specifies which native register sizes are available. n32:64 means that 32-bit and 64-bit wide integers are natively supported.
+
+S specifies the alignment of the stack, again in bits. S128 means that the stack maintains a 16-byte alignment.
+NOTE
+
+A lot more information can be provided with the target data layout. You can find the full information in the reference manual at https://llvm.org/docs/LangRef.html#data-layout.
+
+
+gcd function is defined in the IR file:
+
+define i32 @gcd(i32 %a, i32 %b) 
+
+...
+
+- knowing the load and store approach 
+
+All local optimizations in LLVM are based on the SSA form shown here. For global variables, memory references are used. The IR language knows load-and-store instructions,
+
+$ clang --target=aarch64-linux-gnu -S -emit-llvm gcd.c
+
+```
+define i32 @gcd(i32, i32) {
+
+  %3 = alloca i32, align 4
+
+  %4 = alloca i32, align 4
+
+  %5 = alloca i32, align 4
+
+  %6 = alloca i32, align 4
+
+  store i32 %0, i32* %4, align 4
+
+  store i32 %1, i32* %5, align 4
+
+  %7 = load i32, i32* %5, align 4
+
+  %8 = icmp eq i32 %7, 0
+
+  br i1 %8, label %9, label %11
+```
+
+- mapping the control flow to basic blocks 
+
+You can view branches as directed edges between two basic blocks, resulting in the Control Flow Graph (CFG). A basic block can have predecessors and successors. 
+
+two predecessors:
+
+The basic block resulting from the statement before the WHILE loop
+The branch from the end of the loop body back to the condition
+
+we create the basic blocks:
+
+```
+
+void emitStmt(WhileStatement *Stmt) {
+
+  llvm::BasicBlock *WhileCondBB = llvm::BasicBlock::Create(
+
+      getLLVMCtx(), "while.cond", Fn);
+
+  llvm::BasicBlock *WhileBodyBB = llvm::BasicBlock::Create(
+
+      getLLVMCtx(), "while.body", Fn);
+
+  llvm::BasicBlock *AfterWhileBB =
+
+    llvm::BasicBlock::Create(
+
+      getLLVMCtx(), "after.while", Fn);
+
+```
+
+- optimizing the generated phi instructions 
+
+- emitting the IR code for a function 
+
+IR code will live in a function. A function in IR code resembles a function in C. It specifies the name, and the types of the parameters and of the return value and other attributes
+
+we can get a similar effect with prefixing the name components with their length: 6Square4Root. This is no legal identifier for LLVM, but we can fix this by prefixing the whole name with _t (t for tinylang): _t6Square4Root. 
+
+- converting types from an AST descriptiopn to LLVM types 
+
+two types, this is easy:
+
+```
+llvm::Type *convertType(TypeDeclaration *Ty) {
+
+  if (Ty->getName() == "INTEGER")
+
+    return Int64Ty;
+
+  if (Ty->getName() == "BOOLEAN")
+
+    return Int1Ty;
+
+  llvm::report_fatal_error("Unsupported type");
+
+}
+```
+
+- creating the LLVM IR function 
+
+factory method to create the function type:
+
+```
+llvm::FunctionType *createFunctionType(
+
+    ProcedureDeclaration *Proc) {
+
+  llvm::Type *ResultTy = VoidTy;
+
+  if (Proc->getRetType()) {
+
+    ResultTy = mapType(Proc->getRetType());
+
+  }
+
+  auto FormalParams = Proc->getFormalParams();
+
+  llvm::SmallVector<llvm::Type *, 8> ParamTypes;
+
+  for (auto FP : FormalParams) {
+
+    llvm::Type *Ty = mapType(FP);
+
+    ParamTypes.push_back(Ty);
+
+  }
+
+  return llvm::FunctionType::get(ResultTy, ParamTypes,
+
+                                 /* IsVarArgs */ false);
+
+}
+
+```
+
+The llvm::AttributeBuilder class is used to build the set of attributes for a formal parameter.
+
+- Emitting the function body
+
+We are almost done with emitting the IR code for a function! We only need to put the pieces together to emit a function
+
+- setting up the module and the driver 
+
+an instance of the llvm::GobalValue class. This mapping is saved in Globals and made available to the code generation
+
+The module also holds the LLVMContext class and caches the most commonly used LLVM types
+
+- Initializing the target machine class 
+
+  std::string Error;
+
+  const llvm::Target *Target =
+
+      llvm::TargetRegistry::lookupTarget(
+
+                     codegen::getMArch(), Triple,
+
+                     Error);
+
+  if (!Target) {
+
+    llvm::WithColor::error(llvm::errs(), Argv0) <<
+
+                     Error;
+
+    return nullptr;
+
+  }
+
+...
+
+- emitting assembler text and object code 
+
+
+
+# IR Generation for high level language constructs 
+- object-oriented programming (OOP) constructs. LLVM IR has some support for aggregate data types, and we must implement OOP constructs such as classes on our own.
+
+-  working with arrays, structs and pointers 
+
+ C type of long[10], is expressed in IR as follows
+
+[10 x i64]
+
+packed structure, in which all elements have a 1-byte alignment. The syntax is slightly different:
+
+<{ float, float, i64 }>
+
+put into a @second function, this looks like this:
+
+define i64 @second() {
+
+  %1 = getelementptr [8 x i64], [8 x i64]* @arr, i64 0, i64
+
+       1
+
+  %2 = load i64, i64* %1
+
+  ret i64 %2
+
+}
+
+- getting the application binary interface right 
+
+Are machine registers used for parameter passing? If yes, which?
+
+How are aggregates such as arrays and structs passed to a function?
+
+How are return values handled?
+
+C99 has float _Complex (among others). Older versions of C do not have complex number types, but you can easily define struct Complex { float re, im; } and create arithmetic operations on this type.
+
+    + most commonly used parameter attributes are the following:
+
+inreg specifies that the parameter is passed in a register.
+
+byval specifies that the parameter is passed by value. The parameter must be a pointer type. A hidden copy is made of the pointed-to data and this pointer is passed to the called function.
+
+zeroext and signext specify that the passed integer value should be zero- or sign-extended.
+
+sret specifies that this parameter holds a pointer to memory that is used to return an aggregate type from the function.
+
+- Clang implementation, in the https://github.com/llvm/llvm-project/blob/main/clang/lib/CodeGen/TargetInfo.cpp file. This single file contains the ABI-specific actions
+
+- creating IR code for classes and virtual functions 
+
+Shape type can be extended to represent a Circle class:
+
+TYPE Circle = RECORD (Shape)
+
+                radius: REAL;
+
+                PROCEDURE (VAR s: Circle) Area(): REAL;
+
+              END;
+
+@Shape = type { [2 x i8*]*, i64 }
+
+Shape and Circle classes vtable pointers are all point to the same vtable
+
+    + A dynamic call to a method is then executed with the following steps:
+
+Calculate the offset of the vtable pointer via the getelementptr instruction.
+Load the pointer to the vtable.
+Calculate the offset of the function in the vtable.
+Load the function pointer.
+Indirectly call the function via the pointer with the call instruction.
+
+- extending single inheritance with interfaces 
+
+A good approach is to replace the linear search with a hash table. At compile time, the interface that a class implements is known. Therefore, we can construct a perfect hash function
+
+- adding support for multiple inheritance 
+
+we store the adjustment we need to make to the this pointer before calling the method together with each function pointer in the vtable
+
+your class has a single 64-bit data field but implements 10 interfaces, then your object requires 96 bytes in memory: 8 bytes for the vtable pointer of the class itself, 8 bytes for the data member, and 10 * 8 bytes for the vtable pointers of each interface.
+
+do a prototype in C first. The required pointer manipulations are quickly translated to LLVM IR, but reasoning about the functionality is easier in a higher-level language.
+
+
+
+
+# Advanced IR generation 
+- low-level virtual machine (LLVM) IR.intermediate representation (IR) generation
+
+- throwing and catching exceptions 
+
+used by C++, so we will look at an example in C++ first, where the bar() function can throw an int or a double value
+
+call to __cxa_allocate_exception(). This function takes the number of bytes to allocate as a parameter. The exception payload (the int or the double value in the example) is copied to the allocated memory
+
+```
+int foo(int x) throw(int) {
+
+  int y = 0;
+
+  try {
+
+    y = bar(x);
+
+  }
+
+  catch (int e) {
+
+    y = e;
+
+  }
+
+  return y;
+
+}
+```
+
+```
+%eh = tail call i8* @__cxa_allocate_exception(i64 4)
+
+%payload = bitcast i8* %eh to i32*
+
+store i32 1, i32* %payload
+
+tail call void @__cxa_throw(i8* %eh,
+
+                   i8* bitcast (i8** @_ZTIi to i8*), i8*
+
+                   null)
+
+unreachable
+```
+
+illustrated in the following code snippet:
+```
+
+%y = invoke i32 @_Z3bari(i32 %x) to label %next
+
+                                 unwind label %lpad
+```
+
+
+handling of the exception is done like this:
+
+```
+catchint:
+
+%payload = tail call i8* @__cxa_begin_catch(i8* %exc.ptr)
+
+%payload.int = bitcast i8* %payload to i32*
+
+%retval = load i32, i32* %payload.int
+
+tail call void @__cxa_end_catch()
+
+br label %return
+```
+
+- raising an exception 
+
+To generate the IR code to raise an exception, we add an addThrow() method. This new method needs to initialize the new fields, and then generates the IR to raise an exception via the __cxa_throw function
+
+```
+  void addThrow(int PayloadVal) {
+
+    if (!TypeInfo) {
+
+      TypeInfo = new GlobalVariable(
+
+          *M, Int8PtrTy,
+
+          /*isConstant=*/true,
+
+          GlobalValue::ExternalLinkage,
+
+          /*Initializer=*/nullptr, "_ZTIi");
+```
+
+- integrating the exception handling code into the application 
+$ ninja
+
+$ src/calc "with a: 3/a"
+
+$ src/calc "with a: 3/a" | llc -filetype obj -o exp.o
+
+$ clang++ -o exp exp.o ../rtcalc.cpp
+
+- generating metadata for type based alias analysis 
+
+Clang defines the hierarchy for C as follows:
+
+The root node is called Simple C/C++ TBAA.
+
+Beneath the root node is the node for char types. This is a special type in C because all pointers can be converted to a pointer to char.
+
+Beneath the char node are nodes for the other scalar types and a type for all pointers, called any pointer.
+
+- Adding TBAA metadata to tinylang
+
+To support TBAA, we add a new CGTBAA class. This class is responsible for generating the metadata nodes. We make it a member of the CGModule class, calling it TBAA. Every load and store instruction could be possibly annotated
+
+Simple tinylang TBAA, as illustrated in the following code snippet:
+
+llvm::MDNode *CGTBAA::getRoot() {
+
+  if (!Root)
+
+    Root = MDHelper.createTBAARoot("Simple tinylang                                    TBAA");
+
+  return Root;
+
+}
+
+- adding debug metadata 
+
+The LLVM core libraries generate debug information in DWARF format on Unix systems and in Protein Data Bank (PDB) format for Windows
+The main class we use is llvm::DIBuilder, and we need to use the llvm/IR/DIBuilder include file to get the class declaration
+
+lvm::DIFile 
+
+llvm::DICompileUnit 
+
+llvm::DISubprogram 
+
+llvm::DILexicalBlock 
+
+llvm::DILexicalBlock 
+
+itself requires more data, as follows:
+
+unsigned LineNo = 5;
+
+unsigned ScopeLine = 5;
+
+llvm::DISubprogram *DbgFunc = DBuilder.createFunction(
+
+      DbgCU, "Func", "_t4File4Func", DbgFile, LineNo,
+
+      DbgFuncTy, ScopeLine,
+
+      llvm::DISubprogram::FlagPrivate,
+
+      llvm::DISubprogram::SPFlagLocalToUnit);
+
+- tracking variables and their values 
+
+The llvm.dbg.declare intrinsic function makes a very strong assumption: the address of the variable described in the call to the intrinsic is valid throughout the lifetime of the function.
+
+During optimization, passes can replace this intrinsic with (possibly multiple) calls to llvm.dbg.value and/or llvm.dbg.addr in order to preserve the debug information.
+
+illustrated in the following code snippet:
+
+```
+const llvm::DataLayout &DL = Mod->getDataLayout();
+
+uint64_t Ofs = DL.getStructLayout(Frame)
+
+               ->getElementOffset(3);
+```
+
+- Adding line numbers
+
+A debugger allows a programmer to step line by line through an application.
+
+llvm::DILocation type. A debug location has more information than just the line
+
+
+- adding debug support 
+
+debug metadata in the new CGDebugInfo class.
+
+CGDebugInfo::CGDebugInfo(CGModule &CGM)
+
+    : CGM(CGM), DBuilder(*CGM.getModule()) {
+
+  llvm::SmallString<128> Path(
+
+      CGM.getASTCtx().getFilename());
+
+  llvm::sys::fs::make_absolute(Path);
+
+  llvm::DIFile *File = DBuilder.createFile(
+
+      llvm::sys::path::filename(Path),
+
+      llvm::sys::path::parent_path(Path));
+
+  bool IsOptimized = false;
+
+  unsigned ObjCRunTimeVersion = 0;
+
+  llvm::DICompileUnit::DebugEmissionKind EmissionKind =
+
+      llvm::DICompileUnit::DebugEmissionKind::FullDebug;
+
+  CU = DBuilder.createCompileUnit(
+
+      llvm::dwarf::DW_LANG_Modula2, File, "tinylang",
+
+      IsOptimized, StringRef(), ObjCRunTimeVersion,
+
+      StringRef(), EmissionKind);
+
+}
+
+
+
+# Optimizing IR 
+- A series of Passes is called the Pass pipeline. The Pass manager executes the Pass pipeline on the IR that our compiler produces. 
+
+following topics:
+
+Introducing the LLVM Pass manager
+Implementing a Pass using the new Pass manager
+Adapting a Pass for use with the old Pass manager
+Adding an optimization pipeline to your compiler
+
+- a pass is often categorized according to the scope in which it works 
+
+A function Pass takes a single function as input and performs its work on this function only.
+
+A module Pass takes a whole module as input. Such a Pass performs its work on the given module and can be used for intraprocedural operations inside this module.
+
+A call graph Pass traverses the functions of a call graph in bottom-up order.
+
+for example, from the llvm::FunctionPass
+
+llvm::PassInvo<> mixin class only 
+
+- implemnting a pass using the new pass manager 
+
+Adding a Pass to the LLVM source tree
+
+adapting a pass for use with the old pass manager 
+
+```
+void runCounting(Function &F) {
+
+  for (BasicBlock &BB : F) {
+
+    ++NumOfBB;
+
+    for (Instruction &I : BB) {
+
+      (void)I;
+
+      ++NumOfInst;
+
+    }
+
+  }
+
+}
+```
+
+we need to use the --load option. Our new Pass is invoked with the --countir option:
+$ opt --load lib/CountIR.so --countir –-stats  --disable-output demo.ll
+
+- creating an optimization pipeline with pass manager 
+
+setup of the optimization pipeline is the PassBuilder class. This class knows about all of the registered Passes and can construct a Pass pipeline from a textual description. We use this class to either create the Pass pipeline from a description given on the command line
+
+We use new classes, so we begin by adding new include files. The llvm/Passes/PassBuilder.h file provides the definition of the PassBuilder
+
+- OF_Text flag for both of them:
+```
+  std::error_code EC;
+
+  sys::fs::OpenFlags OpenFlags = sys::fs::OF_None;
+
+  CodeGenFileType FileType = codegen::getFileType();
+
+  if (FileType == CGFT_AssemblyFile)
+
+    OpenFlags |= sys::fs::OF_Text;
+
+  auto Out = std::make_unique<llvm::ToolOutputFile>(
+
+      outputFilename(InputFilename), EC, OpenFlags);
+
+  if (EC) {
+
+    WithColor::error(errs(), Argv0)
+
+        << EC.message() << '\n';
+
+    return false;
+
+  }
+```
+
+- extending the pass pipeline 
+
+pass manager options. With the --debug-pass-manager option, you can follow which Passes are executed in which order. You can print the IR before or after each Pass is invoked using the --print-before-all and --print-after-all options. 
+
+
+
+# Section 3 Taking LLVM to the next level 
+- LLVM has a just-in-time (JIT) compiler, and you will learn how you can use it and how to tailor it to your needs.
+
+- instruction selection 
+
+This is called instruction selection, often abbreviated to ISel. Instruction selection is an important part of the target backend, and LLVM has three different approaches for selecting instructions
+
+machine IR, MIR 
+
+- Graphviz software, which can be downloaded from https://graphviz.org/. The source code is available at http://gitlab.com/graphviz/graphviz/.
+
+- performed in the target backend:
+
+The directed acyclic graph (DAG) used for instruction selection, usually referred to as the SelectionDAG, is constructed.
+
+Machine instructions corresponding to the IR code are selected.
+
+The selected machine instructions are ordered in an optimal sequence.
+
+Virtual registers are replaced with machine registers.
+
+Prologue and epilogue code is added to functions.
+
+Basic blocks are ordered in an optimal sequence.
+
+Target-specific passes are run.
+
+Object code or assembly is emitted.
+
+- The passes after the instruction selection refine this, and in the end, an instance of MCInstr is created, which is a representation of the real machine instruction. The MCInstr instance can be written into an object file
+
+IR file with the following content:
+
+```
+define i16 @sum(i16 %a, i16 %b) {
+
+  %res = add i16 %a, 3
+
+  ret i16 %res
+
+}
+```
+
+- using MIR to test and debug the backend 
+
+IR level, you can, for example, tell llc to dump the IR after each pass. This does not work with the machine passes in the backend
+ 
+MIR is a textual representation of the current state of the machine instructions in the current module. It utilizes the YAML format
+
+Run the llc tool with the --stop-after=finalize-isel option and the test input file we used earlier:
+
+$ llc -mtriple=mips-linux-gnu -stop-after=finalize-isel < sum.ll
+
+output looks like this:
+
+---
+
+name:                 sum
+
+body:                  |
+
+  bb.0 (%ir-block.0):
+
+     liveins: $a0, $a1
+
+     %1:gpr32 = COPY $a1
+
+     %0:gpr32 = COPY $a0
+
+     %2:gpr32 = ADDu %0, %1
+
+     $v0 = COPY %2
+
+     RetRA implicit $v0
+
+...
+
+a mix of virtual registers such as %0 and real machine registers such as $a0. The reason for this comes from ABI lowering. To be portable across
+
+- how instruction selection works 
+
+The LLVM developers decided to capture all this information in a single place, the target description. A new language, the TableGen language
+
+- specify the target description in the TableGen language 
+
+the target description. A new language, the TableGen language, was invented for this purpose. The idea was to use a code generator to create various source fragments
+
+Register class defines the common properties of a register, and you can define a concrete record for register R0:
+
+class Register {
+
+  string name;
+
+}
+
+def R0 : Register {
+
+  let name = "R0";
+
+  string altName = "$0";
+
+}
+
+- Some of the supported types are the following:
+
+bit: A single bit
+int: A 64-bit integer value
+bits<n>: An integral type consisting of n bits
+string: A character string
+list<t>: A list of elements of type t
+dag: A directed acyclic graph (DAG; used by the instruction selection)
+
+
+Target.td file mentioned first. It also defines target features, for example:
+
+```
+def FeatureMips64r2
+
+  : SubtargetFeature<"mips64r2", "MipsArchVersion",
+
+                     "Mips64r2", "Mips64r2 ISA Support",
+
+                     [FeatureMips64, FeatureMips32r2]>;
+```
+
+- following LogicNOR class helps with avoiding the same definitions multiple times:
+
+class LogicNOR<string opstr, RegisterOperand RO>:
+
+  InstSE<(outs RO:$rd), (ins RO:$rs, RO:$rt),
+
+            !strconcat(opstr, "\t$rd, $rs, $rt"),
+
+            [(set RO:$rd, (not (or RO:$rs, RO:$rt)))],
+
+            II_NOR, FrmR, opstr> {
+
+  let isCommutable = 1;
+
+}
+
+- instruction selection with the selection DAG 
+
+instruction selection in two different ways. If you pass the –debug-only=isel option to the llc tool
+
+$ llc -mtriple=mips-linux-gnu -debug-only=isel < sum.ll
+
+You can also generate the graph at other points in time, for example:
+
+Add the --view-legalize-types-dags option to see the DAG before type legalization.
+Add the –view-isel-dags option to see the selection instructions.
+
+- examing the instruction selection 
+
+IR, an instance of the SelectionDAG class is populated by the SelectionDAGBuilder class. There are no special optimizations done at this step
+
+After type legalization, the selection DAG has this textual representation for the sum.ll file
+
+the PerformDAGCombine() method in the XXXISelLowering class is called. You can then check arbitrary complex patterns
+
+- fast instruction selection FastISel 
+
+optimal code, and which is used only for –O0 optimization level. This component is called fast instruction selection, or FastIsel for short.
+
+only for –O0 optimization level. This component is called fast instruction selection, or FastIsel for short.
+
+selection by passing the –fast-isel option to llc tool. Using the sum.ll example file from first section
+
+$ llc -mtriple=mips-linux-gnu -fast-isel –O0 sum.ll
+
+- Current sequence of steps is as follows 
+
+The IRTranslator pass builds the initial machine instructions using the generic opcodes.
+
+ –global-isel option to llc or –mllvm global-isel to clang. You can control what happens if an IR construct cannot be handled by global instruction selection
+ 
+- supporting new machine instructions 
+
+New machine instructions are usually tied to a certain CPU feature. 
+
+two input registers $2 and $3 and assigns the sum of both squares to the output register $1
+
+sqsumu $1, $2, $3
+
+llc with the --mattr=+sqsum option to enable recognition of the new instruction.
+
+llvm/lib/Target/Mips folder add is in the TableGen file Mips.td 
+```
+ add the definition of our new feature:
+
+def FeatureSQSum
+
+     : SubtargetFeature<"sqsum", "HasSQSum", "true",
+
+                                 "Use square-sum instruction">;
+```
+
+- SQSUM predicate states that the instruction is only valid when our feature is enabled. The complete definition is as follows
+
+def SQSUMu  : ArithLogicR<"sqsumu", GPR64Opnd, 1, II_SQSUMU>,
+
+                  ADD_FM<0x1c, 0x28>, ISA_MIPS64, SQSUM
+
+- testing the new instruction 
+
+verify that the instruction encoding is correct 
+
+second we must make sure that the code generation works as expected 
+
+The LLVM projects use LIT, the LLVM Integrated Tester, as the testing tool.
+
+
+$ echo "sqsumu \$1,\$2,\$3" | llvm-mc --triple=mips64-linux-gnu -mattr=+sqsum --show-encoding
+
+llvm/test/MC/Mips directory:
+
+```
+# RUN: llvm-mc %s -triple=mips64-linux-gnu -mattr=+sqsum \
+
+# RUN:  --show-encoding | FileCheck %s
+
+# CHECK: sqsumu  $1, $2, $3 # encoding: [0x70,0x43,0x08,0x28]
+
+     sqsumu $1, $2, $3
+```
+
+
+# JIT Compilation 
+- just in time (JIT) compilers, which allow the direct execution of IR code. A JIT compiler works more like an interpreter
+
+Getting an overview of LLVM's JIT implementation and use cases
+
+Using JIT compilation for direct execution
+
+Utilizing a JIT compiler for code evaluation
+
+- only looked at ahead of time (AOT) compilers. These compilers compile the whole application.
+
+Implementation of a virtual machine: A programming language can be translated to byte code with an AOT compiler.
+
+Expression evaluation: A spreadsheet application can compile often-executed expressions with a JIT compiler.
+
+Database queries: A database creates an execution plan from a database query.
+
+- Exploring the lli tool
+
+Let's try the lli tool with a very simple example. Store the following source as a hello.ll file. It is the equivalent of a C hello world application.
+
+$ clang –fPIC –shared –o greetings.so greetings.c
+
+We also compile the file into a greetings.
+
+Implementing our own JIT compiler with LLJIT
+
+The lli tool is nothing more than a thin wrapper around LLVM APIs
+
+- This demonstrates how easy it is to use JIT compilation. There is a bunch of other possibilities to expose names, besides exposing the symbols for the current process or from a shared library. The StaticLibraryDefinitionGenerator class exposes the symbols found in a static archive, and can be used in the same way as the DynamicLibrarySearchGenerator
+
+InitLLVM.h header is required for basic initialization of the tool, and the TargetSelect.h header for the initialization of the native target:
+```
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
+
+#include "llvm/IRReader/IRReader.h"
+
+#include "llvm/Support/CommandLine.h"
+
+#include "llvm/Support/InitLLVM.h"
+
+#include "llvm/Support/TargetSelect.h"
+
+static cl::opt<std::string>
+
+    InputFile(cl::Positional, cl::Required,
+
+              cl::desc("<input-file>"));
+
+std::unique_ptr<Module>
+
+loadModule(StringRef Filename, LLVMContext &Ctx,
+
+           const char *ProgName) {
+
+  SMDiagnostic Err;
+
+  std::unique_ptr<Module> Mod =
+
+      parseIRFile(Filename, Err, Ctx);
+
+  if (!Mod.get()) {
+
+    Err.print(ProgName, errs());
+
+    exit(-1);
+
+  }
+
+  return std::move(Mod);
+
+}
+```
+
+- adding cmake build description 
+
+create a CMakeLists.txt file with the build description, saved besides the JIT.cpp file:
+
+compile, and the library to link against:
+add_executable(JIT JIT.cpp)
+
+target_link_libraries(JIT ${llvm_libs})
+
+- building a JIT compiler class from scratch 
+
+llvm::orc::RTDyldObjectLinkingLayer class. It is responsible for linking in-memory objects and turning them into executable code. 
+
+The llvm::orc::IRCompileLayer class takes an IR module as input, and compiles it to an object file
+
+The CompileOnDemandLayer class is also a subclass of the IRLayer class. In a very generic way, the IRTransformLayer class, also a subclass of the IRLayer class
+
+- a JIT compiler is as follows:
+
+Initialize an instance of the ExecutionSession class.
+
+Initialize the layer, at least consisting of the RTDyldObjectLinkingLayer class and the IRCompileLayer class.
+
+Create the first JITDylib symbol table, usually with main or a similar name.
+
+The usage is very similar to the LLJIT class from the previous section:
+
+Add an IR module to the symbol table.
+
+Look up a symbol, the triggered compilation of the associated function, and possibly the whole module.
+
+Execute the function.
+
+- creating a JIT compiler class 
+
+JIT_H preprocessor definition:
+```
+#ifndef JIT_H
+
+#define JIT_H
+
+#include "llvm/Analysis/AliasAnalysis.h"
+
+#include "llvm/ExecutionEngine/JITSymbol.h"
+
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+
+#include "llvm/ExecutionEngine/Orc/Core.h"
+
+#include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
+
+#include "llvm/ExecutionEngine/Orc/IRTransformLayer.h"
+
+#include     "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
+
+#include "llvm/ExecutionEngine/Orc/Mangling.h"
+
+#include     "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+
+#include     "llvm/ExecutionEngine/Orc/TargetProcessControl.h"
+
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+
+#include "llvm/Passes/PassBuilder.h"
+
+#include "llvm/Support/Error.h"
+
+class JIT {
+
+  std::unique_ptr<llvm::orc::TargetProcessControl>
+
+    TPC;
+
+  std::unique_ptr<llvm::orc::ExecutionSession> ES;
+
+  llvm::DataLayout DL;
+
+  llvm::orc::MangleAndInterner Mangle;
+
+  std::unique_ptr<llvm::orc::RTDyldObjectLinkingLayer>
+
+      ObjectLinkingLayer;
+
+  std::unique_ptr<llvm::orc::IRCompileLayer>
+
+      CompileLayer;
+
+  std::unique_ptr<llvm::orc::IRTransformLayer>
+
+      OptIRLayer;
+
+  llvm::orc::JITDylib &MainJITDylib;
+
+...
+}
+```
+
+itialize the compiler layer, an IRCompiler instance is needed. The IRCompiler instance is responsible for compiling an IR module into an object file. If our JIT compiler does not use threads, then we can use the SimpleCompiler class, which compiles the IR module using a given target machine.
+
+```
+  static std::unique_ptr<llvm::orc::IRCompileLayer>
+
+  createCompileLayer(
+
+      llvm::orc::ExecutionSession &ES,
+
+      llvm::orc::RTDyldObjectLinkingLayer &OLLayer,
+
+      llvm::orc::JITTargetMachineBuilder JTMB) {
+
+    auto IRCompiler = std::make_unique<
+
+        llvm::orc::ConcurrentIRCompiler>(
+
+        std::move(JTMB));
+
+    auto IRCLayer =
+
+        std::make_unique<llvm::orc::IRCompileLayer>(
+
+            ES, OLLayer, std::move(IRCompiler));
+
+    return std::move(IRCLayer);
+
+  }
+```
+
+The IRTransformLayer class delegates the transformation to a function, in our case, to the optimizeModule function:
+
+```
+  static std::unique_ptr<llvm::orc::IRTransformLayer>
+
+  createOptIRLayer(
+
+      llvm::orc::ExecutionSession &ES,
+
+      llvm::orc::IRCompileLayer &CompileLayer) {
+
+    auto OptIRLayer =
+
+        std::make_unique<llvm::orc::IRTransformLayer>(
+
+            ES, CompileLayer,
+
+            optimizeModule);
+
+    return std::move(OptIRLayer);
+
+  }
+```
+
+- using our new JIT compiler class 
+
+To be able to use our new class, we include the JIT.h header file. This replaces the llvm/ExecutionEngine/Orc/LLJIT.h header file, which is no longer required because we are no longer using the LLJIT class.
+
+Inside the jitmain() function, we replace the call to orc::LLJITBuilder().create() with a call to our new JIT::create() method.
+
+Again, in the jitmain() function, we remove the code to add the DynamicLibrarySearchGenerator class. Precisely this generator is integrated in the JIT class.
+
+- utilizing  a JIT compiler for code evaluation 
+
+A function in computer languages, which has the same characteristic as a function in mathematics, is called a pure function.
+
+The developer can aid the compiler, and mark pure functions, for example, with a special keyword or symbol.
+ 
+- identifying the language semantics 
+
+The D programming language has a feature called compile-time function execution. The reference compiler dmd implements this feature by interpretation of the functions at the AST level. The LLVM-based LDC compiler has an experimental feature to use the LLVM JIT engine for it. 
+
+code like the following:
+
+```
+  if (auto *Const = llvm::dyn_cast<ConstantAccess>(Expr)) {
+
+    // Do something with the constant.
+
+  }
+```
+
+Create a new IR module.
+
+Create an IR function in the module, returning a value of the expected type.
+
+Use the existing emitExpr() function to create the IR for the expression and return the calculated value with the last instruction.
+
+JIT-execute the function to calculate the value.
+
+
+
+# Debugging using LLVM tools 
+- running the static analyzer to identify problems normally not found by the compiler, and creating your own Clang-based tool
+
+- following topics:
+
+Instrumenting an application with sanitizers
+Finding bugs with libFuzzer
+Performance profiling with XRay
+Checking the source with the Clang Static Analyzer
+Creating your own Clang-based tool
+
+- technical requirements 
+
+flame graph in the Performance profiling with XRay section, you need to install the scripts from https://github.com/brendangregg/FlameGraph.
+
+- instrumenting an application with sanitizers 
+
+Intermediate Representation (IR) in a way to check for certain misbehaviors of an application.
+
+address, memory, and thread. We will first look at the address sanitizer.
+
+- detecting memory access problems with the address sanitizer 
+
+find the source of the pass in the llvm/lib/Transforms/Instrumentation/AddressSanitzer.cpp file and a description of the algorithm
+
+$ clang -fsanitize=address -g outofbounds.c -o outofbounds
+
+- finding uninitialized memory access with the memory sanitizer 
+
+find the source of the memory sanitizer pass in the llvm/lib/Transforms/Instrumentation/MemorySanitizer.cpp file. 
+
+- Pointing out data races with the thread sanitizer
+To leverage the power of modern CPUs, applications now use multiple threads.
+
+- with a mutex or semaphore. This is called a data race. The thread sanitizer can detect data races in Pthread-based applications and applications using the LLVM libc++ implementation. 
+
+llvm/lib/Transforms/Instrumentation/ThreadSanitize.cpp
+
+
+```
+#include <pthread.h>
+
+int data = 0;
+
+void *producer(void *x) {
+
+  for (int i = 0; i < 10000; ++i) ++data;
+
+  return x;
+
+}
+
+void *consumer(void *x) {
+
+  for (int i = 0; i < 10000; ++i) --data;
+
+  return x;
+
+}
+
+int main() {
+
+  pthread_t t1, t2;
+
+  pthread_create(&t1, NULL, producer, NULL);
+
+  pthread_create(&t2, NULL, consumer, NULL);
+
+  pthread_join(t1, NULL);
+
+  pthread_join(t2, NULL);
+
+  return data;
+
+}
+```
+
+- finding bugs with libFuzzer 
+
+Fuzz testing can help here. The idea is to present your application with randomly generated data, or data based on valid input but with random changes.
+
+LLVM comes with its own fuzz testing library. Originally part of the LLVM core libraries, the libFuzzer implementation was finally moved to compiler-rt.
+
+fuzzer driver and provides you with some input. The following function counts consecutive ASCII digits in the input, and then we'll feed the random input to it
+
+$ clang -fsanitize=fuzzer,address -g fuzzer.c -o fuzzer
+
+- limitations and altgernatives 
+
+The function under test must accept the input as an array in memory. Some library functions require a file path to the data instead, and they cannot be tested with libFuzzer.
+
+The exit() function should not be called.
+
+The global state should not be altered.
+`
+Hardware random number generators should not be used.
+
+- Performance profiling with XRay
+
+xraydemo.c file:
+
+```
+#include <unistd.h>
+
+void func1() { usleep(10); }
+
+void func2(int n) {
+
+  if (n % 2) func1();
+
+  else usleep(100);
+
+}
+
+int main(int argc, char *argv[]) {
+
+  for (int i = 0; i < 100; i++) { func1(); func2(i); }
+
+  return 0;
+
+}
+```
+
+To enable the XRay instrumentation during compilation, you will need to specify the -fxray-instrument option. Functions with less than 200 instructions are not instrumented.
+
+ther -fxray-instruction-threshold= option. Alternatively, we can add a function attribute to control whether a function should be instrumented
+
+$ clang -fxray-instrument -fxray-instruction-threshold=1 -g xraydemo.c -o xraydemo
+
+This subcommand can also be used to create a flame graph from the stack frames. With a flame graph
+
+inventor of flame graphs, http://www.brendangregg.com/flamegraphs.html.
+
+
+$ llvm-xray convert -output-format=trace_event -output=xray.evt -symbolize –sort -instr_map=./xraydemo xray-log.xraydemo.xVsWiE
+
+Chrome browser and type chrome:///tracing. Then, click on the Load button to load the xray.evt file
+
+The llvm-xray tool has more functionality. You can read about it on the LLVM website at https://llvm.org/docs/XRay.html and https://llvm.org/docs/XRayExample.html.
+
+- The Clang Static Analyzer is a tool that performs additional checking on C, C++, and Objective C source code. 
+
+The older tool is scan-build, which is included in LLVM and can be used for simple scenarios. The newer tool is CodeChecker, available at https://github.com/Ericsson/codechecker/. 
+
+- Adding a new checker to the Clang Static Analyzer
+
+To add a new checker to the Clang Static Analyzer, you create a new subclass of the Checker class
+
+provided in the clang/include/clang/StaticAnalyzer/Core/Checker.h header file.
+
+implement the checker in the clang/lib/StaticAnalyzer/Checkers/IconvChecker.cpp file
+
+- Creating your own Clang-based tool
+
+The static analyzer is an impressive example of what you can do with the Clang infrastructure
+
+user-defined action over the abstract syntax tree (AST), you need to define a subclass of the PluginASTAction class.
+
+The other class you need is a subclass of the ASTConsumer class. An AST consumer is a class using which you can run an action over an AST
+
+
+```
+#include "clang/AST/ASTConsumer.h"
+
+#include "clang/Frontend/CompilerInstance.h"
+
+#include "clang/Frontend/FrontendPluginRegistry.h"
+
+
+...
+
+  std::unique_ptr<ASTConsumer>
+
+  CreateASTConsumer(CompilerInstance &CI,
+
+                    StringRef file) override {
+
+    return std::make_unique<NamingASTConsumer>(CI);
+
+...
+```
+
+you can run the plugin from the compiler command line:
+
+$ clang -cc1 -load ./NamingPlugin.so -plugin naming-plugin naming.c
+
+Another useful addition you could implement as a plugin is the calculation of a software metric such as cyclomatic complexity. You can also add or replace AST nodes, allowing you, for example, to add runtime instrumentation.
+
+
+
+
+# Create your own backend 
+- Adding the new architecture to the Triple class
+An instance of the Triple class represents the target platform LLVM is producing code for. 
+
+In the llvm/include/llvm/ADT/Triple.h file, you add a member to the ArchType enumeration and a new predicate:
+
+```
+class Triple {
+
+public:
+
+  enum ArchType {
+
+  // Many more members
+
+    m88k,           // M88000 (big endian): m88k
+
+  };
+
+  /// Tests whether the target is M88k.
+
+  bool isM88k() const {
+
+    return getArch() == Triple::m88k;
+
+  }
+
+// Many more methods
+
+};
+```
+
+You can use the llvm-readobj tool to inspect an ELF object file, for example, created by a cross-compiler on OpenBSD.
+
+- expand the Executable and Linkable Format (ELF) definition.
+
+The ELF file format is one of the binary object file formats that LLVM has support for to read and write. ELF itself is defined for many CPU architectures,
+
+
+llvm/include/llvm/BinaryFormat/ELFRelocs/M88k.def file:
+```
+#ifndef ELF_RELOC
+
+#error "ELF_RELOC must be defined"
+
+#endif
+
+ELF_RELOC(R_88K_NONE, 0)
+
+ELF_RELOC(R_88K_COPY, 1)
+
+// Many more…
+
+
+```
+
+add some flags to the llvm/include/llvm/BinaryFormat/ELF.h file and include the relocation definitions:
+// M88k Specific e_flags
+
+```
+enum : unsigned {
+
+  EF_88K_NABI = 0x80000000,   // Not ABI compliant
+
+  EF_88K_M88110 = 0x00000004  // File uses 88110-
+
+                              // specific
+
+                              // features
+
+};
+
+// M88k relocations.
+
+enum {
+
+#include "ELFRelocs/M88k.def"
+
+};
+```
+
+expand some other methods. In the llvm/include/llvm/Object/ELFObjectFile.h file are some methods that translate between enumeration members and strings. 
+
+complete the support, you can also add the relocations in the llvm/lib/ObjectYAML/ELFYAML.cpp file, in the method that maps the ELFYAML::ELF_REL enumeration.
+
+- Creating the target description. The target description is the heart of a backend implementation.
+
+put backend into the llvm/lib/Target/M88k directory. The target description is in the M88k.td file
+
+create in the next sections:
+
+```
+include "llvm/Target/Target.td"
+
+include "M88kRegisterInfo.td"
+
+include "M88kCallingConv.td"
+
+include "M88kSchedule.td"
+
+include "M88kInstrFormats.td"
+
+include "M88kInstrInfo.td"
+```
+
+    + Adding the register definition
+    
+class M88kReg<bits<5> Enc, string n> : Register<n> {
+
+  let HWEncoding{15-5} = 0;
+
+  let HWEncoding{4-0} = Enc;
+
+  let Namespace = "M88k";
+
+}
+
+//The M88kReg class is used for all register types. We define a special class for general-purpose registers
+
+class GRi<bits<5> Enc, string n> : M88kReg<Enc, n>;
+
+//all 32 general-purpose registers:
+
+foreach I = 0-31 in {
+
+  def R#I : GRi<I, "r"#I>;
+
+}
+
+//add all registers:
+
+def GPR : RegisterClass<"M88k", [i32], 32, (add (sequence "R%u", 0, 31))>;
+
+//DAG nodes can be extended to denote method names for printing and matching the register in assembly code:
+
+def GPROpnd : RegisterOperand<GPR>;
+
+    + defining the calling convention, A calling convention defines how parameters are passed to functions. 
+    
+We define a record for the calling convention:
+def CC_M88k : CallingConv<[
+    CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+    CCIfSRet<CCIfType<[i32], CCAssignToReg<[R12]>>>,
+    CCIfType<[i32,i64,f32,f64],CCAssignToReg<[R2, R3, R4, R5, R6, R7, R8,R9]>>,
+    CCAssignToStack<4, 4>
+]>;
+
+def RetCC_M88k : CallingConv<[
+
+  CCIfType<[i32,f32], CCAssignToReg<[R2]>>,
+
+  CCIfType<[i64,f64], CCAssignToReg<[R2, R3]>>
+
+]>;
+
+//a calling convention also states which registers have to be preserved by the called function:
+def CSR_M88k :
+
+CalleeSavedRegs<(add (sequence "R%d", 14,25), R30)>;
+```
+
+    + creating the scheduling model. The scheduling model is used by the code generation to order the instructions in an optimal way. 
+    
+```
+def M88kSchedModel : SchedMachineModel {
+
+  let IssueWidth = 2;
+
+  let MicroOpBufferSize = 0;
+
+  let CompleteModel = 0;
+
+  let NoModel = 1;
+
+}
+```
+
+    + Most of the other field definitions just assign a value to a field defined in the Instruction superclass:
+
+```
+class InstM88k<dag outs, dag ins, string asmstr,
+
+         list<dag> pattern, InstrItinClass itin =
+
+           NoItinerary>
+
+   : Instruction {
+
+  field bits<32> Inst;
+
+  field bits<32> SoftFail = 0;
+
+  let Namespace = "M88k";
+
+  let Size = 4;
+
+  dag OutOperandList = outs;
+
+  dag InOperandList = ins;
+
+  let AsmString   = asmstr;
+
+  let Pattern = pattern;
+
+  let DecoderNamespace = "M88k";
+
+  let Itinerary = itin;
+
+}
+```
+    + implement the instructions iteratively
+    
+    A modern CPU can easily have thousands of instructions. It makes sense to not implement all instructions at once. Instead, you should first concentrate on basic instructions such as logical operations and call and return instructions.
+    
+     a lot of code is automatically generated with the llvm-tblgen tool. To complete the instruction selection and other parts of the backend, we still need to develop a C++ source using the generated code
+     
+- Implementing the DAG instruction selection classes 
+
+provide at least one TargetMachine class, usually a subclass of the LLVMTargetMachine class. The M88kTargetMachine class holds a lot of the details required for code generation
+
+```
+class M88kTargetMachine : public LLVMTargetMachine {
+
+public:
+
+  M88kTargetMachine(/* parameters */);
+
+  ~M88kTargetMachine() override;
+
+  const M88kSubtarget *getSubtargetImpl(const Function &)
+
+                                        const override;
+
+  const M88kSubtarget *getSubtargetImpl() const = delete;
+
+  TargetPassConfig *createPassConfig(PassManagerBase &PM)
+
+                                                     override;
+
+};
+```
+
+- pass pipeline to produce object files or assemblers from the IR:
+
+```
+namespace {
+
+class M88kPassConfig : public TargetPassConfig {
+
+public:
+
+  M88kPassConfig(M88kTargetMachine &TM, PassManagerBase
+
+    &PM)
+
+      : TargetPassConfig(TM, PM) {}
+
+  M88kTargetMachine &getM88kTargetMachine() const {
+
+    return getTM<M88kTargetMachine>();
+
+  }
+
+  bool addInstSelector() override {
+
+    addPass(createM88kISelDag(getM88kTargetMachine(),
+
+                              getOptLevel()));
+
+    return false;
+
+  }
+
+};
+
+} // namespace
+
+TargetPassConfig *M88kTargetMachine::createPassConfig(
+
+    PassManagerBase &PM) {
+
+  return new M88kPassConfig(*this, PM);
+
+}
+```
+
+-  M88kSubTarget.h file is as follows:
+
+```
+#define GET_SUBTARGETINFO_HEADER
+
+#include "M88kGenSubtargetInfo.inc"
+
+namespace llvm {
+
+class M88kSubtarget : public M88kGenSubtargetInfo {
+
+  Triple TargetTriple;
+
+  virtual void anchor();
+
+  M88kInstrInfo InstrInfo;
+
+  M88kTargetLowering TLInfo;
+
+  M88kFrameLowering FrameLowering;
+
+public:
+
+  M88kSubtarget(const Triple &TT, const std::string &CPU,
+
+                const std::string &FS,
+
+                const TargetMachine &TM);
+
+  void ParseSubtargetFeatures(StringRef CPU, StringRef FS);
+
+  const TargetFrameLowering *getFrameLowering() const
+
+    override
+
+  { return &FrameLowering; }
+
+  const M88kInstrInfo *getInstrInfo() const override
+
+  { return &InstrInfo; }
+
+  const M88kRegisterInfo *getRegisterInfo() const override
+
+  { return &InstrInfo.getRegisterInfo(); }
+
+  const M88kTargetLowering *getTargetLowering() const
+
+    override
+
+  { return &TLInfo; }
+
+};
+
+} // end namespace llvm
+```
+
+- include in the middle of the class:
+```
+
+class M88kDAGToDAGISel : public SelectionDAGISel {
+
+  const M88kSubtarget *Subtarget;
+
+public:
+
+  M88kDAGToDAGISel(M88kTargetMachine &TM,
+
+                   CodeGenOpt::Level OptLevel)
+
+      : SelectionDAGISel(TM, OptLevel) {}
+
+  StringRef getPassName() const override {
+
+    return "M88k DAG->DAG Pattern Instruction Selection";
+
+  }
+
+#include "M88kGenDAGISel.inc"
+
+  void Select(SDNode *Node) override {
+
+    SelectCode(Node);
+
+  }
+
+};
+```
+
+- support target-sepcific operations 
+
+- Configuring the target lowering
+
+The methods to lower function calls and arguments must always be implemented, as they are always target-dependent.
+
+```
+SDValue performORCombine(SDNode *N,
+
+    TargetLowering::DAGCombinerInfo &DCI) {
+
+  SelectionDAG &DAG = DCI.DAG;
+
+  uint64_t Width, Offset;
+
+  ConstantSDNode *Mask =
+
+                   dyn_cast<ConstantSDNode>(N->getOperand(
+
+                     1));
+
+  if (!Mask ||
+
+      !isShiftedMask(Mask->getZExtValue(), Width, Offset))
+
+    return SDValue();
+
+  EVT ValTy = N->getValueType(0);
+
+  SDLoc DL(N);
+
+  return DAG.getNode(M88kISD::SET, DL, ValTy,
+
+          N->getOperand(0),
+
+          DAG.getConstant(Width << 5 | Offset, DL,
+
+            MVT::i32));
+
+}
+
+```
+
+To finish the implementation of the whole lowering process, we need to implement the M88kFrameLowering class. This class is responsible for handling the stack frame.
+
+- Generating assembler instructions
+
+The instruction selection implemented in the previous sections lowers the IR instructions into MachineInstr instances. This is already a much lower representation of instruction, but it is not yet the machine code itself. 
+
+Because the M88kAsmPrinter class is again a machine function pass, we also override the getPassName() method. The declaration of the class
+
+```
+class M88kAsmPrinter : public AsmPrinter {
+
+public:
+
+  explicit M88kAsmPrinter(TargetMachine &TM,
+
+                         std::unique_ptr<MCStreamer>
+
+                           Streamer)
+
+      : AsmPrinter(TM, std::move(Streamer)) {}
+
+  StringRef getPassName() const override
+
+  { return "M88k Assembly Printer"; }
+
+  void emitInstruction(const MachineInstr *MI) override;
+
+};
+
+void M88kAsmPrinter::emitInstruction(const MachineInstr *MI) {
+
+  MCInst LoweredMI;
+
+  switch (MI->getOpcode()) {
+
+  case M88k::RET:
+
+    LoweredMI = MCInstBuilder(M88k::JMP).addReg(M88k::R1);
+
+    break;
+
+  default:
+
+    M88kMCInstLower Lower(MF->getContext(), *this);
+
+    Lower.lower(MI, LoweredMI);
+
+    break;
+
+  }
+
+  EmitToStreamer(*OutStreamer, LoweredMI);
+
+}
+```
+
+...
+
+- emitting machine code 
+
+The initialization of the MC layer takes place in the MCTargetDesc/M88kMCTargetDesc.cpp file. The following classes are registered with the TargetRegistry singleton:
+
+M88kMCAsmInfo: This class provides basic information, such as the size of a code pointer, the direction of stack growth, the comment symbol, or the name of assembler directives.
+
+M88MCInstrInfo: This class holds information about instructions, for example, the name of an instruction.
+
+M88kRegInfo: This class provides information about registers, for example, the name of a register, or which register is the stack pointer.
+
+M88kSubtargetInfo: This class holds the data of the scheduling model and the methods to parse and set CPU features.
+
+M88kMCAsmBackend: This class provides helper methods to get the target-dependent relocation data for fixups. It also contains factory methods for the object writer classes.
+
+M88kMCInstPrinter: This class contains helper methods to textually print instructions and operands. If an operand defines a custom print method in the target description, then it must be implemented in this class.
+
+M88kMCCodeEmitter: This class writes the encoding of an instruction to a stream.
+
+```
+#define GET_REGINFO_ENUM
+
+#include "M88kGenRegisterInfo.inc"
+
+#define GET_INSTRINFO_ENUM
+
+#include "M88kGenInstrInfo.inc"
+
+#define GET_SUBTARGETINFO_ENUM
+
+#include "M88kGenSubtargetInfo.inc"
+
+
+```
+extern "C" LLVM_EXTERNAL_VISIBILITY
+
+void LLVMInitializeM88kTargetMC() {
+
+  TargetRegistry::RegisterMCAsmInfo(getTheM88kTarget(),
+
+                                         createM88kMCAsmInfo);
+
+  TargetRegistry::RegisterMCCodeEmitter(getTheM88kTarget(),
+
+                                       
+
+                                     createM88kMCCodeEmitter);
+
+  TargetRegistry::RegisterMCInstrInfo(getTheM88kTarget(),
+
+                                       createM88kMCInstrInfo);
+
+  TargetRegistry::RegisterMCRegInfo(getTheM88kTarget(),
+
+                                    createM88kMCRegisterInfo);
+
+  TargetRegistry::RegisterMCSubtargetInfo(getTheM88kTarget(),
+
+                                   createM88kMCSubtargetInfo);
+
+  TargetRegistry::RegisterMCAsmBackend(getTheM88kTarget(),
+
+                                      createM88kMCAsmBackend);
+
+  TargetRegistry::RegisterMCInstPrinter(getTheM88kTarget(),
+
+                                     createM88kMCInstPrinter);
+
+}
+```
+
+M88kMCAsmInfo::M88kMCAsmInfo(const Triple &TT) {
+
+  CodePointerSize = 4;
+
+  IsLittleEndian = false;
+
+  MinInstAlignment = 4;
+
+  CommentString = "#";
+
+}
+```
+
+- storage convention 
+
+1025:
+
+00000000 00000000 00000100 00000001
+
+Address	Big-Endian representation of 1025	Little-Endian representation of 1025
+00           00000000                               00000001                                               
+01           00000000                               00000100
+02           00000100                               00000000
+03	         00000001                               00000000
+
+little-endian, store the lowest value to the lower address first 
+big-endian, store the biggest value to the lower address first, ibm system rule 
+
+- adding support for dissassembling 
+
+llvm-tblgen tool. Besides the generated code, we only need to provide the code to register and initialize the M88kDisassembler class and some helper functions to decode registers and operands
+
+```
+using DecodeStatus = MCDisassembler::DecodeStatus;
+
+namespace {
+
+class M88kDisassembler : public MCDisassembler {
+
+public:
+
+  M88kDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx)
+
+      : MCDisassembler(STI, Ctx) {}
+
+  ~M88kDisassembler() override = default;
+
+  DecodeStatus getInstruction(MCInst &instr, uint64_t &Size,
+
+                              ArrayRef<uint8_t> Bytes,
+
+                              uint64_t Address,
+
+                              raw_ostream &CStream) const
+
+                                                     override;
+
+};
+
+}
+
+...
+
+static const uint16_t GPRDecoderTable[] = {
+
+    M88k::R0,  M88k::R1,  M88k::R2,  M88k::R3,
+
+    M88k::R4,  M88k::R5,  M88k::R6,  M88k::R7,
+
+    M88k::R8,  M88k::R9,  M88k::R10, M88k::R11,
+
+    M88k::R12, M88k::R13, M88k::R14, M88k::R15,
+
+    M88k::R16, M88k::R17, M88k::R18, M88k::R19,
+
+    M88k::R20, M88k::R21, M88k::R22, M88k::R23,
+
+    M88k::R24, M88k::R25, M88k::R26, M88k::R27,
+
+    M88k::R28, M88k::R29, M88k::R30, M88k::R31,
+
+};
+
+static DecodeStatus
+
+DecodeGPRRegisterClass(MCInst &Inst, uint64_t RegNo,
+
+                       uint64_t Address,
+
+                       const void *Decoder) {
+
+  if (RegNo > 31)
+
+    return MCDisassembler::Fail;
+
+  unsigned Register = GPRDecoderTable[RegNo];
+
+  Inst.addOperand(MCOperand::createReg(Register));
+
+  return MCDisassembler::Success;
+
+}
+
+DecodeStatus M88kDisassembler::getInstruction(
+
+    MCInst &MI, uint64_t &Size, ArrayRef<uint8_t> Bytes,
+
+    uint64_t Address, raw_ostream &CS) const {
+
+  if (Bytes.size() < 4) {
+
+    Size = 0;
+
+    return MCDisassembler::Fail;
+
+  }
+
+  Size = 4;
+
+  uint32_t Inst = 0;
+
+  for (uint32_t I = 0; I < Size; ++I)
+
+    Inst = (Inst << 8) | Bytes[I];
+
+  return decodeInstruction(DecoderTableM88k32, MI, Inst,
+
+                           Address, this, STI);
+
+}
+```
+
+DecodeGPRRegisterClass() function:
+
+Check that the value to decode fits the required size restriction. If not, then return the MCDisassembler::Fail value.
+
+Decode the value and add it to the MCInst instance.
+
+Return MCDisassembler::Success to indicate success.
+
+- generating all the types of sources from the target description 
+
+Our new target, located in the llvm/lib/Target/M88k directory, needs to be integrated into the build system.
+
+- Different runs of the llvm-tblgen tool generate different portions of C++ code. However, I recommend adding the generation of all parts to the CMakeLists.txt

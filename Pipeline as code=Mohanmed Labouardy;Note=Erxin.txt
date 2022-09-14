@@ -1,7 +1,695 @@
 Pipeline as code=Mohanmed Labouardy;Note=Erxin
 
 
+# Introduction
+- reference 
+https://learning.oreilly.com/library/view/pipeline-as-code/9781617297540/
+
+- jenkinsfile 
+
+    + example 
+node('workers'){
+    try {
+        stage('Checkout'){
+            checkout scm
+        }
+ 
+        stage('Quality Test'){.
+            echo "Running quality tests"
+        }
+ 
+        stage('Unit Test'){
+            echo "Running unit tests"
+        }
+ 
+        stage('Security Test').
+            echo "Running security checks"
+        }
+ 
+        stage('Build'){.
+            echo "Building artifact"
+        }
+ 
+        stage('Push'){.
+           echo "Storing artifact"
+        }
+ 
+        stage('Deploy').
+            echo "Deploying artifact"
+        }
+ 
+        stage('Acceptance Tests'){
+            echo "Running post-integrations tests"
+        }
+    } catch(err){
+        echo "Handling errors".
+    } finally.
+       echo "Cleaning up"
+    }
+}
+
+- test stages 
+
+checkout 
+
+quality tests 
+
+unit tests 
+
+security tests 
+
+build 
+
+push 
+
+deploy 
+
+acceptance tests 
+
+- pipline rest api 
+
+https://plugins.jenkins.io/pipeline-rest-api
+
+- blueocean, visualizer 
+
+https://plugins.jenkins.io/blueocean/
+
+- a declarative pipeline 
+
+https://plugins.jenkins.io/workflow-aggregator
+ 
+-  example 
+
+The agent section defines the worker or machine where the pipeline will be executed
+The environment section contains a set of environment variables needed to run the pipeline steps
+
+```
+pipeline{
+    agent {
+        node {
+            label 'workers'
+        }
+ 
+        dockerfile {
+            filename 'Dockerfile'
+            label 'workers'
+        }
+ 
+        kubernetes {
+            label 'workers'
+            yaml """
+            kind: Pod
+            metadata:
+            name: jenkins-worker
+            spec:
+            containers:
+            - name: nodejs
+              image: node:lts
+              tty: true
+            """
+        }
+    }
+}
+```
+
+    + syntax: www.jenkins.io/doc/book/pipeline/syntax/
+
+- Fortunately, when using a Jenkinsfile, your pipeline definition lives with the code source of the application going through the pipeline. 
+
+- GitFlow does not solve all problems with branching. But it offers you a more logical branch structure 
+
+- Rerunning the build with a Replay button
+
+- The Jenkins command-line interface (CLI), www.jenkins.io/doc/book/managing/cli/
+
+- Write unit test with jennkins pipeline 
+
+Pipeline Unit (https://github.com/jenkinsci/JenkinsPipelineUnit
+
+Jenkins Pipeline Unit is a testing framework for unit testing Jenkins pipelines, written in Groovy Pipeline DSL.
+
+
+
+# Defining jenkins architecture 
+- Jenkins can be deployed in a standalone mode. 
+
+- Jenkins workers can be added and configured on the Jenkins dashboard or through a Jenkins RESTful API.
+
+- Labels can also be used to restrict the build job to run on a worker node associated with a specific label name
+
+- Manage Jenkins in the admin page menu, and then click Manage Nodes and Add New Node.
+
+- increase the node’s capacity for running jobs by setting the field labeled # of Executors. 
+
+- You can set up multiple workers running different operating systems by using SSH or Java Network Launch Protocol (JNLP)
+
+    + *nix environment, Jenkins worker is undoubtedly to use Secure Shell (SSH), The worker needs to be reachable from the master server, and you will have to supply the hostname, login, and password. You can also provide a path to the SSH private key file
+    
+    + You can add a worker by having Jenkins execute a command from the master, as shown in figure 3.5. Use this approach when the master is capable of remotely executing a process on another machine.
+    
+    + JNLP Another option is to start an agent from the worker machine itself by using Java Web Start (JWS). This approach is useful if the master cannot reach the worker. The master cannot restart the worker. 
+    
+    + Jenkins can also manage a remote Windows worker as a Windows service, using the Windows DCOM Server Process Launcher service, you need to provide a Windows hostname, username, and password.   
+
+    cannot run any applications requiring a graphical interface
+    
+    + Windows and macOS. Otherwise, you can set up a Jenkins playground with a Jenkins official Docker image.
+    
+- security access, set up a network access-control list (ACL) with rules similar to your security group to add an additional layer of security to your instance
+    
+- auto scale,  will deploy them inside an AWS Auto Scaling group (ASG); see https://aws.amazon.com/autoscaling
+
+
+
+# Backing machine images with Packer 
+- Immutable infrastructure is all about immutable components that are re-created and replaced instead of updated after infrastructure creation
+
+- HashiCorp Packer (www.packer.io) is a lightweight and easy-to-use open source tool that automates the creation of any type of machine image for multiple platforms
+
+HashiCorp Vault (www.vaultproject.io), or files. The section is a key-value mapping with the variable name assigned to a default value.
+
+User variables—This section is used to parameterize the Packer template file so we can keep secret, environment variables and other parameters out of the template. 
+
+Builders—This section contains a list of builders that Packer uses to generate a machine image. Builders are responsible for creating an instance and generating machine images from them
+
+Provisioners—This section, which is optional, contains a list of provisioners that Packer uses to install and configure software
+
+    + Packer template file has been cropped for brevity. 
+
+{
+    "variables" : { .
+        "region" : "AWS REGION",
+        "aws_profile": "AWS PROFILE",
+        "source_ami" : "AMAZON LINUX AMI ID",
+        "instance_type": "EC2 INSTANCE TYPE"
+    },
+    "builders" : [.
+        {
+            "type" : "amazon-ebs",
+            "profile" : "{{user `aws_profile`}}",
+            "region" : "{{user `region`}}",
+            "instance_type" : "{{user `instance_type`}}",
+            "source_ami" : "{{user `source_ami`}}",
+            "ssh_username" : "ec2-user",
+            "ami_name" : "jenkins-master-2.204.1",
+            "ami_description" : "Amazon Linux Image with Jenkins Server",
+    ],
+    "provisioners" : [            {
+            "type" : "shell",
+            "script" : "./setup.sh",
+            "execute_command" : "sudo -E -S sh '{{ .Path }}'"
+        }
+    ]
+}
+
+- baking the jenkins master AMI 
+
+- configure jenkins upon startup 
+
+The basic-security.groovy script in listing 4.5 creates a Jenkins user with full admin access
+
+Another alternative to Groovy scripts is the Jenkins Configuration as Code (JCasC) plugin. For more details, refer to the official guide on GitHub: http://mng.bz/zEJa
+
+```
+#!groovy
+ 
+import jenkins.model.*
+import hudson.security.*
+ 
+def instance = Jenkins.getInstance()                    
+def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+hudsonRealm.createAccount('USERNAME','PASSWORD')         
+instance.setSecurityRealm(hudsonRealm)
+ 
+def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+instance.setAuthorizationStrategy(strategy)             
+instance.save()
+```
+
+- plugins, The full list is in the GitHub repository at chapter4/distributed/master/config/plugins.txt.
 
 
 
 
+# Discovering jenkins as code with Terraform 
+- Infrastructure as code (IaC) allows you to manage your infrastructure by using configuration files
+
+- several IaC tools 
+
+AWS CloudFormation (https://aws.amazon.com/cloudformation/), 
+Azure Resource Manager (https://azure.microsoft.com/features/resource-manager/), 
+OpenStack Heat (https://wiki.openstack.org/wiki/Heat), 
+Google Cloud Deployment Manager (https://cloud.google.com/deployment-manager).
+
+- Terraform uses the Terraform AWS provider plugin (https://registry.terraform.io/providers/hashicorp/aws/latest. 
+
+Creating a VPC is not enough; to be able to place Jenkins instances in this isolated network
+
+- Setting up a self-healing jenkins master 
+
+Now that our VPC has been created, we can deploy a dedicated EC2 instance to host the Jenkins master component within a private subnet, by defining an aws_instance resource in the jenkins_master.tf file
+
+```
+resource "aws_instance" "jenkins_master" {
+  ami                    = data.aws_ami.jenkins-master.id
+  instance_type          = var.jenkins_master_instance_type
+  key_name               = aws_key_pair.management.id
+  vpc_security_group_ids = [aws_security_group.jenkins_master_sg.id]
+  subnet_id              = element(aws_subnet.private_subnets, 0)
+ 
+  root_block_device {
+    volume_type           = "gp3"
+    volume_size           = 30
+    delete_on_termination = false
+  }
+ 
+  tags = {
+    Name   = "jenkins_master"
+    Author = var.author
+  }
+}
+```
+
+- Point your browser to the subdomain name created with Terraform. The Jenkins web dashboard should be served through HTTPS
+
+- worker cpu utilization 
+
+$ sudo yum update
+$ sudo yum install -y stress
+
+
+
+# Deploying HA jenkins on multiple cloud providers 
+- cloud providers 
+
+
+Plus, GCP has more expertise when it comes to big data, with services like 
+
+BigQuery (https://cloud.google.com/bigquery)
+Cloud Bigtable (https://cloud.google.com/bigtable)
+Dataflow (https://cloud.google.com/dataflow)
+
+
+
+# Define pipeline as code for microservice 
+- application architecture flow 
+
+loader -> message queue -> parser -> database -> store -> rest api -> marketplace 
+
+Multiple repositories—You can have multiple teams independently developing a service (clear ownership)
+
+Mono repository—Having a single source-control repository comes with a simplified project 
+
+- git and github integration, The pipeline script (Jenkinsfile) will be versioned in GitHub. Therefore, we need to configure the Jenkins job to fetch it from the remote repository
+
+The Jenkins Credentials plugin (https://plugins.jenkins.io/credentials/) is installed by default on the baked Jenkins master machine image
+
+Created a dedicated Jenkins service account on GitHub and used an access token instead of the account password. You can create the access token by signing in with the GitHub credentials and navigating to Settings. 
+
+    + job configuration tab 
+    
+Set the repository HTTPS clone URL and set the discovering behavior to allow scanning of all repository branche
+
+property strategy, all branches get the same properties 
+
+node('workers'){
+    stage('Checkout'){
+        checkout scm
+    }
+}
+
+the use of the workers label on the node block. We’re assuming we have a Jenkins worker already set up 
+
+    + add jenkinsfile 
+```
+git add Jenkinsfile
+git commit -m "creating Jenkinsfile"
+git push origin develop
+```
+    + Therefore, like any code, it can be peer-reviewed, commented on, and approved before being merged into main branches; see figure 7.16.
+
+    + Go back to the Jenkins dashboard, and to trigger the scanning again, click the Scan Repository Now button
+    
+    + The jenkins object will be only triggered when the branch contain a Jenkinsfile. when we set the 
+  
+  
+    
+# Running automated tests with jenkins 
+- develop branch 
+```
+git add Dockerfile.test Jenkinsfile
+git commit -m "unit tests execution"
+git push origin develop
+```
+
+- Nancy (https://github.com/sonatype-nexus-community/nancy) is an open source tool that checks for vulnerabilities in your Go dependencies. 
+
+
+
+
+# Building docker images with a CI pipeline 
+-  using docker dsl 
+
+FROM python:3.7.3
+LABEL MAINTAINER mlabouardy
+WORKDIR /ap.
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY movies.json main.py ./
+CMD python main.py
+
+- Docker-hosted registry on Nexus
+
+API Container Registry https://cloud.google.com/container-registry/docs/quickstart
+
+def imageName = 'mlabouardy/movies-loader'
+def registry = 'https://registry.slowcoder.com'
+node('workers'){
+    stage('Checkout'){
+        checkout scm
+    }
+ 
+    stage('Unit Tests'){
+        def imageTest= docker.build("${imageName}-test".
+"-f Dockerfile.test .")
+        imageTest.inside{
+            sh 'python test_main.py'
+        }
+    }
+ 
+    stage('Build'){
+        docker.build(imageName)
+    }
+ 
+    stage('Push'){
+        docker.withRegistry(registry, 'registry') {
+           docker.image(imageName).push(env.BUILD_ID)
+        }
+    }
+}
+
+- Publishing the Docker image to ECR
+
+def imageName = 'mlabouardy/movies-loader'
+def registry = 'ACCOUNT_ID.dkr.ecr.eu-west-3.amazonaws.com'
+def region = 'REGION'
+ 
+node('workers'){
+    ...
+    stage('Push'){
+        sh "aws ecr get-login-password --region ${region} .
+docker login --username AW.
+--password-stdin ${registry}/${imageName}"
+      
+        docker.image(imageName).push(commitID())
+        if (env.BRANCH_NAME == 'develop') {
+            docker.image(imageName).push('develop')
+        }
+    }
+}
+
+- scanning docker images for vulnerabilities 
+
+Anchore Engine (https://github.com/anchore/anchore-engine) is an open source project that provides a centralized service for inspection, analysis, and certification of container images.
+
+An alternative solution is Aqua Trivy (https://github.com/aquasecurity/trivy)
+
+Paid solutions also can be integrated easily with Jenkins such as Sysdig (https://sysdig.com/
+
+
+
+# Cloud native applications on docker 
+- Docker Swarm official documentation (https://docs.docker.com/engine/swarm/).
+
+A distributed, consistent key-value store such as etcd (https://etcd.io/), HashiCorp’s Consul (www.consul.io), or Apache ZooKeeper (https://zookeeper.apache.org/) 
+
+- Luckily for us, Slack has a prebuilt Jenkins integration that makes things pretty easy. Install the plugin from http://mng.bz/xXOB
+
+
+
+# Dockerized microservices on K8s
+- Jenkins X to simplify the workflow of cloud-native applications running in Kubernetes.
+
+- setting up a kubernetes cluster 
+
+As I’ve said, AWS offers the Amazon Elastic Kubernetes Service https://aws.amazon.com/eks
+
+- command example 
+
+$ kubectl create namespace watchlist
+
+- Migrating Docker Compose to K8s manifests with Kompose
+Another way of creating deployment files is by converting the docker-compose.yml file
+
+the project’s official GitHub repository https://github.com/kubernetes/kompose
+
+- Discovering Jenkins X
+Jenkins X (https://jenkins-x.io/) is a CI/CD solution for modern cloud applications on Kubernetes
+
+
+
+# Lambda based serverless functions 
+- Deploying a Lambda-based application
+Multiple serverless providers are out there, but to keep it simple, we’ll use AWS—and specifically, AWS Lambda (https://aws.amazon.com/lambda/
+
+
+- an advanced version mechanism like semantic versioning (https://semver.org/
+
+
+def sendEmail(String buildStatus){
+    buildStatus =  buildStatus ?: 'SUCCESSFUL'
+    emailext body: "More info at: ${env.BUILD_URL}",
+             subject: "Name: '${env.JOB_NAME}' Status: ${buildStatus}",
+             to: '$DEFAULT_RECIPIENTS',
+             attachLog: true
+}
+
+
+# Collecting continuous delivery metrics 
+- This monitoring solution can be split into three parts:
+
+Telegraf—A metric collector agent, installed on each Jenkins instance. It collects the internal metrics and ships them to a time-series database.
+
+InfluxDB—An open source time-series database (TSDB), optimized for fast, high-availability storage. It consumes the telemetry coming from Telegraf agents.
+
+Grafana—An open source visualization platform, used to build dynamic and interactive dashboards based on data stored in InfluxDB.
+
+- Metrics plugin (https://plugins.jenkins.io/metrics/) provides health checks by exposing an API on the Jenkins server at the $JENKINS_URL/metrics endpoint. 
+
+- use a Prometheus metric plugin (https://plugins.jenkins.io/prometheus/) to expose an endpoint 
+
+- Streaming logs with Filebeat 
+
+Streaming logs with Filebeat
+Filebeat (www.elastic.co/beats/filebeat), a lightweight agent that will be installed on the Jenkins master instance, will ship the logs to Logstash (www.elastic.co/logstash) for processing and aggregation. 
+
+From there, the logs will be stored in Elasticsearch (www.elastic.co/elasticsearch) and visualized in Kibana www.elastic.co/kibana
+
+- Prometheus Alertmanager (https://prometheus.io/docs/alerting/latest/alertmanager/
+
+
+# Jenkins administration and best practices 
+-  enable CAPTCHA verification, install a support plugin such as the Jenkins JCaptcha plugin (https://plugins.jenkins.io/jcaptcha-plugin/
+
+- logged-in users, we can use the Jenkins Matrix Authorization Strategy plugin (https://plugins.jenkins.io/matrix-auth/
+
+- Role-based authorization strategy
+To manage different roles, install the Role-Based Authorization Strategy plugin (https://plugins.jenkins.io/role-strategy/
+
+- GitHub OAuth for Jenkins
+Jenkins supports several authentication plugins, in addition to built-in username and password authentication. If you’re using GitHub as your version-control system within your organization
+
+- keeping track of jenkins user's actions 
+
+The Audit Trail plugin (https://plugins.jenkins.io/audit-trail/) keeps track of the main user actions in a set of rolling log files
+
+- Extending Jenkins with shared libraries
+Throughout this book, you have learned how to write a CI/CD pipeline for multiple applications, and while implementing those pipeline steps
+
+```
+@Library('utils')_      
+ 
+node('workers'){
+ stage('Checkout'){
+    checkout scm
+    notifySlack 'STARTED'
+ }
+}
+```
+
+- ThinBackup (https://plugins.jenkins.io/thinBackup/). The plugin provides a simple user interface that you can use to back up and restore your Jenkins
+
+- open source CLI called Butler (https://github.com/mlabouardy/butler) to import/export Jenkins jobs
+
+- Setting up cron jobs with Jenkins
+Jenkins provides a cron-like feature to periodically build a project. This feature is primarily used to run scheduled builds
+
+- running jenkins locally as a docker container. official Jenkins Docker image from the DockerHub repository (https://hub.docker.com/_/jenkins
+
+
+
+# Email 
+- Find and install plugin for your group chat tool (for example, the Slack Notification plugin).
+- development flows at https://www.atlassian.com/git/tutorials/comparing-workflows.
+
+
+# Build deploy jenkins pipeline with docker 
+
+
+# Jenkins integrations 
+- reference 
+
+https://intel.udemy.com/course/learn-devops-ci-cd-with-jenkins-using-pipelines-and-docker/learn/lecture/7213104#overview
+
+- email 
+
+Email extension plugin 
+
+smtp.mailtrap.io, email server chech
+
+configure, Extended email notification 
+
+- jfrog artifactory integration
+
+docker image 
+
+artifact 
+
+jfrog plugin 
+
+binary frtom a build  
+
+https://intel.udemy.com/course/learn-devops-ci-cd-with-jenkins-using-pipelines-and-docker/learn/lecture/7236162#overview
+
+    + pipeline 
+    
+artifactory {
+    apply plugin: "com.jfrog.artifactgory"
+}
+
+artifactory {
+    publish {
+        repository {
+            repoKey = "xxx"
+            ...
+        }
+        defaults { 
+            ...
+        }
+    }
+    resolve {
+        repository {
+        }
+    }
+}
+
+
+
+node {
+
+    def server = Artifactory.server "address"
+    ...
+    stage ('publish'){
+    def uploadSpec = """{
+        "files":[
+            {
+                "pattern": "complete/build/libs/gs-gradle-*.jar", 
+                "target", "address"
+            }
+        ]
+    }"""
+    server.upload(uploadSpec)
+}
+
+- custom api integration 
+
+http request plugin 
+
+generic http request on any API. 
+
+groove script with Jenkinsfile to do request on Jenkins API 
+
+```
+def token = httpRequest authentication: "address", contentTRype:"APPLICATION_FORM", httpNode: "POST"...
+def acessToken = jsonParse(token.content).access_token 
+def pr = httpReuqest customHeader: [[...]]
+
+jsonParse(pr.content).values
+
+```
+
+
+
+# Advanced jenkins uage 
+
+- adding jenkins slave with ssh 
+
+    + on server 
+    add new node from server 
+    
+    add configuration information for the node and executors 
+    
+    select launch slaves with ssh 
+    
+    add private ssh privaste keys, add credentials for the builder  
+    
+    change port 
+    
+    save the server finger print 
+    
+    $ ssh-keyscan -p port server-address 
+    
+    get the finger print and write to default jenkins home 
+    
+    + on agent machine 
+    
+    linux install jenkins and ssh 
+    
+    
+    
+- jenkins slaves with jnlp 
+    + on jenkins server 
+
+jenkins mangement > mange node > add node > add labels etc. > launch node with jave webstart > click build tool > click the builder 
+
+    + on slave 
+    
+navigate to the server url 
+
+install jdk 
+
+click install jenkins agent builder 
+
+- ssh agent 
+
+- authentication 
+
+- onelogin integbration with using SAML, single sign on 
+
+http://www.onelogin.com 
+
+- install jenkins blue ocean plugins for pipeline ui editor 
+
+pipeline syntax validator with vscode 
+
+install plugin, Jenkins Pipeline Linter Connectgor plugin 
+
+update the VSCode settings and select jenkins, specify the jenknins path, check the plugin readme 
+
+
+
+# Jenkins with agent as docker containers 
+- reference 
+https://intel.udemy.com/course/working-with-jenkins/learn/lecture/20959308#overview
+
+- docker container as build agent 
+
+docker plugin for jenkins
+
+use a docker host to dynamically provision a docker container as a jenkins agent node 
+
+    + check the checkbox for the docker desktop to 
+
+- local docker demo 
+
+- custom docker image for jenkins master 
