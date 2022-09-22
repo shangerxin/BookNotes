@@ -1181,16 +1181,939 @@ a short and convenient alternative to counting characters with wc.
 bash$ promise='I'\''ll do it today.'
 bash$ printf '%s\n' "${promise/today/tomorrow}"
 ```
+                      
+expansions can be done with the "${myvar/pattern/replacement/}" 
+
+replace all instances of the pattern, use two slashes before the first pattern 
+```
+bash$ promise='Yes, today. I'\''ll do it today.'
+bash$ printf '%s\n' "${promise/today/tomorrow}"
+Yes, tomorrow. I'll do it today.
+bash$ printf '%s\n' "${promise//today/tomorrow}"
+Yes, tomorrow. I'll do it tomorrow.
+```
+
+- changing case 
+
+all characters uppercase or lowercase using the "${myvar^^}" and "${myvar,,}"
+
+- Combining parameter expansion forms in one statement is not allowed
+
+use a temporary variable instead, to run them one at a time:
+
+#!/bin/bash
+temp="${myvar:-foo}"
+printf '%s\n' "${temp#.ext}"
+
+- doing math in bash 
+
+$ num_a=3
+$ num_b=2
+$ printf 'The sum of the two numbers is: %u\n' "$((num_a + num_b))"
+
+- fixed or floating point arithmetic 
+
+$ printf '%.2f\n' "$((3/2))"
+
+- using globs 
+
+A glob by itself will expand to all the filenames that are not prefixed with a dot:
+```
+$ ls -a
+.  ..  .bashrc  april  august  october  september
+```
+
+```
+$ printf '%s\n' *
+april
+august
+october
+september
+```
+
+$ printf '%s\n' a*
+
+$ printf '%s\n' ????ber
+
+
+define valid sets of characters with the [...] syntax:
+$ printf '%s\n' *[lr]
+
+
+inverted with an exclamation mark as the first character in the range:
+$ printf '%s\n' *[!lr]
+
+supported [a-z], [0-9], [[:alnum:]]
+
+- configuring globbing behavior 
+
+most useful are dotglob and nullglob.
+
+- including dot file but excluding dot and dot-dot 
+
+exclude . and .. specifically, by requiring a second character that is not a dot
+```
+$ printf '%s\n' * .[!.]*
+```
+this would exclude a file named ..bashrc with two leading dots
+
+    + Bash offers an option to deal with this called dotglob, which includes dot files in glob expansion for *, but excludes the . and .. 
+    
+$ shopt -s dotglob 
+$ printf '%s\n' * 
+
+
+```
+shopt: shopt [-pqsu] [-o] [optname ...]
+    Set and unset shell options.
+
+    Change the setting of each shell option OPTNAME.  Without any option
+    arguments, list each supplied OPTNAME, or all shell options if no
+    OPTNAMEs are given, with an indication of whether or not each is set.
+
+    Options:
+      -o        restrict OPTNAMEs to those defined for use with `set -o'
+      -p        print each shell option with an indication of its status
+      -q        suppress output
+      -s        enable (set) each OPTNAME
+      -u        disable (unset) each OPTNAME
+```
+
+- expanding to nothing 
+
+if pattern is not match anything, it expands to itself, unchanged:
+
+$ printf '%s\n' c*
+
+    + bash allow alter this behavior; if we set the nullglob option, c* really will expand to nothing at all
+    
+```
+bash$ shopt -s nullglob
+bash$ printf '%s\n' c*
+bash$
+```
+- case insentive globbing 
+
+```
+bash$ shopt -s nocaseglob
+bash$ printf '%s\n' A*
+april
+august
+```
+
+- extended globbing, Bash's extglob feature allows us to do this. With this shopt option enabled
+
+$ shopt -s extglob 
+
+?(pattern): Match up to one occurrence of the pattern
+*(pattern): Match any number of occurrences of the pattern
++(pattern): Match at least one occurrence of the pattern
+@(pattern): Match exactly one occurrence of the pattern
+!(pattern): Match everything except the pattern
+
+
+
+- using array 
+
+$ fruits=('apple' 'banana' 'cherry')
+$ printf '%s\n' "${fruits[0]}"
+$ printf '%s\n' "${fruits[-1]}"
+
+all of the array elements using @ 
+$ printf '%s\n' "${fruits[@]}"
+
+apply parameter expansion operations to every element
+$ printf '%s\n' "${fruits[@]}"
+
+- glob expansion arrays 
+
+
+$ myhomefiles=("$HOME"/*)
+$ printf '%s\n' "${myhomefiles[@]}"
+
+- associate arrays, like map or dictionary 
+
+$ declare -A myassocarray
+$ myassocarray=([apple]="red" [banana]="yellow" [carrot]="orange")
+$ printf '%s\n' "${myassocarray[banana]}"
 
 
 
 # Loop and conditionals 
+- if 
 
+$ if grep -q bash /etc/shells ; then printf 'Bash is a system shell\n' ; fi
 
+or 
+
+```
+if grep -q bash /etc/shells ; then
+    printf 'Bash is a system shell\n'
+fi
+
+if ! cd /usr/local/myscript ; then
+    printf >&2 'Failed to changed directory\n'
+    exit 1
+fi
+```
+
+what is expected after the if keyword is not an expression, but a command to run
+
+- different between [ and [[ 
+
+    + test that can be used to test something, and return an exit status
+    
+    $ test "$myshell" = 'sh' && printf 'Match!\n'
+    
+    test -e 'myfile': Whether a file or myfile directory exists
+    test -n "$myvar": Whether a myvar variable is set and not empty
+    test -d 'mydir': Whether a directory with the name mydir exists
+    test -s 'myfile': Whether a file myfile file is not empty
+    
+    $ man test 
+    to get more helps 
+    
+    + test is the [ command 
+    
+    $ [ "$myshell" = 'bash' ] && printf 'Match!\n'
+    
+    ```
+    myshell=bash
+    if [ "$myshell" = 'bash' ] ; then
+        printf 'Match!\n'
+    fi
+    ```
+    
+    + doubling it to [[. It's actually a shell keyword, a special part of the Bash syntax
+    
+    [ and [[ are almost equal but with a few differenciations
+    variables are not in double quotes in [[ 
+    
+    except compare two equal 
+    [[ $myshell = "$yourshell" ]]
+    it is equal to 
+    [[ "$myshell" = "$yourshell" ]]
+    
+    [[ $myshell = b* ]]
+    Because the right side of this expression is unquoted, Bash will check whether the value of the myshell variable starts with b; the rest of it can be any other set of characters, or none at all.
+
+    The [[ keyword also supports a new operator, =~, to test whether strings match regular expressions:
+    [[ $myshell =~ 'sh$' ]]
+    
+    
+- when to use bash's (( arithmetic compound command 
+
+[ "$a" -eq "$b" ]: Equal
+[ "$a" -ne "$b" ]: Not equal
+[ "$a" -lt "$b" ]: Less than
+[ "$a" -le "$b" ]: Less than or equal to
+[ "$a" -gt "$b" ]: Greater than
+[ "$a" -ge "$b" ]: Greater than or equal to
+
+```
+if [ "$((bytes / 1000))" -gt "$kbytes" ] ; then
+    ...
+fi
+```
+
+testing arithmetic expressions with (( – without a leading $ sign – including all the terms in one expression
+```
+if ((bytes / 1000 > kbytes)) ; then
+    ...
+fi
+```
+
+((...)), can contain any arithmetic expression, Variables and Patterns, and it is treated like a command – its exit value reflects the outcome of the expression. An outcome of 0 is treated as false and exits with status 1, and any other outcome is treated as true
+
+```
+((2 > 0))  # True; exits 0
+((a = 1))  # True; exits 0, and variable a is assigned the value 1
+((0 > 3))  # False; exits 1
+((0))      # False; exits 1
+((a = 0))  # False; exits 1, and variable a is assigned value 0
+```
+
+- switch with the case keyword, 
+
+    + don't have to double-quote $command just after the case statement. 
+    + The pattern to match has a closing ), but does not require an opening one
+    + option is terminated with two semicolons.
+    
+    
+```
+case $command in
+    help) printf 'Command help:\n...' ;;
+    
+    //multiple options 
+    help|h|usage) printf 'Command help:\n...' ;; 
+    
+    //glob-matching characters: *, ?, and [...] to test for partial matches
+    debug|verb*)
+        printf 'Running in verbose mode.\n'
+        verbose=1
+        ;;
+        
+    *) printf 'Unknown command\n' ;;
+esac
+```
+
+- looping over shell words with 
+    + for iter in collection; 
+    + do is required and needs to be after the semicolon, to specify where the variable and list of words finishes
+    + The loop is closed with done, not rof
+    + for system in ; do ... ; done is do nothing 
+
+```
+#!/bin/bash
+for system in bsd linux macosx windows ; do
+    printf '%s\n' "${system^^}"
+done
+```
+
+-  positional parameters, expandable as "$@". We can test this out by assigning the parameters for the current shell
+
+```
+set -- bsd linux macosx windows
+for system ; do
+    printf '%s\n' "${system^^}"
+done
+```
+
+The for loop is hence the correct choice for iterating over an arbitrary number of arguments on which your script or function is running.
+
+```
+for system in "$@" ; do
+```
+
+expanding to every value in the array. Don't forget the all-important double quotes
+
+```
+#!/bin/bash
+systems=(bsd linux macosx windows)
+for system in "${systems[@]}" ; do
+    printf '%s\n' "${system^^}"
+done
+```
+
+- skipping an iteration 
+
+The continue keyword skips to the next run of the loop if the directory does not exist.
+```
+#!/bin/bash
+dirs=(/bin /home /mnt /opt /usr)
+for dir in "${dirs[@]}" ; do
+    [[ -d $dir ]] || continue
+    du -s -- "$dir"
+done
+```
+
+handle the case of an unexpanded glob with a continue condition:
+```
+#!/bin/bash
+for tmp in /tmp/myapp/* ; do
+    [[ -e $tmp ]] || continue
+    printf >&2 'Warning: file %s still exists\n' "$tmp"
+done
+```
+
+- ending the loop, The break keyword anywhere within the for loop stops the loop processing.
+
+```
+#!/bin/bash
+opts=()
+for arg ; do
+    case $arg in
+        --) break ;;
+        -*) opts+=($arg) ;;
+    esac
+done
+```
+
+- use when while read -r loops work better "out of the box." instead of for loop to interate through lines. 
+
+- using bash's c-style for loops 
+
+```
+#!/bin/bash
+for ((i = 1 ; i <= 10 ; i++)) ; do
+    printf '%u\n' "$i"
+done
+```
+
+- while loops 
+
+```
+#!/bin/bash
+((i = 1))
+while ((i < 10)) ; do
+    printf '%u\n' "$i"
+    ((i++))
+done
+```
+
+A while loop also behaves much like a for loop in terms of flow control
+
+- infinit loop 
+
+```
+while true ; do
+    printf 'Infinite loop!\n'
+    sleep 1
+done
+```
+
+the colon builtin, :, used instead of true are equal 
+
+```
+while : ; do
+    mygameserver --foreground
+    sleep 1
+done
+```
+
+a quick wrapper script, to run a program again even if it crashes or exits; this is often used to keep a game server daemon process running
+
+- reading data line by line
+
+    + Consider a file named fcs
+
+    ```
+    #!/bin/bash
+    while read -r name ; do
+        printf '%s\n' "$name"
+        printf 'https://en.wikipedia.org/wiki/%s\n' "${name// /_}"
+    done < fcs
+    ```
+    "${name// /_}" is string replacement, // will replace all the found pattern 
+
+    while loop's test command is read -r name. read is a builtin command that accepts a line from standard input
+
+    + field splitting by while build in support, specify multiple variable names 
+    
+    ```
+    while read -r firstname lastname ; do
+        printf '%s\n' "$lastname"
+    done < fcs
+    ```
+
+    + saving fields into arrays 
+
+    Using the -a option to the read builtin, we can save the separated fields of a read line of input as an array variable
+
+    ```
+    #!/bin/bash
+    while read -r -a animals ; do
+        for animal in "${animals[@]}" ; do
+            printf '%s\n' "$animal"
+        done
+    done < animals-by-letter
+    ```
+
+    + choosing the splitting character
+    
+    a special variable named IFS – the Internal Field Separator – to decide where to split the line it reads
+    
+    ```
+    while IFS=: read -r user pass uid; do
+        printf '%s\n' "$uid"
+    done < /etc/passwd   
+    ```
+
+    the setting for IFS to the colon character, :, occurs just before the read command
+
+    + disable whitespace trimming 
+
+    by default read trim the input line 
+    
+    Disalbe trim by set IFS to a blank value for the read command:
+
+    $ while IFS= read -r line ; do 
+    
+    + a while loop can also accept the output of another command as input, using a pipe
+    
+    ```
+    who -T | while read -r username state terminal _ ; do
+        printf '%s\n' "$terminal"
+    done
+    ```
+    
+    + sub shells problem, a command forked process—changes to variables do not persist after the pipeline is completed.
+    
+        * use a temp file 
+        
+        ```
+        who > who.out
+        while read -r ; do
+            ((count++))
+        done < who.out
+        printf '%u\n' "$count"
+        ```
+    
+        * use a compound command to include all of the code that needs to use the count variable as part of the same subshell
+    
+        ```
+        who | {
+            while read -r ; do
+                ((count++))
+            done
+            printf '%u\n' "$count"
+        }
+        ```
+    
+        * process substitution:
+
+        ```
+        while read -r ; do
+            ((count++))
+        done < <(who)
+        printf '%u\n' "$count"
+        ```
+        
+        Note the < <(who) syntax at the very end of the loop. The first left angle bracket, <, is a standard input redirection
+   
+        * lastpipe option set with shopt, which makes the last command in a pipeline run in the current shell
+        
+        ```
+        shopt -s lastpipe
+        ((count = 0))
+        who | while read -r ; do
+            ((count++))
+        done
+        printf '%u\n' "$count"
+        ```
+        
+    + avoiding input problems, some of the program may consume the input stream within the loop such as ssh. 
+    
+    The -n switch to ssh suppresses this behavior, instructing it not to read any standard input:
+    ```
+    while read -r hostname ; do
+        ssh -n -- "$hostname" uptime
+    done < hostnames
+    ```
+    
+    try directing /dev/null into it 
+    ```
+    while read -r item ; do
+        program </dev/null "$item"
+    done < items
+    ```
+    
 
 # Scripts, Functions and Aliases 
+- Aliases: Can expand a word into a command line string
+    
+    $ alias ls='ls --color=auto'
+    $ alias ll='ls -l'
+    
+    turning on the -x option for the shell, which will print the expanded command before executing it, after a + prefix:
 
+    ```
+    $ set -x
+    $ ll .bashrc
+    + ls -l .bashrc
+    ```
+    
+    + Functions: A way to write a command from a set of other commands
+    
+    + Scripts: Take the form of programs in files on your system
+    
+    + Shortcoming with aliases 
+    
+    The commandline argument was only passed to the last command
+    
+    using quotes in the command definitions can get very confusing
+    
+    aliases is that invoking them in Bash scripts doesn't work; they are strictly for use in interactive mode. But other shells may allow use aliases in script this is confusing. 
+    
+- functions
+    + define function 
 
+    $ home() { printf '%s\n' "$HOME" ; }
+
+    + arguments 
+    
+    one possible implementation, put $1 in double quotes to stop any special characters in its value being interpreted by Bash
+
+    $ mkcd() { mkdir -p -- "$1" && cd -- "$1" ; }
+    
+    "$1", we can get the second positional parameter with "$2", the third with "$3", and so on. This can go beyond "$9" if you want, with curly brackets: "${10}", "${11}", and so on
+
+    + using -- to separate options from filenames 
+    
+    calls to "$1" with a double dash, --, the option terminator string. This syntax specifies a point beyond which further arguments are meant as argument strings for the program, often filenames, and not as options
+    
+    Most commands that accept options use this syntax to separate options from filenames or other words, including bash
+    
+    + getting all the arguments with expand parameter 
+    
+    Bash has a syntax for this, with the special "$@" expansion parameter:
+
+    $ mkls() { mkdir -- "$@" && ls -dl -- "$@" ; }
+    
+    changing the shell's own positional parameters with calls to set and printf:
+    $ set -- arg1 'argument 2' '-third argument'
+    $ printf '%s\n' "$@"
+    
+    + returning values from functions 
+    
+    functions, succeed and fail; rather like true and false, they always return 0 and 1, respectively:
+
+    bash$ succeed() { return 0 ; }
+    bash$ fail() { return 1 ; }
+    
+    we can test these using the special $? parameter:
+
+    ```
+    $ succeed;echo $?
+    0
+    $ fail;echo $?
+    1
+    ```
+    
+    use return without specifying a number afterward, the function's return value will be the exit value of the last command it ran. This means we could write succeed() and fail() like this instead
+    
+    ```
+    succeed() { true; }
+    fail() { false; }
+    
+    early return be a good way to stop processing a function due to errors 
+    ```
+    mkcd() {
+        if (($# != 1)) ; then
+            printf >&2 'Need exactly one argument\n'
+            return 1
+        fi
+        mkdir -- "$1" && cd -- "$1"
+    }
+    ```
+    
+    + function input and output, command substitution to include the function's output in a message of its own. 
+
+    $ home() { printf '%s\n' "$HOME" ; }
+    $ printf '%s\n' "Your home directory is: $(home)"
+    $ home | wc -c
+    
+    wc still counted the newline character
+    
+        * read data from standard input as well.
+        
+        $ grep_un() { grep -F -- "$USER" ; }
+        $ getent passwd | grep_un
+        
+    + function scope, Functions defined during a bash session are only available in that session. 
+    
+    This means that variable assignments aren't local to functions; they're visible outside it, after the function has run
+    
+    ```
+    $ func1() { foo=bar ; printf '%s\n' "$foo" ; }
+    $ func1
+    foo
+    $ declare -p foo
+    declare -- foo="bar"
+    ```
+    
+    declare the variable as being local to the function before you set it:
+    ```
+    $ func2() { local baz ; baz=quux ; printf '%s\n' "$baz" ; }
+    ```
+    
+    + run a function without affect current shell. run it with a subshell body instead, by using parentheses instead of curly brackets. Consider these two functions, etc1 and etc2
+    
+    ```
+    // influence the shell 
+    $ etc1() { cd /etc ; }
+    
+    // will not influence the shell. The semicolon is not required too.  
+    $ etc2() ( cd /etc )
+    ```
+    
+    + reloading function at shell startup 
+    
+    a good place to put such function declarations is in your ~/.bashrc file. 
+    
+    we can put aliases, function defintion here. 
+    
+    declare them with the -f option and redirect to the .bashrc file 
+    $ declare -f function_name >> ~/.bashrc 
+    
+        * reload .bashrc without logout 
+    
+        $ source .bashrc 
+    
+- scripts 
+
+    + Sourcing the script means to use the Bash source command to read all of the commands in a script into the current shell session and run them there
+    
+    $ source hello.bash 
+    
+    + you will want the script to do its work, and then exit and leave you back at your shell session without changing any. 
+
+    This starts a new Bash subprocess, which runs the commands in the file, and then exits. in three ways 
+    ```
+    $ bash hello.bash
+    Hello, bashuser!
+    
+    $ cat hello.bash | bash
+    Hello, bashuser!
+    
+    $ bash < hello.bash
+    Hello, bashuser!
+    ```
+    
+    + directly run the script with shebang script. shebang as the very first line of the script:
+
+    after add shebang the file extension is not required 
+    ```
+    #!/bin/bash
+    printf 'Hello, %s!\n' "$USER"
+    ```
+    
+    checking the value of the BASH variable:
+    
+    ```
+    $ declare -p BASH
+    declare -p BASH="/usr/local/bin/bash"
+    ```
+    
+    use the chmod system program to make the script executable
+    ```
+    $ chmod +x hello.bash
+    ```
+    
+    The file tool can help you identify scripts and binaries; for example, the ldd program on Debian GNU/Linux turns out to be a Bash script:
+
+    bash$ file /usr/bin/ldd
+    Bourne-Again shell script, ASCII text executable
+    
+    + finding scripts with $PATH 
+    
+    need to use the special PATH variable to specify where it can find commands such as hello, without needing to specify a full filesystem path
+    
+    ```
+    $ declare -p PATH
+    declare -x PATH="/usr/local/bin:/usr/bin:/bin"
+    ```
+    the -x means it is an environment variable, It's a colon-separated list of directories. the first matching command found is run, and the rest are ignored. We will call these bindirs, short for logical binary directories.
+    
+    + system bin directory 
+    
+    write to /usr/local/bin, you might put it there, using su or sudo to get root permissions first
+    
+    + user bindir, create a new user bindir in our home directory, called ~/bin 
+    
+    adding the directory to the end of PATH with a variable assignment:
+
+    $ PATH=$PATH:/home/bashuser/bin 
+    
+    add this to .bash_profile file, or .profile if .bash_profile 
+    
+    check file in home bin 
+    ```
+    $ type -a hello
+    hello is /home/bashuser/bin/hello
+    $ type -t hello
+    file
+    $ type -p hello
+    /home/bashuser/bin/hello
+    ```
+    
+    + arguments to scripts 
+    
+    You can get the arguments as positional parameters with "$1", "$2", "$3", and so on
+    You can dynamically get all of the positional parameters without having to count them with "$@"
+    You can count the number of positional parameters if you need to with "$#"
+    
+- understand sh vs bash 
+
+difference is that /bin/sh may not even be the same program as /bin/bash, and may therefore lack many of the programming features
+
+Some GNU/Linux systems use bash as their /bin/sh implementation (Arch Linux, CentOS), but others do not (Debian GNU/Linux, Ubuntu).
+
+When Bash is called as sh, it changes its behavior slightly to be consistent with the way the /bin/sh program
+
+If you're writing a Bash script, use a bash shebang. This makes clear to both the system and to anyone reading your script what shell it should run in
+
+- using env 
+
+GNU linux almost always available in /bin/bash. On other systems, such as FreeBSD, it might instead be in /usr/local/bin/bash.
+
+a shebang with bash as the argument will find the first bash program in PATH:
+
+```
+#!/usr/bin/env bash
+```
+    
+you should specify a fixed path, such as #!/bin/bash, for the correct interpreter either in the packaging process or at build time. 
+
+For casual sharing of programs, using /usr/bin/env might be good enough
+
+- choosing between functions and scripts 
+
+want your command only to be limited to an interactive shell, for example to override interactive behavior, add options to a command, or other shortcuts, use a function.
+ 
+affect a running shell process, such as to change your current shell directory, or to read or set shell variables, use a function.
+
+use a script as a filesystem program in a bindir specified in $PATH. This script will then be callable by the system in any other situation you need, not just in Bash.
+
+- using functions in script 
+
+die function that catches error conditions, prints any given messages, and then exits the script
+
+declare the functions before you call them. It's best to put the functions near the top of the script.
+
+```
+die() {
+    printf >&2 '%s\n' "$@"
+    exit 1
+}
+tempfile=$(mktemp) || die 'Could not create temporary file'
+(( $# > 0 )) || die 'Need at least one argument'
+[[ $1 != *:* ]] || die 'Colon not allowed in directory name'
+```
+ 
+ 
 
 # Best practices 
+- quoting correctly 
 
+wrap expansions, such as $myvar, ${myvar[1]}, and ${myvar##*/}, in double quote
+
+    + In a few contexts in Bash, an expansion does not strictly require double quotes
+
+newvar=$myvar
+case $myvar in ...
+[[ $myvar = "$othervar" ]]
+
+quote expression as much as possible.   
+
+- when you don't want quotes 
+
+an ideal application of the positional parameters in the POSIX shell, or (preferably) array variables in Bash  
+
+```
+# POSIX (if necessary)
+(
+    set -- --location --cookie-jar ~/cookies --cookie ~/cookies
+    curl "$@" --head -- http://www.example.org/
+    curl "$@" -- http://www.example.net/
+)
+# Bash (better)
+curlopts=(--location --cookie-jar ~/cookies --cookie ~/cookies)
+curl "${curlopts[@]}" --head -- http://www.example.org/
+curl "${curlopts[@]}" -- http://www.example.net/
+```
+
+if quote the position arguments will not work properly 
+
+    + build and store whole command string 
+    
+```
+an example of building all the options and arguments for a grep command line:
+
+#!/bin/bash
+
+# Example starting values
+extended=0
+fixed=1
+patterns=(foo bar)
+extra_files=()
+# Start with the grep command line
+grepcmdline=(grep)
+# If the extended or fixed flags are set, add -F or -E
+if ((extended)) ; then
+    grepcmdline+=(-E)
+elif ((fixed)) ; then
+    grepcmdline+=(-F)
+fi
+# Add each pattern to check
+for pattern in "${patterns[@]}" ; do
+    grepcmdline+=(-e "$pattern")
+done
+# Add option terminator
+grepcmdline+=(--)
+# Add files to check
+grepcmdline+=(* "${extra_files[@]}")
+# Run command!
+"${grepcmdline[@]}"
+```
+
+- handling filenames starting with dashes 
+
+$ cp "$myvar" destdir 
+
+a file named -alphabet-, this would result in a confusin
+
+use the -- terminator string option, any word after -- is NOT an option 
+
+    + some of the command may not support --, use ./ or fully qualified name 
+    
+$ myscript /home/bashuser/-alphabet
+$ myscript ./-alphabet
+
+- separating output and diagnostics 
+    
+always write error output to standard error file descriptor, not to output. using the >&2 redirection 
+
+- keeping script brief and simple 
+- flexible 
+- respecting and applying the user's configuration
+
+sensible defaults if these values are not set, using the :- form of parameter expansion
+
+- allowing script to run without user inmput 
+
+using configuration file to help user reduce the input times    '
+
+- limit the scope of shell state changes 
+
+The working directory
+The positional parameters ($1, $2 ... )
+Environment variables, especially PATH
+Shell-local variables, especially IFS
+Shell options with set (such as -x) or shopt (such as dotglob)
+Shell resource limits set with ulimit
+
+Keeping the script itself so short that the change doesn't matter
+Changing the state back to its original value again
+CHange in subshell 
+Avoid the change as much as possible 
+
+- avoiding path anit-patterns 
+
+don't save and call absolute path for system command 
+
+- avoiding bash for untrusted user input, Shell script is not a language that was designed with the security of untrusted input in mind. Use python etc.  
+
+- document strings, three documentation methods: writing comments, providing help output, and writing manual pages.
+
+a format such as mandoc: https://mandoc.bsd.lv/
+
+- using temporary files clearly, randomized name, and in a location and pattern that's consistent with the system's settings:
+
+$ mktemp -d
+
+- cleaning up after a script 
+
+```
+#!/bin/bash
+
+# Code setting and using tempdir goes here, and then ...
+
+# Remove the directory
+if [[ -n $tempdir ]] ; then
+    rm -- "$tempdir"/myscript-timestamp
+    rmdir -- "$tempdir"
+fi
+```
+
+- a tool to check shell scripts for problems 
+
+online service and a command-line tool at https://www.shellcheck.net/.
+
+
+
+
+# Additional reference 
+- how to write test 
+https://www.gasparevitta.com/posts/how-to-test-bash-scripts-bach/
+ 
