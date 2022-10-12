@@ -61,5 +61,878 @@ $ grep -l 'PATH' ~/.[!.]*
 
 .[!.]* is a filename expansion pattern where [] denotes a list of characters to match, but the leading ! negates the list
 
-- using shell quoting 
+- using shell quoting
 
+    + Unquoted text and even text enclosed in double quotes is subject to shell expansion and substitution.
+
+```
+//$5 is treated as a variable to expand
+$ echo A coffee is $5?!
+A coffee is ?!
+
+//! is treated as a history substitution
+$ echo "A coffee is $5?!"
+-bash: !": event not found
+
+$ echo 'A coffee is $5?!'
+A coffee is $5?!
+```    
+    
+    + escape character \ or change your quoting.
+ 
+``` 
+$ echo 'A coffee is $5 for' "$USER" '?!'
+A coffee is $5 for jp ?!
+
+$ echo "A coffee is \$5 for $USER?\!"
+A coffee is $5 for jp?\!
+
+$ echo "A coffee is \$5 for $USER?! "
+A coffee is $5 for jp?!
+```
+
+- use type and which commands to see if a given command exists and whether it is built in or external
+
+```
+$ type cd
+cd is a shell builtin
+
+$ type awk
+awk is /usr/bin/awk
+
+$ which cd
+/usr/bin/which: no cd in (/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/ \
+local/sbin:/usr/bin/X11:/usr/X11R6/bin:/root/bin)
+
+$ which awk
+/usr/bin/awk
+```
+
+- builtin commands, use enable -a will list all builtins and their enabled or disabled status.
+
+$ enable -a 
+
+    + redefine builtin commands 
+        
+    we can define a shell function (see Recipe 10.4) to change how the cd command works:
+
+    cd () {
+        builtin cd "$@"
+        echo "$OLDPWD --> $PWD"
+    }
+    
+    + use an external command by disable the builtin or command to call an external command instead of an customized bash function 
+    
+    $ eanble -n test 
+    $ test 
+    
+    //will call the native ls  instead of the function 
+    $ command ls 
+    
+- determine if you are running interactively 
+
+$- is a string listing of all the current shell option flags. 
+
+```
+#!/usr/bin/env bash
+# cookbook filename: interactive
+
+case "$-" in
+    *i*) # Code for interactive shell here
+     ;;
+    *)   # Code for noninteractive shell here
+     ;;
+esac
+
+if [ -n "$PS1" ]; then
+    echo This shell is interactive
+else
+    echo This shell is not interactive
+fi
+```
+
+- set bash as your default shell 
+
+check bash is installed 
+$ bash --version 
+
+chsh -l provides a list of valid shells on Linux, but opens an editor and allows you to change settings on BSD. -l is not a valid option to chsh on macOS
+
+$ chsh -s shell-path  
+
+$ chsh -s /bin/bash
+
+- install bash 
+
+$ apt-get update && apt-get install bash bash-completion bash-doc
+
+$ yum update bash
+
+- get bash for xBSD 
+
+$ pkg_add -vr bash
+
+$ pkg_add -vu ftp://ftp.netbsd.org/pub/NetBSD/packages/pkgsrc-2005Q3/NetBSD-2.0/ i386/All/bash-3.0pl16nb3.tgz
+
+$ pkg_add -vr ftp://ftp.openbsd.org/pub/OpenBSD/3.8/packages/i386/bash-3.0.16p1.tgz
+
+- get bash without os 
+
+free shell accounts: http://shells.red-pill.eu
+
+
+
+# Standard output 
+- output to terminal 
+
+$ echo please wati 
+
+$ echo "this was    very    widely    spaced"
+this    was    very    widely    spaced
+
+- output with format control 
+
+$ printf '%s = %d\n' Lines $LINES
+
+http://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+
+- writing output without the newline 
+
+echo, use the -n option
+
+$ echo -n prompt
+prompt$
+
+    + these escape sequences, you must invoke echo with the -e option. One of echo’s escape sequences is \c, which doesn’t print a character, but rather inhibits printing the ending newline
+    
+$ echo -e 'hi\c'
+hi$
+
+- The cat command gets its name from the longer word concatenation. The cat command concatenates the output from the files listed on its command line
+
+$ cat first.half second.half > whole.file
+
+- saving output to other files 
+
+$ echo some more data > /tmp/echo.out
+
+$ myprogram 1> messages.out 2> message.err
+
+redirect output to same file 
+$ both > outfile 2>&1
+$ both >& outfile 
+
+&> and >& are shortcuts that simply send both STDOUT and STDERR
+
+redirection after redirecting STDERR, like this:
+
+ls >> /tmp/ls.out 2>&1
+
+- using just the beginning or end of a file 
+
+skip first line 
+$ tail -n +2 lines
+
+So, tail -n 10 file shows the last 10 lines of file. a plus sign (+) indicates an offset relative to the top of the file. 
+
+- ignore output 
+
+$ noisy > /dev/null 2>&1
+
+- save or grouping output into several commands 
+
+$ { pwd; ls; cd ../elsewhere; pwd; ls; } > /tmp/all.out
+
+(), to tell bash to run the commands in a subshell, then redirect the output of the entire subshell’s execution
+
+$ (pwd; ls; cd ../elsewhere; pwd; ls) > /tmp/all.out
+
+- pipe output as input 
+
+$ cat my* | tr 'a-z' 'A-Z' | sort | uniq | awk -f transform.awk | wc
+
+redirecting the input into sort
+
+$ sort < /tmp/cat.out
+
+$ find / -name '*.c' -print 2>&1 | tee /tmp/all.my.sources
+
+- using output as argument 
+
+$ rm $(find . -name '*.class')
+
+older shell use ``
+
+The $() encloses a command that is run in a subshell. The output from that command is substituted in place of the $() phrase. Newlines cause the output to become several parameters on the command line
+
+- multiple redirects on one line 
+
+redirection with file numbers to open all the files that you want to use. For example:
+
+$ divert 3> file.three 4> file.four 5> file.five 6> else.where 
+
+- swap stderr and stdout using a third file descriptor
+
+$ ./myscript 3>&1 1>stdout.logfile 2>&3- | tee -a stderr.logfile
+
+- keep files safe from accidental overwriting 
+
+$ set -o noclobber
+
+turn off 
+$ set +o noclobber
+
+noclobber option tells bash not to overwrite any existing files when you redirect output.
+
+- clobbering a file on purpose, Use >| to redirect your output. Even if noclobber is set, bash ignores its setting and overwrites the file. 
+
+$ echo some more >| my.file 
+
+
+
+# Standard input 
+- get input from a file 
+$ wc < my.file 
+
+- redirect input from commandline. with the << characters, redirecting the text from the command line rather than from a file
+
+a file named ext 
+```
+#
+# here is a "here" document
+#
+grep $1 <<EOF
+mike x.123
+joe  x.234
+sue  x.555
+pete x.818
+sara x.822
+bill x.919
+EOF
+```
+
+use it as a script 
+$ ext bill
+bill x.919
+
+our shell script ($1). is the first parameter. The << syntax says that we want to create such a temporary input source, and the EOF is just an arbitrary string (you can choose what you like) to act as the terminator of the temporary input.
+
+    + prevent weir output by escape the any or all of the characters in the ending marker. <<EOF can be replaced with <<\EOF, or <<'EOF', or even <<E\OF
+
+```
+grep $1 <<'EOF'
+...
+```
+
+    + intend here documents. Use <<-, and then you can use tab characters (only!) at the beginning of lines.
+
+$ cat myscript.sh
+...
+     grep $1 <<-'EOF'
+        lots of data
+        can go here
+        it's indented with tabs
+        to match the script's indenting
+        but the leading tabs are
+        discarded when read
+        EOF
+    ls
+...
+
+- get user input with read statement 
+
+$ read 
+will read user input and place it into shell variable REPLAY 
+
+$ read -t 3 -p "answer quickly: " ANSWER
+option -t specify the timeout 
+option -p specify the prompt 
+
+the input words will be spread to the supplied parameters. If less parameters then the last one will contain all the remain words. 
+
+- getting yes or no input 
+
+```
+# Let the user make a choice about something and execute code based on
+# the answer
+# Called like: choose <default (y or n)> <prompt> <yes action> <no action>
+# e.g. choose "y" \
+#       "Do you want to play a game?" \
+#       /usr/games/GlobalThermonuclearWar \
+#       'printf "%b" "See you later Professor Falkin.\n"' >&2
+# Returns: nothing
+function choose {
+
+    local default="$1"
+    local prompt="$2"
+    local choice_yes="$3"
+    local choice_no="$4"
+    local answer
+
+    read -p "$prompt" answer
+    [ -z "$answer" ] && answer="$default"
+
+    case "$answer" in
+        [yY1] ) eval "$choice_yes"
+            # error check
+            ;;
+        [nN0] ) eval "$choice_no"
+            # error check
+            ;;
+        *     ) printf "%b" "Unexpected answer '$answer'!" >&2 ;;
+    esac
+} # end of function choose
+```
+
+```
+# Let the user make a choice about something and return a standardized
+# answer. How the default is handled and what happens next is up to
+# the if/then after the choice in main.
+# Called like: choice <prompt>
+# e.g. choice "Do you want to play a game?"
+# Returns: global variable CHOICE
+function choice {
+
+    CHOICE=''
+    local prompt="$*"
+    local answer
+
+    read -p "$prompt" answer
+    case "$answer" in
+        [yY1] ) CHOICE='y';;
+        [nN0] ) CHOICE='n';;
+        *     ) CHOICE="$answer";;
+    esac
+} # end of function choice
+```
+
+- select from a list of options 
+
+```
+directorylist="Finished $(for i in /*;do [ -d "$i" ] && echo $i; done)"
+
+PS3='Directory to process? ' # Set a useful select prompt
+until [ "$directory" == "Finished" ]; do
+
+    printf "%b" "\a\n\nSelect a directory to process:\n" >&2
+    select directory in $directorylist; do
+
+        # User types a number which is stored in $REPLY, but select
+        # returns the value of the entry
+        if [ "$directory" == "Finished" ]; then
+            echo "Finished processing directories."
+            break
+        elif [ -n "$directory" ]; then
+            echo "You chose number $REPLY, processing $directory..."
+            # Do something here
+            break
+        else
+            echo "Invalid selection!"
+        fi # end of handle user's selection
+
+    done # end of select a directory
+done # end of until dir == finished
+```
+
+- prompt for a password, Use the read command to read the user’s input, but with a special option to turn off echoing:
+
+
+$ read -s -p "password: " PASSWD
+$ printf "%b" "\n"
+
+option -s tells the read command not to echo the characters typed
+
+- executing commands 
+
+set execute permissions on the file before you invoke your script:
+
+$ chmod +x myscript
+
+- run several commands in sequence 
+
+regardless executin result and separate them with semicolons:
+$ long ; medium ; short
+
+programs correctly set exit codes, separate them with double ampersands:
+$ long && medium && short
+
+run all commands parallel 
+$ long & medium & short 
+
+- tell a commands successed or not, The shell variable $? is set with a nonzero value if the command fails. 
+
+$ echo $? 
+
+do not exit script with negative number. 
+
+
+use (()) to evalute arithmetic expression 
+$ if (( $? )) ; then echo failed ; else echo OK; fi
+
+- running a command only if another commands successed 
+
+$ if cd mytmp; then rm * ; fi
+
+- use fewer if statement 
+
+$ cd mytmp && rm *
+
+- run a job in the background and expect to exit the shell before the job completes, then you need to nohup the job:
+
+$ nohup long-job &
+
+nohup command simply sets up the child process to ignore hangup signals.
+
+- display error messages when failures occur 
+
+$ cmd || printf "%b" "cmd failed. You're on your own\n"
+
+$ cmd || { printf "%b" "FAILED.\n" ; exit 1 ; }
+
+the closing brace must be separated by whitespace from the surrounding text
+
+- running commands from a variable, bash uses the value of that variable ($PROG) as the command to run. 
+
+```
+FN=/tmp/x.x
+PROG=echo
+$PROG $FN
+PROG=cat
+$PROG $FN
+```
+
+    + warning, Some programs, such as InfoZip, use environment variables such as $ZIP and $UNZIP to pass settings to the program itself, so if you do something like ZIP=/usr/bin/zip you can spend days pulling your hair out wondering why it works fine from the command line, but not in your script.
+    
+- running all scripts in a directory.  will run everything it finds in a particular directory:
+
+```
+for SCRIPT in /path/to/scripts/dir/*
+do
+    if [ -f "$SCRIPT" -a -x "$SCRIPT" ]
+    then
+        $SCRIPT
+    fi
+done
+```
+
+If it is a file (the -f test) and has execute permissions set (the -x test), the shell will then try to run that script.
+
+
+
+# Basic scripting shell varibles 
+- embedding documentation in shell scripts 
+
+```
+#!/usr/bin/env bash
+# cookbook filename: embedded_documentation
+
+echo 'Shell script code goes here'
+
+# Use a : NOOP and here document to embed documentation,
+: <<'END_OF_DOCS'
+
+Embedded documentation such as Perl's Plain Old Documentation (POD),
+or even plain text here.
+
+Any accurate documentation is better than none at all.
+
+Sample documentation in Perl's Plain Old Documentation (POD) format adapted from
+CODE/ch07/Ch07.001_Best_Ex7.1 and 7.2 in the Perl Best Practices example tarball
+"PBP_code.tar.gz".
+
+=head1 NAME
+
+MY~PROGRAM--One-line description here
+
+=head1 SYNOPSIS
+
+  MY~PROGRAM [OPTIONS] <file>
+
+=head1 OPTIONS
+
+  -h = This usage.
+  -v = Be verbose.
+  -V = Show version, copyright, and license information.
+
+
+=head1 DESCRIPTION
+
+A full description of the application and its features.
+May include numerous subsections (i.e., =head2, =head3, etc.)
+
+[...]
+
+
+=head1 LICENSE AND COPYRIGHT
+
+=cut
+
+END_OF_DOCS
+```
+
+- full variable reference syntax, dollar sing and braces 
+
+somescript /tmp/rep${FN}port.txt
+
+- see all variable values 
+
+$ set| grep * 
+$ declare -p 
+$ export 
+
+- using parameter in shell script 
+
+$ echo $1
+$ echo ${1}
+
+ other parameters are available as ${2}, ${3}, ${4}, ${5}, and so on. 
+ 
+- loop over parameters pass to the shell 
+
+```
+#!/usr/bin/env bash
+# cookbook filename: chmod_all.1
+#
+# change permissions on a bunch of files
+#
+for FN in $*
+do
+    echo changing $FN
+    chmod 0750 $FN
+done
+```
+
+- handling parameters with space 
+
+When we quoted the reference "${1}" it was treated as a single word 
+
+- count arguments 
+
+```
+if (( $# < 3 ))
+```
+
+- consuming arguments, use shift to remove an argument before use them in for loops 
+
+```
+#!/usr/bin/env bash
+# cookbook filename: use_up_option
+#
+# use and consume an option
+#
+# parse the optional argument
+VERBOSE=0
+if [[ $1 = -v ]]
+then
+    VERBOSE=1
+    shift
+fi
+#
+# the real work is here
+#
+for FN in "$@"
+do
+    if (( VERBOSE == 1 ))
+    then
+        echo changing $FN
+    fi
+    chmod 0750 "$FN"
+done
+```
+
+- geting default value, ${:-} syntax when referring to the parameter, and use it to supply a default value:
+
+filter=${1:-/tmp}
+
+the default value is set to /tmp 
+
+- setting default value and reference the variable 
+
+cd ${HOME:=/tmp}
+
+- write only ${HOME=/tmp} without the colon, the assignment will take place only in the case where the variable is not set 
+
+```
+$ echo ${HOME=/tmp}  # no substitution needed
+/home/uid002
+$ HOME=""       # generally not wise
+$ echo ${HOME=/tmp}  # will NOT substitute
+
+$ unset HOME    # generally not wise
+$ echo ${HOME=/tmp}     # will substitute
+/tmp
+$ echo $HOME
+/tmp
+$
+```
+
+- using more than just a constant string for default 
+
+$ cd ${BASE:="$(pwd)"}
+
+Parameter expansion means that we could use other shell variables in this expression, as in ${BASE:=${HOME}}.
+
+- giving an error message for unset parameters
+
+```
+FILEDIR=${1:?"Error. You must supply a scratch directory."}
+```
+
+bash will exit if the variable is not set 
+
+- changing pieces of a string, Use a bash parameter expansion feature that will remove text that matches a pattern
+
+```
+for FN in *.bad
+do
+    mv "${FN}" "${FN%bad}bash"
+done
+```
+
+he slash (/). Similar to editor commands (e.g., those found in vi and sed) that use the slash to delimit substitutions, we could have written:
+
+# Not anchored, don't do this
+mv "${FN}" "${FN/bad/bash}"
+
+    + operators 
+    
+Inside ${ … }	Action taken
+name:number:number              Return a substring of name starting at number with length number
+
+#name                           Return length of string
+
+name#pattern                    Remove (shortest) front-anchored pattern
+
+name##pattern                   Remove (longest) front-anchored pattern
+
+name%pattern                    Remove (shortest) rear-anchored pattern
+
+name%%pattern                   Remove (longest) rear-anchored pattern
+
+name/pattern/string             Replace first occurrence
+
+name//pattern/string            Replace all occurrences
+
+    + getting the absolute value of a number 
+
+MYVAR=${MYVAR#-}        # ABS(MYVAR)
+
+    + get basename          '
+
+the old way of doing this was ``
+
+FILE=$(basename $FULLPATHTOFILE)
+
+FILE=${FULLPATHTOFILE##*/}
+
+    + get dir name,  remove from the righthand side (because of the %) the shortest string (because there is only one %, not two) that matches the pattern
+
+DIR=${MYPATHTOFILE%/*}
+
+- using alternate values for comma separated values 
+
+LIST="${LIST}${LIST:+,}${NEWVAL}"
+
+${var:+str} syntax is replaced with a str when var is not null
+
+- array values 
+
+myary=(first second third)
+
+$ echo on ${myary[0]} and ${myary[2]}
+
+- swap string cases 
+
+${FN,,} will return that string in all lowercase. Similarly, ${FN^^} will return the string in all uppercase. There is even the ${FN~~} operator to swap case
+
+- convert to camel case, use a combination of an array and case conversion 
+
+```
+while read TXT
+do
+    RA=($TXT)        # must be ($  not $(
+    echo ${RA[@]^}
+done
+```
+
+The [@] notation references all the elements of the array at once (individually), and the ^ operator converts the first character 
+
+
+
+
+# Shell logic and arithmetic 
+- doing arithmetic in your shell script 
+
+```
+COUNT=$((COUNT + 5 + MAX * 2))
+let COUNT+='5+MAX*2'
+COUNT=$((COUNT + $2 + OFFSET))
+```
+
+\ |= Bitwise “or” a|=b
+
+- branching on conditions 
+
+```
+if (( $# < 3 ))
+then
+    printf "%b" "Error. Not enough arguments.\n"
+    printf "%b" "usage: myscript file1 op file2\n"
+    exit 1
+elif (( $# > 3 ))
+then
+    printf "%b" "Error. Too many arguments.\n"
+    printf "%b" "usage: myscript file1 op file2\n"
+    exit 2
+else
+    printf "%b" "Argument count correct. Proceeding...\n"
+fi
+
+[ $result = 1 ] \
+  && { echo "Result is 1; excellent." ; exit 0;   } \
+  || { echo "Uh-oh, ummm, RUN AWAY! " ; exit 120; }
+```
+
+The [ and ] are used to delineate optional parts of the statement 
+
+- test file characteristics 
+
+```
+#!/usr/bin/env bash
+# cookbook filename: checkfile
+#
+DIRPLACE=/tmp
+INFILE=/home/yucca/amazing.data
+OUTFILE=/home/yucca/more.results
+
+if [ -d "$DIRPLACE" ]
+then
+    cd $DIRPLACE
+    if [ -e "$INFILE" ]
+    then
+        if [ -w "$OUTFILE" ]
+        then
+            doscience < "$INFILE" >> "$OUTFILE"
+        else
+            echo "cannot write to $OUTFILE"
+        fi
+    else
+        echo "cannot read from $INFILE"
+    fi
+else
+    echo "cannot cd into $DIRPLACE"
+fi
+```
+
+FILE1 -nt FILE2
+Is newer than (it checks the modification date). 
+
+FILE1 -ot FILE2
+Is older than; also, a file
+
+FILE1 -ef FILE2
+Have the same device and inode numbers 
+
+    + options 
+```
+Option	Description
+-b   File is a block special device (for files like /dev/hda1)
+
+-c   File is character special (for files like /dev/tty)
+
+-d   File is a directory
+
+-e   File exists
+
+-f   File is a regular file
+
+-g   File has its set-group-ID (setgid) bit set
+
+-h   File is a symbolic link (same as -L)
+
+-G   File is owned by the effective group ID
+
+-k   File has its sticky bit set
+
+-L   File is a symbolic link (same as -h)
+
+-N   File has been modified since it was last read
+
+-O   File is owned by the effective user ID
+
+-p   File is a named pipe
+
+-r   File is readable
+
+-s   File has a size greater than zero
+
+-S   File is a socket
+
+-u   File has its set-user-ID (setuid) bit set
+
+-w   File is writable
+
+-x   File is executable
+```
+
+    + test more than one characteristics, These conjunctions (-a for AND and -o for OR) can be used for all  
+
+```
+if [ -r $FILE -a -w $FILE ]
+
+if [ -r "$FN" -a \( -f "$FN" -o -p "$FN" \) ]
+```
+
+- test for string 
+
+```
+#!/usr/bin/env bash
+
+VAR="$1"
+#
+# if [ "$VAR" ] will usually work but is bad form, using -n is more clear
+if [ -n "$VAR" ]
+then
+    echo has text
+else
+    echo zero length
+fi
+#
+if [ -z "$VAR" ]
+then
+    echo zero length
+else
+    echo has text
+fi
+```
+
+- test equal, -eq operator for numeric comparisons and the equality primary = (or ==) for string comparisons.
+
+```
+printf "%s" "do they -eq as equal? "
+if [ "$VAR1" -eq "$VAR2" ]
+then
+    echo YES
+else
+    echo NO
+fi
+
+printf "%s" "do they = as equal? "
+if [ "$VAR1" = "$VAR2" ]
+then
+    echo YES
+else
+    echo NO
+fi
+```
+
+    + comparison operators 
+```    
+numeric     string      meaning 
+-lt         <           less than 
+-le         <=          less than or equal to 
+-gt         >           greater than 
+-ge         >=          greater than or equal to 
+-eq         =, ==       equal to 
+-ne         !=          not equal to     
+```
