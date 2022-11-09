@@ -388,19 +388,1131 @@ def adder = { x, y -> return x+y }
 assert adder(4, 3) == 7
 assert adder.call(2, 6) == 8
 
+- iterators 
+
+// Groovy object iteration
+list.each { item -> /* do something with item */ }
+
+- Handling resources with a protocol How many times have you seen code that opens a stream but calls close at the end of the method
+
+new File('myfile.txt').eachLine { println it }
+
+- simple abbreviated closure 
+
+log = ''
+(1..10).each{ log += it }
+assert log == '12345678910'
+
+- assignment declaration 
+
+def printer = { line -> println line }
 
 
-# Around the Groovy library 
+
+# Object orientation groovy style 
+- variable declaration 
+
+final String PI = '3.14'
+assert PI.class.name == 'java.lang.String'
+assert PI.size() == 4
+GroovyAssert.shouldFail(ClassCastException){
+    Float areaOfCircleRadiusOne = PI
+}
+
+class Counter {
+    public count = 0
+}
+
+def counter = new Counter()
+
+counter.count = 1
+assert counter.count == 1
+
+def fieldName = 'count'
+counter[fieldName] = 2
+assert counter['count'] == 2
+
+- extending the general field access 
+
+class PretendFieldCounter {
+    public count = 0
+
+    Object get (String name) {
+        return 'pretend value'
+    }
+    void set (String name, Object value) {
+        count++
+    }
+}
+
+def pretender = new PretendFieldCounter()
+
+assert pretender.isNoField == 'pretend value'
+assert pretender.count     == 0
+
+pretender.isNoFieldEither  = 'just to increase counter'
+
+assert pretender.count     == 1
+
+- calling contructors with named parameters 
+
+class SimpleVendor {
+    String name, product
+}
+
+new SimpleVendor()
+new SimpleVendor(name: 'Canoo')
+new SimpleVendor(product: 'ULC')
+new SimpleVendor(name: 'Canoo', product: 'ULC')
+
+def vendor = new SimpleVendor(name: 'Canoo')
+assert 'Canoo' == vendor.name
+
+- multiple class definition 
+
+class Vendor {
+    public String     name
+    public String     product
+    public Address    address = new Address()
+}
+
+class Address  {
+    public String     street, town, state
+    public int        zip
+}
+
+def canoo = new Vendor()
+canoo.name            = 'Canoo Engineering AG'
+canoo.product         = 'UltraLightClient (ULC)'
+canoo.address.street  = 'Kirschgartenst. 7'
+canoo.address.zip     =  4051
+canoo.address.town    = 'Basel'
+canoo.address.state   = 'Switzerland'
+
+assert canoo.dump()         =~ /ULC/
+assert canoo.address.dump() =~ /Basel/
+
+- Classpath
+The lookup has to start somewhere, and Java uses its classpath for this purpose.
+
+- Groovy code program contains the following initial statements:
+
+import java.lang.*
+import java.util.*
+import java.io.*
+import java.net.*
+import groovy.lang.*
+import groovy.util.*
+import java.math.BigInteger
+import java.math.BigDecimal
+
+- type aliasing 
+
+import thirdparty.MathLib as TwiceHalfMathLib
+import thirdparty2.MathLib as IncMathLib
+def math1 = new TwiceHalfMathLib()
+def math2 = new IncMathLib()
+assert 3 == math1.half(math2.increment(5))
+
+- JDK including the documentation, you’ll find the classpath explanation under %JAVA_HOME%/docs/technotes/tools/windows/classpath.html
+
+- implementing interfaces and sam types 
+
+import java.awt.event.ActionListener
+listeners = []
+def addListener(ActionListener al) { listeners << al }
+addListener { println "I heard that!" }
+listeners*.actionPerformed()
+
+- Multimethods to selectively override equals
+class Equalizer {
+    boolean equals(Equalizer e){
+        return true
+    }
+}
+
+Object same  = new Equalizer()
+Object other = new Object()
+
+assert   new Equalizer().equals( same  )
+assert ! new Equalizer().equals( other )
+
+- Traits with inheritance 
+
+- Groovy doesn’t distinguish between beans and other kinds of object. It solely relies on the accessibility of the respective getter and setter methods.
+
+-  GPaths. A GPath is a construction in Groovy code that powers object navigation. The name is chosen as an analogy to XPath
+
+
+
+# Dynamic programming with groovy 
+- Meta means applying a concept onto itself
+
+Bouncing when a missing method is called
+class Pretender {
+    def methodMissing(String name, Object args) {
+        "called $name with $args"
+    }
+}
+def bounce = new Pretender()
+assert bounce.hello('world') == 'called hello with [world]'
+
+- muyltiple sieve features nonintrustively 
+
+class EvenSieve {
+    def getNo2() {
+        removeAll { it % 2 == 0}
+        return this
+    }
+}
+class MinusSieve {
+    def minus(int num) {
+        removeAll { it % num == 0}
+        return this
+    }
+}
+
+ArrayList.mixin EvenSieve, MinusSieve
+
+assert (0..10).toList().no2 - 3 - 5 == [1, 7]
+
+- The @Delegate transformation adds all of the public instance methods from the delegate onto your class, and automatically calls the delegate when those methods are invoked.
+
+class NoisySet {
+  @Delegate
+  Set delegate = new HashSet()
+
+  @Override
+  boolean add(item) {
+    println "adding $item"
+    delegate.add(item)
+  }
+
+  @Override
+  boolean addAll(Collection items) {
+    items.each { println "adding $it" }
+    delegate.addAll(items)
+  }
+}
+
+Set ns = new NoisySet()
+ns.add(1)
+ns.addAll([2, 3])
+assert ns.size() == 3
+
+
+- @groovy.lang.Singleton. The Singleton pattern is intended to ensure that only one instance of a class exists
+
+import static groovy.test.GroovyAssert.shouldFail
+
+@Singleton class Zeus { }
+
+assert Zeus.instance
+def ex = shouldFail(RuntimeException) { new Zeus() }
+assert ex.message ==
+    "Can't instantiate singleton Zeus. Use Zeus.instance"
+    
+- avoid low level synchronization, doing this correctly is easy with the @Synchronized annotation
+
+ 
+ 
+# Compile time metaprogramming
+- WSDL (Web Service Definition Language) interface documents and produce source code for projects using web service
+
+- using @ToString to generate a toString() method
+
+import groovy.transform.ToString
+
+@ToString
+class Detective {
+    String firstName, lastName
+}
+
+def sherlock = new Detective(firstName: 'Sherlock', lastName: 'Holmes')
+assert sherlock.toString() == 'Detective(Sherlock, Holmes)'
+
+- @groovy.transform.IndexedProperty
+Groovy automatically provides getters and setters for properties. This follows Java’s conventions for JavaBeans.
+
+
+# Groovy as a static language 
+- Types are used at runtime for the method dispatch. The fact that types are mainly used at runtime allows a lot of flexibility
+
+- a method may only exist in the runtime 
+
+- The @TypeChecked annotation can be applied on classes or methods
+
+import groovy.transform.TypeChecked
+
+@TypeChecked
+class Sleuth {
+  String firstName
+  String lastName
+
+  String getFullName() { "$firstName $lastName" }
+}
+
+def nancy = new Sleuth(firstName: 'Nancy', lastName: 'Drew')
+assert nancy.fullName == 'Nancy Drew'
+
+- type inference, ;u`allows you to declare a type in a very short manner, so the equivalent code is shorter:
+
+def text = 'Type is implicit'
+
+- SAM type available that already has type information expressed in its parameter declaration
+
+- Groovy’s TimeCategory class:
+
+use (TimeCategory) {
+    duration = 1.week – 1.day
+}
+
+- toUpperCase isn’t defined on the least upper bound
+@TypeChecked
+void notAllowed() {
+    def var = "String"
+    def cl = { var = new Date() }
+    cl()
+    var = var.toUpperCase()
+}
+
+- @CompileStatic, not only are you activating type checking, but you’re also asking the compiler to generate statically compiled code.
+
+- statically compiled code:
+
+optimizing hotpots 
+
+frameworks 
+
+immunity to monkey patching 
+
+- Booking DSL
+import groovy.transform.Canonical
+
+@Canonical
+class Booking {
+    String meetingRoom
+    String className
+    Date start, end
+}
+
+def book(meeting) {
+    [room: { name ->
+        [between: { sd ->
+            [and: { ed ->
+                [to: { to ->
+                    def b = new Booking(meetingRoom: name,
+                        className: to, start: sd, end: ed)
+                    println b
+                    b
+                }]
+            }]
+        }]
+    }]
+}
+
+def meeting
+@Category(Integer)
+class TimeCategory {
+    static Date getAm(Integer self) {
+        def d = Calendar.instance
+        d.set(Calendar.MINUTE, 0)
+        d.set(Calendar.SECOND, 0)
+        d.set(Calendar.HOUR_OF_DAY, self)
+        d.time
+    }
+}
+use(TimeCategory) {
+    book meeting room 'Honolulu' between 9.am and 12.am to 'B2'
+}
+
+- Once you’ve written a type checking extension, you still need to get them applied.
+
+@TypeChecked(extensions=['/regina/RobotExtension.groovy',
+                         'regina.SQLExtension'])
+void usesExtensions() { ... }
+
+
+
+# Part 3. Around the Groovy library 
+# Working with builders 
+- Task automation with AntBuilder
+Ant (http://ant.apache.org/) is a build automation tool. 
+
+- Ant documentation at http://ant.apache.org/manual.
+
+- SwingBuilder uses within the Groovy distribution and online source repository
+
+- Application design with FXML Oracle offers a free tool called SceneBuilder
+
+
+
+# Working with the GDK 
+- Groovy extends this foundation by providing an extension to the core Java classes, called the GDK. The GDK includes some new classes and utility libraries
+
+def newline = "\n"
+
+assert newline.toString() == "\n"
+
+assert newline.dump() ==
+'''<java.lang.String@a value=
+ hash=10 hash32=0>'''
+
+assert newline.inspect() == /'\n'/
+
+- iterative object methods 
+
+boolean	any {closure}
+Collection	List collect {closure}
+Object	each {closure}
+Object	eachWithIndex {closure}
+boolean	every {closure}
+Object	find {closure}
+Collection	findAll {closure}
+int	findIndexOf {closure}
+List	findIndexValues {closure}
+int	findLastIndexOf {closure}
+Object	findResult
+List	grep(Object filter)
+Object	inject {closure}
+Collection	split {closure}
+
+- example to calculating sin(x)
+
+samples = 4
+def domain(yield) {
+    step = Math.PI * 2 / samples
+    (0..samples).each { yield it*step }
+}
+
+- work with file object iteration method
+
+file = new File('Listing_12_03_File_Iteration.groovy')
+file.each { println it }
+assert file.any { it =~ /File/ }
+assert 3 == file.findAll { it =~ /File/ }.size()
+
+assert 5 == file.grep { it }.size()
+
+- read file example 
+
+example = new File('data/example.txt')
+
+lines = ['line one', 'line two', 'line three']
+assert lines == example.readLines()
+
+example.eachLine {
+  assert it.startsWith('line')
+}
+
+hex = []
+example.eachByte { hex << it }
+assert hex.size() == example.length()
+
+example.splitEachLine(/\s/) {
+  assert 'line' == it[0]
+}
+
+example.withReader { reader ->
+  assert 'line one' == reader.readLine()
+}
+
+- Using Writer’s smart left-shift operator
+
+TimeZone.default = TimeZone.getTimeZone("CET")
+reader = new StringReader('abc')
+writer = new StringWriter()
+
+writer << "\nsome String"   << "\n"
+writer << [a:1, b:2]        << "\n"
+writer << [3,4]             << "\n"
+writer << new Date(0)       << "\n"
+writer << reader            << "\n"
+
+- stream serialize object 
+
+file.newObjectInputStream().eachObject
+
+- work with thread and process 
+
+t = new Thread() { /* Closure body */ }
+t.start()
+
+Thread.startDaemon { /* Closure body */ }
+
+new Timer().runAfter(1000){ /* Closure body */}
+
+Process proc = myCommandString.execute()
+
+def dircmd = ['cmd','/c','dir']
+def dir    = /\Program Files/
+def proc   = (dircmd + dir).execute()
+
+- Finding the earliest listing via command-line processing
+def outputBuffer = new StringBuffer()
+def errorBuffer  = new StringBuffer()
+
+zipProcess   = 'gzip -c'.execute()
+unzipProcess = 'gunzip -c'.execute()
+
+unzipProcess.consumeProcessOutput(outputBuffer, errorBuffer)
+zipProcess.consumeProcessErrorStream(errorBuffer)
+
+zipProcess | unzipProcess
+zipProcess.withWriter { writer ->
+    writer << 'Hello World'
+}
+unzipProcess.waitForOrKill(1000)
+
+println 'Output: ' + outputBuffer
+println 'Error : ' + errorBuffer
+
+- working with template, Template placeholders
+Marker          Purpose
+
+$variable	    Insert the value of the variable into the text
+${groovycode}	Evaluate single-line groovycode, and insert the result into the text
+<%=groovycode%>	Evaluate the groovycode, and insert the result into the text
+<%groovycode%>	Evaluate the groovycode
+
+- advance template issues 
+
+<%
+    tasks.each { out.println('- '+it) }
+%>
+
+groovy provide five template engines, SimpleTemplateEngine, StreamingTemplateEngine, GStringTempalteEngine, XmlTemplateEngine, MarkupTempalteEngine 
+
+- Groovlets are to Groovy what servlets are to Java: a basic, standardized way of writing web applications.  Simple Groovy web server
+
+@Grab('org.eclipse.jetty.aggregate:jetty-server:8.1.16.v20140903')
+@Grab('org.eclipse.jetty.aggregate:jetty-servlet:8.1.16.v20140903')
+@Grab('javax.servlet:javax.servlet-api:3.0.1')
+
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.*
+import groovy.servlet.*
+import static org.eclipse.jetty.servlet.ServletContextHandler.*
+
+def server = new Server(1234)
+def context = new ServletContextHandler(server, "/", SESSIONS)
+context.resourceBase = "."
+context.addServlet(GroovyServlet, "*.groovy")
+server.start()
+
+    + The “Hello world” Groovlet using the HTML builder
+html.html{
+    head {
+        title 'Groovlet Demonstrator'
+    }
+    body { h1 'Welcome to the World of Groovlets' }
+}
+
+
+# Databasse programming with Groovy 
+- Groovy SQL builds on plain JDBC
+
+data transfer objects (DTOs) and data access objects (DAOs).
+
+It is included in the JDK. See www.oracle.com/technetwork/java/javadb/.
+
+- HyperSQL Database (HSQLDB), which you can download from http://hsqldb.org. 
+
+```
+import groovy.sql.Sql
+
+def url = 'jdbc:hsqldb:mem:GinA'
+def user = 'sa'
+def password = ''
+def driver = 'org.hsqldb.jdbcDriver'
+def sql = Sql.newInstance(url, user, password, driver)
+
+// use 'sql' instance ...
+
+sql.close()
+```
+
+Groovy’s @Grab annotation can be used. For our example we could tweak the earlier listing as follows:
+
+@Grab('org.hsqldb:hsqldb:2.3.2')
+@GrabConfig(systemClassLoader=true)
+import groovy.sql.Sql
+// ... as before ...
+
+- create new database instance 
+
+def sql = Sql.newInstance(
+    url: 'jdbc:hsqldb:mem:GinA',
+    user: 'sa',
+    password: '',
+    driver: 'org.hsqldb.jdbcDriver',
+    cacheStatements: true,
+    resultSetConcurrency: CONCUR_READ_ONLY)
+ 
+- DataSources become even more important when running in a managed environment such as within an application server
+
+import groovy.sql.Sql
+import org.hsqldb.jdbc.JDBCDataSource
+
+def dataSource = new JDBCDataSource(
+    database: 'jdbc:hsqldb:mem:marathon', user: 'sa', password: '')
+def sql = new Sql(dataSource)
+
+// use 'sql' instance ...
+
+
+sql.execute(statement)
+
+sql.execute '''
+  CREATE TABLE Athlete (
+    firstname   VARCHAR(64),
+    lastname    VARCHAR(64),
+    dateOfBirth DATE
+  );
+'''
+
+sql.close()
+
+```
+import groovy.sql.Sql
+
+class DbUtil {
+    static Sql create() {
+        def url = 'jdbc:hsqldb:mem:GinA'
+        def user = 'sa'
+        def password = ''
+        def driver = 'org.hsqldb.jdbcDriver'
+        def sql = Sql.newInstance(url, user, password, driver)
+
+        sql.execute """
+            DROP TABLE Athlete IF EXISTS cascade;
+            DROP TABLE Record IF EXISTS;
+        """
+
+        sql.execute """
+            CREATE TABLE Athlete (
+              athleteId   INTEGER GENERATED BY DEFAULT AS IDENTITY,
+              firstname   VARCHAR(64),
+              lastname    VARCHAR(64),
+              dateOfBirth DATE,
+              UNIQUE(athleteId)
+            );
+        """
+
+        // additional set up will be added in future examples
+
+        sql
+    }
+
+    // additional utility methods will be added in future examples
+}
+```
+
+import util.DbUtil
+
+def sql = DbUtil.create()
+DbUtil.populate(sql)
+DbUtil.enableLogging()
+
+sql.withBatch { stmt ->
+    stmt.addBatch '''
+    INSERT INTO Athlete (firstname, lastname, dateOfBirth)
+    VALUES ('Paula', 'Radcliffe', '1973-12-17')'''
+    stmt.addBatch """
+    INSERT INTO Record (time, venue, whenRun, fkAthlete)
+      SELECT ${2*60*60+15*60+25}, 'London', '2003-04-13',
+      athleteId FROM Athlete WHERE lastname='Radcliffe'"""
+}
+
+assert sql.firstRow('SELECT COUNT(*) as num FROM Athlete').num == 4
+assert sql.firstRow('SELECT COUNT(*) as num FROM Record').num == 5
+
+def qry = '''
+  INSERT INTO Athlete (firstname, lastname, dateOfBirth)
+  VALUES (?,?,?)
+'''
+sql.withBatch(3, qry) { ps ->
+    ps.addBatch('Catherine', 'Ndereba', '1972-07-21')
+    ps.addBatch('Naoko', 'Takahashi', '1972-05-06')
+    ps.addBatch('Tegla', 'Loroupe', '1973-05-09')
+    ps.addBatch('Ingrid', 'Kristiansen', '1956-03-21')
+}
+
+assert sql.firstRow('SELECT COUNT(*) as num FROM Athlete').num == 8
+
+- pagination operations 
+
+import util.DbUtil
+
+def sql = DbUtil.create()
+DbUtil.populate(sql)
+
+def qry = 'SELECT * FROM Athlete'
+assert sql.rows(qry, 1, 2)*.lastname == ['Tergat', 'Khannouchi']
+assert sql.rows(qry, 3, 2)*.lastname == ['da Costa']
+
+- access mongodb 
+
+@Grab('com.gmongo:gmongo:1.3')
+import com.gmongo.GMongo
+import groovy.transform.Field
+
+@Field db = new GMongo.getDB('athletes')
+db.athletes.drop()
+db.athletes << [first: 'Paul', last: 'Tergat', dob: '1969-06-17', runs: [
+    [distance: 42195, time: 2*60*60 + 4*60 + 55,
+        venue: 'Berlin', when: '2003-09-28']
+]]
+
+
+
+# Working with xml and json 
+- read xml 
+
+def doc = builder.parse(new FileInputStream('data/plan.xml'))
+
+def builder = fac.newDocumentBuilder()
+def doc     = builder.parse(new FileInputStream('data/plan.xml'))
+
+import javax.xml.parsers.DocumentBuilderFactory
+
+def fac     = DocumentBuilderFactory.newInstance()
+def builder = fac.newDocumentBuilder()
+def doc     = builder.parse(new FileInputStream('data/plan.xml'))
+
+- walking the dom 
+
+import org.w3c.dom.Node
+String info(node) {
+    switch (node.nodeType) {
+        case Node.ELEMENT_NODE:
+             return 'element: '+ node.nodeName
+        case Node.ATTRIBUTE_NODE:
+             return "attribute: ${node.nodeName}=${node.nodeValue}"
+        case Node.TEXT_NODE:
+             return 'text: '+ node.nodeValue
+    }
+    return 'some other type: '+ node.nodeType
+}
+
+- making dom groovier 
+
+def doc  = DOMBuilder.parse(new FileReader('data/plan.xml'))
+def plan = doc.documentElement
+
+- pumping an xml stream without modification 
+
+import groovy.xml.StreamingMarkupBuilder
+
+def path = new XmlSlurper().parse(new File('data/plan.xml'))
+
+def builder = new StreamingMarkupBuilder()
+def copier = builder.bind{ mkp.yield(path) }
+def result = "$copier"
+
+assert result.startsWith('<plan><week ')
+assert result.endsWith('</week></plan>')
+
+- update xml 
+```
+class UpdateChecker {
+  static check(text) {
+    def updated = new XmlParser().parseText(text)
+    updated.week[0].with { w0 ->
+      assert w0.task.@done*.toInteger().sum() == 7
+      assert w0.find{ it.text() == 'time saver' }
+    }
+    updated.week[1].with { w1 ->
+      assert w1.children().size() == 3
+      assert w1.find{ it.@total == "4" }
+      assert w1.find{ it.@title == "build web service client" }
+      assert !w1.find{ it.@title == "use DB/XML combination" }
+    }
+  }
+}
+```
+
+```
+import groovy.xml.XmlUtil
+
+def plan = new XmlParser().parse(new File('data/plan.xml'))
+
+plan.week[0].task[2].@done = '2'
+plan.week[0].task[2].value = 'time saver'
+
+plan.week[1].task[1].replaceNode {
+  task(done:'0', total:'4', title:'build web service')
+}
+plan.week[1].task[1] + {
+  task(done:'0', total:'1', title:'build web service client')
+}
+UpdateChecker.check(XmlUtil.serialize(plan))
+```
+
+
+```
+import groovy.xml.XmlUtil
+
+def plan = new XmlSlurper().parse(new File('data/plan.xml'))
+
+plan.week[0].task[2].@done = '2'
+plan.week[0].task[2] = 'time saver'
+
+plan.week[1].task[1].replaceNode {
+  task(done:'0', total:'4', title:'build web service')
+}
+plan.week[1].task[1] + {
+  task(done:'0', total:'1', title:'build web service client')
+}
+
+UpdateChecker.check(XmlUtil.serialize(plan))
+```
+
+- combine with xpath, XPath selects nodes. Where GPath uses dots, XPath uses slashes. For example,
+
+/plan/week/task
+
+all task elements via
+
+/descendant-or-self::task 
+
+
+xpath.evaluate('//week', plan, NODESET).eachWithIndex{ week, i ->
+    // do something with week
+}
+
+
+- parse json 
+```
+import groovy.json.JsonSlurper
+
+def plan = new JsonSlurper().parse(new File('data/plan.json'))
+assert plan.weeks[0].tasks[0].status == 'easy'
+assert plan.weeks[1].capacity == 8
+assert plan.weeks[1].tasks[0].title == 're-read DB chapter'
+```
+
+- build json 
+```
+import groovy.json.JsonBuilder
+
+def builder = new JsonBuilder()
+builder.weeks {
+  capacity '8'
+  tasks(
+    [{
+      done '0'
+      total '4'
+      title 'build web service'
+    }, {
+      done '0'
+      total '1'
+      title 'build web service client'
+    }]
+  )
+}
+
+assert builder.toString() == '{"weeks":{"capacity":"8","tasks":[' +
+    '{"done":"0","total":"4","title":"build web service"},' +
+    '{"done":"0","total":"1","title":"build web service client"}' +
+    ']}}'
+```
+
+- output json 
+
+```
+import static groovy.json.JsonOutput.*
+
+def json = toJson([date: '2015-01-01', time: '6 am'])
+assert json == '{"date":"2015-01-01","time":"6 am"}'
+
+class Athlete { String first, last }
+
+def mj = new Athlete(first: 'Michael', last: 'Jordan')
+assert toJson(mj) == '{"first":"Michael","last":"Jordan"}'
+
+def pt = new Athlete(first: 'Paul', last: 'Tergat')
+def athletes = [basketball: mj, marathon: pt]
+
+json = toJson(athletes)
+assert prettyPrint(json) == '''
+{
+    "basketball": {
+        "first": "Michael",
+        "last": "Jordan"
+    },
+    "marathon": {
+        "first": "Paul",
+        "last": "Tergat"
+    }
+}
+'''.trim()
+```
+
+
+# Interactive with web services 
+- XML Remote Procedure Call (XML-RPC) can be used. XML-RPC uses HTTP but adds context, which makes it a stateful protocol (as opposed to REST).
+
+- reading rss 
+
+```
+def base = 'http://news.bbc.co.uk/rss/newsonline_uk_edition/'
+def url  = base +'front_page/rss091.xml'
+
+println 'The top three news items today:'
+def items = new XmlParser().parse(url).channel[0].item
+for (item in items[0..2]) {
+    println item.title.text()
+    println item.link.text()
+    println item.description.text()
+    println '----'
+}
+```
+-  using rest api 
+
+```
+def httpConnection = new URL(base + key).openConnection()
+assert httpConnection.responseCode == httpConnection.HTTP_OK
+def result = slurper.parse(httpConnection.inputStream.newReader())
+// do something with result ...
+```
+
+querying jira via rest api 
+```
+import groovy.json.JsonSlurper
+
+class Jira {
+  def base = 'https://issues.apache.org/jira/rest/api/latest/issue/'
+  def slurper = new JsonSlurper()
+
+  def query(key) {
+    def httpConnection = new URL(base + key).openConnection()
+    assert httpConnection.responseCode == httpConnection.HTTP_OK
+    slurper.parse(httpConnection.inputStream.newReader())
+  }
+}
+
+def jira = new Jira()
+def response = jira.query("GROOVY-5999")
+response.fields.with {
+  assert summary == "Make @Delegate work with @DelegatesTo"
+  assert fixVersions.name == ['2.1.1']
+  assert resolutiondate.startsWith('2013-02-14')
+}
+```
+
+- using xml rpc, extremely simple and concise. See www.xmlrpc.com for all details
+
+```
+import groovy.net.xmlrpc.XMLRPCServerProxy as Proxy
+def remote = new Proxy('http://localhost:8080/')
+assert 'Hello world!' == remote.echo('Hello world!')
+```
+- SOAP is the successor of XML-RPC and follows the approach of providing a binding standard. This standard is maintained by the W3C; see www.w3.org/TR/soap/.
+
+- provide excellent support for SOAP. Popular SOAP stack implementations on the Java platform include Metro (http://metro.java.net) and Apache CXF (http://cxf.apache.org/). Built-in SOAP support for Groovy is rather basic
+
+how to read a WSDL service description, refer to www.w3.org/TR/wsdl.
+
+```
+@Grab('com.github.groovy-wslite:groovy-wslite:1.1.0')
+import wslite.soap.*
+
+def url = 'http://www.webserviceX.NET/CurrencyConvertor.asmx?WSDL'
+def client = new SOAPClient(url)
+def response = client.send {
+  version SOAPVersion.V1_2
+  body {
+    ConversionRate(xmlns: 'http://www.webserviceX.NET/') {
+      FromCurrency('USD')
+      ToCurrency('EUR')
+    }
+  }
+}
+assert response.httpResponse.statusCode == 200
+println response.ConversionRateResponse.ConversionRateResult
+```
+
+
+# Integrating groovy 
+- A trivial example of expression evaluation in Groovy
+```
+def shell = new GroovyShell()
+def result = shell.evaluate("12 + 23")
+assert result == 35
+```
+
+- passing expression with groovy shell 
+
+```
+def binding = new Binding()
+def shell = new GroovyShell(binding)
+shell.evaluate('''
+    def localVariable = "local variable"
+    bindingVariable   = "binding variable"
+''')
+
+assert binding.getVariable("bindingVariable") == "binding variable"
+```
+
+- running script 
+```
+def engine = new GroovyScriptEngine(".")
+def value  = engine.run("test/MyScript.groovy", new Binding())
+
+def   gcl = new GroovyClassLoader()
+Class greetingClass = gcl.parseClass(new File("Hello.groovy"))
+assert "Hello!" == greetingClass.newInstance().greeting()
+```
+
+- writting groovy beans 
+
+Another feature that Spring provides is the ability to dynamically detect when Groovy source files change and automatically compile and load the latest version of any Groovy file during runtime. 
+
+- Riding Mustang and JSR-223
+Scripting and dynamic languages are in fashion again thanks to Groovy and the ubiquitous JavaScript in all its flavors
+
+```
+// Groovy
+void init() { println "init" }
+Object execute(Object[] objs) { println "execute" }
+void release() { println "release" }
+```
+
+- mastering compiler configuration 
+
+```
+def conf = new CompilerConfiguration()
+conf.setScriptBaseClass("BaseScript")
+def shell = new GroovyShell(conf)
+def value = shell.evaluate('''
+    multiply(5, 6)
+''')
+assert value == 30
+
+
+def conf = new CompilerConfiguration()
+def customizer = new ImportCustomizer()
+customizer.addImports('java.util.concurrent.atomic.AtomicInteger',
+    'java.util.concurrent.atomic.AtomicLong')
+conf.addCompilationCustomizers(customizer)
+def shell = new GroovyShell(conf)
+def value = shell.evaluate('''
+    def myInt = new AtomicInteger(1)
+    def myLong = new AtomicLong(2)
+''')
+```
+
+- configure script configuration 
+
+```
+groovyc --configscript config.groovy MyClass.groovy
+```
+
+- different integration 
+
+Eval.me 
+
+GrovySheell 
+
+GroovyScriptEngine 
+
+GroovyClassLoader 
+
+Sprint scripting support 
+
+JSR-223
+
+Bean Scripting Framework 
+
+- Additional integration mechanisms may well appear over time in various guises. (See Grengine, http://grengine.ch/.)
+
 
 # Applied Groovy 
 
-# Appendix 
-- installation 
-- language information 
-- GDK API quick reference 
-- Cheet sheets 
-- Annotation parameters 
-- Compiler phases 
-- AST visistors 
-- Type checking extensions 
-- Facets of Groovy 
+# Unit test with Groovy 
+- writing tests is easy 
+
+class Converter {
+    static celsius (fahrenheit) { (fahrenheit - 32) * 5 / 9 }
+}
+
+assert 34  == celsius(95)
+
+- groovy test case, Groovy bundles an extended JUnit class dubbed GroovyTestCase
+
+```
+public void testNotImplementedYet() {
+    if (GroovyTestCase.notYetImplemented(this)) return
+    fail("will be implemented tomorrow")
+}
+
+class SimpleUnitTest extends GroovyTestCase {
+   void testSimple() {
+     assertEquals("Groovy should add correctly", 2, 1 + 1)
+   }
+}
+```
+
+    + extend JUnit's tests case 
+    
+```
+import junit.framework.TestCase
+
+class AnotherSimpleUnitTest extends TestCase {
+   void testSimpleAgain() {
+     assertEquals("Should subtract correctly too", 2, 3 - 1)
+   }
+}
+
+
+class CounterTest extends GroovyTestCase {
+    ...
+}
+
+
+void testCounterWorks() {
+  assertEquals(2, counter.biggerThan([5, 10, 15], 7))
+}
+
+
+void testCountHowManyFromSampleStrings() {
+  check(2, ['Dog', 'Cat', 'Antelope'], 'Bird')
+}
+```
+
+- test java code 
+
+- test suties 
+
+```
+java groovy.util.GroovyTestSuite src/test/Foo.groovy
+```
+
+
+```
+import junit.framework.*
+import junit.textui.TestRunner
+
+static Test suite() {
+  def suite = new TestSuite()
+  def gts = new GroovyTestSuite()
+  suite.addTestSuite(gts.compile("Listing_17_02_CounterTest.groovy"))
+  suite.addTestSuite(gts.compile("Listing_17_03_HashMapTest.groovy"))
+  return suite
+}
+
+TestRunner.run(suite())
+```
+
+-  property testing 
+
+```
+@Grab('net.java.quickcheck:quickcheck:0.6')
+import static net.java.quickcheck.generator.PrimitiveGenerators.*
+import static net.java.quickcheck.generator.CombinedGeneratorsIterables.*
+
+for (words in someNonEmptyLists(strings())) {
+    assert words*.size().sum() == words.sum().size()
+}
+```
