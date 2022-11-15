@@ -1206,8 +1206,669 @@ trait WithName {
 }
 trait Identified implements WithId, WithName {}  
 
+- duck typing and traits 
+
+```
+trait SpeakingDuck {
+    String speak() { quack() }                      
+}
+class Duck implements SpeakingDuck {
+    String methodMissing(String name, args) {
+        "${name.capitalize()}!"                     
+    }
+}
+def d = new Duck()
+assert d.speak() == 'Quack!' 
+```
+
+the Duck class does implement the method using methodMissing
+
+- dynamic methods in a trait, It is also possible for a trait to implement MOP methods like methodMissing or propertyMissing, in which case implementing classes will inherit the behavior from the trait
+
+```
+trait DynamicObject {                               
+    private Map props = [:]
+    def methodMissing(String name, args) {
+        name.toUpperCase()
+    }
+    def propertyMissing(String name) {
+        props.get(name)
+    }
+    void setProperty(String name, Object value) {
+        props.put(name, value)
+    }
+}
+
+class Dynamic implements DynamicObject {
+    String existingProperty = 'ok'                  
+    String existingMethod() { 'ok' }                
+}
+def d = new Dynamic()
+assert d.existingProperty == 'ok'                   
+assert d.foo == null                                
+d.foo = 'bar'                                       
+assert d.foo == 'bar'                               
+assert d.existingMethod() == 'ok'                   
+assert d.someMethod() == 'SOMEMETHOD'   
+```
+
+- multiple inherits conflict, the last win 
+
+trait A {
+    String exec() { 'A' }               
+}
+trait B {
+    String exec() { 'B' }               
+}
+class C implements A,B {} 
+
+    + explicit specify the confict resolution 
+    
+class C implements A,B {
+    String exec() { A.super.exec() }    
+}
+def c = new C()
+assert c.exec() == 'A'
+
+- runtime implementation of traits 
+
+```
+trait Extra {
+    String extra() { "I'm an extra method" }            
+}
+class Something {                                       
+    String doSomething() { 'Something' }                
+}
+
+def s = new Something() as Extra                        
+s.extra()                                               
+s.doSomething() 
+```
+
+- implenting multiple traits at once 
+```
+trait A { void methodFromA() {} }
+trait B { void methodFromB() {} }
+
+class C {}
+
+def c = new C()
+c.methodFromA()                     
+c.methodFromB()                     
+def d = c.withTraits A, B           
+d.methodFromA()                     
+d.methodFromB()
+```
+
+- chaining behavior, stackable traits 
+
+interface MessageHandler {
+    void on(String message, Map payload)
+} 
+
+trait DefaultHandler implements MessageHandler {
+    void on(String message, Map payload) {
+        println "Received $message with payload $payload"
+    }
+}
+
+trait LoggingHandler implements MessageHandler {                            
+    void on(String message, Map payload) {
+        println "Seeing $message with payload $payload"                     
+        super.on(message, payload)                                          
+    }
+}
+
+class HandlerWithLogger implements DefaultHandler, LoggingHandler {}
+def loggingHandler = new HandlerWithLogger()
+loggingHandler.on('test logging', [:])
+
+- semantics of super inside a trait
+
+if the class implements another trait, the call delegates to the next trait in the chain
+
+if there isn’t any trait left in the chain, super refers to the super class of the implementing class (this)
+
+``` 
+
+trait Filtering {                                       
+    StringBuilder append(String str) {                  
+        def subst = str.replace('o','')                 
+        super.append(subst)                             
+    }
+    String toString() { super.toString() }              
+}
+def sb = new StringBuilder().withTraits Filtering       
+sb.append('Groovy')
+assert sb.toString() == 'Grvy'   
+
+```
+
+- Advanced features, SAM type coercion, If a trait defines a single abstract method, it is candidate for SAM (Single Abstract Method) type coercion.
+
+trait Greeter {
+    String greet() { "Hello $name" }        
+    abstract String getName()               
+}
+
+Greeter greeter = { 'Alice' }  
+
+void greet(Greeter g) { println g.greet() } 
+greet { 'Alice' }   
+
+- different with interface default, trait is always used if the class declares the trait in its interface list and that it doesn’t provide an implementation even if a super class does. The interface default method will only be used when not class implement the method 
+
+- different with mixins, methods defined in a trait are visible in bytecode and visible for java  
+
+- static methods in a trait with limitations 
+
+cannot be compiled statically or type checking 
+
+do not appear within the generated interfaces 
+
+trait is interpreted as a template for the implementating class. the static method will be generated for each implement classes 
+
+not mix static and instance methods of the same signature. 
+
+- fields and properties in traits will also priorit than the subclass. It has to use the property getter to get or set the fields with the same name. 
+```
+trait IntCouple {
+    int x = 1
+    int y = 2
+    int sum() { getX()+getY() }
+}
+
+class Elem implements IntCouple {
+    int x = 3
+    int y = 4
+    int f() { sum() }
+}
+def elem = new Elem()
+assert elem.f() == 7
+```
+
+- type constraints, @SelfType annotation, a class that implements this trait must inherit or implement. Both @Sealed and @SelfType restrict classes which use a trait but in orthogonal ways
+
+@SelfType(Device)
+@CompileStatic
+trait Communicating {
+    void sendMessage(Device to, String message) {
+        SecurityService.check(this)
+        CommunicationService.sendMessage(id, to.id, message)
+    }
+}
+
+- limitation, Traits are not officially compatible with AST transformations. 
+
+    + prefix and post fix operations are not allowed on traits 
+    
+    trait Counting {
+        int x
+        void inc() { //error 
+            x++                             
+        }
+        void dec() { //error 
+            --x                             
+        }
+    }
+ 
+- Record classes, or records for short, are a special kind of class useful for modelling plain data aggregates
+
+```
+record Message(String from, String to, String body) { }
+
+def msg = new Message('me@myhost.com', 'you@yourhost.net', 'Hello!')
+assert msg.toString() == 'Message[from=me@myhost.com, to=you@yourhost.net, body=Hello!]'
+```
+
+The term component is typically used for records.
+
+- Groovy enhancements
+
+    + argument defaults 
+    
+record ColoredPoint(int x, int y = 0, String color = 'white') {}    
+@TupleConstructor(defaultsMode=DefaultsMode.OFF)
+record ColoredPoint2(int x, int y, String color) {}
+assert new ColoredPoint2(4, 5, 'red').toString() == 'ColoredPoint2[x=4, y=5, color=red]'
+
+- diving deeper with class keyword and an accompanying @RecordType annotation
+
+@RecordType
+class Message {
+    String from
+    String to
+    String body
+}
+
+    + customize a record’s toString method by writing your own.
+```
+package threed
+
+import groovy.transform.ToString
+
+@ToString(ignoreNulls=true, cache=true, includeNames=true,
+          leftDelimiter='[', rightDelimiter=']', nameValueSeparator='=')
+record Point(Integer x, Integer y, Integer z=null) { }
+
+assert new Point(10, 20).toString() == 'threed.Point[x=10, y=20]'
+```
+
+    + obtain a list of record component values 
+
+    ```
+    record Point(int x, int y, String color) { }
+
+    def p = new Point(100, 200, 'green')
+    def (x, y, c) = p.toList()
+    ```    
+    
+    + obtaining a map of the record component values 
+    
+    ```
+    record Point(int x, int y, String color) { }
+
+    def p = new Point(100, 200, 'green')
+    assert p.toMap() == [x: 100, y: 200, color: 'green']
+    ```
+
+    + record support methods 
+    
+records.toList()
+records.toMap() 
+records[index]
+records.copyWith(propertyName:newValue)
+records.components instanceof Tuple#
+
+    + make a copy of a record with some components changed. This can be done using an optional copyWith method
+
+@RecordOptions(copyWith=true)
+record Fruit(String name, double price) {}
+def apple = new Fruit('Apple', 11.6)
+assert 'Apple' == apple.name()
+assert 11.6 == apple.price()
+
+def orange = apple.copyWith(name: 'Orange')
+assert orange.toString() == 'Fruit[name=Orange, price=11.6]'
+
+    + Groovy’s @Immutable transform performs defensive copying for a range of mutable data types
+    
+@ImmutableProperties
+record Shopping(List items) {}
+
+def items = ['bread', 'milk']
+def shop = new Shopping(items)
+items << 'chocolate'
+assert shop.items() == ['bread', 'milk']
+
+- Sealed classes, interfaces and traits restrict which subclasses can extend/implement them. Sealed hierarchies provide full inheritance within a known hierarchy of classes
+
+sealed interface ShapeI permits Circle,Square { }
+final class Circle implements ShapeI { }
+final class Square implements ShapeI { }
+
+The @SealedOptions annotation supports a mode annotation attribute which can take one of three values (with AUTO being the default)
 
 
+
+
+
+# Closure 
+- define a closure, A closure in Groovy is an open, anonymous, block of code that can take arguments, return a value and be assigned to a variable 
+
+{ [closureParameters -> ] statements }
+
+- examples 
+
+{ item++ }                                          
+
+{ -> item++ }                                       
+
+{ println it }                                      
+
+{ it -> println it }                                
+
+{ name -> println name }                            
+
+{ String x, int y ->                                
+    println "hey ${x} the value is ${y}"
+}
+
+{ reader ->                                         
+    def line = reader.readLine()
+    line.trim()
+}    
+
+- closure as an object 
+```
+def listener = { e -> println "Clicked on $e.source" }      
+assert listener instanceof Closure
+Closure callback = { println 'Done!' }                      
+Closure<Boolean> isTextFile = {
+    File it -> it.name.endsWith('.txt')                     
+}
+
+isTextFile(file)
+```
+
+- parameter is as same as function, optional type, name, optional default value  
+- implicit parameter a closure always defines an implicit parameter, named it. This means that this code
+
+```
+def greeting = { "Hello, $it!" }
+assert greeting('Patrick') == 'Hello, Patrick!'
+
+//equal to 
+
+def greeting = { it -> "Hello, $it!" }
+assert greeting('Patrick') == 'Hello, Patrick!'
+```
+- varargs, can acccept a variable number of arguments 
+
+```
+def concat1 = { String... args -> args.join('') }           
+assert concat1('abc','def') == 'abcdef'                     
+def concat2 = { String[] args -> args.join('') }            
+assert concat2('abc', 'def') == 'abcdef'
+```
+
+- delegation strategy, property is accessed without explicitly setting a receiver object, the property will be resolved transparently on the delegate object. By default is the owner first then delegate. 
+
+```
+class Person {
+    String name
+    def pretty = { "My name is $name" }             
+    String toString() {
+        pretty()
+    }
+}
+class Thing {
+    String name                                     
+}
+
+def p = new Person(name: 'Sarah')
+def t = new Thing(name: 'Teapot')
+
+assert p.toString() == 'My name is Sarah'           
+p.pretty.delegate = t  
+assert p.toString() == 'My name is Sarah'    
+
+//change the resolution strategy of the closure:
+
+p.pretty.resolveStrategy = Closure.DELEGATE_FIRST
+assert p.toString() == 'My name is Teapot'                          
+```
+
+- Closures in GStrings 
+
+ two reasons for this:
+
+a GString only evaluates lazily the toString representation of values
+
+the syntax ${x} in a GString does not represent a closure but an expression to $x. Evaluated when the GString is created 
+
+    + a closure in a GString to enforce lazy evaluation 
+    
+def x = 1
+def gs = "x = ${-> x}"
+assert gs == 'x = 1'
+
+x = 2
+assert gs == 'x = 2'
+
+- functional programming
+
+    + left currying, Groovy will let you set the value of one parameter of a closure
+    
+    ```
+    def nCopies = { int n, String str -> str*n }    
+    def twice = nCopies.curry(2)                    
+    assert twice('bla') == 'blabla'  
+    ```
+
+    + right currying 
+    ```
+    def nCopies = { int n, String str -> str*n }    
+    def blah = nCopies.rcurry('bla')                
+    assert blah(2) == 'blabla'                      
+    assert blah(2) == nCopies(2, 'bla')   
+    ```
+    
+    + index based currying,  accepts more than 2 parameters, it is possible to set an arbitrary parameter using ncurry
+    
+    ```
+    def volume = { double l, double w, double h -> l*w*h }      
+    def fixedWidthVolume = volume.ncurry(1, 2d)                 
+    assert volume(3d, 2d, 4d) == fixedWidthVolume(3d, 4d)
+    ```
+    
+    + memorize 
+    ```
+    fib = { long n -> n<2?n:fib(n-1)+fib(n-2) }.memoize()
+    assert fib(25) == 75025 // fast!
+    ```
+    
+    + composition, creating a new function by composing two or more functions (chaining calls), as illustrated in this example:
+    
+    ```
+    def plus2  = { it + 2 }
+    def times3 = { it * 3 }
+
+    def times3plus2 = plus2 << times3
+    assert times3plus2(3) == 11    
+    ```
+    
+- trampoline Closures are wrapped in a TrampolineClosure. Upon calling, a trampolined Closure will call the original Closure waiting for its result to prevent stackoverflow  
+
+```
+trampoline() to implement the factorial function:
+
+def factorial
+factorial = { int n, def accu = 1G ->
+    if (n < 2) return accu
+    factorial.trampoline(n - 1, n * accu)
+}
+factorial = factorial.trampoline()
+
+assert factorial(1)    == 1
+assert factorial(3)    == 1 * 2 * 3
+```
+
+- method pointer operator (.&) can be used to store a reference to a method in a variable
+
+def str = 'example of method reference'            
+def fun = str.&toUpperCase                         
+def upper = fun()                                  
+assert upper == str.toUpperCase()  
+
+- The method reference operator (::) can be used to reference a method or constructor in contexts expecting a functional interface.
+
+```
+import groovy.transform.CompileStatic
+import static java.util.stream.Collectors.toList
+
+@CompileStatic
+void methodRefs() {
+    assert 6G == [1G, 2G, 3G].stream().reduce(0G, BigInteger::add)                           
+
+    assert [4G, 5G, 6G] == [1G, 2G, 3G].stream().map(3G::add).collect(toList())              
+
+    assert [1G, 2G, 3G] == [1L, 2L, 3L].stream().map(BigInteger::valueOf).collect(toList())  
+
+    assert [1G, 2G, 3G] == [1L, 2L, 3L].stream().map(3G::valueOf).collect(toList())          
+}
+
+methodRefs()
+```
+    
+    
+
+# Processing yaml 
+- YamlSlurper is a class that parses YAML text or reader content into Groovy data structures (objects) such as maps, lists and primitive types like Integer, Double, Boolean and String.
+
+- read 
+
+```
+        def ys = new YamlSlurper()
+        def yaml = ys.parseText '''
+language: groovy
+sudo: required
+dist: trusty
+
+matrix:
+  include:
+    - jdk: openjdk10
+    - jdk: oraclejdk9
+    - jdk: oraclejdk8
+
+before_script:
+  - |
+    unset _JAVA_OPTIONS
+
+        '''
+
+        assert 'groovy' == yaml.language
+        assert 'required' == yaml.sudo
+        assert 'trusty' == yaml.dist
+        assert ['openjdk10', 'oraclejdk9', 'oraclejdk8'] ==  yaml.matrix.include.jdk
+        assert ['unset _JAVA_OPTIONS'] == yaml.before_script*.trim()
+```
+
+- write 
+
+```
+        def builder = new YamlBuilder()
+        builder.records {
+            car {
+                name 'HSV Maloo'
+                make 'Holden'
+                year 2006
+                country 'Australia'
+                homepage new URL('http://example.org')
+                record {
+                    type 'speed'
+                    description 'production pickup truck with speed of 271kph'
+                }
+            }
+        }
+
+        assert builder.toString() == '''---
+records:
+  car:
+    name: "HSV Maloo"
+    make: "Holden"
+    year: 2006
+    country: "Australia"
+    homepage: "http://example.org"
+    record:
+      type: "speed"
+      description: "production pickup truck with speed of 271kph"
+```
+
+
+
+# Template engine 
+- Groovy supports multiple ways to generate text dynamically including GStrings, printf and MarkupBuilder
+
+- template framework 
+
+SimpleTemplateEngine
+StreamingTemplateEngine 
+GStringTemplateEngine 
+XmlTemplateEngine 
+MarkupTemplateEngine 
+
+- SimpleTemplateEngine, similar to jsp 
+```
+def text = 'Dear "$firstname $lastname",\nSo nice to meet you in <% print city %>.\nSee you in ${month},\n${signed}'
+
+def engine = new groovy.text.SimpleTemplateEngine()
+def template = engine.createTemplate(text).make(binding)
+template.toString()
+```
+
+escape <% print city == "New York" ? "\\"The Big Apple\\"" : city %>
+
+- StreamTemplateEngine similar to SimpleTemplateEngine but can handle strings large than 64k 
+
+- GStringTemplateEngine
+
+in file test.template 
+```
+Dear "$firstname $lastname",
+So nice to meet you in <% out << (city == "New York" ? "\\"The Big Apple\\"" : city) %>.
+See you in ${month},
+${signed}
+```
+
+```
+def f = new File('test.template')
+def engine = new groovy.text.GStringTemplateEngine()
+def template = engine.createTemplate(f).make(binding)
+println template.toString()
+```
+
+- XmlTemplateEngine for template and output are all expect to xml 
+
+```
+def binding = [firstname: 'Jochen', lastname: 'Theodorou', nickname: 'blackdrag', salutation: 'Dear']
+def engine = new groovy.text.XmlTemplateEngine()
+def text = '''\
+    <document xmlns:gsp='http://groovy.codehaus.org/2005/gsp' xmlns:foo='baz' type='letter'>
+        <gsp:scriptlet>def greeting = "${salutation}est"</gsp:scriptlet>
+        <gsp:expression>greeting</gsp:expression>
+        <foo:to>$firstname "$nickname" $lastname</foo:to>
+        How are you today?
+    </document>
+'''
+def template = engine.createTemplate(text).make(binding)
+println template.toString()
+```
+
+- markup template 
+
+```
+xmlDeclaration()
+cars {
+   cars.each {
+       car(make: it.make, model: it.model)
+   }
+}
+```
+
+- custom template class, By default, templates created inherit the groovy.text.markup.BaseTemplate class. It may be interesting for an application to provide a different template clas
+
+- type checking, The MarkupTemplateEngine provides such a facility. Templates can be optionally type checked
+
+
+
+
+# Servlet support  
+- There is also a GroovyServlet.
+
+This feature will automatically compile your .groovy source files, turn them into bytecode, load the Class and cache it until you change the source file.
+
+- setup groovylets 
+
+<servlet>
+    <servlet-name>Groovy</servlet-name>
+    <servlet-class>groovy.servlet.GroovyServlet</servlet-class>
+</servlet>
+
+<servlet-mapping>
+    <servlet-name>Groovy</servlet-name>
+    <url-pattern>*.groovy</url-pattern>
+</servlet-mapping>
+
+the .groovy files in, say, the root directory  and let GroovyServlet to take care of the .groovy files 
+
+
+
+# Groovyc the groovy compiler 
+- groovyc MyClass.groovy
+- Gant is a tool for scripting Ant tasks using Groovy instead of XML to specify the logic. 
+- gradle is a build tool to leverage the flexibility of ant 
+- maven integration 
 
 
 

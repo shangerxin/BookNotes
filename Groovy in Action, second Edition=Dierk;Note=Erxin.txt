@@ -1505,6 +1505,18 @@ static Test suite() {
 TestRunner.run(suite())
 ```
 
+
+```
+import org.junit.Test
+import static org.junit.Assert.assertEquals
+class SimpleUnitTest {
+   @Test
+   void shouldAdd() {
+     assertEquals("Groovy should add correctly", 2, 1 + 1)
+   }
+}
+```
+
 -  property testing 
 
 ```
@@ -1516,3 +1528,462 @@ for (words in someNonEmptyLists(strings())) {
     assert words*.size().sum() == words.sum().size()
 }
 ```
+
+- advance testing 
+
+    + stub 
+
+```
+//target code
+def relay(request, farm) {
+    farm.machines.sort { it.load }[0].send(request)
+}
+
+//mocks 
+import groovy.mock.interceptor.StubFor
+
+def farmStub = new StubFor(Farm)
+
+def fakeOne = new Expando(load:10, send: { false } )
+def fakeTwo = new Expando(load:5,  send: { true }  )
+
+farmStub.demand.getMachines { [fakeOne, fakeTwo] }
+```
+
+    + stub expectation yield different results per call
+
+someStub.demand.methodOne { 1 }
+someStub.demand.methodOne { 2 }
+someStub.demand.methodOne(0..35) { 1 }
+
+    + stub isn't asserted by default, can enforce this check by calling
+
+someStub.expect.verify()
+
+- unit testing java code 
+
+write your tests in Groovy.
+
+ensure that the Java .class files you wish to test are on the classpath.
+
+run your Groovy tests in the normal way (on the command line or via your IDE or favorite build environment).
+
+- using GroovyLogTestCase 
+
+```
+import java.util.logging.*
+
+class LoggingCounter {
+    static final LOG = Logger.getLogger('LoggingCounter')
+    def biggerThan(items, target) {
+        def count = 0
+        items.each{
+            if (it > target) {
+                count++
+                LOG.finer "item was bigger - count this one"
+            } else if (it == target) {
+                LOG.finer "item was equal - don't count this one"
+            } else {
+                LOG.finer "item was smaller - don't count this one"
+            }
+        }
+        return count
+    }
+}
+```
+
+- Meet Spock (www.spockframework.org), a testing and specification framework for Java and Groovy applications
+
+```
+@Grab('org.spockframework:spock-core:1.0-groovy-2.4')
+import spock.lang.Specification
+
+class GivenWhenThenSpec extends Specification {
+
+  def "test adding a new item to a set"() {
+    given:
+    def items = [4, 6, 3, 2] as Set
+
+    when:
+    items << 1
+
+    then:
+    items.size() == 5
+  }
+}
+```
+
+    + data driven spock tests 
+    
+```
+@Grab('org.spockframework:spock-core:1.0-groovy-2.4')
+import spock.lang.*
+
+import static Converter.celsius
+
+class Listing_17_17_SpockDataDriven extends Specification {
+  def "test temperature scenarios"() {
+    expect:
+    celsius(tempF) == tempC
+
+    where:
+    scenario                  | tempF || tempC
+    'Freezing'                |    32 ||     0
+    'Garden party conditions' |    68 ||    20
+    'Beach conditions'        |    95 ||    35
+    'Boiling'                 |   212 ||   100
+  }
+}
+```
+
+- build automation with gradle 
+
+
+
+# Concurrent Groovy with GPars 
+- GPars is an external library that comes bundled with the Groovy installation and is thus readily available in most cases.
+
+@Grab('org.codehaus.gpars:gpars:1.2.1')
+<some import statement here>
+
+calculating a list of squares concurrently 
+```
+import static groovyx.gpars.GParsPool.withPool
+
+def numbers = [1, 2, 3,  4,  5,  6]
+def squares = [1, 4, 9, 16, 25, 36]
+
+withPool {
+   assert squares == numbers.collectParallel  { it * it }
+}
+```
+
+- Using transitive transparent concurrency to find squares < 10
+
+```
+import static groovyx.gpars.GParsPool.withPool
+
+withPool {
+    def numbers = [1, 2, 3,  4,  5,  6].makeConcurrent()
+    def squares = [1, 4, 9]
+    assert squares == numbers.collect{ it * it }.grep{ it < 10 }
+}
+```
+
+- withPool available fork/join methods 
+
+```
+import static groovyx.gpars.GParsPool.withPool
+
+withPool {
+    assert 55 == [0, 1, 2, 3, 4].parallel
+        .map    { it + 1  }
+        .map    { it ** 2 }
+        .reduce { a, b -> a + b }
+}
+```
+
+- public by default, Groovy considers classes and methods public
+
+- groovy closures parallel 
+
+// Groovy with Java 8
+def numbers = [1, 2, 3,  4,  5,  6]
+assert [1, 4, 9] == numbers.parallelStream()
+    .map    { it * it }
+    .filter { it < 10 }
+    .collect()
+    
+- dataflow streams and operators for implicit task coordination 
+
+```
+import static groovyx.gpars.dataflow.Dataflow.*
+import groovyx.gpars.dataflow.DataflowQueue
+
+def chances = new DataflowQueue()
+def amounts = new DataflowQueue()
+def payouts = new DataflowQueue()
+
+operator( inputs: [chances, amounts],
+         outputs: [payouts],
+        { chance, amount -> payouts << chance * amount }
+)
+
+task { [0.1, 0.2, 0.3].each { chances << it } }
+task { [300, 200, 100].each { amounts << it } }
+
+[30, 40, 30].each { assert it == payouts.val }
+```
+
+- final thoughts on dataflow, dataflow operators by applying the efficient KanbanFlow pattern (http://people.canoo.com/mittie/kanbanflow.html).
+
+- Apache Camel project (see http://camel.apache.org/enterprise-integration-patterns.html
+
+- hooking into the actor lifecycle through metaprogramming 
+
+```
+import static groovyx.gpars.actor.Actors.*
+
+def stopper = reactor { stop() }
+stopper.metaClass.afterStop = { inbox -> println inbox }
+stopper.send()
+```
+
+- Safeguarding a string for concurrent modifications
+
+```
+import groovyx.gpars.agent.Agent
+
+def guard = new Agent<String>()
+
+guard { updateValue('GPars') }
+guard { updateValue(it + ' is groovy!') }
+
+assert "GPars is groovy!" == guard.val
+```
+
+- fetching price concurrent with price 
+
+```
+import static groovyx.gpars.GParsPool.withPool
+import static YahooService.getYearEndClosing
+
+def tickers = ['AAPL', 'GOOG', 'IBM', 'ORCL', 'MSFT']
+
+withPool(tickers.size()) {
+  def top = tickers.makeConcurrent()
+      .collect { [ticker: it, price: getYearEndClosing(it, 2014)] }
+      .max { it.price }
+  assert top == [ticker: 'GOOG', price: 526.4f]
+}
+```
+
+
+
+# Domain specific languages 
+- using a custom base script 
+
+```
+Using a custom base script class
+package v02
+
+import v02.model.*
+
+def binding = new Binding(
+    robot: new Robot(),
+    *: Direction.values().collectEntries { [(it.name()): it] }
+)
+
+def shell = new GroovyShell(this.class.classLoader, binding)
+shell.evaluate '''
+@BaseScript(v02.integration.RobotBaseScript)
+import groovy.transform.BaseScript
+
+move left
+'''
+```
+
+- Using @Delegate for method injection and delegation
+
+```
+package v02.integration
+
+import v02.model.Direction
+
+abstract class RobotBaseScript extends Script {
+    @Delegate @Lazy Robot robot = this.binding.robot
+}
+```
+
+- adding property to numbers 
+
+```
+Unit enum
+package v03.model
+
+enum DistanceUnit {
+
+  centimeter('cm', 0.01),
+  meter     ( 'm',    1),
+  kilometer ('km', 1000)
+
+  String abbreviation
+  double multiplier
+
+  DistanceUnit(String abbr, double mult) {
+    this.abbreviation = abbr
+    this.multiplier = mult
+  }
+
+  String toString() { abbreviation }
+}
+```
+
+- implementing a distance category
+
+```
+package v03.integration
+
+import v03.model.*
+
+class DistanceCategory {
+    static Distance getCentimeters(Number num) {
+        new Distance(num, Unit.centimeter)
+    }
+
+    static Distance getMeters(Number num) {
+        new Distance(num, Unit.meter)
+    }
+
+    static Distance getKilometers(Number num) {
+        new Distance(num, Unit.kilometer)
+    }
+}
+```
+
+-  updated distance with an overloaded division operator
+
+```
+package v03.model
+
+import groovy.transform.TupleConstructor
+
+@TupleConstructor
+class Distance {
+    double amount
+    DistanceUnit unit
+
+    Speed div(Duration dur) {
+        new Speed(amount, unit)
+    }
+
+    String toString() { "$amount$unit" }
+}
+```
+
+- The WhenUntilTransform class
+
+transform dsl syntax to groovy 
+
+```
+import org.codehaus.groovy.ast.*
+import org.codehaus.groovy.control.*
+import org.codehaus.groovy.transform.*
+
+@GroovyASTTransformation(phase = CompilePhase.SEMANTIC_ANALYSIS)
+class WhenUntilTransform implements ASTTransformation {
+    void visit(ASTNode[] nodes, SourceUnit unit) {
+        // we'll fill in the gaps!
+    }
+}
+···
+
+- Ruby-style instantiation
+
+```
+import groovy.transform.ToString
+
+@ToString
+class Car {
+    String make
+    String model
+}
+
+@Newify
+def car = Car.new(make: 'Porsche', model: '911')
+
+assert car.toString() == 'Car(Porsche, 911)'
+```
+
+
+- Python-style instantiation
+
+```
+import groovy.transform.Canonical
+
+@Canonical
+class Country {
+    String name
+}
+
+@Canonical
+class City {
+    String name
+    String zipCode
+    Country country
+}
+
+@Newify([City, Country])
+def paris = City('Paris', '75000', Country('France'))
+
+assert paris.toString() == 'City(Paris, 75000, Country(France))'
+```
+
+- secure ast customizer, Introducing SecureASTCustomizer
+In the previous sections, we had the opportunity to use compiler customizers for injecting imports or AST transformations.  
+
+-  custom syntax exception:
+```
+import groovy.transform.*
+
+@InheritConstructors
+class SyntaxException extends Exception {}
+```
+
+
+
+# The groovy ecosystem 
+- Grapes lets you add Maven dependencies to your classpath from within a .groovy file.
+
+- hosted at http://myrepo.my-company.com, then you would add the @GrabResolver annotation to your script, like so:
+
+@GrabResolver(name='myrepo', root='http://myrepo.my-company.com/')
+@Grab('org.ccil.cowan.tagsoup:tagsoup:1.2')
+import org.ccil.cowan.tagsoup.Parser
+
+- The website MvnRepository (http://mvnrepository.com) allows you to search for dependencies and displays the correct @Grab
+
+- let’s write our first ActiveX Groovy script:
+```
+import org.codehaus.groovy.scriptom.*
+def wshell = new ActiveXObject('WScript.Shell')
+wshell.popup('Scriptom is Groovy!')
+
+import org.codehaus.groovy.scriptom.ActiveXObject
+
+def explorer = new ActiveXObject('InternetExplorer.Application')
+explorer.Visible    = true
+explorer.AddressBar = true
+explorer.Navigate('http://www.groovy-lang.org/')
+```
+
+- timing plain old groovy 
+
+$ time groovy -e "println new Date()"
+
+- CodeNarc for static code analysis
+The CodeNarc project analyzes Groovy code and warns you of possible defects, bad practices
+
+- Using @Synchronized
+
+```
+class Person {
+    List addresses
+
+    @groovy.transform.Synchronized
+    void setAddresses(List addresses) {
+        this.addresses.clear()
+        this.addresses.addAll(addresses)
+    }
+}
+The violation generated for this code is “Inconsistent Property Synchronization.”
+```
+
+- Grails is a platform for writing Groovy web applications, and at its core is a Model-View-Controller (MVC) design based on Spring
+
+
+
+# Reference 
+- Groovy blog aggregator is www.groovyblogs.org, also comprising the “Groovy Weekly.”
+
+- http://groovyconsole.appspot.com/, where you can do live-coding in the browser.
