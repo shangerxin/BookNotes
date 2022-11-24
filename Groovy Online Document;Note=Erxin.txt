@@ -3,7 +3,7 @@ Groovy Online Document;Note=Erxin
 # Reference 
 http://groovy-lang.org/syntax.html
 
-# Sytax
+# Syntax
 - comments 
 // 
 
@@ -1767,7 +1767,661 @@ records:
 
 
 
-# Template engine 
+# Semantics 
+- variable definition 
+
+String x
+def y
+var z
+
+- multiple assignment 
+
+def (a, b, c) = [10, 20, 'foo']
+
+- overflow and underflow 
+
+def (a, b, c) = [1, 2]
+assert a == 1 && b == 2 && c == null
+
+def (a, b) = [1, 2, 3]
+assert a == 1 && b == 2
+
+- object descructuring with multiple assignment. customize type to suppport object descructure 
+
+```
+@Immutable
+class Coordinates {
+    double latitude
+    double longitude
+
+    double getAt(int idx) {
+        if (idx == 0) latitude
+        else if (idx == 1) longitude
+        else throw new Exception("Wrong coordinate index, use 0 or 1")
+    }
+}
+Now let’s instantiate this class and destructure its longitude and latitude:
+
+def coordinates = new Coordinates(latitude: 43.23, longitude: 3.67) 
+
+def (la, lo) = coordinates                                          
+
+assert la == 43.23                                                  
+assert lo == 3.67
+```
+
+- control structure 
+
+    + if/else 
+
+```
+def x = false
+def y = false
+
+if ( !x ) {
+    x = true
+}
+
+assert x == true
+
+if ( x ) {
+    x = false
+} else {
+    y = true
+}
+
+assert x == y
+```
+
+    + switch/case 
+    
+```
+
+switch (x) {
+    case "foo":
+        result = "found foo"
+        // lets fall through
+
+    case "bar":
+        result += "bar"
+
+    case [4, 5, 6, 'inList']:
+        result = "list"
+        break
+    default:
+        result = "default"
+}
+
+
+def partner = switch(person) {
+    case 'Romeo'  -> 'Juliet'
+    case 'Adam'   -> 'Eve'
+    case 'Antony' -> 'Cleopatra'
+    case 'Bonnie' -> 'Clyde'
+}
+```
+
+- looping structures 
+
+    + classic for loop
+    
+```
+String message = ''
+for (int i = 0; i < 5; i++) {
+    message += 'Hi '
+}
+assert message == 'Hi Hi Hi Hi Hi '
+
+for (int fact = 1, i = 1; i <= count; i++, fact *= i) {
+    facts << fact
+}
+
+for (def (String u, int v) = ['bar', 42]; v < 45; u++, v++) {
+    baNums << "$u $v"
+}
+```
+
+    + for in loop 
+```
+for ( i in 0..9 ) {
+    x += i
+}
+
+for ( i in [0, 1, 2, 3, 4] ) {
+    x += i
+}
+
+def map = ['abc':1, 'def':2, 'xyz':3]
+x = 0
+for ( e in map ) {
+    x += e.value
+}
+
+for ( v in map.values() ) {
+    x += v
+}
+```
+
+    + while loop 
+```
+while ( y-- > 0 ) {
+    x++
+}
+
+do {
+    fact *= count--
+} while(count > 1)
+
+
+```
+
+- exception handling 
+
+```
+try {
+    'moo'.toLong()   // this will generate an exception
+    assert false     // asserting that this point should never be reached
+} catch ( e ) {
+    assert e in NumberFormatException
+}
+```
+
+    + Automatic Resource Management (ARM). That syntax is now supported for Java programmers 
+
+
+```
+class FromResource extends ByteArrayInputStream {
+    @Override
+    void close() throws IOException {
+        super.close()
+        println "FromResource closing"
+    }
+
+    FromResource(String input) {
+        super(input.toLowerCase().bytes)
+    }
+}
+
+class ToResource extends ByteArrayOutputStream {
+    @Override
+    void close() throws IOException {
+        super.close()
+        println "ToResource closing"
+    }
+}
+
+def wrestle(s) {
+    try (
+            FromResource from = new FromResource(s)
+            ToResource to = new ToResource()
+    ) {
+        to << from
+        return to.toString()
+    }
+}
+
+def wrestle2(s) {
+    FromResource from = new FromResource(s)
+    try (from; ToResource to = new ToResource()) { // Enhanced try-with-resources in Java 9+
+        to << from
+        return to.toString()
+    }
+}
+```
+
+- power assertion, First of all, an assertion in Groovy is always executed, independently of the -ea flag of the JVM.
+
+assert [left expression] == [right expression] : (optional message)
+
+- label statement
+
+```
+given:
+    def x = 1
+    def y = 2
+when:
+    def z = x+y
+then:
+    assert z == 3
+    
+    
+for (int i=0;i<10;i++) {
+    for (int j=0;j<i;j++) {
+        println "j=$j"
+        if (j == 5) {
+            break exit
+        }
+    }
+    exit: println "i=$i"
+}
+```
+
+the Spock Framework does to make testing easier.
+
+https://spockframework.org/spock/docs/2.3/index.html
+
+- expression 
+
+Example expression(s)                               Description
+
+foo                                                 the name of a variable, field, parameter, …​
+
+this, super, it                                     special names
+
+true, 10, "bar"                                     literals
+
+String.class                                        Class literal
+
+( expression )                                      parenthesised expressions
+
+foo++, ~bar                                         Unary operator expressions
+
+foo + bar, bar * baz                                Binary operator expressions
+
+foo ? bar : baz                                     Ternary operator expressions
+
+(Integer x, Integer y) → x + y                      Lambda expressions
+
+assert 'bar' == switch('foo') {
+  case 'foo' -> 'bar'
+}
+
+String                                              Abbreviated class literal (when not ambiguous)
+
+{ x, y → x + y }                                    Closure expressions
+
+[1, 3, 5]                                           literal list expressions
+
+[a:2, b:4, c:6]                                     literal map expressions
+
+- GPath is a path expression similar to XPath which is a dot-object notation 
+
+a.b.c → for XML, yields all the c elements inside b inside a
+
+a["@href"] → map-like notation : the href attribute of all the a elements
+
+a.'@href' → property notation : an alternative way of expressing this
+
+a.@href → direct notation : yet another alternative way of expressing this
+
+    + object navigation 
+                                                   
+```                                                   
+void aMethodFoo() { println "This is aMethodFoo." }
+assert ['aMethodFoo'] == this.class.methods.name.grep(~/.*Foo/)
+```
+
+    + xml navigation 
+
+```
+def xmlText = """
+              | <root>
+              |   <level>
+              |      <sublevel id='1'>
+              |        <keyVal>
+              |          <key>mykey</key>
+              |          <value>value 123</value>
+              |        </keyVal>
+              |      </sublevel>
+              |      <sublevel id='2'>
+              |        <keyVal>
+              |          <key>anotherKey</key>
+              |          <value>42</value>
+              |        </keyVal>
+              |        <keyVal>
+              |          <key>mykey</key>
+              |          <value>fizzbuzz</value>
+              |        </keyVal>
+              |      </sublevel>
+              |   </level>
+              | </root>
+              """
+def root = new XmlSlurper().parseText(xmlText.stripMargin())
+assert root.level.size() == 1 
+assert root.level.sublevel.size() == 2 
+assert root.level.sublevel.findAll { it.@id == 1 }.size() == 1 
+```
+
+
+- Promotion and coercion 
+
+binary operations between byte, char, short and int result in int
+
+binary operations involving long with byte, char, short and int result in long
+
+binary operations involving BigInteger and any other integral type result in BigInteger
+
+binary operations involving BigDecimal with byte, char, short, int and BigInteger result in BigDecimal
+
+binary operations between float, double and BigDecimal result in double
+
+binary operations between two BigDecimal result in BigDecimal
+
+- Closure to type coercion 
+
+    + assigning to a SAM type, A SAM type is a type which defines a single abstract method
+    
+```
+interface Predicate<T> {
+    boolean accept(T obj)
+}
+
+abstract class Greeter {
+    abstract String getName()
+    void greet() {
+        println "Hello, $name"
+    }
+}
+
+Predicate filter = { it.contains 'G' } as Predicate
+assert filter.accept('Groovy') == true
+
+Greeter greeter = { 'Groovy' } as Greeter
+greeter.greet()
+
+//equal to 
+Predicate filter = { it.contains 'G' }
+assert filter.accept('Groovy') == true
+
+Greeter greeter = { 'Groovy' }
+greeter.greet()
+```   
+
+Any closure can be converted into a SAM type using the as operator. The as Type expression is optional. 
+
+method pointers also do the same assignment 
+```
+boolean doFilter(String s) { s.contains('G') }
+
+Predicate filter = this.&doFilter
+assert filter.accept('Groovy') == true
+```
+
+    + call a method with a SAM type parameter. It can be assigned with closure 
+ 
+``` 
+public <T> List<T> filter(List<T> source, Predicate<T> predicate) {
+    source.findAll { predicate.accept(it) }
+}
+
+assert filter(['Java','Groovy'], { it.contains 'G'} as Predicate) == ['Groovy']
+
+assert filter(['Java','Groovy']) { it.contains 'G'} == ['Groovy']
+```
+
+    + closure to arbitrary type coercion 
+
+```
+interface FooBar {
+    int foo()
+    void bar()
+}
+
+def impl = { println 'ok'; 123 } as FooBar
+
+class FooBar {
+    int foo() { 1 }
+    void bar() { println 'bar' }
+}
+
+def impl = { println 'ok'; 123 } as FooBar
+```
+
+    + coerce a map into an interface or a class
+```    
+interface X {
+    void f()
+    void g(int n)
+    void h(String s, int n)
+}
+
+x = [ f: {println "f called"} ] as X
+x.f() // method exists
+x.g() // MissingMethodException here
+x.g(5) // UnsupportedOperationException her
+```
+    + string to enum coercion 
+    
+```
+enum State {
+    up,
+    down
+}
+
+State st = 'up'
+assert st == State.up
+
+def val = "up"
+State st = "${val}"
+assert st == State.up
+
+//implicit coercion in switch 
+State switchState(State st) {
+    switch (st) {
+        case 'up':
+            return State.down // explicit constant
+        case 'down':
+            return 'up' // implicit coercion for return types
+    }
+}
+
+```
+
+    + custom type coercion, implementing the asType method. Custom coercion is invoked using the as operator and is never implicit
+    
+```
+class Polar {
+    double r
+    double phi
+}
+class Cartesian {
+   double x
+   double y
+}
+def asType(Class target) {
+    if (Cartesian==target) {
+        return new Cartesian(x: r*cos(phi), y: r*sin(phi))
+    }
+}
+def sigma = 1E-16
+def polar = new Polar(r:1.0,phi:PI/2)
+def cartesian = polar as Cartesian
+assert abs(cartesian.x-sigma) < sigma
+
+class Polar {
+    double r
+    double phi
+    def asType(Class target) {
+        if (Cartesian==target) {
+            return new Cartesian(x: r*cos(phi), y: r*sin(phi))
+        }
+    }
+}
+
+//define asType outside of a closed class 
+Polar.metaClass.asType = { Class target ->
+    if (Cartesian==target) {
+        return new Cartesian(x: r*cos(phi), y: r*sin(phi))
+    }
+}
+```    
+
+    + Class literals vs variables and the as operator 
+    
+    as keyword is only possible if you have a static reference to a class
+
+    ```
+    interface Greeter {
+        void greet()
+    }
+    def greeter = { println 'Hello, Groovy!' } as Greeter // Greeter is known statically
+    greeter.greet()
+    
+    //lass literals. Instead, you need to call the asType method
+    greeter = { println 'Hello, Groovy!' } as clazz
+    greeter = { println 'Hello, Groovy!' }.asType(clazz)
+    greeter.greet()
+    ```
+- optional paraentheses 
+
+println 'Hello World'
+def maximum = Math.max 5, 10
+
+- optional semicolons, semicolons is required for multi statement  
+
+boolean a = true; assert a
+
+- optional return keyword 
+
+```
+int add(int a, int b) {
+    a+b
+}
+assert add(1, 2) == 3
+```
+
+- optional public methods, by default class method is public 
+
+```
+class Server {
+    String toString() { "a server" }
+}
+```
+
+- the groovy truth 
+
+assert true
+assert !false
+assert [1, 2, 3]
+assert ![]
+assert ('a' =~ /a/)
+assert !('a' =~ /b/)
+assert [0].iterator()
+assert ![].iterator()
+Vector v = [0] as Vector
+Enumeration enumeration = v.elements()
+assert enumeration
+enumeration.nextElement()
+assert !enumeration
+assert ['one' : 1]
+assert ![:]
+assert 'a'
+assert !''
+def nonEmpty = 'a'
+assert "$nonEmpty"
+def empty = ''
+assert !"$empty"
+assert new Object()
+assert !null
+
+    + customizing 
+
+```
+class Color {
+    String name
+
+    boolean asBoolean(){
+        name == 'green' ? true : false 
+    }
+}
+
+assert new Color(name: 'green')    
+```
+
+- Typing 
+
+    + Optional type checking 
+```
+String aString = 'foo'
+def aString = 'foo'                         
+assert aString.toUpperCase()    
+
+String concat(String a, String b) {
+    a+b
+}
+
+def concat(def a, def b) {                              
+    a+b
+}
+```
+
+    + Static type checking 
+    
+```
+class Person {                                                          
+    String firstName
+    String lastName
+}
+
+def p = new Person(firstName: 'Raymond', lastName: 'Devos')             
+assert p.formattedName == 'Raymond Devos'   
+Person.metaClass.getFormattedName = { "$delegate.firstName $delegate.lastName" }
+```
+
+switching to a type checked mode. This can be done by annotating a class or a method with @groovy.transform.TypeChecked.
+
+    + The @TypeChecked annotation 
+
+```
+@groovy.transform.TypeChecked
+class Calculator {
+    int sum(int x, int y) { x+y }
+}
+``` 
+
+- type checking assignments 
+
+String s = new Date() // implicit call to toString
+Boolean boxed = 'some string'       // Groovy truth
+boolean prim = 'some string'        // Groovy truth
+Class clazz = 'java.lang.String'    // class coercion
+String s = null         // passes
+int i = null            // fails
+
+- list and map constructors 
+
+```
+@groovy.transform.TupleConstructor
+class Person {
+    String firstName
+    String lastName
+}
+Person classic = new Person('Ada','Lovelace')
+
+Person list = ['Ada','Lovelace']
+Person map = [firstName:'Ada', lastName:'Lovelace']
+```
+
+- variables vs fields in type inference 
+
+```
+class SomeClass {
+    def someUntypedField                                                                
+    String someTypedField                                                               
+
+    void someMethod() {
+        someUntypedField = '123'                                                        
+        someUntypedField = someUntypedField.toUpperCase()  // compile-time error        
+    }
+
+    void someSafeMethod() {
+        someTypedField = '123'                                                          
+        someTypedField = someTypedField.toUpperCase()                                   
+    }
+
+    void someMethodUsingLocalVariable() {
+        def localVariable = '123'                                                       
+        someUntypedField = localVariable.toUpperCase()                                  
+    }
+}
+
+```   
+
+
+
+
+
+# Template engines 
 - Groovy supports multiple ways to generate text dynamically including GStrings, printf and MarkupBuilder
 
 - template framework 
@@ -1840,7 +2494,1224 @@ cars {
 
 - type checking, The MarkupTemplateEngine provides such a facility. Templates can be optionally type checked
 
+- list and map constructors 
+```
+@groovy.transform.TupleConstructor
+class Person {
+    String firstName
+    String lastName
+}
+Person classic = new Person('Ada','Lovelace')
+Person list = ['Ada','Lovelace']
+Person map = [firstName:'Ada', lastName:'Lovelace']
+```
 
+- variables vs fields in type inference 
+
+```
+class SomeClass {
+    def someUntypedField                                                                
+    String someTypedField                                                               
+
+    void someMethod() {
+        someUntypedField = '123'                                                        
+        someUntypedField = someUntypedField.toUpperCase()  // compile-time error        
+    }
+
+    void someSafeMethod() {
+        someTypedField = '123'                                                          
+        someTypedField = someTypedField.toUpperCase()                                   
+    }
+
+    void someMethodUsingLocalVariable() {
+        def localVariable = '123'                                                       
+        someUntypedField = localVariable.toUpperCase()                                  
+    }
+}
+```
+
+a field. Any thread can access any field at any time 
+local variables we know if they "escape" or not, so we can make sure that the type of a variable is constant (or not) over time
+
+- collection literal type inference 
+
+lists, using the [] literal 
+maps, using the [:] literal 
+ranges, using from...to 
+
+def intRange = (0..10)
+def charRange = ('a'..'z')
+
+- least upper bound, superclass corresponds to the common super class of A and B. It can also be upper bound is a type which represents the union of the interfaces 
+
+```
+class Top {}
+class Bottom1 extends Top {}
+class Bottom2 extends Top {}
+
+assert leastUpperBound(String, String) == String                    
+assert leastUpperBound(ArrayList, LinkedList) == AbstractList       
+assert leastUpperBound(ArrayList, List) == List                     
+assert leastUpperBound(List, List) == List                          
+assert leastUpperBound(Bottom1, Bottom2) == Top                     
+assert leastUpperBound(List, Serializable) == Object   
+```
+
+- instanceof inference 
+```
+class Greeter {
+    String greeting() { 'Hello' }
+}
+
+void doSomething(def o) {
+    if (o instanceof Greeter) {     
+        println o.greeting()        
+    }
+}
+
+doSomething(new Greeter())
+```
+
+- Flow typing is an important concept of Groovy in type checked mode and an extension of type inference
+
+```
+@groovy.transform.TypeChecked
+void flowTyping() {
+    def o = 'foo'                       
+    o = o.toUpperCase()                 
+    o = 9d                              
+    o = Math.sqrt(o)                    
+}
+```
+- advance type inference 
+
+String result
+doSomething { String it ->
+    result = "Result: $it"
+}
+result = result?.toUpperCase()
+
+- explicit closure parameters 
+
+inviteIf(p) {Person it ->
+    it.age >= 18 
+}
+
+- Groovy provides an annotation, @ClosureParams which is aimed at completing type information. 
+
+- type checking extensions 
+
+The @TypeChecked annotation supports an attribute named extensions, a list of type checking extensions scripts 
+
+```
+@TypeChecked(extensions='/path/to/myextension.groovy')
+void foo() { ...}
+```
+
+The type checking API is a low level API, dealing with the Abstract Syntax Tree
+
+- advanced type checking extensions, type checking extension script becomes the body of the main method of a type checking extension class
+
+
+
+# Design pattern 
+- abstract factory 
+
+```
+def guessFactory = [messages: GuessGameMessages, control: GuessGameControl, converter: GuessGameInputConverter]
+def twoupFactory = [messages: TwoupMessages, control: TwoupControl, converter: TwoupInputConverter]
+
+class GameFactory {
+    def static factory
+    def static getMessages() { return factory.messages.newInstance() }
+    def static getControl() { return factory.control.newInstance() }
+    def static getConverter() { return factory.converter.newInstance() }
+}
+```
+- adapter pattern, make it appear to have the correct interface. It would look like this:
+
+class SquarePegAdapter {
+    def peg
+    def getRadius() {
+        Math.sqrt(((peg.width / 2) ** 2) * 2)
+    }
+    String toString() {
+        "SquarePegAdapter with peg width $peg.width (and notional radius $radius)"
+    }
+}
+
+- The Bouncer Pattern describes usage of a method whose sole purpose is to either throw an exception or do nothing 
+```
+class NullChecker {
+    static check(name, arg) {
+        if (arg == null) {
+            throw new IllegalArgumentException(name + ' is null')
+        }
+    }
+}
+
+class NumberChecker {
+    static final String NUMBER_PATTERN = "\\\\d+(\\\\.\\\\d+(E-?\\\\d+)?)?"
+    static isNumber(str) {
+        if (!str ==~ NUMBER_PATTERN) {
+            throw new IllegalArgumentException("Argument '$str' must be a number")
+        }
+    }
+    static isNotZero(number) {
+        if (number == 0) {
+            throw new IllegalArgumentException('Argument must not be 0')
+        }
+    }
+}
+```
+
+- chain of reszponsibility pattern 
+
+```
+class UnixLister {
+    private nextInLine
+    UnixLister(next) { nextInLine = next }
+    def listFiles(dir) {
+        if (System.getProperty('os.name') == 'Linux') {
+            println "ls $dir".execute().text
+        } else {
+            nextInLine.listFiles(dir)
+        }
+    }
+}
+
+class WindowsLister {
+    private nextInLine
+    WindowsLister(next) { nextInLine = next }
+    def listFiles(dir) {
+        if (System.getProperty('os.name') == 'Windows XP') {
+            println "cmd.exe /c dir $dir".execute().text
+        } else {
+            nextInLine.listFiles(dir)
+        }
+    }
+}
+
+class DefaultLister {
+    def listFiles(dir) {
+        new File(dir).eachFile { f -> println f }
+    }
+}
+
+def lister = new UnixLister(new WindowsLister(new DefaultLister()))
+
+lister.listFiles('Downloads')
+```
+- The Composite Pattern allows you to treat single instances of an object the same way as a group of objects.
+
+```
+abstract class Component {
+    def name
+    def toString(indent) {
+        ("-" * indent) + name
+    }
+}
+
+class Composite extends Component {
+    private children = []
+    def toString(indent) {
+        def s = super.toString(indent)
+        children.each { child ->
+            s += "\\n" + child.toString(indent + 1)
+        }
+        s
+    }
+    def leftShift(component) {
+        children << component
+    }
+}
+
+class Leaf extends Component { }
+
+def root = new Composite(name: "root")
+root << new Leaf(name: "leaf A")
+def comp = new Composite(name: "comp B")
+root << comp
+```
+
+- The Decorator Pattern provides a mechanism to embellish the behaviour of an object without changing its essential interface.
+
+```
+class TimeStampingLogger extends Logger {
+    private Logger logger
+    TimeStampingLogger(logger) {
+        this.logger = logger
+    }
+    def log(String message) {
+        def now = Calendar.instance
+        logger.log("$now.time: $message")
+    }
+}
+
+class UpperLogger extends Logger {
+    private Logger logger
+    UpperLogger(logger) {
+        this.logger = logger
+    }
+    def log(String message) {
+        logger.log(message.toUpperCase())
+    }
+}
+
+def logger = new UpperLogger(new TimeStampingLogger(new Logger()))
+logger.log("G'day Mate")
+
+```
+
+- a touch of dynam ic behavior 
+
+```
+class GenericLowerDecorator {
+    private delegate
+    GenericLowerDecorator(delegate) {
+        this.delegate = delegate
+    }
+    def invokeMethod(String name, args) {
+        def newargs = args.collect { arg ->
+            if (arg instanceof String) {
+                return arg.toLowerCase()
+            } else {
+                return arg
+            }
+        }
+        delegate.invokeMethod(name, newargs)
+    }
+}
+```
+
+- expando meta class 
+
+```
+// current mechanism to enable ExpandoMetaClass
+GroovySystem.metaClassRegistry.metaClassCreationHandle = new ExpandoMetaClassCreationHandle()
+
+def logger = new Logger()
+logger.metaClass.log = { String m -> println 'message: ' + m.toUpperCase() }
+logger.log('x')
+// => message: X
+```
+
+- decorating with an interceptor, built-in TracingInterceptor. We can extend the built-in class like this:
+```
+class TimingInterceptor extends TracingInterceptor {
+    private beforeTime
+    def beforeInvoke(object, String methodName, Object[] arguments) {
+        super.beforeInvoke(object, methodName, arguments)
+        beforeTime = System.currentTimeMillis()
+    }
+    Object afterInvoke(Object object, String methodName, Object[] arguments, Object result) {
+        super.afterInvoke(object, methodName, arguments, result)
+        def duration = System.currentTimeMillis() - beforeTime
+        writer.write("Duration: $duration ms\\n")
+        writer.flush()
+        result
+    }
+} 
+```
+
+- decorating with java.lang.reflect.Proxy, 
+```
+protected Sql getGroovySql() {
+    final Connection con = session.connection()
+    def invoker = { object, method, args ->
+        if (method.name == "close") {
+            log.debug("ignoring call to Connection.close() for use by groovy.sql.Sql")
+        } else {
+            log.trace("delegating $method")
+            return con.invokeMethod(method.name, args)
+        }
+    } as InvocationHandler;
+    def proxy = Proxy.newProxyInstance( getClass().getClassLoader(), [Connection] as Class[], invoker )
+    return new Sql(proxy)
+}
+```
+- decorating with string 
+```
+@Grab('org.springframework:spring-context:3.2.2.RELEASE')
+import org.springframework.context.support.ClassPathXmlApplicationContext
+
+def ctx = new ClassPathXmlApplicationContext('beans.xml')
+def calc = ctx.getBean('calc')
+println calc.add(3, 25)
+```
+
+- The Delegation Pattern is a technique where an object’s behavior (public methods) is implemented by delegating responsibility to one or more associated objects.
+
+```
+class Delegator {
+    private targetClass
+    private delegate
+    Delegator(targetClass, delegate) {
+        this.targetClass = targetClass
+        this.delegate = delegate
+    }
+    def delegate(String methodName) {
+        delegate(methodName, methodName)
+    }
+    def delegate(String methodName, String asMethodName) {
+        targetClass.metaClass."$asMethodName" = delegate.&"$methodName"
+    }
+    def delegateAll(String[] names) {
+        names.each { delegate(it) }
+    }
+    def delegateAll(Map names) {
+        names.each { k, v -> delegate(k, v) }
+    }
+    def delegateAll() {
+        delegate.class.methods*.name.each { delegate(it) }
+    }
+}
+
+class Person {
+    String name
+}
+
+class MortgageLender {
+    def borrowAmount(amount) {
+       "borrow \\$$amount"
+    }
+    def borrowFor(thing) {
+       "buy \\$thing"
+    }
+}
+
+def lender = new MortgageLender()
+
+def delegator = new Delegator(Person, lender)
+
+delegator.delegate 'borrowFor'
+delegator.delegate 'borrowAmount', 'getMoney'
+
+def p = new Person()
+
+println p.borrowFor('present')   // => buy present
+println p.getMoney(50)
+
+//borrow multiple methods like this:
+
+delegator.delegateAll 'borrowFor', 'borrowAmount'
+delegator.delegateAll()
+delegator.delegateAll borrowAmount:'getMoney', borrowFor:'getThing'
+```
+    + using delegate annotation 
+```
+class Person {
+    def name
+    @Delegate MortgageLender mortgageLender = new MortgageLender()
+}
+
+class MortgageLender {
+    def borrowAmount(amount) {
+       "borrow \\$$amount"
+    }
+    def borrowFor(thing) {
+       "buy $thing"
+    }
+}
+
+def p = new Person()
+
+assert "buy present" == p.borrowFor('present')
+assert "borrow \\$50" == p.borrowAmount(50)
+```
+
+- The Flyweight Pattern is a pattern for greatly reducing memory requirements by not requiring that heavy-weight objects be created in large numbers. It is captured within the heavy-weight class 
+
+```
+class Boeing797 {
+    def wingspan = '80.8 m'
+    def capacity = 1000
+    def speed = '1046 km/h'
+    def range = '14400 km'
+    // ...
+}
+
+class Airbus380 {
+    def wingspan = '79.8 m'
+    def capacity = 555
+    def speed = '912 km/h'
+    def range = '10370 km'
+    // ...
+}
+
+class FlyweightFactory {
+    static instances = [797: new Boeing797(), 380: new Airbus380()]
+}
+
+class Aircraft {
+    private type         // instrinsic state
+    private assetNumber  // extrinsic state
+    private bought       // extrinsic state
+    Aircraft(typeCode, assetNumber, bought) {
+        type = FlyweightFactory.instances[typeCode]
+        this.assetNumber = assetNumber
+        this.bought = bought
+    }
+    def describe() {
+        println """
+        Asset Number: $assetNumber
+        Capacity: $type.capacity people
+        Speed: $type.speed
+        Range: $type.range
+        Bought: $bought
+        """
+    }
+}
+
+def fleet = [
+    new Aircraft(380, 1001, '10-May-2007'),
+    new Aircraft(380, 1002, '10-Nov-2007'),
+    new Aircraft(797, 1003, '10-May-2008'),
+    new Aircraft(797, 1004, '10-Nov-2008')
+]
+
+fleet.each { p -> p.describe() }
+```
+- The Iterator Pattern allows sequential access to the elements of an aggregate object without exposing its
+
+def printAll(container) {
+    for (item in container) { println item }
+}
+
+- The Loan my Resource pattern ensures that a resource is deterministically disposed of once it goes out of scope.
+
+def withListOfWordsForEachLine(File f, Closure c) {
+    def r = f.newReader()
+    try {
+        r.splitEachLine(' ', c)
+    } finally {
+        r?.close()
+    }
+}
+
+- The null object pattern uses a special object representing null, instead of using an actual null. equivalent to doing nothing 
+
+class NullJob extends Job { def salary = 0 }
+
+an expression like p?.job?.salary will be equal to null if salary is equal to null, or if job is equal ` null or if p is equal to nul
+
+- pimp my library pattern, We may not have all of the source code to the Groovy and Java libraries so we can’t just change the library. Instead we augment the library. 
+```
+class EnhancedInteger {
+    static boolean greaterThanAll(Integer self, Object[] others) {
+        greaterThanAll(self, others)
+    }
+    static boolean greaterThanAll(Integer self, others) {
+        others.every { self > it }
+    }
+}
+```
+
+- proxy pattern, The Proxy Pattern allows one object to act as a pretend replacement for some other object
+```
+class AccumulatorProxy {
+    def accumulate(args) {
+        def result
+        def s = new Socket("localhost", 54321)
+        s.withObjectStreams { ois, oos ->
+            oos << args
+            result = ois.readObject()
+        }
+        s.close()
+        return result
+    }
+}
+
+println new AccumulatorProxy().accumulate([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+```
+
+- singleton pattern, The Singleton Pattern is used to make sure only one object of a particular class is ever created
+
+```
+class VoteCollector {
+    def votes = 0
+    private static final INSTANCE = new VoteCollector()
+    static getInstance() { return INSTANCE }
+    private VoteCollector() { }
+    def display() { println "Collector:${hashCode()}, Votes:$votes" }
+}
+```
+
+    + metaclass vs singleton pattern 
+
+```
+class CalculatorMetaClass extends MetaClassImpl {
+    private static final INSTANCE = new Calculator()
+    CalculatorMetaClass() { super(Calculator) }
+    def invokeConstructor(Object[] arguments) { return INSTANCE }
+}
+
+def registry = GroovySystem.metaClassRegistry
+registry.setMetaClass(Calculator, new CalculatorMetaClass())
+```
+
+    + Singleton Pattern using Guice. Guice (pronounced 'juice') is a lightweight dependency injection framework for Java 8. https://github.com/google/guice
+    
+```
+@Grapes([@Grab('aopalliance:aopalliance:1.0'), @Grab('com.google.code.guice:guice:1.0')])
+import com.google.inject.*
+
+interface Calculator {
+    def add(a, b)
+}
+
+class CalculatorImpl implements Calculator {
+    private total = 0
+    def add(a, b) { total++; a + b }
+    def getTotalCalculations() { 'Total Calculations: ' + total }
+    String toString() { 'Calc: ' + hashCode() }
+}
+
+class Client {
+    @Inject Calculator calc
+    def executeCalc(a, b) { calc.add(a, b) }
+    String toString() { 'Client: ' + hashCode() }
+}
+
+def injector = Guice.createInjector (
+    [configure: { binding ->
+        binding.bind(Calculator)
+               .to(CalculatorImpl)
+               .asEagerSingleton() } ] as Module
+)
+
+def client = injector.getInstance(Client)
+assert 3 == client.executeCalc(1, 2)
+println "$client, $client.calc, $client.calc.totalCalculations"
+```
+
+- The State Pattern provides a structured approach to partitioning the behaviour within complex systems. The overall behaviour of a system is partitioned into well-defined states. 
+    
+```
+class Client {
+    def context = new Context()
+    def connect() {
+        context.state.connect()
+    }
+    def disconnect() {
+        context.state.disconnect()
+    }
+    def send_message(message) {
+        context.state.send_message(message)
+    }
+    def receive_message() {
+        context.state.receive_message()
+    }
+}
+
+class Context {
+    def state = new Offline(this)
+}
+
+class ClientState {
+    def context
+    ClientState(context) {
+        this.context = context
+        inform()
+    }
+}
+
+class Offline extends ClientState {
+    Offline(context) {
+        super(context)
+    }
+    def inform() {
+        println "offline"
+    }
+    def connect() {
+        context.state = new Online(context)
+    }
+    def disconnect() {
+        println "error: not connected"
+    }
+    def send_message(message) {
+        println "error: not connected"
+    }
+    def receive_message() {
+        println "error: not connected"
+    }
+}
+
+class Online extends ClientState {
+    Online(context) {
+        super(context)
+    }
+    def inform() {
+        println "connected"
+    }
+    def connect() {
+        println "error: already connected"
+    }
+    def disconnect() {
+        context.state = new Offline(context)
+    }
+    def send_message(message) {
+        println "\"$message\" sent"
+    }
+    def receive_message() {
+        println "message received"
+    }
+}
+
+client = new Client()
+client.send_message("Hello")
+client.connect()
+client.send_message("Hello")
+client.connect()
+client.receive_message()
+client.disconnect()
+```
+
+We can look at any state class in isolation and know the bounds of behaviour possible for that state.
+
+    + variation extract state patern logic extract some of our State Pattern logic into helper classes.  
+
+```
+abstract class InstanceProvider {
+    static def registry = GroovySystem.metaClassRegistry
+    static def create(objectClass, param) {
+        registry.getMetaClass(objectClass).invokeConstructor([param] as Object[])
+    }
+}
+
+abstract class Context {
+    private context
+    protected setContext(context) {
+        this.context = context
+    }
+    def invokeMethod(String name, Object arg) {
+        context.invokeMethod(name, arg)
+    }
+    def startFrom(initialState) {
+        setContext(InstanceProvider.create(initialState, this))
+    }
+}
+
+abstract class State {
+    private client
+
+    State(client) { this.client = client }
+
+    def transitionTo(nextState) {
+        client.setContext(InstanceProvider.create(nextState, client))
+    }
+}
+
+class Client extends Context {
+    Client() {
+        startFrom(Offline)
+    }
+}
+
+class Offline extends State {
+    Offline(client) {
+        super(client)
+        println "offline"
+    }
+    def connect() {
+        transitionTo(Online)
+    }
+    def disconnect() {
+        println "error: not connected"
+    }
+    def send_message(message) {
+        println "error: not connected"
+    }
+    def receive_message() {
+        println "error: not connected"
+    }
+}
+
+class Online extends State {
+    Online(client) {
+        super(client)
+        println "connected"
+    }
+    def connect() {
+        println "error: already connected"
+    }
+    def disconnect() {
+        transitionTo(Offline)
+    }
+    def send_message(message) {
+        println "\"$message\" sent"
+    }
+    def receive_message() {
+        println "message received"
+    }
+}
+
+client = new Client()
+client.send_message("Hello")
+client.connect()
+client.send_message("Hello")
+client.connect()
+client.receive_message()
+client.disconnect()
+```
+
+    + bring to dsl fully embrace a Domain Specific Language (DSL) approach to this example.
+
+```
+class Grammar {
+    def fsm
+
+    def event
+    def fromState
+    def toState
+
+    Grammar(a_fsm) {
+        fsm = a_fsm
+    }
+
+    def on(a_event) {
+        event = a_event
+        this
+    }
+
+    def on(a_event, a_transitioner) {
+        on(a_event)
+        a_transitioner.delegate = this
+        a_transitioner.call()
+        this
+    }
+
+    def from(a_fromState) {
+        fromState = a_fromState
+        this
+    }
+
+    def to(a_toState) {
+        assert a_toState, "Invalid toState: $a_toState"
+        toState = a_toState
+        fsm.registerTransition(this)
+        this
+    }
+
+    def isValid() {
+        event && fromState && toState
+    }
+
+    public String toString() {
+        "$event: $fromState=>$toState"
+    }
+}
+
+class FiniteStateMachine {
+    def transitions = [:]
+
+    def initialState
+    def currentState
+
+    FiniteStateMachine(a_initialState) {
+        assert a_initialState, "You need to provide an initial state"
+        initialState = a_initialState
+        currentState = a_initialState
+    }
+
+    def record() {
+        Grammar.newInstance(this)
+    }
+
+    def reset() {
+        currentState = initialState
+    }
+
+    def isState(a_state) {
+        currentState == a_state
+    }
+
+    def registerTransition(a_grammar) {
+        assert a_grammar.isValid(), "Invalid transition ($a_grammar)"
+        def transition
+        def event = a_grammar.event
+        def fromState = a_grammar.fromState
+        def toState = a_grammar.toState
+
+        if (!transitions[event]) {
+            transitions[event] = [:]
+        }
+
+        transition = transitions[event]
+        assert !transition[fromState], "Duplicate fromState $fromState for transition $a_grammar"
+        transition[fromState] = toState
+    }
+
+    def fire(a_event) {
+        assert currentState, "Invalid current state '$currentState': passed into constructor"
+        assert transitions.containsKey(a_event), "Invalid event '$a_event', should be one of ${transitions.keySet()}"
+        def transition = transitions[a_event]
+        def nextState = transition[currentState]
+        assert nextState, "There is no transition from '$currentState' to any other state"
+        currentState = nextState
+        currentState
+    }
+}
+
+class StatePatternDslTest extends GroovyTestCase {
+    private fsm
+
+    protected void setUp() {
+        fsm = FiniteStateMachine.newInstance('offline')
+        def recorder = fsm.record()
+        recorder.on('connect').from('offline').to('online')
+        recorder.on('disconnect').from('online').to('offline')
+        recorder.on('send_message').from('online').to('online')
+        recorder.on('receive_message').from('online').to('online')
+    }
+
+    void testInitialState() {
+        assert fsm.isState('offline')
+    }
+
+    void testOfflineState() {
+        shouldFail{
+            fsm.fire('send_message')
+        }
+        shouldFail{
+            fsm.fire('receive_message')
+        }
+        shouldFail{
+            fsm.fire('disconnect')
+        }
+        assert 'online' == fsm.fire('connect')
+    }
+
+    void testOnlineState() {
+        fsm.fire('connect')
+        fsm.fire('send_message')
+        fsm.fire('receive_message')
+        shouldFail{
+            fsm.fire('connect')
+        }
+        assert 'offline' == fsm.fire('disconnect')
+    }
+}
+```
+
+- The Strategy Pattern allows you to abstract away particular algorithms from their usage. This allows you to easily swap the algorithm being used without having to change the calling code
+
+```
+interface Calc {
+    def execute(n, m)
+}
+
+class CalcByMult implements Calc {
+    def execute(n, m) { n * m }
+}
+
+class CalcByManyAdds implements Calc {
+    def execute(n, m) {
+        def result = 0
+        n.times{
+            result += m
+        }
+
+        result
+    }
+}
+
+def sampleData = [
+    [3, 4, 12],
+    [5, -5, -25]
+]
+
+Calc[] multiplicationStrategies = [
+    new CalcByMult(),
+    new CalcByManyAdds()
+]
+
+sampleData.each{ data ->
+    multiplicationStrategies.each { calc ->
+        assert data[2] == calc.execute(data[0], data[1])
+    }
+}
+
+//equal to groovy style code. implemented with closure 
+def multiplicationStrategies = [
+    { n, m -> n * m },
+    { n, m -> def result = 0; n.times{ result += m }; result }
+]
+
+def sampleData = [
+    [3, 4, 12],
+    [5, -5, -25]
+]
+
+sampleData.each{ data ->
+    multiplicationStrategies.each { calc ->
+        assert data[2] == calc(data[0], data[1])
+    }
+}
+```
+
+- template method pattern 
+
+Accumulator captures the essence of the accumulation algorithm. The base classes Sum and Product provide particular customised ways to use the generic accumulation algorithm.
+
+```
+abstract class Accumulator {
+    protected initial
+    abstract doAccumulate(total, v)
+    def accumulate(values) {
+        def total = initial
+        values.each { v -> total = doAccumulate(total, v) }
+        total
+    }
+}
+
+class Sum extends Accumulator {
+    def Sum() { initial = 0 }
+    def doAccumulate(total, v) { total + v }
+}
+
+class Product extends Accumulator {
+    def Product() { initial = 1 }
+    def doAccumulate(total, v) { total * v }
+}
+
+println new Sum().accumulate([1,2,3,4])
+println new Product().accumulate([1,2,3,4])
+```
+
+- Visitor pattern, The goal of the pattern is to separate an algorithm from an object structure. 
+
+```
+abstract class Shape { }
+
+class Rectangle extends Shape {
+    def x, y, width, height
+
+    Rectangle(x, y, width, height) {
+        this.x = x; this.y = y; this.width = width; this.height = height
+    }
+
+    def union(rect) {
+        if (!rect) return this
+        def minx = [rect.x, x].min()
+        def maxx = [rect.x + width, x + width].max()
+        def miny = [rect.y, y].min()
+        def maxy = [rect.y + height, y + height].max()
+        new Rectangle(minx, miny, maxx - minx, maxy - miny)
+    }
+
+    def accept(visitor) {
+        visitor.visit_rectangle(this)
+    }
+}
+
+class Line extends Shape {
+    def x1, y1, x2, y2
+
+    Line(x1, y1, x2, y2) {
+        this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2
+    }
+
+    def accept(visitor){
+        visitor.visit_line(this)
+    }
+}
+
+class Group extends Shape {
+    def shapes = []
+    def add(shape) { shapes += shape }
+    def remove(shape) { shapes -= shape }
+    def accept(visitor) {
+        visitor.visit_group(this)
+    }
+}
+
+class BoundingRectangleVisitor {
+    def bounds
+
+    def visit_rectangle(rectangle) {
+        if (bounds)
+            bounds = bounds.union(rectangle)
+        else
+            bounds = rectangle
+    }
+
+    def visit_line(line) {
+        def line_bounds = new Rectangle(line.x1, line.y1, line.x2-line.y1, line.x2-line.y2)
+        if (bounds)
+            bounds = bounds.union(line_bounds)
+        else
+            bounds = line_bounds
+    }
+
+    def visit_group(group) {
+        group.shapes.each { shape -> shape.accept(this) }
+    }
+}
+
+def group = new Group()
+group.add(new Rectangle(100, 40, 10, 5))
+group.add(new Rectangle(100, 70, 10, 5))
+group.add(new Line(90, 30, 60, 5))
+def visitor = new BoundingRectangleVisitor()
+group.accept(visitor)
+bounding_box = visitor.bounds
+println bounding_box.dump()
+```
+
+    + advance 
+```
+interface Visitor {
+    void visit(NodeType1 n1)
+    void visit(NodeType2 n2)
+}
+
+interface Visitable {
+    void accept(Visitor visitor)
+}
+
+class NodeType1 implements Visitable {
+    Visitable[] children = new Visitable[0]
+    void accept(Visitor visitor) {
+        visitor.visit(this)
+        for(int i = 0; i < children.length; ++i) {
+            children[i].accept(visitor)
+        }
+    }
+}
+
+class NodeType2 implements Visitable {
+    Visitable[] children = new Visitable[0]
+    void accept(Visitor visitor) {
+        visitor.visit(this)
+        for(int i = 0; i < children.length; ++i) {
+            children[i].accept(visitor)
+        }
+    }
+}
+
+class NodeType1Counter implements Visitor {
+    int count = 0
+    void visit(NodeType1 n1) {
+        count++
+    }
+    void visit(NodeType2 n2){}
+}
+```
+
+    + groovy style 
+```
+class DefaultVisitor {
+    void visit(NodeType1 n1) {
+        n1.children.each { visit(it) }
+    }
+    void visit(NodeType2 n2) {
+        n2.children.each { visit(it) }
+    }
+    void visit(Visitable v) { }
+}
+
+interface Visitable { }
+
+class NodeType1 implements Visitable {
+    Visitable[] children = []
+}
+
+class NodeType2 implements Visitable {
+    Visitable[] children = []
+}
+
+class NodeType1Counter extends DefaultVisitor {
+    int count = 0
+    void visit(NodeType1 n1) {
+        count++
+        super.visit(n1)
+    }
+}
+```
+
+
+# Style guide 
+- optional semicolons 
+- optional return keyword 
+- def and type, When using def in Groovy, the actual type holder is Object
+- class method public by default 
+- omitting paranethese 
+- classes and first-class citizens 
+- getters and setters 
+- initializing beans with named parameters and the default constructor 
+
+```
+class Server {
+    String name
+    Cluster cluster
+}
+def server = new Server()
+server.name = "Obelix"
+server.cluster = aCluster
+```
+
+- using with() and tap() for repeated operations on the same bean 
+
+server.with {
+    name = application.name
+    status = status
+    sessionCount = 3
+    start()
+    stop()
+}
+
+    + returns the incoming object, there is also tap() will return the caller object instead of the last statement 
+    
+def person = new Person().tap {
+    name = "Ada Lovelace"
+}
+
+- equals and ==, Java’s == is actually Groovy’s is() method, and Groovy’s == is a clever equals()!
+
+
+usual equals() comparison, you should prefer Groovy’s ==
+
+
+status == ControlConstants.STATUS_COMPLETED
+
+- GStrings, lazily evaluate those expressions using a closure notation with ${-> resource }.
+
+regular expression 
+```
+assert "foooo/baaaaar" ==~ /fo+\/ba+r/
+```
+
+- Import aliasing
+```
+import java.awt.List as AwtList
+```
+
+- Groovy truth
+
+```
+if (name != null && name.length > 0) {}
+```
+
+- safe graph navigation 
+
+```
+if (order != null) {
+    if (order.getCustomer() != null) {
+        if (order.getCustomer().getAddress() != null) {
+            System.out.println(order.getCustomer().getAddress());
+        }
+    }
+}
+```
+
+- assert statement.
+```
+// name non-null and non-empty according to Groovy Truth
+assert name
+// safe navigation + Groovy Truth to check
+assert name?.size() > 3
+```
 
 
 # Servlet support  
@@ -1872,6 +3743,228 @@ the .groovy files in, say, the root directory  and let GroovyServlet to take car
 
 
 
+# Domain specific language 
+
+
+# Testing guide 
+- Power assertions 
+
+def x = 1
+assert x == 2 
+assert [[1,2,3,3,3,3,4]].first().unique() == [1,2,3]
+
+- mocking and subbing 
+```
+class TranslationService {
+    String convert(String key) {
+        return "test"
+    }
+}
+
+def service = [convert: { String key -> 'some text' }] as TranslationService
+assert 'some text' == service.convert('key.text')
+```
+
+-  Groovy mocking and stubbing classes can be found in the groovy.mock.interceptor package. MockFor allows such mocks to be created using meta-programming. T
+
+
+```
+class Person {
+    String first, last
+}
+
+class Family {
+    Person father, mother
+    def nameOfMother() { "$mother.first $mother.last" }
+}
+
+def mock = new MockFor(Person)      
+mock.demand.getFirst{ 'dummy' }
+mock.demand.getLast{ 'name' }
+mock.use {                          
+    def mary = new Person(first:'Mary', last:'Smith')
+    def f = new Family(mother:mary)
+    assert f.nameOfMother() == 'dummy name'
+}
+mock.expect.verify()   
+```
+
+    + the stub expectation checked with verify is sequence independent
+
+```
+def stub = new StubFor(Person)      
+stub.demand.with {                  
+    getLast{ 'name' }
+    getFirst{ 'dummy' }
+}
+stub.use {                          
+    def john = new Person(first:'John', last:'Smith')
+    def f = new Family(father:john)
+    assert f.father.first == 'dummy'
+    assert f.father.last == 'name'
+}
+stub.expect.verify() 
+
+- Expando meta-class, Groovy includes a special MetaClass the so-called ExpandoMetaClass (EMC). It allows to dynamically add methods, constructors, properties and static methods using a neat closure syntax.
+
+String.metaClass.swapCase = {->
+    def sb = new StringBuffer()
+    delegate.each {
+        sb << (Character.isUpperCase(it as char) ? Character.toLowerCase(it as char) :
+            Character.toUpperCase(it as char))
+    }
+    sb.toString()
+}
+
+def s = "heLLo, worLD!"
+assert s.swapCase() == 'HEllO, WORld!'
+
+String.metaClass.swapCase = {->
+    def sb = new StringBuffer()
+    delegate.each {
+        sb << (Character.isUpperCase(it as char) ? Character.toLowerCase(it as char) :
+            Character.toUpperCase(it as char))
+    }
+    sb.toString()
+}
+
+def s = "heLLo, worLD!"
+assert s.swapCase() == 'HEllO, WORld!'
+```
+
+- GDK methods that can be leveraged in test case scenarios, for example for test data generation.
+
+```
+void testCombinations() {
+    def combinations = [[2, 3],[4, 5, 6]].combinations()
+    assert combinations == [[2, 4], [3, 4], [2, 5], [3, 5], [2, 6], [3, 6]]
+}
+```
+
+- test code coverage, Groovy support for this task is Cobertura.  enable Cobertura test coverage reports
+
+```
+def pluginVersion = '<plugin version>'
+def groovyVersion = '<groovy version>'
+def junitVersion = '<junit version>'
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.eriwen:gradle-cobertura-plugin:${pluginVersion}'
+    }
+}
+
+apply plugin: 'groovy'
+apply plugin: 'cobertura'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile "org.codehaus.groovy:groovy-all:${groovyVersion}"
+    testCompile "junit:junit:${junitVersion}"
+}
+
+cobertura {
+    format = 'html'
+    includes = ['**/*.java', '**/*.groovy']
+    excludes = ['com/thirdparty/**/*.*']
+}
+```
+
+- simplifies JUnit testing
+```
+class MyTestCase extends GroovyTestCase {
+
+    void testAssertions() {
+        assertTrue(1 == 1)
+        assertEquals("test", "test")
+
+        def x = "42"
+        assertNotNull "x must not be null", x
+        assertNull null
+
+        assertSame x, x
+    }
+
+}
+
+void testScriptAssertions() {
+    assertScript '''
+        def x = 1
+        def y = 2
+
+        assert x + y == 3
+    '''
+}
+```
+
+- shouldFail can be used to check whether the given code block fails or not.
+
+
+- The notYetImplemented method has been greatly influenced by HtmlUnit.
+
+@NotYetImplemented
+void testNotYetImplemented2() {
+    assert 1 == 2
+}
+
+- Spock is a testing and specification framework for Java and Groovy applications. 
+
+- Although Geb can be used standalone in a Groovy script, in many scenarios it’s used in combination with other testing frameworks.  JUnit 3/4 support is geb-junit4:
+
+```
+@Grab('org.gebish:geb-core:0.9.2')
+@Grab('org.gebish:geb-junit4:0.9.2')
+@Grab('org.seleniumhq.selenium:selenium-firefox-driver:2.26.0')
+@Grab('org.seleniumhq.selenium:selenium-support:2.26.0')
+
+import geb.Browser
+import org.openqa.selenium.firefox.FirefoxDriver
+
+def browser = new Browser(driver: new FirefoxDriver(), baseUrl: 'http://myhost:8080/myapp')  
+browser.drive {
+    go "/login"                        
+
+    $("#username").text = 'John'       
+    $("#password").text = 'Doe'
+
+    $("#loginButton").click()
+
+    assert title == "My Application - Dashboard"
+}
+```
+
+```
+import geb.Page
+import geb.spock.GebSpec
+ 
+class LoginSpec extends GebSpec {
+    def "login to admin section"() {
+        given:
+        to LoginPage
+         
+        when:
+        loginForm.with {
+            username = "admin"
+            password = "password"
+        }
+         
+        and:
+        loginButton.click()
+         
+        then:
+        at AdminPage
+    }
+}
+```
+
+
+
 
 
 # Meta programming 
@@ -1889,7 +3982,20 @@ Welcome to the team.
 
 
 
+# Groovy API references 
+- Packages categories 
 
+Interfaces (italic)
+Classes
+Enums
+Exceptions
+Errors
+Annotation Types
 
+- with or without frames 
+
+All pages are available with or without frames.
+
+- any serialized class and clicking "Serialized Form" in the "See also" section of the class description.
 
 
