@@ -1,0 +1,1346 @@
+Modern CMake for C++=Rafal;Note=Erxin
+
+
+# The first steps with cmake 
+- how to use CMake without creating a project at all.
+
+- build examples with recommended commands:
+
+$ cmake -B <build tree> -S <source tree>
+
+$ cmake --build <build tree>
+
+- span multiple different aspects:
+
+Compiling executables and libraries
+Managing dependencies
+Testing
+Installing
+Packaging
+Producing documentation
+Testing some more
+
+- plenty of options out there
+
+Make, Autotools, SCons, Ninja, Premake,
+
+    + cmake 
+    
+supports building for Windows, Linux, macOS, and Cygwin.
+
+- process has three stages:
+
+    + Configuration
+    read CMakeCache.txt 
+    Parse & exzecute cmake language 
+    starting with CMakeLists.txt 
+    write initial build tree 
+    
+    + Generation
+    Generate Makfiles or project files 
+    
+    + Building
+    Compile 
+    Link 
+    Test 
+    Package 
+    
+- complete documentation online at https://cmake.org/cmake/help/.
+
+- different environments CMake can be used.
+
+docker, https://registry.hub.docker.com/, that provides millions of ready-to-use images.
+
+linux build from source 
+```
+$ wget https://github.com/Kitware/CMake/releases/download/v3.20.0/cmake-3.20.0.tar.gz
+
+$ tar xzf cmake-3.20.0.tar.gz
+
+$ cd cmake-3.20.0
+
+$ ./bootstrap
+
+$ make
+
+$ make install
+```
+
+- cmake tools five executables:
+
+cmake: This is the main executable that configures, generates, and builds projects.
+ctest: This is the test driver program used to run and report test results.
+cpack: This is the packaging program used to generate installers and source packages.
+cmake-gui: This is the graphical wrapper around cmake.
+ccmake: This is the console-based GUI wrapper around cmake.
+
+- generating a project build system 
+
+cmake [<options>] -S <path-to-source> -B <path-to-build>
+
+cmake [<options>] <path-to-source>
+
+cmake [<options>] <path-to-existing-build>
+
+- Version Control Systems (VCS) with unnecessary files or ignore directives.
+
+buildsystem specified with -B:
+
+$ cmake -S ./project -B ./build
+
+$ cmake -G <generator-name> -T <toolset-spec> -A <platform-name> <path-to-source>
+
+- options for cache  prepopulate cached information:
+
+$ cmake -C <initial-cache-script> <path-to-source>
+
+- options for debugging 
+
+$ cmake --build <dir> --verbose
+
+$ cmake --build <dir> -v
+
+- syntax of the installation mode
+
+$ cmake --install <dir> [<options>]
+
+- multi configuration generators 
+
+$ cmake --install <dir> --config <cfg>
+
+- install a single component
+
+$ cmake --install <dir> --component <comp> 
+
+- running a script 
+
+$ cmake [{-D <var>=<value>}...] -P <cmake-script-file>  [-- <unparsed-options>...]
+
+- running a command line tool 
+
+$ cmake -E <command> [<options>]
+
+- CTest is about wrapping CMake in a higher layer of abstraction. run tests for a built project is to call ctest
+
+$ ctest 
+
+- CPack works in a very similar way to CMake: it is configured with the CMake language and has many package generators to pick from
+
+- CMake GUI 
+
+- CCMake, the curses interface for Unix-like platforms
+
+$ ccmake [<options>]
+
+$ ccmake {<path-to-source> | <path-to-existing-build>}
+
+- navigating the project files 
+
+- source tree, project root keys takeaways 
+
+CMakeLists.txt, configuration file in its top directory 
+
+managed with a VCS such as git 
+
+path is given by -s argument to cmake 
+
+- build tree, CMake uses this directory to store everything that gets generated during the build, also called build root binary tree
+
+CMake recommends out-of-source builds or builds that produce artifacts in a directory that is separate from all source files. 
+
+- Listfiles, CMake language are called listfiles and can be included one in another, by calling include() and find_package(), or indirectly with add_subdirectory()
+
+- CMakeLists.txt configuration file 
+
+at least two commands:
+
+cmake_minimum_required(VERSION <x.xx>): Sets an expected version of CMake
+
+project(<name> <OPTIONS>): This is used to name the project
+
+- CMakeCache.txt, Cache variables will be generated from listfiles and stored in CMakeCache.txt
+
+- ignore file for cmake .gitignore
+
+# If you put build tree in the source tree add it like so:
+
+build_debug/
+
+build_release/
+
+# Generated and user files
+
+**/CMakeCache.txt
+
+**/CMakeUserPresets.json
+
+**/CTestTestfile.cmake
+
+**/CPackConfig.cmake
+
+**/cmake_install.cmake
+
+**/install_manifest.txt
+
+**/compile_commands.json
+
+- CMake projects can use external modules to enhance their functionality.
+
+https://github.com/onqtam/awesome-cmake
+
+https://cmake.org/cmake/help/latest/manual/cmake-modules.7.html
+
+
+
+# The cmake language 
+-  comments, commands, variables, and control structures – but we'll also give the necessary background and try them out in a clean and modern CMake example
+
+$ cmake -B <build tree> -S <source tree>
+
+$ cmake --build <build tree>
+
+scripts can be run with the following command:
+
+$ cmake -P script.cmake
+
+- CMake supports 7-bit ASCII text files for portability across all platforms. You can use both \n or \r\n line endings. UTF-8 with optional Byte Order Markers (BOMs) is supported in CMake versions above 3.0, and UTF-16 is supported in CMake versions above 3.2
+
+- syntax 
+
+    + comments 
+    
+    single-line comments and bracket (multiline) comments
+    
+    ```
+    # single-line comments start with a hash sign "#"
+
+    # they can be placed on an empty line
+
+    message("Hi"); # or after a command like here.
+
+    #[=[
+
+    bracket comment
+
+      #[[
+
+        nested bracket comment
+
+      #]]
+
+    #]=]
+    
+    
+    
+    command(argument1 "argument2" argument3) # comment
+
+    # [[ multiline comment ]]
+    ```
+    
+    + command invocations  whitespace-separated list of command arguments
+    
+    message("hello world")
+    
+        * script commands 
+        
+        * project commands 
+        
+        * CTest commands 
+        
+    + CMake offers three types of arguments:
+
+```
+# Bracket arguments
+message([[multiline
+
+  bracket
+
+  argument
+
+]])
+
+
+
+message([==[
+
+  because we used two equal-signs "=="
+
+  following is still a single argument:
+
+  { "petsArray" = [["mouse","cat"],["dog"]] }
+
+]==])
+
+
+# Quoted arguments, resemble a regular C++ string – these arguments group together multiple characters, including whitespace, and they will expand escape sequences
+
+message("1. escape sequence: \" \n in a quoted argument")
+
+message("2. multi...
+
+  line")
+
+message("3. and a variable reference: ${CMAKE_VERSION}")
+
+
+# Unquoted arguments, Unquoted arguments evaluate both escape sequences and variable references.    
+message(a\ single\ argument)
+
+message(two arguments)
+
+message(three;separated;arguments)
+
+message(${CMAKE_VERSION})  # a variable reference
+
+message(()()())            # matching parentheses
+``` 
+    
+- working with variables 
+
+Variable names are case-sensitive 
+
+All variables are stored internally as strings
+
+Commands are set() and unset()
+
+reserved names (in upper, lower, or mixed case) that begin with any of the following: CMAKE_, _CMAKE_, or underscore (_), followed by the name of any CMake command
+
+```
+set(MyString1 "Text1")
+
+set([[My String2]] "Text2")
+
+set("My String 3" "Text3")
+
+message(${MyString1})
+
+message(${My\ String2})
+
+message(${My\ String\ 3})
+```
+
+- varaible reference 
+
+use the ${} syntax, like so: message(${MyString1}).
+
+
+The ${} syntax is used to reference normal or cache variables.
+The $ENV{} syntax is used to reference environment variables.
+The $CACHE{} syntax is used to reference cache variables.
+
+```
+# use the set(ENV{<variable>} <value>) command, like so:
+set(ENV{CXX} "clang++")
+
+# clear an environment variable, use unset(ENV{<variable>}), like so:
+unset(ENV{VERBOSE})
+```
+
+use set() with the following syntax:
+
+set(<variable> <value> CACHE <type> <docstring> [FORCE])
+
+- variable scope 
+
+Function scope: For when custom functions defined with function() are executed
+```
+function(Inner)
+
+  message("  > Inner: ${V}")
+
+  set(V 3)
+
+  message("  < Inner: ${V}")
+
+endfunction()
+
+function(Outer)
+
+  message(" > Outer: ${V}")
+
+  set(V 2)
+
+  Inner()
+
+  message(" < Outer: ${V}")
+
+endfunction()
+
+set(V 1)
+
+message("> Global: ${V}")
+
+Outer()
+
+message("< Global: ${V}")
+```
+
+
+Directory scope: For when a CMakeLists.txt listfile in a nested directory is executed from the add_subdirectory() command
+
+- lists 
+
+To store a list, CMake concatenates all elements into a string, using a semicolon (;) as a delimiter: a;list;of;5;elements. 
+ 
+```
+set(myList "a;list;of;five;elements")
+set(myList a list "of;five;elements")
+```
+
+subcommands to read, search etc. 
+
+```
+list(LENGTH <list> <out-var>)
+
+list(GET <list> <element index> [<index> ...] <out-var>)
+
+list(JOIN <list> <glue> <out-var>)
+
+list(SUBLIST <list> <begin> <length> <out-var>)
+
+list(FIND <list> <value> <out-var>)
+
+list(APPEND <list> [<element>...])
+
+list(FILTER <list> {INCLUDE | EXCLUDE} REGEX <regex>)
+
+list(INSERT <list> <index> [<element>...])
+
+list(POP_BACK <list> [<out-var>...])
+
+list(POP_FRONT <list> [<out-var>...])
+
+list(PREPEND <list> [<element>...])
+
+list(REMOVE_ITEM <list> <value>...)
+
+list(REMOVE_AT <list> <index>...)
+
+list(REMOVE_DUPLICATES <list>)
+
+list(TRANSFORM <list> <ACTION> [...])
+
+list(REVERSE <list>)
+
+list(SORT <list> [...])
+```
+
+- control structure in cmake 
+
+    + condition 
+
+```
+if(<condition>)
+
+  <commands>
+
+elseif(<condition>) # optional block, can be repeated
+
+  <commands>
+
+else()              # optional block
+
+  <commands>
+
+endif()
+```
+
+    + logic operators 
+    
+NOT, AND, and OR logical operators:
+
+NOT <condition>
+<condition> AND <condition>
+<condition> OR <condition>
+
+- evaluation of a string and a variable 
+
+```
+set(VAR1 FALSE)
+
+set(VAR2 "VAR1")
+
+if(${VAR2})
+
+if(DEFINED <name>)
+
+if(DEFINED CACHE{<name>})
+
+if(DEFINED ENV{<name>})
+
+if ("A" STREQUAL "${B}")
+
+if (1.3.4 VERSION_LESS_EQUAL 1.4)
+```
+
+- Commands definitions, use the macro() command or the function() command.
+
+A macro() command works more like a find-and-replace instruction than an actual subroutine call such as function()
+
+The function() command creates a separate scope for local variables, unlike the macro() command, which works in the variable scope of a caller
+
+```
+${ARGC}: The count of arguments
+${ARGV}: A list of all arguments
+${ARG0}, ${ARG1}, ${ARG2}: The value of an argument at a specific index
+${ARGN}: A list of anonymous arguments that were passed by a caller after the last expected argument
+```
+
+- Macros, a macro is similar to any other block:
+
+macro(<name> [<argument>…])
+
+  <commands>
+
+endmacro()
+
+```
+macro(MyMacro myVar)
+
+  set(myVar "new value")
+
+  message("argument: ${myVar}")
+
+endmacro()
+
+set(myVar "first value")
+
+message("myVar is now: ${myVar}")
+
+MyMacro("called value")
+
+message("myVar is now: ${myVar}")
+```
+
+- functions 
+
+function(<name> [<argument>…])
+
+  <commands>
+
+endfunction()
+
+variables for each function (these have been available since version 3.17):
+
+CMAKE_CURRENT_FUNCTION
+CMAKE_CURRENT_FUNCTION_LIST_DIR
+CMAKE_CURRENT_FUNCTION_LIST_FILE
+CMAKE_CURRENT_FUNCTION_LIST_LINE
+
+```
+function(MyFunction FirstArg)
+
+  message("Function: ${CMAKE_CURRENT_FUNCTION}")
+
+  message("File: ${CMAKE_CURRENT_FUNCTION_LIST_FILE}")
+
+  message("FirstArg: ${FirstArg}")
+
+  set(FirstArg "new value")
+
+  message("FirstArg again: ${FirstArg}")
+
+  message("ARGV0: ${ARGV0} ARGV1: ${ARGV1} ARGC: ${ARGC}")
+
+endfunction()
+
+set(FirstArg "first value")
+
+MyFunction("Value1" "Value2")
+
+message("FirstArg in global scope: ${FirstArg}")
+```
+
+- useful commands 
+
+Appendix section, for example, list(), string(), and file() (we'll leave these explanations there and concentrate on projects in the main chapters). Others, such as find_...()
+
+message(<MODE> "text").
+
+recognized models 
+```
+FATAL_ERROR: This stops processing and generation.
+
+SEND_ERROR: This continues processing, but skips generation.
+
+WARNING: This continues processing.
+
+AUTHOR_WARNING: A CMake warning. This continues processing.
+
+DEPRECATION: This works accordingly if either of the CMAKE_ERROR_DEPRECATED or CMAKE_WARN_DEPRECATED variables are enabled.
+
+NOTICE or omitted mode (default): This prints a message to stderr to attract the user's attention.
+
+STATUS: This continues processing and is recommended for main messages for users.
+
+VERBOSE: This continues processing and should be used for more detailed information that usually isn't very necessary.
+
+DEBUG: This continues processing and should contain any fine details that might be helpful when there's an issue with a project.
+
+TRACE: This continues processing and is recommended to print messages during the project development. Usually, these sorts of messages would be removed before publishing the project.
+```
+
+dot-separated context 
+```
+function(foo)
+
+  list(APPEND CMAKE_MESSAGE_CONTEXT "foo")
+
+  message("foo message")
+
+endfunction()
+
+list(APPEND CMAKE_MESSAGE_CONTEXT "top")
+
+message("Before `foo`")
+
+foo()
+
+message("After `foo`")
+```
+
+message() is to add indentation to the CMAKE_MESSAGE_INDENT list (in exactly the same way as with CMAKE_MESSAGE_CONTEXT)
+
+    + include command 
+    
+include(), as shown in the following example:
+
+include(<file|module> [OPTIONAL] [RESULT_VARIABLE <var>])
+
+include("${CMAKE_CURRENT_LIST_DIR}/<filename>.cmake")
+
+CMake will search for a file with the name of <module>.cmake in CMAKE_MODULE_PATH and then in the CMake module directory.
+
+- file manipulation command:
+
+file(READ <filename> <out-var> [...])
+
+file({WRITE | APPEND} <filename> <content>...)
+
+file(DOWNLOAD <url> [<file>] [...])
+
+- use execute_process() to run other processes and collect their output. 
+
+execute_process(COMMAND <cmd1> [<arguments>]… [OPTIONS])
+
+two arguments: OUTPUT_VARIABLE and ERROR_VARIABLE (which are used in a similar fashion). If you would like to merge both stdout and stderr
+
+
+
+# Setting up your firstr cmake project 
+- Specifying the minimum cmake version cmake_minimum_required() 
+
+cmake_policy(VERSION), which will tell CMake what the right policies are to use for this project.
+
+- defining languages and metadata project()
+
+```
+project(<PROJECT-NAME> [<language-name>...])
+
+project(<PROJECT-NAME>
+
+        [VERSION <major>[.<minor>[.<patch>[.<tweak>]]]]
+
+        [DESCRIPTION <project-description-string>]
+
+        [HOMEPAGE_URL <url-string>]
+
+        [LANGUAGES <language-name>...])
+```
+
+PROJECT_NAME
+CMAKE_PROJECT_NAME (only in the top-level CMakeLists.txt)
+PROJECT_SOURCE_DIR, <PROJECT-NAME>_SOURCE_DIR
+PROJECT_BINARY_DIR, <PROJECT-NAME>_BINARY_DIR
+
+    + VERSION will make the following variables available:
+
+PROJECT_VERSION, <PROJECT-NAME>_VERSION
+CMAKE_PROJECT_VERSION (only in the top-level CMakeLists.txt)
+PROJECT_VERSION_MAJOR, <PROJECT-NAME>_VERSION_MAJOR
+PROJECT_VERSION_MINOR, <PROJECT-NAME>_VERSION_MINOR
+PROJECT_VERSION_PATCH, <PROJECT-NAME>_VERSION_PATCH
+PROJECT_VERSION_TWEAK, <PROJECT-NAME>_VERSION_TWEAK
+
+- Partitioning your project
+
+```
+cmake_minimum_required(VERSION 3.20.0)
+
+project(Rental CXX)
+
+include(cars/cars.cmake)
+
+add_executable(Rental
+
+               main.cpp
+
+               cars/car.cpp  
+
+               # more files in other directories
+
+)
+```
+
+All of the directories will share the same configuration
+
+All of the paths are relative to the top-level
+
+command will look for a CMakeLists.txt file in the source_dir path
+
+CMakeLists.txt
+```
+cmake_minimum_required(VERSION 3.20.0)
+
+project(Rental CXX)
+
+add_executable(Rental main.cpp)
+
+add_subdirectory(cars)
+
+target_link_libraries(Rental PRIVATE cars)
+```
+
+- nested project and structure 
+
+adding the project() command to the listfile in the nested directory. Just don't forget to prepend it with cmake_minimum_required().
+
+partitioning tools at our disposal: including listfiles, adding subdirectories, and nesting projects
+
+suggested structure 
+
+/project /cmake /include 
+                /module 
+                /script 
+                
+         /src   /app1   /include 
+                        /lib3 
+                        /test 
+                        /CMakeLists.txt 
+                        /main.cpp 
+                        /class_a.cpp 
+                        /class_b.cpp 
+                /app2 
+                /lib1 
+                /lib2 
+                
+         /doc 
+         /extern 
+         /test 
+         
+use the add_subdirectory() command to execute all of the listfiles in the nested directories
+ 
+- scoping the environment, CMake provides multiple ways of querying the environment with CMAKE_ variables, ENV variables, and special commands
+
+```
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+
+  message(STATUS "Doing things the usual way")
+
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+
+  message(STATUS "Thinking differently")
+
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+
+  message(STATUS "I'm supported here too.")
+
+elseif(CMAKE_SYSTEM_NAME STREQUAL "AIX")
+
+  message(STATUS "I buy mainframes.")
+
+else()
+
+  message(STATUS "This is ${CMAKE_SYSTEM_NAME} speaking.")
+
+endif()
+```
+
+- environment and the OS
+
+HOSTNAME 
+FQDN, full qualified domain name 
+TOTAL_VIRTUAL_MEMORY 
+AVALIABLE_VIRTUAL_MEMORY 
+TOTAL_PHYSICAL_MEMORY 
+AVALIABLE_PHYSICAL_MEMORY 
+OS_NAME 
+OS_RELEASE 
+OS_VERSION 
+OS_PLATFORM 
+
+    + query processor-specific information
+NUMER_OF_LOGICAL_CORES 
+NUMER_OF_PHYSICAL_CORES 
+HAS_SERIAL_NUMBER 
+PROCESSOR_SERIAL_NUMBER 
+HAS_FPU
+....
+
+```
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+
+  message(STATUS "Target is 64 bits")
+
+endif()
+```
+
+CMake will provide you with a BIG_ENDIAN or LITTLE_ENDIAN value stored in the CMAKE_<LANG>_BYTE_ORDER variable, where <LANG> is C, CXX, OBJC, or CUDA.
+
+- Configuring the toolchain 
+
+```
+set_property(TARGET <target> PROPERTY CXX_STANDARD <standard>)
+
+include(CheckIPOSupported)
+
+check_ipo_supported(RESULT ipo_supported)
+
+if(ipo_supported)
+
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION True)
+
+endif()
+```
+
+The CXX_STANDARD property mentioned in the previous section won't stop CMake from continuing with the build, even if the compiler isn't supporting the desired version – it's treated as a preference
+
+add their own enhancements to the language – plugins CMake will add -std=gnu++14 instead of -std=c++14 to the compile line.
+
+- list of features known to CMake can be found in the documentation:
+
+https://cmake.org/cmake/help/latest/prop_gbl/CMAKE_CXX_KNOWN_FEATURES.html
+
+- Compiling a test file 
+
+    + create a hello world main.cpp 
+    
+    + add /CMakeLists.txt
+```
+set(CMAKE_CXX_STANDARD 20)
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+try_run(run_result compile_result
+
+        ${CMAKE_BINARY_DIR}/test_output
+
+        ${CMAKE_SOURCE_DIR}/main.cpp
+
+        RUN_OUTPUT_VARIABLE output)
+
+message("run_result: ${run_result}")
+
+message("compile_result: ${compile_result}")
+
+message("output:\n" ${output})
+```
+
+try_run(<runResultVar> <compileResultVar>
+
+        <bindir> <srcfile> [CMAKE_FLAGS <flags>...]
+
+        [COMPILE_DEFINITIONS <defs>...]
+
+        [LINK_OPTIONS <options>...]
+
+        [LINK_LIBRARIES <libs>...]
+
+        [COMPILE_OUTPUT_VARIABLE <var>]
+
+        [RUN_OUTPUT_VARIABLE <var>]
+
+        [OUTPUT_VARIABLE <var>]
+
+        [WORKING_DIRECTORY <var>]
+
+        [ARGS <args>...])
+
+- disabling in-source builds 
+
+```
+# add this options before PROJECT keyword
+
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+
+
+# another way to disable it 
+cmake_minimum_required(VERSION 3.20.0)
+
+project(NoInSource CXX)
+
+if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
+
+  message(FATAL_ERROR "In-source builds are not allowed")
+
+endif()
+
+message("Build successful!")
+```
+
+
+# Working with targets 
+- create a target using one of three commands:
+
+add_executable()
+add_library()
+add_custom_target()
+
+add_custom_target(Name [ALL] [command1 [args1...]]
+
+                  [COMMAND command2 [args2...] ...]
+
+                  [DEPENDS depend depend depend ... ]
+
+                  [BYPRODUCTS [files...]]
+
+                  [WORKING_DIRECTORY dir]
+
+                  [COMMENT comment]
+
+                  [JOB_POOL job_pool]
+
+                  [VERBATIM] [USES_TERMINAL]
+
+                  [COMMAND_EXPAND_LISTS]
+
+                  [SOURCES src1 [src2...]])
+
+    + add dependencies 
+    
+```
+cmake_minimum_required(VERSION 3.19.2)
+
+project(BankApp CXX)
+
+add_executable(terminal_app terminal_app.cpp)
+
+add_executable(gui_app gui_app.cpp)
+
+target_link_libraries(terminal_app calculations)
+
+target_link_libraries(gui_app calculations drawing)
+
+add_library(calculations calculations.cpp)
+
+add_library(drawing drawing.cpp)
+
+add_custom_target(checksum ALL
+
+    COMMAND sh -c "cksum terminal_app>terminal.ck"
+
+    COMMAND sh -c "cksum gui_app>gui.ck"
+
+    BYPRODUCTS terminal.ck gui.ck
+
+    COMMENT "Checking the sums..."
+
+)
+```
+
+- visualize dependencies with graphvz 
+
+$ cmake --graphviz=test.dot .
+
+Graphviz straight from your browser at this address:
+
+https://dreampuf.github.io/GraphvizOnline/
+
+- target properties, manipulate the properties of a target:
+
+get_target_property(<var> <target> <property-name>)
+
+set_target_properties(<target1> <target2> ...
+
+                      PROPERTIES <prop1-name> <value1>
+
+                      <prop2-name> <value2> ...)
+
+- This target command will populate the COMPILE_DEFINITIONS property 
+
+target_compile_definitions(<source> <INTERFACE|PUBLIC|PRIVATE> [items1...])
+
+Compile definitions are simply -Dname=definition flags passed to the compiler that configure the C++ preprocessor definitions 
+
+target_link_options() or directly with the set_target_properties() command:
+
+AUTOUIC_OPTIONS
+COMPILE_DEFINITIONS
+COMPILE_FEATURES
+COMPILE_OPTIONS
+INCLUDE_DIRECTORIES
+LINK_DEPENDS
+LINK_DIRECTORIES
+LINK_LIBRARIES
+LINK_OPTIONS
+POSITION_INDEPENDENT_CODE
+PRECOMPILE_HEADERS
+SOURCES
+
+find helpers for a property 
+https://cmake.org/cmake/help/latest//manual/cmake-properties.7.html
+
+
+target_link_libraries() command. The full signature of this command requires a propagation keyword:
+
+target_link_libraries(<target>
+
+                     <PRIVATE|PUBLIC|INTERFACE> <item>...
+
+                    [<PRIVATE|PUBLIC|INTERFACE> <item>...]...)
+
+Propagation keywords work like this:
+
+PRIVATE appends the source value to the private property of the destination.
+INTERFACE appends the source value to the interface property of the destination.
+PUBLIC appends to both properties of the destination.
+
+- CMake understands this as a conflict and will print an error similar to this:
+
+CMake Error: The INTERFACE_POSITION_INDEPENDENT_CODE property of "source_target2" does not agree with the value of POSITION_INDEPENDENT_CODE already determined for "destination_target".
+
+Each target has four such lists:
+
+COMPATIBLE_INTERFACE_BOOL
+COMPATIBLE_INTERFACE_STRING
+COMPATIBLE_INTERFACE_NUMBER_MAX
+COMPATIBLE_INTERFACE_NUMBER_MIN
+
+- meet the psedudo targets or targets that don't make it to the generated buildsystem.
+
+    + IMPORTED targets are essentially products of this process. CMake can define them as a result of the find_package() command
+    
+    + Alias targets do exactly what you expect – they create another reference to a target under a different name
+    
+target_link_libraries(executable Eigen)
+
+No actual linking occurs here, but CMake will understand this command as a request to propagate all the INTERFACE properties to the executable target
+
+-  build targets, Target is a bit of a loaded word. It means different things in the context of a project and the context of generated buildsystems
+
+exclude them from the ALL target like so:
+
+add_executable(<name> EXCLUDE_FROM_ALL [<source>...])
+
+add_library(<name> EXCLUDE_FROM_ALL [<source>...])
+
+- writing custom commands 
+
+Google's Protocol Buffer's (Protobuf) .proto files. If you're not familiar with this library, protobuf is a platform-neutral binary serializer for structured data.
+
+```
+# define a custom command to compile them:
+
+add_custom_command(OUTPUT person.pb.h person.pb.cc
+
+        COMMAND protoc ARGS person.proto
+
+        DEPENDS person.proto
+
+)
+
+add_executable(serializer serializer.cpp person.pb.cc)
+```
+
+
+create the necessary header by copying it from another location:
+```
+CMakeLists.txt
+
+add_executable(main main.cpp constants.h)
+
+target_include_directories(main PRIVATE
+
+  ${CMAKE_BINARY_DIR})
+
+add_custom_command(OUTPUT constants.h
+
+COMMAND cp
+
+ARGS "${CMAKE_SOURCE_DIR}/template.xyz" constants.h)
+```
+
+using a custom command as a target hook 
+```
+add_custom_command(TARGET <target>
+
+                   PRE_BUILD | PRE_LINK | POST_BUILD
+
+                   COMMAND command1 [ARGS] [args1...]
+
+                   [COMMAND command2 [ARGS] [args2...] ...]
+
+                   [BYPRODUCTS [files...]]
+
+                   [WORKING_DIRECTORY dir]
+
+                   [COMMENT comment]
+
+                   [VERBATIM] [USES_TERMINAL]
+
+                   [COMMAND_EXPAND_LISTS])
+```
+
+angle brackets ($<>). It's a generator expression evaluating a full path to the target's binary file.
+a variable, as it would be wrapped in curly braces (${})
+
+- understanding generator expressions 
+
+target properties such as LINK_LIBRARIES, INCLUDE_DIRECTORIES, COMPILE_DEFINITIONS, propagated properties
+
+    + general syntax 
+    
+target_compile_definitions(foo PUBLIC
+
+  BAR=$<TARGET_FILE:foo>)
+
+    + nesting 
+    
+$<UPPER_CASE:$<PLATFORM_ID>>
+
+    + conditional expressions 
+    
+$<IF:condition,true_string,false_string>
+
+    + types of evaluation 
+    
+Boolean is represented by 1 (true) and 0 (false). Everything else is just a string.
+
+    + evaluation to boolean 
+    
+logical operators:
+
+$<NOT:arg> negates the Boolean argument.
+$<AND:arg1,arg2,arg3...> returns 1 if all the arguments are 1.
+$<OR:arg1,arg2,arg3...> returns 1 if any of the arguments is 1.
+$<BOOL:string_arg> converts arguments from a string to a Boolean type.
+
+    + streing comparison 
+$<STREQUAL:arg1,arg2> is a case-sensitive string comparison.
+$<EQUAL:arg1,arg2> converts a string to a number and compares equality.
+$<IN_LIST:arg,list> checks whether the arg element is in the list list (case-sensitive).
+$<VERSION_EQUAL:v1,v2>, $<VERSION_LESS:v1,v2>, $<VERSION_GREATER:v1,v2>, $<VERSION_LESS_EQUAL:v1,v2>, and $<VERSION_GREATER_EQUAL:v1,v2> are component-wise version comparisons.
+
+    + evaluated to false 
+    
+The string is empty.
+The string is a case-insensitive equivalent of 0, FALSE, OFF, N, NO, IGNORE, or NOTFOUND.
+The string ends in the -NOTFOUND suffix (case-sensitive).
+
+    + variable queries 
+    
+multiple queries scanning passed arguments for a specific value:
+
+$<CONFIG:args> is the current config (Debug, Release, and so on) in args (case-insensitive).
+$<PLATFORM_ID:args> is the current platform ID in args.
+$<LANG_COMPILER_ID:args> is CMake's LANG compiler ID in args, where LANG is one of C, CXX, CUDA, OBJC, OBJCXX, Fortran, or ISPC.
+$<LANG_COMPILER_VERSION:args> is the CMake's LANG compiler version in args, where LANG is one of C, CXX, CUDA, OBJC, OBJCXX, Fortran, or ISPC.
+$<COMPILE_FEATURES:features> will return true if features is supported by the compiler for this target.
+$<COMPILE_LANG_AND_ID:lang,compiler_id1,compiler_id2...> is the language of this lang target and is the compiler used for this target present in the compiler_ids list
+$<LINK_LANGUAGE:args> is the language used for the link step in args.
+$<LINK_LANG_AND_ID:lang,compiler_id1,compiler_id2...> works similarly to COMPILE_LANG_AND_ID but checks the language used for the link step instead
+
+    + target dependent queries 
+    
+$<TARGET_NAME_IF_EXISTS:target> – the target name of target if it exists; it is an empty string otherwise.
+$<TARGET_FILE:target> – the full path to the target binary file.
+$<TARGET_FILE_NAME:target> – the target filename.
+$<TARGET_FILE_BASE_NAME:target> – the base name of target, or $<TARGET_FILE_NAME:target> without a prefix and suffix. For libmylib.so, the base name would be mylib.
+$<TARGET_FILE_PREFIX:target> – the prefix of the target filename (lib).
+$<TARGET_FILE_SUFFIX:target> – the suffix (or extension) of the target filename (.so, .exe).
+$<TARGET_FILE_DIR:target> – the directory of the target binary file.
+$<TARGET_LINKER_FILE:target> – the file used when linking to the target target. Usually, it is the library that target represents (.a, .lib, .so) on platforms with Dynamically
+
+    + escaping 
+    
+$<ANGLE-R> – a literal > symbol (which compares strings containing >)
+$<COMMA> – a literal , symbol (which compares strings containing ,)
+$<SEMICOLON> – a literal ; symbol (which prevents a list expansion on an argument with ;)
+
+    + string transformations 
+    
+$<JOIN:list,d> – join a semicolon-separated list using a d delimiter.
+$<REMOVE_DUPLICATES:list> – remove duplicates without sorting list.
+$<FILTER:list,INCLUDE|EXCLUDE,regex> – include/exclude items from a list using a regex regular expression.
+$<LOWER_CASE:string>, $<UPPER_CASE:string> – convert the string to another case.
+$<GENEX_EVAL:expr> – evaluate the expr string as a nested expression in the context of the current target. This is useful when an evaluation of a nested expression returns another expression (they aren't evaluated recursively).
+$<TARGET_GENEX_EVAL:target,expr> – evaluate expr similarly to the GENEX_EVAL transformation but in the context of target.
+
+    + output related expressions  a specific condition is met and an empty string otherwise:
+
+$<LINK_ONLY:deps> – sets implicitly with target_link_libraries() to store PRIVATE deps link dependencies, which won't be propagated as usage requirements
+$<INSTALL_INTERFACE:content> – returns content if used with install(EXPORT)
+$<BUILD_INTERFACE:content> – returns content if used with an export() command or by another target in the same buildsystem
+
+- example 
+
+```
+target_compile_options(tgt $<$<CONFIG:DEBUG>:-ginline-points>)
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    target_compile_definitions(myProject PRIVATE LINUX=1)
+
+endif()
+
+target_compile_definitions(myProject PRIVATE $<$<CMAKE_SYSTEM_NAME:LINUX>:LINUX=1>)
+
+
+set(myvar "small text")
+
+set(myvar2 "small > text")
+
+file(GENERATE OUTPUT nesting CONTENT
+
+  "1 $<PLATFORM_ID>
+
+  2 $<UPPER_CASE:$<PLATFORM_ID>>
+
+  3 $<UPPER_CASE:hello world>
+
+  4 $<UPPER_CASE:${myvar}>
+
+  5 $<UPPER_CASE:${myvar2}>
+
+")
+```
+
+
+# Compiling C++ sources with cmake 
+- On Linux, the most popular format is the Executable and Linkable Format (ELF). Windows uses a PE/COFF format specification. On macOS, we'll find Mach objects (the Mach-O format).
+
+- Preprocessing (despite being automatically invoked by most compilers) is thought of as a preliminary step to actual compilation
+
+Assembly is nothing more than a translation of these tokens to CPU-specific instructions based on an instruction set available for the platform
+
+Optimization happens throughout the whole compilation, little by little, at every stage. There's an explicit stage after producing the first assembly version, which is responsible for minimizing the usage of registers and removing unused code
+
+Code emission consists of writing the optimized machine code into an object file according to the format specified by the target platform.
+
+initial configuration 
+```
+target_compile_features(): Require a compiler with specific features to compile this target.
+target_sources(): Add sources to an already defined target.
+target_include_directories(): Set up the preprocessor include paths.
+target_compile_definitions(): Set up preprocessor definitions.
+target_compile_options(): Compiler-specific options for the command line.
+target_precompile_headers(): Optimize the compilation of external headers.
+```
+
+AppleClang: Apple Clang for Xcode versions 4.4+
+Clang: Clang Compiler versions 2.9+
+GNU: GNU Compiler versions 4.4+
+MSVC: Microsoft Visual Studio versions 2010+
+SunPro: Oracle Solaris Studio versions 12.4+
+Intel: Intel Compiler versions 12.1+
+IMPORTANT NOTE
+
+You can, of course, use any of the CMAKE_CXX_KNOWN_FEATURES variable, but I recommend sticking to a general C++ standard – cxx_std_98, cxx_std_11, cxx_std_14, cxx_std_17, cxx_std_20, or cxx_std_23. Check out the Further reading section for more details.
+
+- managing sources for targets manage include directory 
+
+a command to manipulate paths being searched for the included files:
+
+target_include_directories(<target> [SYSTEM] [AFTER|BEFORE]
+
+  <INTERFACE|PUBLIC|PRIVATE> [item1...]
+
+  [<INTERFACE|PUBLIC|PRIVATE> [item2...] ...])
+
+
+- preprocessor definitions 
+
+definitions.cpp
+```
+
+#include <iostream>
+
+int main() {
+
+#if defined(ABC)
+
+    std::cout << "ABC is defined!" << std::endl;
+
+#endif
+
+#if (DEF < 2*4-3)
+
+    std::cout << "DEF is greater than 5!" << std::endl;
+
+#endif
+
+}
+```
+
+CMakeLists.txt 
+```
+set(VAR 8)
+
+add_executable(defined definitions.cpp)
+
+target_compile_definitions(defined PRIVATE ABC
+
+  "DEF=${VAR}")
+```
+
+- configuring the headers 
+
+configure_file(<input> <output>) command, we can generate new files from templates like this one:
+
+chapter05/04-configure/configure.h.in
+```
+#cmakedefine FOO_ENABLE
+
+#cmakedefine FOO_STRING1 "@FOO_STRING1@"
+
+#cmakedefine FOO_STRING2 "${FOO_STRING2}"
+
+#cmakedefine FOO_UNDEFINED "@FOO_UNDEFINED@"
+```
+
+CMakeLists.txt
+```
+add_executable(configure configure.cpp)
+
+set(FOO_ENABLE ON)
+
+set(FOO_STRING1 "abc")
+
+set(FOO_STRING2 "def")
+
+configure_file(configure.h.in configured/configure.h)
+
+target_include_directories(configure PRIVATE
+
+                           ${CMAKE_CURRENT_BINARY_DIR})
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Cmake official document 
+...
+- Setting variables on the command line
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+- CMAKE_BUILD_TYPE
+
+Typical values include Debug, Release, RelWithDebInfo and MinSizeRel
+
+- ccmake 
+
+The ccmake executable is the CMake curses interface. Project configuration settings may be specified interactively through this GUI. 
+
+

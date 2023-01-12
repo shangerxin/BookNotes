@@ -1,0 +1,410 @@
+Effective C=Robert C;Note=Erxin
+
+
+# Introduction 
+- C standard, GNU Compiler Collection (GCC), which uses the -std= flag to determine the language standard. Possible values for this option include c89, c90, c99, c11, c17, c18, and c2x
+
+GCC 8 and later is -std=c17.
+
+- reference, developing correct, secure C code. Go to this book’s page at https://www.nostarch.com/effective_c/ or to http://www.robertseacord.com/
+
+
+# Getting start with C 
+- first 
+```
+   #include <stdio.h>
+   #include <stdlib.h>
+➊ int main(void) {
+  ➋ puts("Hello, world!");
+  ➌ return EXIT_SUCCESS;
+➍ }
+```
+
+$ cc hello.c
+$ cc -o hello hello.c
+
+- IDEs 
+
+vi/Vim 
+Visual Studio Code 
+Visual Studio 
+CLion 
+Atom 
+Sublime Text 
+XCode 
+Emacs 
+Other 
+
+- Compilers 
+
+    + GCC
+The GNU Compiler Collection (GCC) includes frontends for C, C++, and Objective-C, as well as other languages (https://gcc.gnu.org/)
+
+
+$ sudo apt-get install gcc-8 
+$ gcc --version
+$ sudo dnf install gcc
+
+    + Clang 
+$ sudo apt-get install clang
+
+    + Visual Studio 
+    
+Compile as C Code (/TC) option and not the Compile as C++ Code (/TP) option. By default, when you name a file with a .c extension, it’s compiled with /TC. If the file is named with a .cpp, .cxx, or a few other extensions, it’s compiled with /TP.
+
+-  C Standard documents:
+
+Implementation-defined behavior, that’s not specified by the C Standard and that may offer different results among implementations
+Unspecified behavior, the standard provides two or more options. 
+Undefined behavior, hat isn’t defined by the C Standard, or less circularly, “behavior, upon use of a nonportable or erroneous program construct or of erroneous data, for which the standard imposes no requirements.”
+Locale-specific behavior
+Common extensions, on local conventions of nationality, culture, and language that each implementation documents.
+
+
+
+# Objects, functions, and types 
+- varialbes 
+
+char *src;    // src has a type of char *
+char c;       // c has a type of char
+int x;        // x has a type int
+int y[5];     // y is an array of 5 elements of type int
+int m[12];    // m is an array of 12 elements of type int
+int n[15][3]; // n is an array of 15 arrays of 3 elements of type int
+int o[21];    // o is an array of 21 elements of type int
+
+- Swapping Values (First Attempt)
+
+```
+#include <stdio.h>
+void swap(int *pa, int *pb) {   // pa → a: 21    pb → b: 17
+  int t = *pa;                  // t: 21
+  *pa = *pb;                    // pa → a: 17    pb → b: 17
+  *pb = t;                      // pa → a: 17    pb → b: 21
+  
+}
+int main(void) {
+  int a = 21;                   // a: 21
+  int b = 17;                   // b: 17
+  swap(&a, &b);
+  printf("a = %d, b = %d\n", a, b);    // a: 17    b: 21
+  return 0;
+}
+```
+
+call-by-reference (also known as pass-by-reference) by generating object addresses
+
+- Scope, C has four types of scope: file, block, function prototype, and function.
+
+```
+int j;  // file scope of j begins
+
+void f(int i) {         // block scope of i begins
+  int j = 1;            // block scope of j begins; hides file-scope j
+  i++;                  // i refers to the function parameter
+  for (int i = 0; i < 2; i++) {  // block scope of loop-local i begins
+    int j = 2;          // block scope of the inner j begin; hides outer j
+    printf("%d\n", j);  // inner j is in scope, prints 2
+  }                     // block scope of the inner i and j ends
+  printf("%d\n", j);    // the outer j is in scope, prints 1
+}  // the block scope of i and j ends
+
+void g(int j);          // j has function prototype scope; hides file-scope j
+```
+
+- storage duration that determines their lifetime. Altogether, four storage durations are available: automatic, static, thread, and allocated
+
+declare a variable within a block scope to have static storage duration by using the storage-class specifier static
+
+```
+void increment(void) {
+  static unsigned int counter = 0;
+  counter++;
+  printf("%d ", counter);
+}
+
+int main(void) {
+  for (int i = 0; i < 5; i++) {
+    increment();
+  }
+  return 0;
+}
+```
+
+```
+//static objects must be initialized with a constant value and not a variable:
+
+int *func(int i) {
+  const int j = i; // ok
+  static int k = j; // error
+  return &k;
+}
+```
+
+A constant value refers to literal constants (for example, 1, 'a', or 0xFF), enum members, and the results of operators such as alignof or sizeof; not const-qualified objects.
+
+Thread storage duration is used in concurrent programming and is not covered by this book. 
+
+- alignment
+
+An alignment represents the number of bytes between successive addresses at which a given object can be allocated. 
+
+Alignment requirements may depend on the CPU word size (typically, 16, 32, or 64 bits).
+
+Dynamically allocated memory from malloc is required to be sufficiently aligned for all standard types, including arrays and structures.
+
+override the compiler’s default choices; for example, to align data on the boundaries of the memory cache lines that must start at power-of-two address boundaries, or to meet other system-specific requirements.
+
+Traditionally, these requirements were met by linker commands, or by overallocating memory with malloc followed by rounding the user address upward
+
+C11 introduced a simple, forward-compatible mechanism for specifying alignments. Alignments are represented as values of the type size_t. a stricter alignment (a larger power of two) using the alignment specifier (_Alignas).
+
+```
+struct S {
+  int i; double d; char c;
+};
+
+int main(void) {
+  unsigned char bad_buff[sizeof(struct S)];
+  _Alignas(struct S) unsigned char good_buff[sizeof(struct S)];
+
+  struct S *bad_s_ptr = (struct S *)bad_buff;   // wrong pointer alignment
+  struct S *good_s_ptr = (struct S *)good_buff; // correct pointer alignment
+}
+```
+
+- object types 
+
+    + Boolean types, Objects declared as _Bool can store only the values 0 and 1. This Boolean type was introduced in C99. C Standards committee can create new keywords such as _Bool
+    
+    If you include the header <stdbool.h>, you can also spell this type as bool and assign it the values true (which expands to the integer constant 1) and false (which expands to the integer constant 0)
+
+```
+#include <stdbool.h>
+_Bool flag1 = 0;
+bool flag2 = false;
+```
+
+    + Character types 
+    
+    three character types: char, signed char, and unsigned char. Each compiler implementation will define char to have the same alignment, size, range, representation, and behavior as either signed char or unsigned char
+    
+    + numerical types 
+    
+    integer types 
+    
+    The signed integer types include signed char, short int, int, long int, and long long int.
+    
+    unsigned integer type that uses the same amount of storage: unsigned char, unsigned short int, unsigned int, unsigned long int, and unsigned long long int
+    
+    minimum and maximum representable values for the various integer types specified in the <limits.h> header file.
+    
+    The int type usually has the natural size suggested by the architecture of the execution environment, so the size would be 16 bits wide on a 16-bit architecture, and 32 bits wide on a 32-bit architecture. You can specify actual-width integers by using type definitions from the <stdint.h> or <inttypes.h> headers, like uint32_t. These headers also provide type definitions for the widest available integer types: uintmax_t and intmax_t.
+    
+    + enum types 
+    
+    An enumeration, or enum, allows you to define a type that assigns names (enumerators) to integer values in cases with an enumerable set of constant values.
+    
+    ```
+    enum day { sun, mon, tue, wed, thu, fri, sat };
+    enum cardinal_points { north = 0, east = 90, south = 180, west = 270 };
+    enum months { jan = 1, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec };
+    ```
+    
+    enumeration constant must be representable as int, Visual C++ uses a signed int, and GCC uses an unsigned int.
+    
+    + floating point types 
+    
+    The C language supports three floating-point types: float, double, and long double.
+    
+    the IEEE Standard for Floating-Point Arithmetic (IEEE 754–2008). The choice of floating-point representation is implementation dependent
+    
+    + void types
+    
+    The void type is a rather strange type. The keyword void (by itself) means “cannot hold any value.” For example, you can use it to indicate that a function doesn’t return a value, or as the sole parameter of a function to indicate that the function takes no arguments. On the other hand, the derived type void * means that the pointer can reference any object.
+    
+    + function types
+
+    Function type is derived from the return type and the number and types of its parameters The return type of a function cannot be an array type.
+    
+```
+int f(void);
+int *fip();
+void g(int i, int j);
+void h(int, int);
+```
+
+    explicitly list parameter types and use void when there are no parameters.
+    
+    The function definition provides the actual implementation of the function.
+    
+    A function prototype informs the compiler about the number and types of parameters a function accepts.
+    
+    + Derived types
+    
+    Derived types are types that are constructed from other types
+    
+    + Pointer types 
+    
+    A pointer type is derived from the function or object type that it points to, called the referenced type.
+    
+```
+int *ip;
+char *cp;
+void *vp;
+```
+
+    + arrays 
+    
+    Array types are characterized by their element types and the number of elements in the array. 
+    
+```
+int ia[11];
+float *afp[17];
+
+char str[11];
+for (unsigned int i = 0; i < 10; ++i) {
+➊ str[i] = '0' + i;
+}
+str[10] = '\0';
+```
+
+*(str + i). When str is an array object (as it is here), the expression str[i] designates the ith element of the array (counting from 0). 
+
+    + Structures 
+    
+    A structure type (also known as a struct) contains sequentially allocated member objects.
+    
+```
+struct sigrecord {
+   int signum;
+   char signame[20];
+   char sigdesc[100];
+} sigline, *sigline_p;
+```
+
+    + unions 
+    
+    Union types are similar to structures, except that the memory used by the member objects overlaps.
+```    
+union {
+  struct {
+    int type;
+  } n;
+  struct {
+    int type;
+    int intnode;
+  } ni;
+  struct {
+    int type;
+    double doublenode;
+  } nf;
+} u;
+u.nf.type = 1;
+u.nf.doublenode = 3.14;
+```
+
+    + tags 
+    
+    Tags are a special naming mechanism for structs, unions, and enumerations.
+    
+    The tags of structures, unions, and enumerations are defined in a separate namespace from ordinary identifiers. This allows a C program to have both a tag and another identifier with the same spelling in the same scope:
+    
+```
+struct s {
+  //---snip---
+};
+
+struct s v;   // instance of struct s
+struct s *p;  // pointer to struct s
+
+enum day { sun, mon, tue, wed, thu, fri, sat };
+day today;  // error
+enum day tomorrow;  // OK
+
+enum status { ok, fail };  // enumeration
+enum status status(void);  // function
+
+// struct tags as type names and define an alias for the tag by using a typedef.
+typedef struct s { int x; } t;
+
+// The tag name in struct, union, and enum is optional, so you can just dispense with it 
+typedef struct { int x; } t;
+
+typedef struct tnode {
+  int count;
+  struct tnode *left;
+  struct tnode *right;
+} tnode;
+
+// can use a different name for the tag and the typedef
+// can also define this type before the structure so that you can use it to declare the left and right members that refer to other objects of type tnode
+typedef struct tnode tnode;
+struct tnode {
+  int count;
+  tnode *left
+  tnode *right;
+} tnode;
+
+// all three of the following declarations of the signal function specify the same type
+typedef void fv(int), (*pfv)(int);
+void (*signal(int, void (*)(int)))(int);
+fv *signal(int, fv *);
+pfv signal(int, pfv);
+```
+
+- type qualifiers, Types can be qualified by using one or more of the following qualifiers: const, volatile, and restrict. The _Atomic type qualifier, available since C11, supports concurrent programs.
+
+can be used interchangeably as arguments to functions, return values from functions, and members of unions
+
+    + const
+    
+    Objects declared with the const qualifier (const-qualified types) are not modifiable.
+    
+```
+const int i = 1; // const-qualified int
+i = 2; // error: i is const-qualified
+
+const int i = 1;  // object of const-qualified type
+int *ip = (int *)&i;
+*ip = 2;  // undefined behavior
+
+int i = 12;
+const int j = 12;
+const int *ip = &i;
+const int *jp = &j;
+*(int *)ip = 42; // ok
+*(int *)jp = 42; // undefined behavior
+```
+
+C does not allow you to cast away the const if the original was declared as a const-qualified object. 
+
+    + volatile 
+    
+    Static volatile-qualified objects are used to model memory-mapped input/output (I/O) ports, and static constant volatile-qualified objects model memory-mapped input ports such as a real-time clock.
+    
+    Using a volatile-qualified type lets the compiler know that the value may change by other programs, and ensures that every access to the real-time clock occurs. otherwise the read maybe optimized to read the cache 
+    
+    volatile-qualified types are used for communications with signal handlers and with setjmp/longjmp 
+    
+    Unlike in Java and other programming languages, volatile-qualified types in C should not be used for synchronization between threads. 
+    
+    + restrict 
+    
+    A restrict-qualified pointer is used to promote optimization. Objects indirectly accessed through a pointer frequently cannot be fully optimized because of potential aliasing, which occurs when more than one pointer refers to the same object.
+    
+```
+// the compiler can assume that an object accessed through one of the pointer parameters is not also accessed through the other.
+void f(unsigned int n, int * restrict p, int * restrict q) {
+  while (n-- > 0) {
+    *p++ = *q++;
+  }
+}
+```
+
+    using restrict-qualified pointers can result in more efficient code, you must ensure that the pointers do not refer to overlapping memory to prevent undefined behavior.
+    
+    
+    
+# Arithmetic types 
+- 
