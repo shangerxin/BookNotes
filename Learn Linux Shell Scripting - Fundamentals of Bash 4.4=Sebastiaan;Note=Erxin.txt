@@ -1,0 +1,340 @@
+Learn Linux Shell Scripting - Fundamentals of Bash 4.4=Sebastiaan;Note=Erxin
+
+
+# Preface
+- GNU stands for GNU's Not Unix! (a recursive acronym), is a collection of free software, a lot of which is found in most Linux distributions.
+
+- The Linux kernel is so-called Unix-like software.
+
+- One of the more well-known Linux distributions, Ubuntu, is based on the Debian distribution family. Another prominent Linux distribution, Fedora, is based on the Red Hat family.
+
+- Secure Shell (SSH) protocol. A few interesting things to note:
+
+
+
+
+# Setting up your local environment 
+- The simplest and most well-known client is PuTTY. 
+
+newer SSH client software, such as MobaXterm.
+
+- text editor 
+
+npp
+atom 
+vim 
+
+- The .vimrc file can be used to set some persistent options for Vim.
+
+```
+set expandtab
+set tabstop=2
+syntax on
+colo peachpuff
+set ignorecase
+set smartcase
+set number
+```
+
+    + vim cheat sheet 
+    
+Esc  Exit insert mode, go back to command mode.
+
+i    Enter insert mode before the current location of the cursor.
+
+a    Enter insert mode after the current location of the cursor.
+
+I    Enter insert mode at the beginning of the current line.
+
+A    Enter insert mode at the end of the current line.
+
+o    Enter insert mode with a new line below the current line.
+
+O    Enter insert mode with a new line above the current line.
+
+dd   Delete the current line.
+
+u    Undo the changes made in the previous insert mode.
+
+Ctrl + r
+
+Redo an undo.
+
+yy   'Yank' the current line (=copy).
+
+p    Paste the last yanked line below the current line.
+
+P    Paste the last yanked line above the current line.
+
+H    Navigate to the beginning of the file.
+
+M    Navigate to the middle of the file.
+
+G    Navigate to the end of the file.
+
+dH   Delete all lines until the beginning of the file (including the current line).
+
+dG   Delete all lines until the end of the file (including the current line).
+
+- Nano is much more than a What You See Is What You Get (WYSIWYG) tool
+
+
+
+# Linux file system 
+- three types 
+
+ext4
+XFS
+Btrfs
+
+extended file system (ext) series of Linux filesystems. It was released in 2008 and is considered very stable
+
+
+XFS is most famously used in Red Hat distributions (Red Hat Enterprise Linux, CentOS, and Fedora). It contains some features that are more advanced than ext4
+
+Btrfs. This filesystem implementation was initially designed at Oracle and is considered stable as of 2014. Btrfs has many advanced features that could make it preferable to ext4 and XFS; the principal developer of ext4 even stated that ext4 should eventually be replaced by Btrfs.
+
+You would not use ext4 as the filesystem for the primary drive under Windows, but you could mount a Linux-formatted ext4 filesystem under Windows and interact with the contents. 
+
+- filesystem unique 
+
+A Linux filesystem adheres to the Filesystem Hierarchy Standard (FHS).
+
+Unix Filesystem Standard (UFS). It specifies the directory structure
+
+    + files are written to disk in three steps:
+
+        1. Filesystem requests disk write from journal
+        2. Journal writes on disk
+        3. After file write, journal is updated
+
+The journal only contains some metadata about the operation, not the entire file. Since the journal contains a reference to the actual location on disk (the drive sectors), it will overwrite what was previously written, in this case, part of the file. If it finished successfully this time, the journal entry will be removed and the state of the file/disk is guaranteed.
+
+- top level directories 
+
+/bin/  Contains essential binaries (=tools) used by normal users
+
+/boot/ Contains files used in the boot process: kernel, initramfs, bootloader
+
+/dev/  Contains special files used to access devices
+
+/etc/  Default location for software configuration files
+
+/home/ Contains the home directories for normal users
+
+/lib/  Contains system libraries
+
+/lib64/ Contains 64bit system libraries
+
+/media/ Removable devices such as USB and DVDs can be found here
+
+/mnt/   Empty by default, can be used to mount other filesystems
+
+/opt/   Directory where optional software can be installed
+
+/proc/  Directory where information about processes is stored
+
+/root/  The home directory of the root user
+
+/run/   Contains variable data about run-time data, different each boot
+
+/sbin/  Contains essential sytem binaries (=tools) used by administrative users
+
+/srv/   Directory to place data to be served by the server
+
+/sys/   Contains information about the system, such as drivers and kernel features
+
+/tmp/   Directory intended for temporary files, often cleared on reboot (because it is stored in RAM, instead of on disk)
+
+/usr/   Contains non-essential files and binaries as read-only user data
+
+/var/   Contains variable files, such as logs
+
+- multiple partitions 
+
+Linux mounts filesystems somewhere within the tree structure. The first mount is found on the primary partition we have already covered: it is mounted on /
+
+new df tool:
+
+reader@ubuntu:~$ df -hT
+
+df, reports filesystem disk space usage
+
+- bin/, sbin/ and user/ 
+
+- check bash version 
+
+$ echo $BASH_VERSION
+4.4.19(1)-release
+
+- Universally Unique Identifier (UUID) and we're mounting it on /, so as the root filesystem. It's of type ext4, mounted using options defaults
+
+- password legacy reasons; the (hashed!) password has been moved to the /etc/shadow file, which can only be read by the root superuser. We will cover the UID and GID in the next chapter
+
+- file types Linux to represent them:
+
+```
+-: Normal file
+
+A regular file, containing text or bytes
+
+d: Directory A directory, which can contain other directories and regular files
+
+l: Symlink  Symbolic link, used as a shortcut
+
+s: Socket   A channel used for communication
+
+c: Special file   Mostly used for device handlers
+
+b: Block device   The type that represents storage hardware, such as disk partitions
+
+p: Named pipe     Used between processes to talk to each other
+```
+
+
+
+# Understand linux permissions scheme 
+- read, write, and execute, or RWX. 
+
+    + list files with permissions 
+$ ls -l /
+drwx------
+
+filetype(1) user permissions (2-4) group permission (5-7) other permissions (8-10)  user ownership  group ownership 
+
+```
+- normal file 
+rw- read and write, no execute 
+r-- only read 
+```
+
+    + check current user id 
+
+$ id
+uid=1000(reader) gid=1004(reader) groups=1004(reader),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),108(lxd),1000(lpadmin),1001(sambashare),1002(debian-tor),1003(libvirtd)
+reader@ubuntu:~$
+
+- chmod, umask 
+
+change file mode. chmod has two operating modes: symbolic mode and numeric/octal mode
+
+$ chmod -v u+rwx testfile
+
+We can use the verbose option on chmod to make it print more information
+```
+Symbolic	Octal
+---	0
+--x	1
+-w-	2
+-wx	3
+r--	4
+r-x	5
+rw-	6
+rwx	7
+```
+
+$ chmod -v 0777 testfile 
+
+see from the chmod u+rwx,g+rx,o+r testfile command, things have gotten a bit complicated
+$ chmod 0754 testfile 
+
+
+The umask session is used to determine the file permissions for newly created files and directories. 
+
+showcase with regards to umask. In specific cases, we'd like to determine default values for files and directories
+
+- change owner (chown) and change group (chgrp).
+
+- multiple users 
+
+As was the case with chown and chgrp, useradd (and later usermod) is a privileged
+
+useradd commadn 
+usermode 
+
+```
+reader@ubuntu:~$ sudo groupadd development
+reader@ubuntu:~$ sudo groupadd operations
+reader@ubuntu:~$ sudo groupadd security
+```
+
+usermod (which stands for user modify). The syntax to set a user's primary group is as follows: usermod -g <groupname> <username>:
+
+```
+reader@ubuntu:/data$ sudo groupadd devops
+reader@ubuntu:/data$ sudo usermod -a -G devops dev-user1 
+reader@ubuntu:/data$ sudo usermod -a -G devops ops-user1 
+```
+
+- file attribute 
+
+man pages for the lsattr and chattr commands (man lsattr and man chattr).
+
+- special file permissions 
+
+SUID, SGID, and the sticky bit. They have a similar octal notation (where SUID is 4, SGID is 2, and the sticky bit is 1
+
+SUID    Files are executed with the permissions of the owner, regardless of which user executes it.
+
+        Directories Does nothing.
+
+SGID    Files are executed with the permissions of the group, regardless of which user executes it.
+
+        Directories Files that are created in this directory get the same group as the directory.
+
+Sticky bit  Does nothing.
+
+            User can only delete their own files within this directory. See the /tmp/ directory for its most famous use.
+            
+- Access control lists, ACLs, ACLs are a way to increase the flexibility of the UGO/RWX system. Using setfacl (set file acl) and getfacl (get file acl), you can set additional permissions for files and directories. 
+
+
+
+# File manipulation 
+- copy 
+
+$ cp 
+
+- removing 
+
+$ rm 
+- renaming, moving, linking 
+
+$ mv 
+
+- archiving 
+$ gzip 
+$ tar 
+$ zip 
+
+- finding files 
+
+$ find 
+$ locate 
+
+locate - find files by name. The locate command is installed by default on your Ubuntu machine
+
+find:
+
+Search on a filename
+Search on permissions (both user and group)
+Search on ownership
+Search on file type
+Search on file size
+Search on timestamps (created, last-modified, last-accessed)
+Search only in certain directories
+
+$ find /home/reader/ -name *cache* -type f
+$ find /home/reader/ -size +10c
+
+- summary 
+
+
+
+
+# Hello world
+-  shebang, but is sometimes also referred to as a sha-bang, hashbang, pound-bang, and/or hash-pling. 
+
+we will always use the #!/bin/bash shebang, but for Perl or Python scripts it would be #!/usr/bin/perl and #!/usr/bin/python3 respectively
+
+- 

@@ -407,4 +407,579 @@ void f(unsigned int n, int * restrict p, int * restrict q) {
     
     
 # Arithmetic types 
-- 
+- integers 
+
+    + padding and precision 
+    
+    All integer types except char, signed char, and unsigned char may contain unused bits, called padding, that allow implementations to accommodate hardware quirks (such as skipping over a sign bit in the middle of a multiple-word representation) or to optimally align with a target architecture. 
+    
+    width and is often denoted by N. The precision is the number of bits used to represent values
+    
+    sign and padding bits.
+    
+    + the <limits.h> header file 
+    
+    + C Standard
+    
+    First, storage for every data type occupies an integral number of adjacent unsigned char objects (which may include padding)
+    
+    Second, each integer type has to support the minimum ranges, allowing you to depend on a portable range of values across any implementation. 
+    
+```
+unsigned int ui; // unsigned is required
+unsigned u; // int can be omitted
+unsigned long long ull2; // int can be omitted
+unsigned char uc; // unsigned is required
+```
+    
+- padding and precision 
+
+All integer types except char, signed char, and unsigned char may contain unused bits, called padding, that allow implementations to accommodate hardware quirks (such as skipping over a sign bit in the middle of a multiple-word representation) or to optimally align with a target architecture
+
+- declaring integers, Unless explicitly declared as unsigned, integer types are assumed to be signed
+
+```
+unsigned int ui; // unsigned is required
+unsigned u; // int can be omitted
+unsigned long long ull2; // int can be omitted
+unsigned char uc; // unsigned is required
+```
+
+most x86 architectures use 32-bit integers with no padding bits, so an object of type unsigned int has a range of 0 to 232 – 1 (4,294,967,295). The constant expression UINT_MAX from <limits.h> 
+
+Wraparound occurs when you perform arithmetic operations that result in values too small (less than 0) or too large (greater than 2N – 1) to be represented as a particular unsigned integer type.
+
+```
+//For example, the i in the following for loop can never take on a negative value, so this loop will never terminate:
+
+for (unsigned int i = n; i >= 0; --i)
+```
+
+
+```
+extern unsigned int ui, sum;
+// assign values to ui and sum
+if (sum + ui > UINT_MAX)
+  too_big();
+else
+  sum = sum + ui;
+
+extern unsigned int ui, sum;
+// assign values to ui and sum
+if (ui > UINT_MAX - sum)
+  too_big();
+else
+  sum = sum + ui;
+
+
+// extern unsigned int i, j;
+if (j > i)  // correct
+  negative();
+else
+  i = i - j;
+```
+
+Keep in mind that the width used when wrapping depends on the implementation. 
+
+- signed integers 
+
+Ones’ complement The sign bit is given the weight –(2N – 1 – 1), and the other value bits have the same weights as for unsigned.
+
+Two’s complement The sign bit is given the weight –(2N – 1), and the other value bits have the same weights as for unsigned. 
+
+Standards committee intends, starting with C2x, to accommodate only two’s-complement representation
+
+negating + 1 is two's complement representation 
+
+    + bit two's complement values 
+    
+Binary          Decimal         Weighting           Constant
+
+00000000        0               0
+
+00000001        1               2^0
+
+01111111        127             2^(N – 1) – 1      SCHAR_MAX
+
+10000000        –128            –2^(N – 1) + 0     SCHAR_MIN
+
+10000001        –127            –(2N – 1 ) + 1
+
+11111110        –2              –(2N – 1 ) + 126
+
+11111111        –1              –(2N – 1 ) + 127
+
+- overflow igned integer operation results in a value that cannot be represented in the resulting type 
+
+```
+// undefined or wrong for most negative value
+#define Abs(i) ((i) < 0 ? -(i) : (i))
+
+
+signed int si = INT_MIN;
+signed int abs_si = Abs(si);  // undefined behavior no universally correct solution to this problem exists, but we can at least test for the possibility of undefined behavior before it occurs and take appropriate action
+
+printf("%d\n", abs_si);
+```
+
+corrected
+```
+#define AbsM(i, flag) ((i) >= 0 ? (i) : ((i)==(flag) ? (flag) : -(i)))
+signed int si = -25;  // try INT_MIN to trigger the problem case
+signed int abs_si = AbsM(si, INT_MIN);
+if (abs_si == INT_MIN)
+  goto recover;  // special case
+else
+  printf("%d\n", abs_si);  // prints 25
+```
+
+the C Standard library implements the following int-only absolute-value function to avoid overflow
+```
+int abs(int i) {
+  return (i >= 0) ? i : -(unsigned)i;  // avoids overflow
+}
+```
+
+Because -INT_MIN can’t be represented as a signed int, the result is implementation defined
+
+Unsigned integers have well-defined wraparound behavior. Signed integer overflow, or the possibility of it, should always be considered a defect
+
+- integer constants 
+
+decimal constants, octal constants, and hexadecimal constants.
+
+```
+unsigned int ui = 71;
+int si;
+si = -12;
+
+int agent = 007;
+int permissions = 0777
+
+int burger = 0xDEADBEEF;
+
+unsigned int ui = 71U;
+signed long int sli = 9223372036854775807L;
+unsigned long long int ui = 18446744073709551615ULL;
+```
+
+append a suffix to your constant to specify its type. Without a suffix, a decimal constant is given the int type if it can be represented as a value in that type. If it cannot be represented as an int, it will be represented as a long int or long long int. The suffixes are U for unsigned, L for signed long, and LL for long long. 
+
+- floating point types, C has three floating-point types: float, double, and long double.
+
+    + common floatingp point format 
+
+assume conformance to Annex F (the most common floating-point format). You can test the values of the __STDC_IEC_559__ or __STDC_IEC_60559_BFP__ macros
+
+test the values of the __STDC_IEC_559__ or __STDC_IEC_60559_BFP__ macros in newer compilers to determine whether the implementation conforms to Annex F.
+
+common IEC 60559 float type encodes values using 1 sign bit, 8 exponent bits, and 23 significand bits (ISO/IEC/IEEE 60559:2011).
+
+assigns the long double type one of the following formats:
+
+IEC 60559 quadruple (or binary128) format7
+IEC 60559 binary64-extended format
+A non-IEC 60559 extended format
+IEC 60559 double (or binary64) format
+
+Floating-point types cannot represent all real numbers exactly, even when they can be represented in a small number of decimal digits. -FLT_MIN 0 FLT_MIN 
+
+negative and positive infinity and not-a-number (NaN) values. NaNs are values that do not represent a real number.
+
+The NAN and INFINITY macros and the nan functions in <math.h> provide designations for IEC 60559 quiet NaNs and infinities. The SNANF, SNAN, and SNANL macros (ISO/IEC TS 18661-1:2014, ISO/IEC TS 18661-3:2015) defined in <math.h>
+
+use the fpclassify function-like macro, which classifies its argument value as NaN, infinite, normal, subnormal, or zero.
+
+```
+#include <math.h>
+int fpclassify(real-floating x);
+
+
+const char *show_classification(double x) {
+  switch(fpclassify(x)) {
+    case FP_INFINITE:  return "Inf";
+    case FP_NAN:       return "NaN";
+    case FP_NORMAL:    return "normal";
+    case FP_SUBNORMAL: return "subnormal";
+    case FP_ZERO:      return "zero";
+    default:           return "unknown";
+  }
+```
+
+A floating-point constant is a decimal or hexadecimal number that represents a signed real number.
+
+```
+15.75
+1.575E1   /* 15.75 */
+1575e-2   /* 15.75 */
+-2.5e-3   /* -0.0025 */
+25E-4     /* 0.0025 */
+
+10.0   /* type double */
+10.0F  /* type float */
+10.0L  /* type long double */
+```
+
+- arithmetic conversion,  cast operator to perform explicit conversions. Listing 3-3 shows two examples of casts.
+
+```
+int si = 5;
+short ss = 8;
+long sl = (long)si;➊
+unsigned short us = (unsigned short)(ss + sl);➋
+```
+
+Implicit conversion, also known as coercion, occurs automatically in expressions as required
+
+- integer promotions 
+```
+signed char cresult, c1, c2, c3;
+c1 = 100; c2 = 3; c3 = 4;
+cresult = c1 * c2 / c3;
+```
+
+Many operators that accept integer operands—including *, /, %, +, -, <, >, <=, >=, ==, != , &, ^, |, and ? :—perform conversions using the usual arithmetic conversions
+
+- implicit conversion 
+
+```
+unsigned int ui = UINT_MAX;
+signed char c = -1;
+if (c == ui) {
+  puts("-1 equals 4,294,967,295");
+}
+```
+
+- Safe Conversions
+
+Integer conversions occur when a value of an integer type is converted to a different integer type. 
+
+```
+#include <errno.h>
+#include <limits.h>
+
+errno_t do_stuff(signed long value) {
+  if ((value < SCHAR_MIN) || (value > SCHAR_MAX)) {
+    return ERANGE;
+  }
+  signed char sc = (signed char)value; // Cast quiets warning
+  //---snip---
+}
+```
+
+- Integer to Floating-Point Conversions
+
+If the value of the integer type being converted to a floating-point type can be represented exactly in the new type, it is unchanged. If the value being converted is in the range of values that can be represented but not exactly
+
+- Floating-Point to Integer Conversions
+
+When a finite value of a floating type is converted to an integer type (other than bool), the fractional part is discarded. 
+
+- Floating-Point Demotions
+
+Converting a floating-point value to a larger floating-point type is always safe
+
+
+# Expressions and operators 
+- An operator is a keyword or one or more punctuation characters used to perform an operation. When an operator is applied to one or more operands, it becomes an expression that computes a value and that might have side effects. 
+
+- Expressions are sequences of operators and operands that compute a value or accomplish another purpose. 
+
+- simple assignment  
+
+```
+int i = 21; // declaration with initializer
+int j = 7;  // declaration with initializer
+i = j;      // simple assignment
+```
+
+- lvalue, 
+
+lvalue can also be an expression such as *(p+4), provided it references an object in memory.
+
+think of it as standing for locator value, because it must designate an object
+ 
+- rvalue (right operand) or expression value. 
+
+The rvalue does not need to refer to an object
+
+
+```
+int i;
+i = 5;     // i is an lvalue, 5 is an rvalue
+int j = i; // lvalues can appear on the right-hand side of an assignment
+7 = i;     // error: rvalues can't appear on the left-hand side of an assignment
+```
+- Evaluation mostly means simplifying an expression down to a single value. 
+
+If a[i] is an array of int, and f() returns an int, the result of the expression will have the type int.
+
+- Side effects are changes to the state of the execution environment. Side effects include writing to an object, accessing (reading or writing) a volatile-qualified object, I/O, assignment, or calling a function that does any of these things
+
+- function invocation 
+
+```
+int x = 11;
+int y = 21;
+int max_of_x_and_y = max(x, y);
+```
+
+- Increment and Decrement Operators
+The increment (++) and decrement (--) operators increment and decrement a modifiable lvalue,
+
+```
+int i = 5;
+int e;    // result of the expression
+e = i++;  // postfix increment: i has the value 6; e has the value 5
+e = i--;  // postfix decrement: i has the value 5; e has the value 6
+e = ++i;  // prefix increment: i has the value 6; e has the value 6
+e = --i;  // prefix decrement: i has the value 5; e has the value 5
+```
+
+- operator precedence and associativity, the expression 2 + 3 × 4 is interpreted to have the value 2 + (3 × 4) = 14, not (2 + 3) × 4 = 20.
+
+Left-associative operators cause the operations to be grouped from the left 
+
+right-associative operators cause the operations to be grouped from the right.
+
+Precedence      Operator            Description                         associativity 
+0               (...)               Forced grouping                     Left 
+        
+1               ++ --               Postfix increment and decrement     Left
+                ()                  function call 
+                []                  array subscripting 
+                .                   structure and union access 
+                ->                  structure and union member access through pointer 
+                (type){list}        compound literal 
+                
+2               ++ --               prefix increment and decrement      right 
+                + -                 unary plus and minux 
+                ! ~                 logic not and bitwise not 
+                (type)              type cast 
+                *                   indirection (dereference)
+                &                   address-of 
+                sizeof              Size of 
+                _Alignof            alignment requiremrent 
+                
+3               * / %               multiplication division and remainder   left 
+
+4               + -                 addition and substraction 
+
+5               << >>               bitwise left shift and right shift 
+
+6               < <=                relational operators < and <= 
+                > >=                relational operators 
+
+7               == !=               equal and not equyal to 
+
+8               &                   bitwise AND 
+
+9               ^                   bitwise XOR 
+                        
+10              |                   bitwise OR 
+
+11              &&                  logical and 
+
+12              ||                  logical or 
+
+13              ?:                  conditional operator 
+
+14              =                   simple assignment 
+                += -=               assignment by sum and difference 
+                *= /= %=            assignm,ent by product quotient and remainder 
+                <<= >>=             assignment by bitwise left shfit and right shift 
+                &= ^= |=            assignment by bitwise AND, XOR, and OR 
+                
+15              ,                   expression sequencing                       left 
+
+- The order of evaluation of the operands of any C operator, including the order of evaluation of any subexpressions, is generally unspecified.
+
+```
+int glob;  // static storage initialized to 0
+
+int f(void) {
+  return glob + 10;
+}
+int g(void) {
+  glob = 42;
+  return glob;
+}
+int main(void) {
+  int max_value = max(f(), g());
+  // ---snip---
+}
+```
+
+- Some evaluations are indeterminately sequenced, which means they cannot interleave but can still be executed in any order
+
+```
+printf("%d\n", ++i + ++j * --k);
+```
+
+-  sequence point is the juncture at which all side effects will have completed.
+
+-  sizeof operator to find the size in bytes of its operand; specifically, it returns an unsigned integer of size_t type that represents the size.
+
+The size_t type is defined in <stddef.h> as well as other header files. 
+
+- Complement Operator
+
+The unary complement (~) operator works on a single operand of integer type and returns the bitwise complement of its operand;
+
+- Shift operations shift the value of each bit of an operand of integer type by a specified number of positions
+
+shift-expression << additive-expression
+
+- bitwise operators 
+
+  1 1 0 1 = 13
+^ 0 1 1 0 = 6
+= 1 0 1 1 = 11
+
+Bitwise AND Operator
+The binary bitwise AND (&) operator returns the bitwise AND of two operands of integer type
+
+- Cast Operators
+Casts (also known as type casts) explicitly convert a value of one type to a value of another type.
+
+- Conditional Operator
+The conditional (?:) operator is the only C operator that takes three operands. 
+
+- _Alignof Operator
+The _Alignof operator yields an integer constant representing the alignment requirement of its operand’s declared complete object type
+
+
+```
+#include <stdio.h>
+#include <stddef.h>
+#include <stdalign.h>
+#include <assert.h>
+
+int main(void) {
+  int arr[4];
+  static_assert(_Alignof(arr) == 4, "unexpected alignment"); // static assert
+  assert(alignof(max_align_t) == 16); // runtime assertion
+  printf("Alignment of arr = %zu\n", _Alignof(arr));
+  printf("Alignment of max_align_t = %zu\n", alignof(max_align_t));
+}
+```
+
+- relational operators, The relational operators include == (equal to), != (not equal to), < (less than), > (greater than), <= (less than or equal to), and >= (greater than or equal to). 
+
+- pointer arithmetic 
+
+Adding or subtracting an expression that has integer type to or from a pointer returns a value with the type of the pointer operand
+
+
+```
+int arr[100];
+int *arrp1 = &arr[40];
+int *arrp2 = arrp1 + 20;      // arrp2 points to arr[60]
+printf("%td\n", arrp2-arrp1); // prints 20
+```
+
+
+# Control flow 
+- expression statement 
+
+- A compound statement, or block, is a list of zero or more statements, surrounded by braces.
+
+- Selection statements allow you to conditionally execute a substatement depending on the value of a controlling expression
+
+- if statement 
+
+  if (marks >= 90) {
+    puts("YOUR GRADE : A");
+  } else if (marks >= 80) {
+    puts("YOUR GRADE : B");
+  } else if (marks >= 70) {
+    puts("YOUR GRADE : C");
+  } else {
+    puts("YOUR GRADE : Failed");
+  }
+}
+
+- switch 
+
+switch (marks/10) {
+  case 10:
+  case 9:
+    puts("YOUR GRADE : A");
+    break;
+  case 8:
+    puts("YOUR GRADE : B");
+    break;
+  case 7:
+    puts("YOUR GRADE : C");
+    break;
+  default:
+    puts("YOUR GRADE : Failed");
+}
+
+- Iteration statements cause substatements (or compound statements) to be executed zero or more times, subject to termination criteria
+
+- The while statement causes the loop body to execute repeatedly until the controlling expression is equal to 0. 
+
+void f(unsigned int x) {
+  while (x > 0) {
+    printf("%d\n," x);
+    --x;
+  }
+  return;
+}
+
+
+
+# Control flow 
+- An expression statement is an optional expression terminated by a semicolon.
+
+- A stream is a uniform abstraction for communicating with files and devices that consume or produce sequential data such as sockets, keyboards, USB ports, and printers.
+
+- You should never allocate a FILE object yourself. C Standard Library functions operate on objects of type FILE * 
+
+- Buffering is the process of temporarily storing data in main memory that’s passing between a process and a device or file. 
+
+- Stream can be in three states 
+
+Unbuffered  Characters are intended to appear from the source or at the destination as soon as possible. 
+
+Fully buffered Characters are intended to be transmitted to or from the host environment as a block when a buffer is filled to optimize throughput 
+
+Line buffered Characters are intended to be transmitted to or from the host environment as a block when a newline character is encountered. 
+
+- predefined streams 
+
+extern FILE * stdin;  // standard input stream
+extern FILE * stdout; // standard output stream
+extern FILE * stderr; // standard error stream
+
+
+The standard error stream (stderr) is for writing diagnostic output. As initially opened, stderr isn’t fully buffered; 
+
+stdin and stdout are fully buffered if and only if the stream doesn’t refer to an interactive device. 
+
+The stderr stream isn’t fully buffered
+
+- Each stream has an orientation that indicates whether the stream contains narrow or wide characters. 
+
+an external file stream doesn’t have an orientation. Once a wide character I/O function has been applied to a stream without orientation, the stream becomes a wide-oriented stream.
+
+You can reset the orientation of a stream by using the fwide function or by closing and then reopening the file.
+
+- text and binary streams 
+
+The C Standard supports both text streams and binary streams. A text stream is an ordered sequence of characters composed into lines, each of which consists of zero or more characters plus a terminating newline character sequence
+
+A binary stream is an ordered sequence of arbitrary binary data. Data read in from a binary stream will be the same as data written out earlier to that same stream,
+
+- opening and creating files
+
+The fopen function opens the file whose name is given as a string and pointed to by filename, and then associates a stream with it
+
+FILE *fopen(
+  const char * restrict filename,
+  const char * restrict mode
+);
+
+r, w, a, rb, wb, ab, r+, w+, a+, r+b or rb+, w+b or wb+, a+b or ab+ 
+
