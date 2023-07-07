@@ -1,0 +1,822 @@
+Pro Windows Subsystem for Linux (WSL)=Hayden;Note=Erxin
+
+
+# Start learning 
+- wsl1 vs wsl2 
+$ sudo apt install strace -y
+$ strace -o output.txt echo 'hello world'
+$ cat output.txt 
+
+- The new GPU compute functionality is based on a para-virtualized GPU in the WSL 2 environment. GPU acceleration will allow a whole new category of GPU-driven comput
+
+- “Using WSL for Enterprise Development.”
+
+/dev/dxgkrnl
+
+/dev/dxgkrnl is a pass-through driver, similar in some ways to accelerated graphics drivers on other virtualization platforms, like VirtualBox.
+
+/dev/dxgkrnl does not contain DirectX, but it is open source and can be viewed at 
+
+https://github.com/microsoft/WSL2-Linux-Kernel
+
+- direct3d 12, Direct3D is part of DirectX. Direct3D is a real-time API for rendering three-dimensional graphics in applications and games. 
+
+- directml is a part of directx is a low level api for machine learning 
+
+- opengl and opencl 
+
+provide mapping layers for OpenGL and OpenCL on top of DirectX through the open source Mesa library (Figure 1-9). This will allow OpenGL and OpenCL applications to be seamlessly DirectX accelerated
+
+- CUDA is a cross-platform parallel processing API created by Nvidia. Microsoft worked with Nvidia to build a version of CUDA for Linux that targeted the WDDM layer through the /dev/dxgkrnl device driver
+
+- The libraries needed to access advanced GPU features in WSL are overlaid onto the WSL file system at /usr/lib/wsl/lib for glibc-based distributions.
+
+- gpu, official GUI support for WSL 2 are coming in 2021.
+
+- If VAIL is upstreamed into the RDP standard, then, instead of using the RAIL channel to send graphical data, the video framebuffer could be copied directly from Linux to Windows. This will dramatically improve GUI performance and is similar to Intel GVT-g technology.
+
+- enable wsl 
+
+    + from windows feature 
+    
+    + powershell 
+
+ps> Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
+
+    + using dism 
+
+ps> dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+
+enable all 
+ps> dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestar
+
+ps> Restart-Computer
+
+    + set using wsl 2 
+    
+Open PowerShell as Administrator, and run
+ps> wsl.exe --set-default-version 2
+
+- list all online version 
+
+$ wsl.exe --list --online
+
+install one distribution  
+$ wsl.exe --install -d Ubuntu-16.04
+
+- installable derivative image:
+
+https://docs.microsoft.com/en-us/windows-hardware/manufacture/desktop/work-with-windows-images
+
+$ Set-VMProcessor -VMName "Virtual Machine Name" -ExposeVirtualizationExtensions $true
+
+- Installing a linux distribution on wsl 
+
+we can also install from windows store 
+
+- enable developer mode 
+
+- WSL can be downloaded directly from Microsoft at https://docs.microsoft.com/en-us/windows/wsl/install-manual.
+
+- import from tarball 
+
+$ wsl.exe --import
+
+- from ubuntu cloud 
+
+We will begin at https://cloud-images.ubuntu.com/ (Figure 2-17). Click “groovy” and then “current,” and you will find yourself at a page listing builds
+
+Ubuntu release cycle can be found at https://ubuntu.com/about/release-cycle.
+
+check https://releases.ubuntu.com/
+
+- The official template from Microsoft is available from https://github.com/microsoft/WSL-DistroLauncher.
+
+- rootfs will be unpacked at the local specified in your command 
+
+$ wsl.exe --import <name for distro> <location to unpack rootfs> <location of rootfs> [optionally: --version <version of WSL to install in>]
+
+- wsl tooling 
+
+WSL 2 uses several components located at %SystemRoot%\system32\lxss\ to perform its basic functions
+
+LxssManager.dll – Services for managing the WSL environment
+
+LxssManagerProxyStub.dll – An initial stub for loading LxssManager.dll later in the boot process
+
+tools/ – A folder containing several other tools (see in the following)
+
+lib/ – A folder containing several libraries (see in the following)
+
+wslclient.dll – A new library in builds 19555+ used to consolidate the functionality of wsl.exe, bash.exe, wslhost.exe, wslconfig.exe, and LxssManager.dll into a single library
+
+wslhost.exe – A tool used to maintain Windows interoperability for background tasks on WSL 1
+
+    + The subdirectory \tools\ (Figure 2-31) is home to
+bsdtar – The utility for converting WSL installations to and from tar.gz balls
+
+ext4.vhdx.gz – A preformatted blank ext4 file system
+
+init – The WSL 2 init process, which operates as PID 1 on WSL 2 containers
+
+initrd.img – The initial RAM disk loaded by the WSL 2 kernel as part of the “boot” process
+
+kernel – The WSL 2 Linux kernel
+
+license – A copy of the GNU General Public License 2 covering the Linux kernel
+
+libcuda.so, libnvidia-ml.so.1, libnvwgf2umx.so, and related libraries provide support for Nvidia CUDA, machine learning, and other GPU compute functionalities.
+
+- wsl api in windows 10 
+
+```
+if (!g_wslApi.WslIsOptionalComponentInstalled()) {
+        Helpers::PrintMessage(MSG_MISSING_OPTIONAL_COMPONENT);
+It then checks if the WSL distribution is installed and, if not, installs it:
+if (!g_wslApi.WslIsDistributionRegistered()) {
+// If the "--root" option is specified, do not create a user account.
+     bool useRoot = ((installOnly) && (arguments.size() > 1) && (arguments[1] == ARG_INSTALL_ROOT));
+     hr = InstallDistribution(!useRoot);
+        if (FAILED(hr)) {
+            if (hr == HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)) {
+            Helpers::PrintMessage(MSG_INSTALL_ALREADY_EXISTS);
+            }
+        } else {
+            Helpers::PrintMessage(MSG_INSTALL_SUCCESS);
+        }
+        exitCode = SUCCEEDED(hr) ? 0 : 1;
+}
+Creating a new user and adding them to sudo is handled in DistroLauncher/DistributionInfo.cpp and calls directly inside the WSL distro:
+bool DistributionInfo::CreateUser(std::wstring_view userName)
+{
+    // Create the user account.
+    DWORD exitCode;
+    std::wstring commandLine = L"/usr/sbin/adduser --quiet --gecos '' ";
+    commandLine += userName;
+    HRESULT hr = g_wslApi.WslLaunchInteractive(commandLine.c_str(), true, &exitCode);
+    if ((FAILED(hr)) || (exitCode != 0)) {
+        return false;
+    }
+    // Add the user account to any relevant groups.
+    commandLine = L"/usr/sbin/usermod -aG adm,cdrom,sudo,dip,plugdev ";
+    commandLine += userName;
+    hr = g_wslApi.WslLaunchInteractive(commandLine.c_str(), true, &exitCode);
+    if ((FAILED(hr)) || (exitCode != 0)) {
+        // Delete the user if the group add command failed.
+        commandLine = L"/usr/sbin/deluser ";
+        commandLine += userName;
+        g_wslApi.WslLaunchInteractive(commandLine.c_str(), true, &exitCode);
+        return false;
+    }
+    return true;
+}
+
+WslIsOptionalComponentInstalled()
+WslIsDistributionRegistered()
+WslRegisterDistribution()
+WslConfigureDistribution()
+WslLaunchInteractive()
+WslLaunch()
+```
+
+
+
+# Managing wsl distros 
+- listing 
+$ wsl --list --all --verbose 
+
+- list running 
+
+$ wsl.exe --list –running
+
+- running a specific distro 
+
+$ wsl.exe --distribution <name of distribution>
+
+$ wsl.exe --distribution Ubuntu-20.04
+
+run as a specific user 
+$ wsl.exe --distribution <name of distribution> --user <name of user>
+
+- execute single command 
+
+$ wsl.exe --exec echo 'hello world'
+
+add --distribution and the name of the distribution (Figure 3-11):
+$ wsl.exe --distribution <name of distribution> --exec <command to run>
+
+- shutdown 
+
+shut down the WSL 2 environment (Figure 3-13), run the following:
+$ wsl.exe --shutdown
+
+- terminate, necessary to forcibly terminate it. Terminating a WSL distro immediately halts all running processes
+
+$ wsl.exe –terminate <name of distribution>
+
+$ wsl.exe --terminate Ubuntu-20.04 
+
+- convert distribution version 
+
+convert a distro between 1 and 2 (Figure 3-17), run
+$ wsl.exe --set-version <name of distribution> <version number>
+
+- export 
+
+$ wsl.exe --export <name of distribution> <filename of exported image>
+
+- import 
+$ wsl.exe --import <name of imported distro> <location to store unpacked file system> <filename of exported image> --version <1 or 2>
+
+- resewtting distros, you have a few additional GUI options to manage your distro, including the option to “Reset” to a fresh installation
+
+From “Apps & features,” you can easily relocate your WSL distro to another drive
+
+access additional options for your WSL distro, click “Advanced options,” which will take you to the following pane. There will be a reset button in the setting 
+
+- uninstall 
+
+    + from setting pane 
+    
+    + from powershell 
+    
+$ Get-AppxPackage -Name "*<distroname>*" | Select PackageFamilyName
+
+$ Remove-AppxPackage -Package <PackageFullName>
+$ Remove-AppxPackage -Package "CanonicalGroupLimited.UbuntuonWindows_2004.2020.424.0_x64__79rhkp1fndgsc"
+
+    + Installed Using wsl.exe --import
+    
+$ wsl.exe --import <name of imported distro> <location to store unpacked file system> <filename of exported image> --version <1 or 2>    
+
+- update 
+
+$ wsl --update 
+
+- ralling back kernel update 
+
+start an elevated prompt from an existing PowerShell, run
+ps> Start-Process WT -Verb runAs
+ps> wsl.exe --update --rollback
+
+- mounting external volumes 
+
+from diskmanagement 
+
+from wsl 
+$ wsl.exe --mount \\.\PHYSICALDRIVE<disk number> --bare
+$ wsl.exe --exec lsblk
+
+<disk number> is the drive number from Disk Management.
+$ wsl.exe --mount \\.\PHYSICALDRIVE3 --bare
+$ wsl.exe --exec lsblk
+
+double-check that we have the correct \\.\PHYSICALDRIVE path by running
+ps> wmic diskdrive list brief
+
+$ wsl.exe --mount \\.\PHYSICALDRIVE<disk number> --partition <partition number> [optionally: --type <filesystem type>] [optionally: --options <filesystem mount options>]
+
+$ wsl.exe --mount \\.\PHYSICALDRIVE0 --partition 2
+
+- update 
+
+automatically accept the prompt by adding the -y flag to your command (Figure 4-4):
+$ sudo apt -y upgrade
+
+- auto remove unused dependencies for ubuntu 
+
+$ sudo apt autoremove 
+
+- find package 
+$ apt search lynx
+$ sudo apt install synaptic
+
+- build your own ubuntu wsl image 
+
+Installing an Ubuntu image bootstrapping tool
+$ sudo apt -y install debootstrap
+
+Creating a temporary folder in which we will bootstrap our image
+$ mkdir /tmp/wslchroot
+$ help with debootstrap, remember you can always run man debootstrap.
+
+Bootstrapping a very basic Ubuntu image in that folder from the minimum packages to run Ubuntu
+$ sudo chroot /tmp/wslchroot/ apt clean
+
+Customizing the Ubuntu image in that folder by running commands “inside” the image using chroot, installing packages we want for our image, and setting custom options
+
+Building a tarball archive of the Ubuntu image from the temporary folder and copying it to the Windows file system
+$ sudo rsync --progress --remove-source-files /tmp/ubuntu-gis-wsl.tar.gz /mnt/c/WSL/
+
+Importing that Ubuntu image tarball into WSL as a custom WSL image
+$ wsl.exe --import "Ubuntu-GIS" C:\WSL\Ubuntu-GIS C:\WSL\ubuntu-gis-wsl.tar.gz --version 2
+
+
+
+# Configuring wsl distros 
+- automount 
+
+/etc/wsl.conf:
+```
+[automount]
+enabled = true
+The default is true, to mount Windows drives automatically. If you wish to isolate your WSL instance from the Windows file system, you should set this to false:
+[automount]
+enabled = false
+```
+
+- case sensitive 
+
+Windows, open PowerShell, and run (Figure 5-3)
+$ fsutil.exe file queryCaseSensitiveInfo <path>
+
+    + configure in wsl.conf 
+    
+for example:
+```
+[automount]
+enabled = true
+mountFsTab = true
+options = "metadata,case=off,umask=22,fmask=11"
+```
+
+- changing the uid and gid of a mount 
+
+uid – A unique user number linked to each user on a Linux device. 
+
+gid – A unique group number linked to groups of users on a Linux device.
+
+
+- file permission number forms 
+
+0 – No permissions or ---
+
+1 – Execute only or --x
+
+2 – Write only or -w-
+
+3 – Write and execute or -wx
+
+4 – Read only or r--
+
+5 – Read and execute or r-x
+
+6 – Read and write or rw-
+
+7 – Read, write, and execute or rwx
+
+rwx for the owner = 7
+
+r-x for members of the group = 5
+
+r-- for all other users = 4
+
+or simply = 754
+
+    + ls information 
+    
+example:
+$ ls -l 
+-rw-r--r-- 1 user1 wslusers 0 Sep 19 13:17 abc.txt
+    
+information here could include
+l – Indicates a symbolic link
+
+b – Indicates a block device
+
+c – Indicates a serial device
+
+ symbolic notation can also tell us
+d is appended – This is a directory.
+
+<user> – The user who owns the file.
+
+<group> – The group to which the user is assigned.
+
+- cross distro mounting 
+
+```
+Cross-Distro Mounting
+[automount]
+crossDistro = true
+```
+Cross-distro mounting enables a space, /mnt/wsl, where any folder mounted by any one distro is visible to all other distros.
+
+- ldconfig
+Libraries, which are collections of common tasks and subroutines relied upon by applications, are “located” in a cache generated
+
+
+WSL to load these directories to enable GPU compute. The setting to load them is set as an automount setting:
+[automount]
+ldconfig = true
+The default is true.
+
+- network, generate hosts files 
+
+C:\Windows\System32\drivers\etc\hosts over your WSL distro hosts file at /etc/hosts
+
+resolv.conf, located at /etc/resolv.conf, is a file that allows you to manually configure where your device will look
+
+```
+[network]
+generateHosts = true
+generateResolvConf = true
+hostname = Biswa96
+```
+
+- ineroperability get the most out of this unique feature of WSL.
+[interop]
+enabled = true
+The default is true.
+
+- temporarily disable Windows programs in Linux, run
+echo 0 > /proc/sys/fs/binfmt_misc/WSLInterop
+To reenable Windows programs in Linux, run
+echo 1 > /proc/sys/fs/binfmt_misc/WSLInterop
+
+- WSLENV is a special meta environment variable that exists in both Windows and WSL. WSLENV defines which environment variables are shared between Windows and WSL.
+
+WSLENV contains a list of these other environment variables, separated by a colon in WSL or a semicolon in Windows
+
+
+We define PATHTOPROJECT in WSL:
+$ export PATHTOPROJECT=~/project
+
+Then add PATHTOPROJECT to WSLENV:
+$ export WSLENV=PATHTOPROJECT/p
+
+Now, switch to Windows and read it back:
+> cmd.exe
+> set PATHTOPROJECT
+
+/p – Translates a path between Windows and WSL paths, as demonstrated earlier
+/l – Indicates a list of paths
+/u – Shares the variable only from Windows to WSL
+/w – Shares the variable only from WSL to Windows
+
+- set default user 
+
+```
+[user]
+default = root
+```
+
+- Speaking of boot, beginning in Windows 10 build 21286, the ability to run startup commands was added to WSL:
+
+```
+[boot]
+command = <string>
+```
+
+```
+[boot]
+command = apt update && apt upgrade -y
+```
+
+
+# Configuring wsl 2 
+- .wslconfig WSL 2-specific settings are defined in a separate file. It is located in your Windows user home folder in a file named 
+
+- kernel, WSL 2 ships with a kernel that is stored in Windows 10 at %SystemRoot%\system32\lxss\tools\kernel and is updated through Windows Update automatically or manually with
+
+$ wsl.exe --update
+
+ to support older Linux distributions:
+ 
+ ```
+[wsl2]
+kernel=C:\\Users\\Hayden\\bzImage
+kernelCommandLine= vsyscall=emulate
+processors=4
+```
+
+- memory, WSL 2 automatically assigns memory to the WSL distro as needed and reclaims it as it is freed from tasks. Beginning in Windows build 20175, WSL 2 will default to assigning up to 50% of your available RAM or 8 GB
+
+- WSL 2 will default to storing your swap file at %USERPROFILE%\AppData\Local\Temp\swap.vhdx.
+```
+[wsl2]
+kernel=C:\\Users\\Hayden\\bzImage
+kernelCommandLine= vsyscall=emulate
+memory=12GB
+processors=6
+swap=4GB
+swapfile=C:\\wslswap.vhdx
+```
+
+- WSL 2 will default to freeing unused memory by the WSL distro and returning it back to Windows. This feature relies on a patch in the WSL 2 kernel from Microsoft. 
+
+- page reporting 
+
+The Linux kernel allocates available memory into pages, which it then maps to running processes. 
+
+manually trigger memory compare 
+$ echo 1 | sudo tee /proc/sys/vm/compact_memory
+
+
+- localhost forwarding 
+
+```
+[wsl2]
+kernel=C:\\Users\\Hayden\\bzImage
+kernelCommandLine= vsyscall=emulate
+memory=12GB
+processors=6
+swap=4GB
+swapfile=C:\\wslswap.vhdx
+localhostforwarding=true
+```
+
+In WSL 2, the WSL distro is networked on a virtual subnet with NAT and configured with DHCP. This can make some networking configuration trickier.
+
+- nested virtualization 
+
+Nested virtualization allows you to run virtual machines (VMs) inside of WSL 2, most commonly using KVM, the native virtualization tooling built into the Linux kernel
+
+- debug console 
+
+```
+[wsl2]
+kernel=C:\\Users\\Hayden\\bzImage
+kernelCommandLine= vsyscall=emulate
+memory=12GB
+processors=6
+swap=4GB
+swapfile=C:\\wslswap.vhdx
+localhostforwarding=true
+nestedVirtualization=true
+debugConsole=true
+
+```
+
+- When editing .wslconfig, you must shut down the WSL 2 environment for settings to take.
+
+- wsl registry settings WSL-related settings are found at
+\HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Lxss
+
+DefaultDistribution contains the GUID of your default WSL distro.
+
+DefaultVersion contains the default version of WSL, either 1 or 2.
+
+
+
+# Customizing WSL 
+- Install a X server on windows 
+
+VcXsrv
+
+X410
+
+Xmanager
+
+Xming
+
+Cygwin/X
+
+MobaXterm 
+
+- Configure WSL to Forward X to Your Windows X Server
+
+$ export DISPLAY=127.0.0.1:0.0
+
+/etc/resolv.conf:
+$ export DISPLAY=$(awk '/nameserver/ {print $2}' /etc/resolv.conf 2>/dev/null):0
+
+$ export DISPLAY= $ (powershell.exe -c "(Get-NetIPAddress -InterfaceAlias '*wsl*' -AddressFamily IPv4).ipaddress + ':0.0'")
+
+WSL, open your advanced Windows Firewall settings:
+> cmd.exe /C wf.msc
+
+TCP inbound rule for your X server by right-clicking and selecting “Properties.”
+
+Under “General,” select “Allow the connection.”
+
+- install a gui application 
+
+$ sudo apt -y install synaptic
+$ sudo synaptic 
+
+- control system init 
+
+.bashrc
+Adding shell commands to your bash config file 
+
+- Windows Task Scheduler
+If editing bash scripts and batch files seems like overkill to automate some WSL commands from Windows
+
+start wsl.exe with the arguments: -u root -e apt update.
+
+- boot command 
+
+In Windows 10 builds 21286 or higher, it is now possible to manually enable startup commands in /etc/wsl.conf.
+
+executed as root. This can function as a minimal init system 
+
+
+
+# Going further with wsl 2 
+- running systemd 
+
+one-script-wsl-systemd, https://github.com/diddledan/one-script-wsl2-systemd
+
+Genie, https://github.com/arkane-systems/genie
+
+Subsystemctl, https://github.com/sorah/subsystemctl
+
+- building your own kernel 
+
+Microsoft WSL 2 kernel can be found on GitHub at https://github.com/microsoft/WSL2-Linux-Kernel/
+
+- manual changes to make are
+
+KVM_GUEST=y
+CONFIG_KVM=y
+CONFIG_KVM_INTEL=m
+CONFIG_VHOST=y
+
+- install a guest operating system on KVM on wsl 
+custom configuration 
+
+$ cp Microsoft/config-wsl .config
+
+launched with the appropriate make command:
+$ make menuconfig
+
+in the console interface use Y key to mark it with a * to enable “Kernel-based Virtual Machine (KVM)
+
+$ sudo apt -y install qemu-kvm aria2
+
+$ qemu-system-x86_64 \
+      -drive file=kubuntu.qcow2,format=qcow2 \
+      -drive file=kubuntu-20.04.2-desktop-amd64.iso,media=cdrom,readonly \
+      -net nic -net user \
+      -m 5172 \
+      -vga qxl \
+      --enable-kvm \
+      -smp 4 \
+      -cpu kvm64,+vmx,+vme,+msr,+x2apic,+hypervisor
+      
+      
+# Maximizing windows interoperability 
+- wslpath, wslpath is a tool built into WSL that allows for simple conversion of paths between WSL and their Windows equivalents
+
+- wslutilities, a collection of tools by Patrick Wu that have been adopted by several WSL distros published on the Microsoft Store  
+
+wslusc allows you to create a shortcut to Linux applications on the Windows desktop.
+
+$ wslusc -g -n 'gedit' -i /usr/share/icons/Humanity/apps/48/gedit-icon.svg gedit
+
+wslsys provides some basic system information, useful when filing WSL-related bug reports (Figure 9-5).
+
+$ wslsys | grep 'Theme' | sed 's/^.*: //'
+
+wslvar allows you to retrieve Windows environmental variables, such as %APPDATA% and %USERPROFILE%. 
+
+$ touch hello
+$ cp hello $(wslpath $(wslvar USERPROFILE))
+
+wslview registers itself as the default web browser in WSL that when run will open the corresponding URL in the default web browser in Windows
+
+$ wslview http://boxofcables.dev
+
+- redirecting between windows and linux applications 
+
+When using the pipe mechanism, commands can be created that perform complex action chains without requiring you to write a program to perform the complete process
+
+$ gzip --stdout /etc/hosts | base64 | gpg --clear-sign
+
+GPG key, you can create one with
+$ gpg --full-gen-key
+
+piping from wsl to windows 
+$ cowsay "Hi readers!" | clip.exe
+
+from windows to wsl 
+ps> Get-Service | wsl.exe -d Ubuntu-20.04 grep Xbox
+
+- file redirect 
+
+$ wsl.exe -u root tee /etc/hosts < C:\Windows\System32\drivers\etc\hosts
+
+- heredocs, Bash provides a feature called “heredocs.” These enable you to write long multiline text input to a command without requiring to first write the text to a file. The “heredoc” is defined with << followed by any unique word that will be used to indicate the end of the input text.
+```
+cat <<ENDOFINPUTINDICATOR
+Hi readers!
+The next line indicates the end of this input text
+ENDOFINPUTINDICATOR
+```
+
+```
+powershell.exe -File C:/Users/Hayden/sendmail.ps1 <<EOF
+Hi, Readers
+This text will be used as the body or a new email message in Microsoft Outlook. Congratulations on learning about Heredocs.
+Best regards,
+Hayden
+EOF
+```
+
+- environment variable, WSLENV 
+
+/p – Indicate that the variable should have its value treated as a path and translate between Windows and WSL equivalent representations.
+
+/l – Indicate that the variable should be treated as a colon-delimited list of paths in WSL or a semicolon-delimited list of paths in Windows. Like /p, each individual path in the list is converted between Windows and WSL representations.
+
+/u – Indicate that the variable should be forwarded from Windows to WSL but not from WSL to Windows.
+
+/w – Indicate the inverse of /u. The variable should be forwarded from WSL to Windows but not from Windows to WSL.
+
+You may also combine /u and /w with either /p or /l. For example, the following are some variants you may use, but not an exhaustive list:
+/pu – The variable contains a path to be translated, and the variable should only propagate from Windows to WSL.
+
+/lw – The variable contains a list of paths to be translated, and the variable should only propagate from WSL to Windows.
+
+- mount file systems in wsl 2 
+
+WSL-to-Windows special path \\wsl$ and the Linux node in Windows Explorer
+
+    + Windows Share mapping to a Drive Letter in Windows:
+
+    In Windows, navigate to the Network item in Windows Explorer.
+
+    Navigate into the server object that holds your share.
+
+    Right-click your share, and choose “Map network drive.”
+
+    In the new window, choose Z:, and then close the dialog. Enter your username and password for the share if prompted or you have chosen to use alternative credentials.
+
+    In WSL, run sudo mkdir /mnt/z; sudo mount -t drvfs Z: /mnt/z.
+
+    You will now find your network share’s files accessible under the path /mnt/z.
+
+    To ensure that the drive is remounted when WSL restarts, add the following line into /etc/fstab: Z: /mnt/z drvfs defaults 0 0.
+    
+    + Share to a drive letter, we can use the “UNC” path when calling mount.
+    
+    In WSL, run the following, ensuring that you replace \\server\share-name with the UNC path of your share:
+
+    sudo mkdir /mnt/file-share; sudo mount -t drvfs '\\server\share-name' /mnt/file-share
+    
+    To ensure that the drive is remounted when WSL restarts, add the following line into /etc/fstab:
+
+    \\server\share-name /mnt/file-share drvfs defaults 0 0
+    
+- SSHFS and other FUSE-based file systems 
+
+“FUSE”-based file systems. FUSE is an acronym for “Filesystem in User space” where the actual file system driver is run as a program rather than as a part of the kernel.
+
+In a Disk Image (VHDX File)
+You can, instead of using a physical disk or partition, use a virtual hard disk image stored as a .vhdx file
+
+$ wsl.exe --mount \\.\PHYSICALDRIVE1 --partition 2 -t ext4
+
+
+
+# Using wsl for enterprise development 
+- creating a microk8s worksation 
+
+microk8s 
+
+```
+sudo snap install microk8s --classic
+sudo usermod -a -G microk8s $USER
+newgrp microk8s
+sudo chown -f -R $USER ~/.kube
+microk8s status
+```
+
+
+
+# Troubleshooting wsl 
+- enable wsl from powershell 
+
+ps> Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+ps> Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
+
+- systemd
+The standard mechanism for handling system services in a Linux distro is usually provided by “Systemd.” 
+
+- linux application debug tool 
+
+
+GDB – The GNU debugger
+
+strace – Trace system calls and signals
+
+
+# Deploy in scale 
+- Using Intune to Deploy Ubuntu on WSL
+- Using Landscape to Manage Ubuntu on WSL
+
+instructions at https://docs.ubuntu.com/landscape/en/.
+
+$ sudo apt-get install landscape-client
+
+- Using Ansible to Manage Ubuntu on WSL
+
+from https://github.com/ansible/ansible and is also available in the Ubuntu APT repository.
+
+journey available at https://ansible.com.
+
+
+- WinRM 
+
+WinRM, which stands for Windows Remote Management, is a popular way to connect to Windows computers

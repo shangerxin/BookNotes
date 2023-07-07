@@ -1,0 +1,2864 @@
+Python Programming on Win32=Andy;Note=Erxin
+
+
+# Introduction to python 
+- The Component Object Model (COM) is Microsoft’s newest integration technology and pervades Windows 95, 98, NT, and 2000.
+
+- network, tcp socket 
+
+- distrbuted objects 
+
+COM, which is a Windows-only solution and Common Object Request Broker Architecture (CORBA), which is multiplatform.
+
+- Extensions falling into this category include OpenGL, mxTools, Zope, PIL, and others.
+
+- pythonwin 
+
+- win32 extensions 
+
+mmapfile 
+
+odbc 
+
+win32api 
+
+win32event 
+
+win32evtlog, win32evtlogutil 
+
+win32pdh, helper dll provided by microsoft known as the performance data helper or pdh 
+
+win32pipe 
+
+win32file 
+
+win32lz, windows lz compression library 
+
+win32net, win32wnet, windwos network api 
+
+win32print
+
+win32process
+
+win32ras, interface to windows remote access service 
+
+win32security, windows secruity related functions 
+
+win32trace, win32traceutil, Debugging related modules 
+
+- pythonwin, PythonWin consists of two discrete parts:
+
+A large Python extension that exposes the Microsoft Foundation Classes (MFC) to Python. MFC is a C++ library provided by Microsoft to create Windows programs.  
+
+A set of Python modules that use these MFC facilities to create the IDE environment you see when you start PythonWin. Same code from MFC 
+
+- PythonCOM
+
+http://www.pythonware.com 
+
+ython Imaging Library (PIL)
+The Python Imaging Library (PIL) is a set of modules that can perform all sorts of image manipulation and processing in Python. PIL is designed to be cross-platform
+
+- PyOpenGL, OpenGL Architecture Review Board. More information on OpenGL can be found at http://www.opengl.org. 
+
+- web publishing tools 
+
+
+medusa, http://www.nightware.com/medusa 
+
+zope, Zope is an Open Source application server and portal toolkit supplied and supported by Digital Creations
+http://www.zope.org
+
+- OpenSSL ( http://www.openssl.org) team.
+
+- Python and can be found at the Python web site, http://www.python.org/topics/scicomp/
+
+- PythonWin support Object Browser
+PythonWin supports a fairly simple object browser. This allows you to peer deep inside any Python object
+
+- Introduction to COM 
+
+COM defines many interfaces but doesn’t provide implementations for many of these interfaces. One commonly used interface, IDispatch , allows COM objects to be used from a scripting environment, such as Visual Basic or Python. Although COM has defined the interface for IDispatch, it’s the responsibility of the COM objects themselves to implement this interface
+
+- using COM object from python 
+
+>>> import win32com.client
+>>> xl = win32com.client.Dispatch("Excel.Application")
+>>>
+
+>>> import win32com.client
+>>> wd = win32com.client.Dispatch("Word.Application")
+
+- implementing COM objects with python 
+
+
+```
+# SimpleCOMServer.py - A sample COM server - almost as small as they come!
+# 
+# We expose a single method in a Python COM object.
+class PythonUtilities:
+    _public_methods_ = [ 'SplitString' ]
+    _reg_progid_ = "PythonDemos.Utilities"
+    # NEVER copy the following ID 
+    # Use "print pythoncom.CreateGuid()" to make a new one.
+    _reg_clsid_ = "{41E24E95-D45A-11D2-852C-204C4F4F5020}"
+    
+    def SplitString(self, val, item=None):
+        import string
+        if item != None: item = str(item)
+        return string.split(str(val), item)
+
+# Add code so that when this script is run by
+# Python.exe, it self-registers.
+if __name__=='__main__':
+    print "Registering COM server..."
+    import win32com.server.register
+    win32com.server.register.UseCommandLine(PythonUtilities)
+```
+
+special attributes:
+
+_public_methods_
+A list of all methods in the object that are to be exposed via COM; the sample exposes only one method, SplitString.
+
+_reg_progid_
+The ProgID for the new object, that is, the name that the users of this object must use to create the object.
+
+_reg_clsid_
+The unique CLSID for the object. As noted in the source code, you must never copy these IDs, but create new ones using pythoncom.CreateGuid().
+
+- New GUIDs can be created from Python code using the following code:
+
+>>> import pythoncom
+>>> print pythoncom.CreateGuid()
+{FA21CDC1-381F-11D3-8559-204C4F4F5020}
+
+
+
+
+# Building an advanced python application 
+- financial modeling toolkit in python 
+- get set attribute 
+
+```
+class HateSpam:
+    def __setattr__(self, name, value):
+        if name == 'spam':
+            print "Keep that stuff away from me"
+        else:
+            self.__dict__[name] = value
+    def __getattr__(self, name):
+        if name == 'spam':
+            print "you won't find any of that here"
+        else:
+            return self.__dict__[name]
+
+>>> h = HateSpam()
+>>> h.eggs = 12
+>>> h.spam = 3
+Keep that stuff away from me
+>>> h.spam
+you won't find any of that here
+>>> h.eggs
+12
+```
+
+- COM service
+    + Here are several design patterns to do this:
+
+COM base class, pure Python subclass
+Here you define a base class and expose it as a COM server, initially doing nothing with the arguments to the methods, which defines your COM interface neatly in one place. 
+
+    + Pure Python base class, COM subclass
+Here you inherit from the existing Python BookSet class and rewrite the relevant methods to handle string and object arguments
+
+    + COM interface, Python delegate
+Here you define a COM class to define your interface. Rather than using inheritance
+
+- VB client, three public methods in the form, InitCOMServer, CloseCOMServer, and TestCOMServer
+
+```
+Public BookServer As Object
+
+Private Sub MDIForm_Load()
+    InitCOMServer
+    frmJournal.Show
+End Sub
+
+Private Sub MDIForm_Unload(Cancel As Integer)
+    CloseCOMServer
+End Sub
+
+Sub InitCOMServer()
+    'called when the program starts
+    On Error GoTo InitCOMServer_error
+    Set BookServer = CreateObject("Doubletalk.BookServer")
+    Exit Sub
+    
+InitCOMServer_error:
+    Dim msg As String
+    msg = "There was an error trying to initialize the BookServer." + _
+            "Please check that it is properly registered and try the Python " + _
+            "test functions first.  The program will now abort."
+    MsgBox msg
+    End
+    
+End Sub
+
+Sub CloseCOMServer()
+    Set BookServer = Nothing
+End Sub
+
+Sub TestCOMServer()
+    'just to check it is alive
+    Dim hopefully_four As Integer
+    hopefully_four = BookServer.Double(2)
+    MsgBox "2 x 2 = " & hopefully_four & ", so your server is alive"
+End Sub
+
+
+Private Sub mnuToolsTestServer_Click()
+    'this helps establish if the COM server is alive
+    'using a minimal diagnostic function in the modMain module
+    TestCOMServer
+End Sub
+```
+
+- You need to expose Transaction class as a COM server. You also need to think about how to create these transactions and manage their lifecycles and about the right choice of patterns. 
+
+```
+    Dim newtran As Object
+    
+    Set newtran = CreateObject("Doubletalk.Transaction")
+    newtran.setDateString "31/12/99"
+    newtran.setComment "Python on Windows Royalty Cheque"
+    newtran.addLine "MyCo.Assets.NCA.CurAss.Cash", 5000
+    newtran.addLastLine "MyCo.Capital.PL.Income.Writing"
+    
+    BookServer.Add newtran
+```
+
+    + COM transaction 
+    
+```
+class COMTransaction:
+    # we don't need all the _reg_ stuff, as we provide our own
+    # API for creating these and don't use the registry.
+    _public_methods_ = [
+                'asString',
+                'getDateString',
+                'setDateString',
+                'setCOMDate',
+                'getCOMDate',
+                'getComment',
+                'setComment',
+                'getLineCount',
+                'getAccount',
+                'getAmount',
+                'addLine',
+                'addLastLine',
+                'getOneLineDescription'
+                ]
+    
+    def __init__(self, tran=None):
+        if tran is None:
+            self._tran = doubletalk.transac.Transaction()
+        else:
+            self._tran = tran       
+        
+    def asString(self):
+        return self._tran.asString()
+    
+    def getDateString(self):
+        return self._tran.getDateString()
+    
+    def setDateString(self, aDateString): 
+        self._tran.setDateString(str(aDateString))
+    
+    def setCOMDate(self, comdate):
+        self._tran.date = (comdate - 25569.0) * 86400.0
+        
+    def getCOMDate(self):
+        return (self._tran.date / 86400.0) + 25569.0
+
+    def getComment(self):
+        return self._tran.comment
+
+    def setComment(self, aComment):
+        self._tran.comment = str(aComment)
+       
+    def getOneLineDescription(self):
+        return '%-15s %s %10.2f' % (
+            self._tran.getDateString(), 
+            self._tran.comment,
+            self._tran.magnitude()
+            )
+    
+    def getLineCount(self):
+        return len(self._tran.lines)
+    
+    def getAccount(self, index):
+        return self._tran.lines[index][0]
+        
+    def getAmount(self, index):
+        return self._tran.lines[index][1]
+    
+    def addLine(self, account, amount):
+        self._tran.addLine(str(account), amount)
+       
+    def addLastLine(self, account):
+        self._tran.addLastLine(str(account))
+```
+
+- Debugging COM servers 
+
+    + passed in from Visual Basic:
+```
+idForm = win32com.client.Dispatch(vbForm)
+```
+
+- code to update a list box of accounts:
+```
+procedure TfrmMain.UpdateAccountList;
+var AccountList: Variant;
+    i: integer;
+begin
+    lstAllAccounts.Items.Clear;
+    AccountList := BookServer.GetAccountList;
+    for i := 0 to VarArrayHighBound(AccountList, 1) do
+        lstAllAccounts.Items.Add(AccountList[i]);
+end;
+```
+
+- if you have a large VB application and want to use a specific Python tool or library, you could wrap it with a COM server and call it from VB.
+
+- Python looks for it with the find_module function:
+
+>>> import imp
+>>> found = imp.find_module('temp', ['c:\\temp\\import'])
+>>> found
+(<open file 'c:\temp\import\temp.py', mode 'r' at 1078200>, 'c:\\temp\\import\\temp.py', ('.py', 'r', 1))
+>>>
+
+>>> mymodule = imp.load_module('temp', found[0], found[1], found[2])
+>>> mymodule
+<module 'temp'>
+>>>
+
+- views and validators 
+
+A Validator is an object a BookSet notifies before changing data, asking for permission to proceed.
+
+A View is an object the BookSet notifies after changes have been made.[1] It also has a method to return a 2D array of data on demand, which contains whatever users wish.
+
+- User-Defined Validations
+
+Imagine you’re building a set of year-end accounts, repeatedly importing data from several sources and making manual edits
+
+- Validators can be used for other jobs as well as displaying interactive data:
+
+If you want to implement an error-recovery system, you could create a View that writes every change to a log file and then can roll backward and forward through the log 
+
+- Integration with excel, client-side COM and the excel object model 
+
+    + Drop-down auto-completion
+    
+If you type ActiveSheet into the editor, a list drops down showing all the properties and methods of a Sheet objects
+
+    + Context-sensitive help
+    
+You can click on any variable, property, or method name and press F1 to get detailed help on that part of the object model
+
+    + The F5 key and spreadsheet integration
+    
+You don’t need to write a whole program to get started in Excel.
+
+- Starting excel, PythonWin and enter the following:
+
+>>> from win32com.client import Dispatch
+>>> xlApp = Dispatch("Excel.Application") 
+>>> xlApp.Visible = 1
+>>> xlApp.Workbooks.Add()
+<win32com.gen_py.Microsoft Excel 8.0 Object Library.Workbook>
+>>>
+
+>>> xlApp.ActiveSheet.Cells(1,1).Value = 'Python Rules!'
+>>> xlApp.ActiveWorkbook.ActiveSheet.Cells(1,1).Value = 'Python Rules!'
+>>> xlApp.Workbooks("Book1").Sheets("Sheet1").Cells(1,1).Value = "Python Rules!"
+>>> xlApp.Workbooks(1).Sheets(1).Cells(1,1).Value = "Python Rules!"  
+>>> xlApp.Workbooks(1).Sheets(1).Cells(1,1).Value = "Python Rules!"  
+>>> 
+>>> xlBook = xlApp.Workbooks(1)
+>>> xlSheet = xlApp.Sheets(1)
+>>> xlSheet.Cells(1,1).Value = "Python Rules!"
+>>> WorkBook.SaveAs(Filename, FileFormat, Password, WriteResPassword, ReadOnlyRecommended, CreateBackup, AddToMru, TextCodePage, TextVisualLayout)
+
+- Server-side COM agent execel as a GUI 
+
+Excel makes a wonderful frontend for financial applications. We’ve already built a COM server that can handle all of our data and return certain views
+
+Excel on top and a Python COM server. If a spreadsheet import/export is one step in the execution of a much larger Python script 
+
+- Print output 
+
+- automate word 
+
+```
+from win32com.client import Dispatch
+MYDIR = 'c:\\data\\project\\oreilly\\examples\\ch12_print'
+
+def simple():
+    myWord = Dispatch('Word.Application')
+    myWord.Visible = 1  # comment out for production
+    
+    myDoc = myWord.Documents.Add()
+    myRange = myDoc.Range(0,0)
+    myRange.InsertBefore('Hello from Python!')
+    
+    # uncomment these for a full script
+    #myDoc.SaveAs(MYDIR + '\\python01.doc')
+    #myDoc.PrintOut()
+    #myDoc.Close()
+```
+
+- Plug-In Drawing, Does Little Else (PIDDLE) and is available from http://www.strout.net/python/piddle/. The package includes the basic API
+
+- Portable Document Format
+PDF is a recent evolution of PostScript. Whereas PostScript was intended to be consumed by printers, PDF is designed for both online viewing and printing.
+
+- Reference 
+
+The Adobe PDF Specification (Version 1.3) is available from http://partners.adobe.com/asn/developer/PDFS/TN/PDFSPEC.PDF
+
+- DCOM, DCOM needs to be enabled on the remote server. Choose Start → Run and type dcomcnfg.exe. A configuration dialog starts up.
+
+the contents of which are stored in the variable RemoteMachine. Here’s the startup code:
+
+```
+Set BookServer = CreateObject("Doubletalk.BookServer", RemoteMachine)
+```
+
+
+
+# Python on windows cookbook 
+- Advanced python and COM 
+
+Each COM interface has a unique 128-bit GUID known as an interface ID (IID).
+
+An interface defines a series of methods: interfaces can’t have properties. An interface is defined in terms of a C++ vtable
+
+COM defines an interface known as IUnknown , which is the root (or base) of all COM interfaces; that is, all COM interfaces explicitly support the IUnknown interface. IUnknown is a simple interface defining only three methods: AddRef() , Release(), and QueryInterface().
+
+Each object class is identified by a class ID (CLSID, also a GUID) that exposes interfaces, each identified by an IID. a number of identifiers associated with every COM object: the CLSID identifying the class that provides the object, and a series of IIDs for each interface the object supports. 
+
+Objects may also register a program ID, or ProgID as well as a CLSID. A ProgID is a string describing the object, suitable for use by humans. When you need to create a particular object, it’s usually more convenient to use the ProgID rather than the CLSID. There is no guarantee that ProgIDs will be unique on a given system; 
+
+- The IDispatch Interface
+
+    + some drawbacks, notably:
+
+There is support for methods, but no support for properties. In many cases, properties would simplify the object model you are attempting to publish.
+
+It doesn’t work as well when using higher-level languages than C++. The language in use may not support using the .IDL or .H files necessary to obtain the definition of these interfaces. Because they don't have compile time step involved. 
+
+    + The IDispatch interface allows an object to expose an object model (complete with methods and properties) and allows the user of the object to determine the methods and properties available at runtime.
+    
+    + IDispatch is a COM interface that allows an arbitrary object model to be exposed. In other words, IDispatch is not the object model but is the mechanism that allows an object model to be exposed.
+    
+    there are two methods
+    
+        * The first is GetIDsOfNames() ; it allows you to ask an object “do you have a method/property named foo ?” If the object does have such an attribute, it returns an integer ID for the method or property.
+        
+        * The method Invoke() performs the actual operation on the object—that is, either calling the method foo, or getting or setting a property named foo
+        
+    + most of the time don't need to use the IDispatch interface.  
+    
+    when you execute code in VB, Python, Delphi, and so forth similar to:
+    ```
+    workbook = excel.Workbooks.Add()
+    ```
+    
+    equal to call
+    ```
+    propertyId = excel->GetIDsOfNames("Workbook")
+    newObject = excel->Invoke(propertyId, DISPATCH_PROPERTYGET)
+    methodId = newObject->GetIDsOfNames("Add")
+    result = newObject->Invoke(methodId, DISPATCH_METHOD)
+    ```
+      
+- Most COM-aware languages, including Visual Basic, Delphi, and Python have techniques that allow the programmer to choose between the binding models. 
+
+This distinction is just as true for the IDispatch interface; programs that use an IDispatch object must call the GetIDsOfNames() and Invoke() methods to perform method calls or property reference.
+
+- COM objects can be implemented either in Windows DLLs or in separate Windows processes via an EXE.
+
+    + Objects implemented in DLLs are loaded into the process of the calling object. InProc objects 
+    
+    + creates a COM object implemented in an EXE, COM automatically starts the process for the object (if not already running) and manages the plumbing between the two processes. Known as LocalServer objects
+
+    objects implemented in an EXE that run on a remote machine are known as RemoteServer objects    
+    
+    + Python and COM support InProc, LocalServer, and RemoteServer objects
+    
+- the pythoncom Python extension module and the win32com Python package. Collectively, they are known as PythonCOM.  The pythoncom module also exposes a number of COM-related functions and constants.
+
+win32com has a number of subpackages; win32com.client is concerned with supporting client-side COM 
+
+win32com.server is concerned with helping Python programs use server-side COM
+
+- automation objects are COM objects that expose methods and properties using the IDispatch interface.  The win32com.client package contains a number of modules to provide access to automation objects. 
+
+To use an IDispatch-based COM object, use the method win32com.client.Dispatch() . This method takes as its first parameter the ProgID or CLSID of the object you wish to creat
+
+```
+>>> import win32com.client
+>>> xl = win32com.client.Dispatch("Excel.Application")
+>>>
+```
+
+- Early-Bound Automation, The PythonCOM package can also use early binding for COM objects.
+
+Python uses the MakePy.py utility to support early-bound automation. MakePy is a utility written in Python that uses a COM type library to generate Python source code supporting the interface
+
+Using a MakePy-supported object means you must run MakePy before code that requires it can be used.
+
+The MakePy-generated files can be huge. The file generated for Microsoft Excel is around 800 KB, a large Python source file by anyone’s standards. 
+
+    + to run makepy.py script:
+
+Start PythonWin, and from the Tools menu, select the item COM Makepy utility.
+
+Using Windows Explorer, locate the client subdirectory under the main win32com directory and double-click the file makepy.py.
+
+- To find the class definition for the Excel _Application object, you can perform a search for class _Application
+
+```
+class _Application(DispatchBaseClass):
+  CLSID = pythoncom.MakeIID('{000208D5-0000-0000-C000-000000000046}')
+  def ActivateMicrosoftApp(self, Index=defaultNamedNotOptArg):
+    return self._ApplyTypes_(0x447, 1, (24, 0), ((3, 1),), \
+                             'ActivateMicrosoftApp', None, Index)
+
+  def AddChartAutoFormat(self, Chart=defaultNamedNotOptArg, \
+                               Name=defaultNamedNotOptArg, \
+                               Description=defaultNamedOptArg):
+    return self._ApplyTypes_(0xd8, 1, (24, 0), ((12, 1), (8, 1), (12, 17)),\
+                      'AddChartAutoFormat', None, Chart, Name, Description)
+```
+```
+CLSIDToClassMap = {
+  '{00024428-0000-0000-C000-000000000046}' : _QueryTable,
+  '{00024423-0001-0000-C000-000000000046}' : ICustomView,
+  '{00024424-0001-0000-C000-000000000046}' : IFormatConditions,
+  '{00024425-0001-0000-C000-000000000046}' : IFormatCondition,
+  '{00024420-0000-0000-C000-000000000046}' : CalculatedFields,
+  # And many, many more removed!
+}
+```
+This dictionary is used at runtime to convert COM objects into the actual classes defined in the module
+
+- forcing early or late binding 
+
+```
+# LateAndEarly.py - Demonstrates how to force
+# late or early binding of your COM objects.
+
+import win32com.client
+import win32com.client.dynamic
+
+print "Creating late-bound Excel object"
+xl = win32com.client.dynamic.Dispatch("Excel.Application")
+print "The Excel object is", `xl`
+
+
+print "Running makepy for Excel"
+# NOTE - these 2 lines are copied verbatim from the output
+# of makepy.py when run with the -i parameter.
+from win32com.client import gencache
+gencache.EnsureModule('{00020813-0000-0000-C000-000000000046}', 0, 1, 2)
+
+xl = win32com.client.Dispatch("Excel.Application")
+print "The Excel object is", `xl`
+```
+
+- Using COM constants 
+
+Many COM type libraries also include enumerations, which are named constants and used with the type library. For example, the type library used with Microsoft Excel includes constants named xlAscdending, xlDescending, and so forth
+
+the constants for a package don’t exist until the MakePy-generated module has been imported.  you first create an Excel.Application object, the constants become available:
+
+```
+>>> xl=Dispatch("Excel.Application")
+>>> constants.xlAscending
+1
+```
+
+- Passing and obtaining python objects from COM 
+
+COM supports a variety of argument types, using the VARIANT data structure. The types that can be passed to COM functions include integers and floats of various sizes, strings, date/time values, COM objects, or arrays of any of these types.
+
+Python integer is automatically converted to a VARIANT type VT_I4
+
+    + Default Python Object to VARIANT Translation
+Python Object Type              VARIANT Type
+
+Integer                         VT_I4
+
+Long Integer                    VT_I4 if the value is less than 232, or VT_I8 if greater
+
+String/Unicode                  VT_BSTR
+
+Float                           VT_R8
+
+PyTrue/PyFalse                  VT_BOOL
+
+None                            VT_NULL
+
+win32com.client.Dispatch instance   VT_DISPATCH
+
+PyIDispatch                         VT_DISPATCH
+
+All other PyI* PythonCOM objects    VT_UNKNOWN
+
+Pywintypes PyTIME object            VT_DATE
+
+Any other Python sequence           An array of VARIANTs; each element of the sequence is translated using this table
+
+
+If you can’t use MakePy for your COM object, you must get your hands dirty and use the PyIDispatch.InvokeTypes() method manually;
+
+    + assume you need to call a function that in C looks like:
+```
+BOOL GetSize( int *left, int *right, int *top, int *bottom);
+```
+
+    + call this function looks like this:
+```
+int left, right, top, bottom;
+BOOL ok;
+ok = GetSize( &left, &right, &top, &bottom);
+```
+
+    + Visual Basic, the code looks like:
+
+```
+Declare GetSize( ByRef left as integer, ByRef right as integer, _
+                 ByRef top as integer, ByRef bottom as integer) as Integer
+...
+ok = GetSize(left, right, top, bottom);
+```
+
+for anything other than simple arguments, it’s highly recommended you use MakePy to force early-bound dispatch. 
+
+- Using other COM interface 
+
+a little utility to dump statistics from a Microsoft Office application file
+
+call a COM function to open the structured storage file. This operation results in a PyIStorage object, a Python object that wraps the COM IStorage interface.
+
+```
+# DumpStorage.py - Dumps some user defined properties 
+# of a COM Structured Storage file.
+
+import pythoncom
+from win32com import storagecon # constants related to storage functions.
+
+# These come from ObjIdl.h
+FMTID_UserDefinedProperties = "{F29F85E0-4FF9-1068-AB91-08002B27B3D9}"
+
+PIDSI_TITLE               = 0x00000002
+PIDSI_SUBJECT             = 0x00000003
+PIDSI_AUTHOR              = 0x00000004
+PIDSI_CREATE_DTM          = 0x0000000c
+
+def PrintStats(filename):
+    if not pythoncom.StgIsStorageFile(filename):
+        print "The file is not a storage file!"
+        return
+    # Open the file.
+    flags = storagecon.STGM_READ | storagecon.STGM_SHARE_EXCLUSIVE
+    stg = pythoncom.StgOpenStorage(filename, None, flags )
+
+    # Now see if the storage object supports Property Information.
+    try:
+        pss = stg.QueryInterface(pythoncom.IID_IPropertySetStorage)
+    except pythoncom.com_error:
+        print "No summary information is available"
+        return
+    # Open the user defined properties.
+    ps = pss.Open(FMTID_UserDefinedProperties)
+    props = PIDSI_TITLE, PIDSI_SUBJECT, PIDSI_AUTHOR, PIDSI_CREATE_DTM
+    data = ps.ReadMultiple( props )
+    # Unpack the result into the items.
+    title, subject, author, created = data
+    print "Title:", title
+    print "Subject:", subject
+    print "Author:", author
+    print "Created:", created.Format()
+
+if __name__=='__main__':
+    import sys
+    if len(sys.argv)<2:
+        print "Please specify a file name"
+    else:
+        PrintStats(sys.argv[1])
+        
+C:\Scripts>python.exe DumpStorage.py "Python and COM.doc"
+Title: Python and COM
+Subject:
+Author: Mark Hammond
+Created: 03/04/99 00:41:00
+
+C:\Scripts>
+```
+
+- Error handling, COM uses three schemes to report error information to client applications
+
+    + All COM interface methods return an integer status code (known as an HRESULT ), with COM defining many common values for these HRESULTs.
+
+    + COM defines two special interfaces that report extended error information—ISupportErrorInfo and IErrorInfo.
+    
+    + IDispatch (automation) interfaces have a standard technique for reporting COM exceptions. it fills out an exception structure and returns it to the caller.
+    
+
+- All COM errors are reported to Python programs as pythoncom.com_error
+
+The HRESULT of the COM function.
+
+A text representation of the HRESULT. For example, if the HRESULT is E_NOINTERFACE, the text representation is (for English users) “No such interface supported.”
+
+Additional exception information as described later in this chapter, or None if no additional information is supported.
+
+If the error is due to a parameter to a function, an integer indicating the parameter in error. This may be None or -1 if no information about the argument in error can be determined.
+
+HRESULT should be win32con.DISP_E_EXCEPTION. In this case, either the wCode or the sCode contains the actual error.
+
+```
+>>> from win32com.client import Dispatch
+>>> import pythoncom
+>>> def OpenExcelSheet(filename):
+...     try:
+...         xl = Dispatch("Excel.Application")
+...         xl.Workbooks.Open(filename)
+...     except pythoncom.com_error, (hr, msg, exc, arg):
+...         print "The Excel call failed with code %d: %s" % (hr, msg)
+...         if exc is None:
+...             print "There is no extended error information"
+...         else:
+...             wcode, source, text, helpFile, helpId, scode = exc
+...             print "The source of the error is", source
+...             print "The error message is", text
+...             print "More info can be found in %s (id=%d)" % (helpFile, helpId)
+... 	
+>>>
+
+>>> OpenExcelSheet("foo.xls")
+The Excel call failed with code -2147352567: Exception occurred.
+The source of the error is Microsoft Excel
+The error message is 'foo.xls' could not be found. Check the spelling of the 
+file name, and verify that the file location is correct.
+
+If you are trying to open the file from your list of most recently used 
+files on the File menu, make sure that the file has not been renamed, 
+moved, or deleted.
+More info can be found in XLMAIN8.HLP (id=0)
+```
+
+- Implementing a COM server 
+
+```
+# SimpleCOMServer.py - A sample COM server - almost as small as they come!
+# 
+# We simply expose a single method in a Python COM object.
+class PythonUtilities:
+    _public_methods_ = [ 'SplitString' ]
+    _reg_progid_ = "PythonDemos.Utilities"
+    # NEVER copy the following ID 
+    # Use "print pythoncom.CreateGuid()" to make a new one.
+    _reg_clsid_ = "{41E24E95-D45A-11D2-852C-204C4F4F5020}"
+    
+    def SplitString(self, val, item=None):
+        import string
+        if item != None: item = str(item)
+        return string.split(str(val), item)
+
+# Add code so that when this script is run by
+# Python.exe, it self-registers.
+if __name__=='__main__':
+    print "Registering COM server..."
+    import win32com.server.register
+    win32com.server.register.UseCommandLine(PythonUtilities)
+```
+
+Most COM servers are implemented as Python classes. These classes have special attribute annotations
+
+The win32com package automatically registers and unregisters the COM server
+
+    + _public_methods_ A list of strings that indicate the names of the public methods for the object.
+    
+    + _public_attrs_ A list of strings that indicate the public attributes (or properties) for the object.
+
+    + _readonly_attrs_  A list of attributes that should be considered read-only. 
+
+    + _value_  A method (not the name of a method) that provides the default value for the object
+    
+    + _NewEnum A method (not the name of a method) that’s used to when the client using this object requests an enumerator
+    
+    + _Evaluate Used when the client using this object requests to evaluate it.
+    
+- registering your COM server, To prepare an object for registration, you need to provide additional attribute annotations on the object. 
+
+_reg_progid_   The ProgID for the object.  
+
+_reg_desc_     Optional description of the COM object. 
+    
+_reg_classspec_    An optional string identifying the Python module and the object in the module. The PythonCOM framework uses this string to instantiate the COM object. If neither this nor _reg_policyspec_ are provided, the COM framework determines the value from the command line.  
+
+_reg_policyspec_   An optional string identifying the PythonCOM policy to be used for this object. 
+
+_reg_verprogid_    The version-dependent ProgID. This is typically the ProgID with a version number appended.
+
+_reg_icon_       The default icon for the COM object.
+
+_reg_threading_  The default threading model for the COM object. This must be one of the COM-defined values acceptable for the ThreadingModel key of the COM server, e.g., Apartment, Free, or Both.
+
+_reg_catids_     A list of category IDs for the server.
+
+_reg_options_    A dictionary of additional keys to be written to the registry for the COM object
+
+_reg_clsctx_     The contexts defining how this object is to be registered.
+
+_reg_disable_pycomcat_     A boolean flag indicating if the COM object should be associated with the list of PythonCOM servers installed on the machine.
+
+_reg_dispatcher_spec_    _reg_debug_dispatcher_spec_    The dispatcher for the COM object. Dispatchers are largely a debugging aid, allowing you to snoop on your COM object as calls are made on it.
+
+
+    + Command-Line Options Recognized by UseCommandLine
+    
+```
+--unregister   Unregisters the objects. This removes all references to the objects from the Windows registry.
+
+--debug        Registers the COM servers in debug mode
+
+--quiet        Register (or unregister) the object quietly (i.e., don’t report success).
+
+To register objects:
+
+C:\Scripts> Python.exe YourServer.py
+
+C:\Scripts> Python.exe YourServer.py --unregister
+
+C:\Scripts> Python.exe YourServer.py --debug
+```
+
+- error handling for COM servers 
+
+To support this, the win32com.server.exception module exposes the COMException Python object in order to raise an exception to COM. This object allows you to specify many details about the error
+
+```
+def sqrt(self, val):
+        try:
+            return math.sqrt(val)
+        except (TypeError, ValueError):
+            raise COMException("The argument must be a positive number", \
+                                winerror.DISP_E_TYPEMISMATCH)
+```
+
+- policies 
+
+A PythonCOM policy determines how Python objects are exposed to COM; the policy dictates which attributes are exposed to COM and the IDs these attributes get.
+
+The policy actually sits between COM and your object and is responsible for responding to the IDispatch interface’s GetIDsOfNames() and Invoke() functions.
+
+    + The policy implemented is:
+
+All methods named in the _public_methods_ attribute are exposed to COM. Any method not listed in _public_methods_ is considered private.
+
+All properties named in the _public_attrs_ attribute are exposed to COM. If the property name also appears in the attribute _readonly_attrs_, it can be read, but not written;
+
+    + policies are implemented in the win32com.server.policy module.  
+    
+    + there are a couple of points:
+
+The Unicode strings bite us again! As COM passes all strings as Unicode, you need to convert them to Python strings before the string module can work with them.
+
+Most of the registration data is the same as discussed previously, except there is a new attribute, _reg_policy_spec_. This attribute identifies that you need to use the DynamicPolicy rather than the default DesignatedWrapPolicy.
+
+The handling of IDispatch.GetIDsOfNames() has been done for you (the _dynamic_ methods deal with attribute names), and the policy has dealt with the IDs for the attributes.
+
+There is some extra internal knowledge of COM needed to implement the _dynamic_ method. Specifically, you need to differentiate between a property reference and a method call. Also remember that VB is not case-sensitive, while Python is.
+
+```
+# DynamicPolicy.py -- A demonstration of dynamic policies in PythonCOM
+import string
+import pythoncom
+import pywintypes
+import winerror
+import types
+from win32com.server.exception import COMException
+
+def FixArgs(args):
+    # Fix the arguments, so Unicode objects are
+    # converted to strings.  Does this recursively,
+    # to ensure sub-lists (ie, arrays) are also converted
+    newArgs = []
+    for arg in args:
+        if type(arg)==types.TupleType:
+            arg = FixArgs(arg)
+        elif type(arg)==pywintypes.UnicodeType:
+            arg = str(arg)
+        newArgs.append(arg)
+    return tuple(newArgs)
+
+class PythonStringModule:
+    _reg_progid_ = "PythonDemos.StringModule"
+    _reg_clsid_ = "{CB2E1BC5-D6A5-11D2-852D-204C4F4F5020}"
+    _reg_policy_spec_ = "DynamicPolicy"
+
+    # The dynamic policy insists that we provide a method
+    # named _dynamic_, and that we handle the IDispatch::Invoke logic.
+    def _dynamic_(self, name, lcid, wFlags, args):
+        # Get the requested attribute from the string module.
+        try:
+            item = getattr(string, string.lower(name))
+        except AttributeError:
+            raise COMException("No attribute of that name", \
+                               winerror.DISP_E_MEMBERNOTFOUND)
+        # Massage the arguments...
+        args = FixArgs(args)
+        # VB will often make calls with wFlags set to
+        # DISPATCH_METHOD | DISPATCH_PROPERTYGET, as the VB
+        # syntax makes the distinction impossible to make.
+        # Therefore, we also check the object being referenced is
+        # in fact a Python function
+        if (wFlags & pythoncom.DISPATCH_METHOD) and \
+           type(item) in [types.BuiltinFunctionType, types.FunctionType]:
+            return apply(item, args)
+        elif wFlags & pythoncom.DISPATCH_PROPERTYGET:
+            return item
+        else:
+            raise COMException("You can not set this attribute", 
+                               winerror.DISP_E_BADVARTYPE)
+
+# Add code so that when this script is run by
+# Python.exe, it self-registers.
+if __name__=='__main__':
+    import win32com.server.register
+    win32com.server.register.UseCommandLine(PythonStringModule)
+```
+
+    + test the COM object, use the following VBA code:
+```
+Sub Test()
+    ' Create the Python COM objects.
+    Set stringmod = CreateObject("PythonDemos.StringModule")
+    ' Call string.split
+    response = stringmod.Split("Hello from VB")
+    For Each Item In response
+        MsgBox (Item)
+    Next
+    ' Call string.join
+    MsgBox "The items joined are " & stringmod.join(response)
+    ' Get string.uppercase
+    MsgBox "The upper case character are" & stringmod.uppercase
+    
+    ' Attempt to set a property - this should fail.
+    stringmod.uppercase = "Hi"
+
+End Sub
+```
+
+As you can see, the DynamicPolicy has given you the tools to wrap any arbitrary Python object, rather than requiring you to explicitly declare the public interface.
+
+- wrapping and unwrapping 
+
+a Python object via COM, you actually expose an IDispatch object. As described previously, the IDispatch interface is used to expose automation objects. Whenever the COM framework creates a new Python COM object, the general process is:
+
+
+    1. An instance of the selected policy for the object is created.
+
+    2. The policy creates an instance of your Python class.
+
+    3. An IDispatch object is created that wraps the Python policy (which in turn wraps your instance).
+
+    4. The IDispatch object is returned to the client (e.g., Visual Basic).
+    
+The most common scenario is when you need to expose a COM object via some sort of factory method; that is, rather than allowing the user to create your object directly using VB’s CreateObject(), you return the object from another object.
+
+example, microsoft office, the object model defines Cell or Paragraph objects, but you can’t create them directly. You must create the Application object and use it to create or reference Cells and Paragraphs.
+
+- Debugging python COM objects, register your COM objects using -debug on the command line. Then use the Trace Collector Debugging Tool item on the PythonWin Tools menu to see any print statements or Python exceptions
+
+the Python COM framework has the concept of a dispatcher . A dispatcher is similar to a policy object, but dispatches calls to the policy. The win32com package provides a number of useful dispatchers.
+
+When you register the COM Server with --debug (note the double hyphen), the registration mechanism also registers a dispatcher for your object. The default dispatcher is known as DispatcherWin32trace, although you can specify a different dispatcher using the _reg_debug_dispatcher_spec_ attribute
+
+The default DispatcherWin32trace uses the win32trace module to display its output. 
+
+- the final sample 
+
+The Child object isn’t registered and can be created only by calling the CreateChild() method on the Parent. The Child object has no methods, just a Name property.
+
+```
+# ContrivedServer.py
+#
+# A contrived sample Python server that demonstrates 
+# wrapping, unwrapping, and passing IDispatch objects.
+
+# Import the utilities for wrapping and unwrapping.
+from win32com.server.util import wrap, unwrap
+
+import win32com.client
+
+# Although we are able to register our Parent object for debugging,
+# our Child object is not registered, so this won't work. To get
+# the debugging behavior for our wrapped objects, we must do it ourself.
+debugging = 1
+if debugging:
+    from win32com.server.dispatcher import DefaultDebugDispatcher
+    useDispatcher = DefaultDebugDispatcher
+else:
+    useDispatcher = None
+
+# Our Parent object.
+# This is registered, and therefore creatable
+# using CreateObject etc from VB.
+class Parent:
+    _public_methods_ = ['CreateChild', 'KissChild']
+    _reg_clsid_ = "{E8F7F001-DB69-11D2-8531-204C4F4F5020}"
+    _reg_progid_ = "PythonDemos.Parent"
+
+    def CreateChild(self):
+        # We create a new Child object, and wrap
+        # it using the default policy
+        # If we are debugging, we also specify the default dispatcher
+        child = Child()
+        print "Our Python child is", child
+        wrapped = wrap( child, useDispatcher=useDispatcher )
+        print "Returing wrapped", wrapped
+        return wrapped
+
+    def KissChild(self, child):
+        print "KissChild called with child", child
+        # Our child is a PyIDispatch object, so we will attempt
+        # to use it as such.  To make it into something useful,
+        # we must convert it to a win32com.client.Dispatch object.
+        dispatch = win32com.client.Dispatch(child)
+        print "KissChild called with child named", dispatch.Name
+
+        # Now, assuming it is a Python child object, let's
+        # unwrap it to get the object back!
+        child = unwrap(child)
+        print "The Python child is", child
+
+# Our Child object.
+# This is not registered        
+class Child:
+    _public_methods_ = []
+    _public_attrs_ = ['Name']
+    def __init__(self):
+        self.Name = "Unnamed"
+
+if __name__=='__main__':
+    import win32com.server.register
+    win32com.server.register.UseCommandLine(Parent, debug=debugging)
+```
+
+
+
+    + include the following code:
+```
+if __name__=='__main__':
+    print "Registering COM server..."
+    import win32com.server.register
+    win32com.server.register.UseCommandLine(PythonUtilities)
+``` 
+
+VB script 
+```
+Registered: PythonDemos.Parent (for debugging)
+
+
+Sub DebuggingTest()
+  Set ParentObj = CreateObject("PythonDemos.Parent")
+
+  Set child = ParentObj.CreateChild()
+  MsgBox "Child's name is " & child.Name
+
+  ParentObj.KissChild child
+  MsgBox "I kissed my child"
+
+  ' Now lets pass a non-python object!
+  ' As we are using VBA (either Word or Excel)
+  ' we just pass our application object.
+  ' This should fail with an InternalError.
+  Set app = Application
+  ParentObj.KissChild (app)
+End Sub
+```
+
+“Unexpected Python Error,” discussed previously, which means you have an unhandled Python exception in the COM server. If you look in the debugging window
+
+One final note relates to how an IDispatch object is used as a parameter to a COM function. To turn the object into something useful, you must use a win32com.client.Dispatch() object
+
+- Python and DCOM 
+
+Microsoft Transaction Server (MTS) that provides additional facilities for large-scale distributed applications. 
+
+    + Configure DCOM on the remote machine. To configure DCOM, start the DCOM configuration tool by selecting the Run option from the Windows start menu, and enter dcomcnfg
+
+    Start -> Run dcomcnfg
+
+Configure DCOM and our object on the local machine. Disable the local computer option and enable the “Run application on the following computer” setting. The remote computer is named SKIPPY. Now enter the name of your remote machine.
+
+    + Test the remote object using normal COM.  If you recall the discussion at the beginning of the chapter regarding InProc, LocalServer, and RemoteServer objects, it should come as no surprise that remote DCOM objects must be hosted by an executable. 
+```    
+>>> import win32api
+>>> win32api.GetComputerName()
+'BOBCAT'
+>>>
+
+>>> import pythoncom, win32com.client
+>>> clsctx=pythoncom.CLSCTX_LOCAL_SERVER
+>>> i=win32com.client.Dispatch("Python.Interpreter", clsctx=clsctx)
+>>>
+
+>>> i.Exec("import win32api")
+>>> i.Eval("win32api.GetComputerName()")
+'SKIPPY'
+>>>
+```
+If you view the Task Manager for the remote machine, notice a new process pythonw.exe. This is the process hosting the remote object.
+
+    + Test the remote object using DCOM-specific calls.  select the Python.Interpreter object. Select the Location tab and restore the settings to Run application on this computer 
+    
+>>> i=win32com.client.Dispatch("Python.Interpreter", clsctx=clsctx)
+>>> i.Exec("import win32api")
+>>> i.Eval("win32api.GetComputerName()")
+'BOBCAT'
+>>>   
+
+
+# Databases 
+-  libraries for (at least) Oracle, Sybase, Informix, Solid, MySQL, and Interbase.
+
+- Open database connectivity 
+
+Open Database Connectivity (ODBC) is a standardized API that provides universal database access and is available on all Windows systems
+
+ODBC framework. Click Start → Settings → Control Panel → 32-bit ODBC to see the ODBC Data Source Administrator
+
+- Remote Data Objects (RDO) is another COM object hierarchy, layered on top of ODBC instead of the Jet engine. When you use DAO to get at an ODBC database, you are actually using RDO objects. RDO is popular among corporate developers because it offers support for features such as prepared statements and calling stored procedures.
+
+- The Data Access Object (DAO) hierarchy was an object hierarchy for getting at the Jet engine; it contained objects to represent databases, tables, relationships between tables, fields, and queries. It was originally accessible only from Access and Visual Basic
+
+- OLEDB (which probably stands for Object Linking and Embedding Database, but as far as we can tell has never been written out in full before now) is intended as a successor to ODBC. ODBC allowed connection to relational databases; OLEDB extends this to allow querying of arbitrary data providers such as hierarchical filesystems, mailboxes in Microsoft Exchange,
+
+OLEDB consists of a wide range of low-level COM interfaces
+
+- ActiveX data objects 
+
+ActiveX Data Objects (ADO) is not a new technology, but simply an easy-to-use COM object hierarchy on top of OLEDB
+
+    + enhancements offered:
+
+A programmer can trap events before or after commands are executed.
+
+A command object wraps stored procedures and simplifies setting parameters.
+
+ADO exposes objects that wrap up the data definition language of a data store, meaning you can write code to create and modify tables and indexes, which works against a variety of underlying databases, even nonrelational ones.
+
+ADO supports hierarchical recordsets, which consist of prejoined master and detail recordsets.
+
+Disconnected recordsets and batch updates are perhaps the most exciting features.
+
+- python databasse api, relating to it at http://www.python.org/sigs/db-sig/.
+
+- Configure ODBC datasource 
+
+Click on Start → Settings → Control Panel → 32-bit ODBC → User (or system) DSN → Add.
+
+Select Microsoft Access Driver from the list of drivers.
+
+Enter the name PYDBDEMOS in the box for Data Source Name.
+
+Click the Select button and locate the file pydbdemos.mdb.
+
+Click OK. The new data source should now be visible in the list.
+
+Click OK to close the ODBC Data Source Administrator. 
+
+```
+Click on Start → Settings → Control Panel → 32-bit ODBC → User (or system) DSN → Add.
+
+Select Microsoft Access Driver from the list of drivers.
+
+Enter the name PYDBDEMOS in the box for Data Source Name.
+
+Click the Select button and locate the file pydbdemos.mdb.
+
+Click OK. The new data source should now be visible in the list.
+
+Click OK to close the ODBC Data Source Administrator. 
+```
+
+- connecting with ado 
+
+>>> import win32com.client
+>>> adoConn = win32com.client.Dispatch('ADODB.Connection')
+>>> adoConn.Open('PYDBDEMOS')  # use our ODBC alias again
+>>> (adoRS, success) = adoConn.Execute('SELECT * FROM Clients')
+>>> adoRS.MoveFirst()
+>>> adoRS.Fields("CompanyName").Value
+'MegaWad Investments'
+>>>
+
+```
+>>> import ODBC.Windows
+>>> conn = ODBC.Windows.Connect('PYDBDEMOS')
+>>> cursor = conn.cursor()
+>>> cursor.execute('SELECT ClientID, PeriodEnding, Consultant, 
+    Hours FROM Invoices')
+>>> import laundry
+>>> ds = laundry.DataSetFromCursor(cursor)
+>>> cursor.close()
+>>> conn.close()
+>>> ds.pp()
+('ClientID', 'PeriodEnding', 'Consultant', 'Hours')
+('MEGAWAD', 1999-04-18 00:00:00.00, 'Joe Hacker', 42.0)
+('MEGAWAD', 1999-04-18 00:00:00.00, 'Arthur Suit', 24.0)
+('MEGAWAD', 1999-04-25 00:00:00.00, 'Joe Hacker', 57.0)
+('NOSHCO', 1999-04-25 00:00:00.00, 'Tim Trainee', 18.0)
+('MEGAWAD', 1999-04-18 00:00:00.00, 'Joe Hacker', 42.0)
+>>>
+```
+
+We now step away from Microsoft APIs altogether. Gadfly is an SQL relational database written in Python by Aaron Watters.
+
+- Dynamic Attributes Python objects can hold any attributes you want, in addition to those defined for the class.
+
+class Record:
+    #holds arbitrary database data
+    def __init__(self):
+        self._dbdata = {}
+        
+    def loadFromDict(self, aDict):
+        "accept all attributes in the dictionary"
+        self._dbdata.update(aDict)
+
+    def getData(self):
+        return self._dbdata.copy()
+        
+    def pp(self):
+        "pretty-print my database data"
+        pprint(self._dbdata)
+        
+    def __getattr__(self, key):
+        """This is called if the object lacks the attribute.
+        If the key is not found, it raises an error in the
+        same way that the attribute access would were no
+        __getattr__ method present.  """
+        return self._dbdata[key]
+
+- a lazy fetch to get the data on demand. This Customer class inherits from our Record
+
+
+# Working with Email 
+- SMTP provides a technique for putting messages in a mailbox, but it doesn’t define a technique for retrieving existing messages from a mailbox.  specified in RFC-821
+- the Post Office Protocol, Version 3 (POP3) has been designed, as specified in RFC-1725. Its explicit purpose is to allow remote access to a mailbox managed
+- Messages with multiple sections are typically referred to as Multipurpose Internet Mail Extensions (MIME) messages. Unfortunately, MIME is a complex beast and beyond the scope of this chapter.
+
+```
+>>> import smtplib
+>>> s=smtplib.SMTP(host)
+>>> s.sendmail(address, [address], msg)
+{}
+```
+
+```
+# DumpPop.py - Dumps the first message in a POP3 mailbox.
+import sys
+import poplib
+
+def DumpAPopMessage(host, user, password):
+    # Establish a connection to the POP server.
+    a = poplib.POP3(host)
+    # Note we print the server response, although not necessary!
+    print a.user(user)
+    print a.pass_(password)
+    # The mailbox is now locked - ensure we unlock it!
+    try:
+        (numMsgs, totalSize) = a.stat()
+        if numMsgs == 0:
+            print "Sorry - there are no messages in the mailbox"
+        else:
+            (server_msg, body, octets) = a.retr(1)
+            print "Server Message:", server_msg
+            print "Number of Octets:", octets
+            print "Message body:"
+            for line in body:
+                print line
+    finally:
+        print a.quit()
+
+if __name__=='__main__':
+    if len(sys.argv)<4:
+        print "Usage:", sys.argv[0], "host username password"
+    else:
+        DumpAPopMessage(sys.argv[1], sys.argv[2], sys.argv[3])
+```
+
+- Collaboration Data Objects (CDO) is a general-purpose COM automation interface for working with Microsoft Exchange.
+
+```
+>>> from win32com.client import Dispatch
+>>> s=Dispatch("Mapi.Session")
+>>> s.Logon()
+>>> len(s.Inbox.Messages)
+>>> s.Inbox.Messages.Item(1).Subject
+'Free WinZip Self-Extractor 2.1 Upgrade'
+
+# send email with CDO 
+>>> newMsg = s.Outbox.Messages.Add("Hi from Python", "Hello")
+>>>
+>>> recip = newMsg.Recipients.Add("Mark Hammond", "SMTP:MHammond@skippinet.com.au")
+>>>
+>>> newMsg.Send()
+>>>
+
+# force deliver 
+>>> s.DeliverNow()
+>>>
+
+# retrieving a message 
+>>> print s.Inbox.Messages[len(s.Inbox.Messages)].Subject
+Hi from Python
+>>>
+>>> messages = s.Inbox.Messages
+>>> msg = messages.GetFirst()
+>>> while msg is not None:
+...     if msg.Subject == "Hi from Python":
+...         print "Deleting msg from", msg.Sender.Name
+...         msg.Delete()
+...     msg = messages.GetNext()
+... 
+Deleting msg from Mark Hammond
+>>>
+```
+
+
+# Using basic inernet protocols 
+- http 
+
+>>> import httplib
+>>> http=httplib.HTTP('www.python.org')
+>>>
+
+- ftp 
+
+>>> import ftplib
+>>> ftp = ftplib.FTP('ftp.python.org') # connect to host, default port
+>>>
+
+- The Network News Transfer Protocol (NNTP) exchanges news articles over a network. Whenever you run a news reader,
+
+```
+import sys, string
+
+import nntplib
+
+import win32api # to execute our browser.
+
+g_newsserver = 'news-server.c3.telstra-mm.net.au'
+
+def MakeNewsPage(groupname, subjectsearch, outfile ):
+    print "Connecting..."
+    nntp=nntplib.NNTP(g_newsserver)
+    print "Fetching group information"
+    # Most functions return the raw server response first.
+    resp, numarts, first, last, name = nntp.group(groupname)
+    # Get the subject line from these messages.
+    print "Getting article information..."
+    resp, data = nntp.xover(first, last)
+    for artnum, subject, poster, time, id, references, size, numlines in data:
+        # We will match on any case!
+        subjectlook=string.lower(subject)
+        if string.find(subjectlook, string.lower(subjectsearch))>=0:
+            # Translate the "<" and ">" chars.
+            subject = string.replace(subjectlook, "<", "&lt")
+            poster = string.replace(poster, "<", "&lt")
+            subject = string.replace(subject, ">", "&gt")
+            poster = string.replace(poster, ">", "&gt")
+            # Build a href
+            href = "news:%s" % id[1:-1]
+            # Write the HTML
+            outfile.write('<P>From %s on %s<BR><a HREF="%s">%s</a>\n' \
+                % (poster, time, href, subject))
+    outfile.close()
+    
+if __name__=='__main__':
+    if len(sys.argv)<3:
+        print "usage: %s groupname, searchstring" % sys.argv[0]
+        sys.exit(1)
+    
+    groupname = sys.argv[1]
+    search = sys.argv[2]
+    outname = groupname + ".htm"
+
+    # Open the outfile file.
+    outfile = open(outname, "w")
+
+    MakeNewsPage(groupname, search, outfile)
+    print "Done - Executing", outname
+    win32api.ShellExecute(0, "open", outname, None, "", 1)
+```
+
+
+
+# Windows NT administration 
+- obtaining information about a user or group 
+
+>>> import win32api
+>>> userName=win32api.GetUserName()
+>>> def dump(dict):
+...     for key, value in dict.items():
+...         print key, "=", str(value)
+...     
+>>>
+>>> import win32net
+>>> info=win32net.NetUserGetInfo(None, userName, 1)
+>>> print info['name'] # print just the user name
+skip
+>>> dump(info)
+priv = 2
+home_dir = c:\winnt\profiles\skip\personal
+password = None
+script_path = 
+name = skip
+flags = 66049
+password_age = 23792806
+comment = 
+>>> entries, total, resume = win32net.NetUserEnum(server, level, filter, resume, len=4096)
+>>> import win32netcon
+>>> import time
+>>> def ReportUsers():
+...  resume = 0
+...  while 1:
+...    filter = win32netcon.FILTER_NORMAL_ACCOUNT
+...    data, total, resume = win32net.NetUserEnum(None, 2, filter, resume)
+...    for user in data:
+...      lastlogon= time.strftime("%c", time.localtime(user['last_logon']))
+...      print user['name'], lastlogon
+...    if resume==0:
+...      break
+>>> ReportUsers()
+
+- creating, changing and deleting users and groups 
+
+>>> win32net.NetUserAdd(server, level, data)
+>>> win32net.NetUserGetInfo(None, "PythonTestUser", 0)
+{'name': L'PythonTestUser'}
+>>> win32net.NetUserDel(server, userName)
+
+- quering information about servers 
+
+>>> import win32net, win32netcon
+>>> data=win32net.NetServerGetInfo(None, 100)
+>>> data
+{'name': L'BOBCAT', 'platform_id': 500}
+>>> win32netcon.SV_PLATFORM_ID_NT
+500
+>>>
+
+- working with shared information 
+
+>>> data, total, resume = win32net.NetShareEnum(None, 0)
+>>> for share in data:
+...     print share['netname']
+
+    + usedr and share sample 
+    
+```
+homeRoot = "C:\\Users"
+
+def CreateUserAndShare(userName, fullName):
+    homeDir = "%s\\%s" % (serverName, userName)
+    # Create user data in information level 3 (PyUSER_INFO_3) format.
+    userData = {}
+    userData['name'] = userName
+    userData['full_name'] = fullName
+    userData['password'] = userName
+    userData['flags'] = win32netcon.UF_NORMAL_ACCOUNT | win32netcon.UF_SCRIPT
+    userData['priv'] = win32netcon.USER_PRIV_USER
+    userData['home_dir'] = homeDir
+    userData['home_dir_drive'] = "P:"
+    userData['primary_group_id'] = ntsecuritycon.DOMAIN_GROUP_RID_USERS
+    userData['password_expired'] = 1 # User must change password next logon.
+    
+    # Create the user
+    win32net.NetUserAdd(serverName, 3, userData)
+    
+    # Create the new directory, then the share
+    dirName = os.path.join(homeRoot, userName)
+    os.mkdir(dirName)
+    shareData = {}
+    shareData['netname'] = userName
+    shareData['type'] = win32netcon.STYPE_DISKTREE
+    shareData['path'] = dirName
+    shareData['max_uses'] = -1
+    # The security setting for the share.
+    sd = CreateUserSecurityDescriptor(userName)
+    shareData['security_descriptor'] = sd
+    # And finally create it.
+    win32net.NetShareAdd(serverName, 502, shareData)
+    
+# A utility function that creates an NT security object for a user.
+def CreateUserSecurityDescriptor(userName):
+    sidUser = win32security.LookupAccountName(serverName, userName)[0]
+    sd = win32security.SECURITY_DESCRIPTOR()
+
+    # Create the "well known" SID for the administrators group
+    subAuths = ntsecuritycon.SECURITY_BUILTIN_DOMAIN_RID, \
+               ntsecuritycon.DOMAIN_ALIAS_RID_ADMINS
+    sidAdmins = win32security.SID(ntsecuritycon.SECURITY_NT_AUTHORITY, subAuths)
+
+    # Now set the ACL, giving user and admin full access.
+    acl = win32security.ACL(128)
+    acl.AddAccessAllowedAce(win32file.FILE_ALL_ACCESS, sidUser)
+    acl.AddAccessAllowedAce(win32file.FILE_ALL_ACCESS, sidAdmins)
+
+    sd.SetSecurityDescriptorDacl(1, acl, 0)
+    return sd
+
+# Debug helper to delete our test accounts and shares.
+def DeleteUser(name):
+    try:    win32net.NetUserDel(serverName, name)
+    except win32net.error: pass
+
+    try: win32net.NetShareDel(serverName, name)
+    except win32net.error: pass
+
+    try: os.rmdir(os.path.join(homeRoot, name))
+    except os.error: pass
+
+if __name__=='__main__':
+    import fileinput # Helper for reading files line by line
+    if len(sys.argv)<2:
+        print "You must specify an options file"
+        sys.exit(1)
+    if sys.argv[1]=="-delete":
+        for line in fileinput.input(sys.argv[2:]):
+            DeleteUser(string.split(line,",")[0])
+    else:
+        for line in fileinput.input(sys.argv[1:]):
+            userName, fullName = string.split(string.strip(line), ",")
+            CreateUserAndShare(userName, fullName)
+            print "Created", userName
+```
+
+- rebooting a machine 
+
+win32api.InitiateSystemShutdown(machine, message, timeout, bForce, bReboot)
+
+```
+# RebootServer.py - Reboots a remove server
+import win32security
+import win32api
+import sys
+import time
+from ntsecuritycon import *
+
+def AdjustPrivilege(priv, enable = 1):
+    # Get the process token.
+    flags = TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY
+    htoken = win32security.OpenProcessToken(win32api.GetCurrentProcess(), flags)
+    # Get the ID for the system shutdown privilege.
+    id = win32security.LookupPrivilegeValue(None, priv)
+    # Now obtain the privilege for this process.
+    # Create a list of the privileges to be added.
+    if enable:
+        newPrivileges = [(id, SE_PRIVILEGE_ENABLED)]
+    else:
+        newPrivileges = [(id, 0)]
+    # and make the adjustment.
+    win32security.AdjustTokenPrivileges(htoken, 0, newPrivileges)
+
+def RebootServer(message="Server Rebooting", timeout=30, bForce=0, bReboot=1):
+    AdjustPrivilege(SE_SHUTDOWN_NAME)
+    try:
+        win32api.InitiateSystemShutdown(None, message, timeout, bForce, bReboot)
+    finally:
+        # Now we remove the privilege we just added.
+        AdjustPrivilege(SE_SHUTDOWN_NAME, 0)
+
+def AbortReboot():
+    AdjustPrivilege(SE_SHUTDOWN_NAME)
+    try:
+        win32api.AbortSystemShutdown(None)
+    finally:
+        # Now we remove the privilege we just added.
+        AdjustPrivilege(SE_SHUTDOWN_NAME, 0)
+            
+if __name__=='__main__':
+        message = "This server is pretending to reboot\r\n"
+        message = message + "The shutdown will stop in 10 seconds"
+        RebootServer(message)
+        print "Sleeping for 10 seconds"
+        time.sleep(10)
+        print "Aborting shutdown"
+        AbortReboot()
+```
+
+
+# Processes and files 
+- python os module 
+- open text file, binary file 
+
+- Opening and Creating Files. The win32file.CreateFile() function opens or creates standard files
+
+- reading and writing files 
+
+win32file.ReadFile() takes the following parameters:
+
+The file handle to read from
+
+The size of the data to read (see the reference for further details)
+
+Optionally, an OVERLAPPED or None
+
+- Pipes are a concept available in most modern operating systems. Typically, these are a block of shared memory set up much like a file
+
+win32pipe.CreatePipe() creates an anonymous pipe
+
+>>> import win32pipe
+>>> # Create the pipe
+>>> readHandle, writeHandle = win32pipe.CreatePipe(None, 0)
+>>> import win32file # This module contains the ReadFile/WriteFile functions.
+>>> # Write a string to the pipe
+>>> win32file.WriteFile(writeHandle, "Hi from the pipe")
+(0, 16)
+>>> # Now read data from it
+>>> win32file.ReadFile(readHandle, 16)
+(0, 'Hi from the pipe')
+>>>
+
+- processes, A process is an executing application and has a single virtual address space, a list of valid handles, and other Windows resources. A process consists of at least one thread, but may contain a large number of threads.
+
+    + create with os.system 
+    
+    + os.execv 
+    
+    + os.popen 
+    
+    + Better Process Control: The win32api Module The module win32api
+    
+    win32api.WinExec
+    
+    The WinExec function behaves similarly to the os.system
+    
+    + win32api.ShellExecute
+    
+    The win32api module also provides another useful function for creating new processes. The ShellExecute function is primarily used to open documents
+    
+- ultimate process control the win32process module 
+
+Handles and IDs Every thread and process in the system can be identified by a Windows handle, and by an integer ID. A process or thread ID is a unique number allocated for the process or thread and is valid across the entire system. 
+
+The win32process module contains two functions for creating new processes: CreateProcess() and CreateProcessAsUser()
+
+To terminate a process, the win32process.TerminateProcess() function
+
+Controlling processes
+
+```
+# CreateProcess.py
+#
+# Demo of creating two processes using the CreateProcess API,
+# then waiting for the processes to terminate.
+
+import win32process
+import win32event
+import win32con
+import win32api
+
+# Create a process specified by commandLine, and
+# The process' window should be at position rect
+# Returns the handle to the new process.
+def CreateMyProcess( commandLine, rect):
+    # Create a STARTUPINFO object
+    si = win32process.STARTUPINFO()
+    # Set the position in the startup info.
+    si.dwX, si.dwY, si.dwXSize, si.dwYSize = rect
+    # And indicate which of the items are valid.
+    si.dwFlags = win32process.STARTF_USEPOSITION | \
+                 win32process.STARTF_USESIZE
+    # Rest of startup info is default, so we leave alone.
+    # Create the process.
+    info = win32process.CreateProcess(
+                          None, # AppName
+                          commandLine, # Command line
+                          None, # Process Security
+                          None, # ThreadSecurity
+                          0, # Inherit Handles?
+                          win32process.NORMAL_PRIORITY_CLASS,
+                          None, # New environment
+                          None, # Current directory
+                          si) # startup info.
+    # Return the handle to the process.
+    # Recall info is a tuple of (hProcess, hThread, processId, threadId)
+    return info[0]
+
+def RunEm():
+    handles = []
+    # First get the screen size to calculate layout.
+    screenX = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+    screenY = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+    # First instance will be on the left hand side of the screen.
+    rect = 0, 0, screenX/2, screenY
+    handle = CreateMyProcess("notepad", rect)
+    handles.append(handle)
+    # Second instance of notepad will be on the right hand side.
+    rect = screenX/2+1, 0, screenX/2, screenY
+    handle = CreateMyProcess("notepad", rect)
+    handles.append(handle)
+
+    # Now we have the processes, wait for them both
+    # to terminate.
+    # Rather than waiting the whole time, we loop 10 times,
+    # waiting for one second each time, printing a message
+    # each time around the loop
+    countdown = range(1,10)
+    countdown.reverse()
+    for i in countdown:
+        print "Waiting %d seconds for apps to close" % i
+        rc = win32event.WaitForMultipleObjects(
+                              handles, # Objects to wait for.
+                              1, # Wait for them all
+                              1000) # timeout in milli-seconds.
+        if rc == win32event.WAIT_OBJECT_0:
+            # Our processes closed!
+            print "Our processes closed in time."
+            break
+        # else just continue around the loop.
+    else:
+        # We didn't break out of the for loop!
+        print "Giving up waiting - killing processes"
+        for handle in handles:
+            try:
+                win32process.TerminateProcess(handle, 0)
+            except win32process.error:
+                # This one may have already stopped.
+                pass
+
+if __name__=='__main__':
+    RunEm()
+```
+
+
+
+# Windows NT services 
+- An integral part of Windows NT is the Service Control Manager (SCM).
+
+Performance Monitor
+It’s often appropriate for a Windows NT service to provide some performance statistics
+
+- The win32service module implements the Win32 service functions, while the win32serviceutil module provides some handy utilities
+
+- connecting to the scm 
+
+handle = win32service.OpenSCManager(machineName, databaseName, access)
+
+>>> status=win32service.QueryServiceStatus(hs)
+>>> status
+(32, 4, 5, 0, 0, 0, 0)
+>>>
+
+- controlling a service 
+
+win32service.ControlService() function. This function is simple: it takes a handle to the service you wish to control and an integer identifying the control to send
+
+>>> win32service.CloseServiceHandle(hs)
+>>> win32service.CloseServiceHandle(hscm)
+>>>
+
+>>> win32serviceutil.StopService("Messenger", "skippy")
+(32, 3, 0, 0, 0, 6, 20000)
+>>> .
+
+- reading the event log 
+
+>>> win32evtlog.OpenEventLog() obtains a handle to the Event Log. This handle can then be passed to
+
+>>> win32evtlogutil.FeedEventLogRecords(CheckRecord)
+
+- browse performance monitor data 
+
+>>> import win32pdhutil
+>>> win32pdhutil.browse(CounterCallback)
+
+- anatomy of a python service 
+
+most Python services, PythonService.exe . This special executable is aware of the special requirements for services that make Python.exe unsuitable for the task.
+
+```
+import win32serviceutil
+import win32service
+import win32event
+
+class SmallestPythonService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "SmallestPythonService"
+    _svc_display_name_ = "The smallest possible Python Service"
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        # Create an event which we will use to wait on.
+        # The "service stop" request will set this event.
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+
+    def SvcStop(self):
+        # Before we do anything, tell the SCM we are starting the stop process.
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        # And set my event.
+        win32event.SetEvent(self.hWaitStop)
+
+    def SvcDoRun(self):
+        # We do nothing other than wait to be stopped!
+        win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
+
+if __name__=='__main__':
+    win32serviceutil.HandleCommandLine(SmallestPythonService)
+```
+
+C:\Program Files\Python\win32>PythonService.exe /register
+Registering the Python Service Manager...
+C:\Program Files\Python\win32>
+
+
+C:\Scripts> SmallestService.py install
+Installing service SmallestPythonService to Python class 
+   C:\Scripts\SmallestService.SmallestPythonService
+Service installed
+C:\Scripts>
+
+C:\Scripts> python.exe SmallestService.py start
+Starting service SmallestPythonService
+C:\Scripts>
+
+
+C:\Scripts> python.exe SmallestService.py stop
+Stopping service SmallestPythonService
+C:\Scripts>
+
+C:\Anywhere> net start SmallestPythonService
+
+- Sample service written in python 
+
+create a special security object useful for named-pipe services:
+```
+# PipeService1.py
+#
+# A sample demonstrating a service which uses a 
+# named-pipe to accept client connections.
+
+import win32serviceutil
+import win32service
+import win32event
+import win32pipe
+import win32file
+import pywintypes
+import winerror
+
+class PipeService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "PythonPipeService"
+    _svc_display_name_ = "A sample Python service using named pipes"
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        # Create an event which we will use to wait on.
+        # The "service stop" request will set this event.
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        # We need to use overlapped IO for this, so we don't block when
+        # waiting for a client to connect.  This is the only effective way
+        # to handle either a client connection, or a service stop request.
+        self.overlapped = pywintypes.OVERLAPPED()
+        # And create an event to be used in the OVERLAPPED object.
+        self.overlapped.hEvent = win32event.CreateEvent(None,0,0,None)
+
+    def SvcStop(self):
+        # Before we do anything, tell the SCM we are starting the stop process.
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        # And set my event.
+        win32event.SetEvent(self.hWaitStop)
+
+    def SvcDoRun(self):
+        # We create our named pipe.
+        pipeName = "\\\\.\\pipe\\PyPipeService"
+        openMode = win32pipe.PIPE_ACCESS_DUPLEX | win32file.FILE_FLAG_OVERLAPPED
+        pipeMode = win32pipe.PIPE_TYPE_MESSAGE
+        
+        # When running as a service, we must use special security for the pipe
+        sa = pywintypes.SECURITY_ATTRIBUTES()
+        # Say we do have a DACL, and it is empty
+        # (ie, allow full access!)
+        sa.SetSecurityDescriptorDacl ( 1, None, 0 )
+
+        pipeHandle = win32pipe.CreateNamedPipe(pipeName,
+            openMode,
+            pipeMode,
+            win32pipe.PIPE_UNLIMITED_INSTANCES,
+            0, 0, 6000, # default buffers, and 6 second timeout.
+            sa)
+
+        # Loop accepting and processing connections
+        while 1:            
+            try:
+                hr = win32pipe.ConnectNamedPipe(pipeHandle, self.overlapped)
+            except error, details:
+                print "Error connecting pipe!", details
+                pipeHandle.Close()
+                break
+                   
+            if hr==winerror.ERROR_PIPE_CONNECTED:
+                # Client is fast, and already connected - signal event
+                win32event.SetEvent(self.overlapped.hEvent)
+            # Wait for either a connection, or a service stop request.
+            timeout = win32event.INFINITE
+            waitHandles = self.hWaitStop, self.overlapped.hEvent
+            rc = win32event.WaitForMultipleObjects(waitHandles, 0, timeout)
+            if rc==win32event.WAIT_OBJECT_0:
+                # Stop event
+                break
+            else:
+                # Pipe event - read the data, and write it back.
+                # (We only handle a max of 255 characters for this sample)
+                try:
+                    hr, data = win32file.ReadFile(pipeHandle, 256)
+                    win32file.WriteFile(pipeHandle, "You sent me:" + data)
+                    # And disconnect from the client.
+                    win32pipe.DisconnectNamedPipe(pipeHandle)
+                except win32file.error:
+                    # Client disconnected without sending data
+                    # or before reading the response.
+                    # Thats OK - just get the next connection
+                    continue
+                    
+if __name__=='__main__':
+    win32serviceutil.HandleCommandLine(PipeService)
+    
+    
+    
+# PipeServiceClient.py
+#
+# A client for testing the PipeService.
+#
+# Usage:
+#
+#   PipeServiceClient.py message
+
+import win32pipe
+import sys
+import string
+
+if __name__=='__main__':
+    message = string.join(sys.argv[1:])
+    pipeName = "\\\\.\\pipe\\PyPipeService"
+    data = win32pipe.CallNamedPipe(pipeName, message, 512, 0)
+    print "The service sent back:"
+    print data
+    
+C:\Scripts> PipeService1 install
+C:\Scripts> PipeService1.py start
+C:\Scripts> PipeServiceClient.py Hi there, how are you
+C:\Scripts> PipeService1.py stop
+C:\Scripts> PipeService1.py remove
+```
+
+- Writting to the event log 
+
+```
+def SvcDoRun(self):
+        # Log a "started" message to the event log.
+        import servicemanager
+        servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE, 
+                servicemanager.PYS_SERVICE_STARTED,
+                (self._svc_name_, ''))
+                
+        # Now log a "service stopped" message
+        servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE, 
+                servicemanager.PYS_SERVICE_STOPPED,
+                (self._svc_name_, ''))
+```
+
+register with the Event Viewer, use the function win32evtlogutil.Add-SourceToRegistry().
+
+win32evtlogutil.AddSourceToRegistry(ApplicationName, MessageDll, EventLogType= "Application")
+
+win32evtlogutil.ReportEvent(ApplicationName, EventID, EventCategory, EventType, 
+Inserts=[], Data=None, SID=None)
+
+- providing performance monitor information 
+
+The name of a C header (.h) file providing information about the counters
+
+The name of a Windows INI file providing the definitions of the counters
+
+The name of the DLL providing Performance Monitor information
+
+```
+# PipeService2.py
+#
+# A sample demonstrating a service which uses a 
+# named-pipe to accept client connections,
+# and writes data to the event log.
+
+import win32serviceutil
+import win32service
+import win32event
+import win32pipe
+import win32file
+import pywintypes
+import winerror
+import perfmon
+import os
+
+class PipeService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "PythonPipeService"
+    _svc_display_name_ = "A sample Python service using named pipes"
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        # Create an event which we will use to wait on.
+        # The "service stop" request will set this event.
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        # We need to use overlapped IO for this, so we dont block when
+        # waiting for a client to connect.  This is the only effective way
+        # to handle either a client connection, or a service stop request.
+        self.overlapped = pywintypes.OVERLAPPED()
+        # And create an event to be used in the OVERLAPPED object.
+        self.overlapped.hEvent = win32event.CreateEvent(None,0,0,None)
+        # Finally initialize our Performance Monitor counters
+        self.InitPerfMon()
+
+    def InitPerfMon(self):
+        # Magic numbers (2 and 4) must match header and ini file used
+        # at install - could lookup ini, but then Id need it a runtime
+        
+        # A counter for number of connections per second.
+        self.counterConnections=perfmon.CounterDefinition(2) 
+        # We arent expecting many, so we set the scale high (ie, x10)
+        # Note the scale is 10^DefaultScale = ie, to get 10, we use 1!
+        self.counterConnections.DefaultScale = 1
+
+        # Now a counter for the number of bytes received per second.
+        self.counterBytes=perfmon.CounterDefinition(4)
+        # A scale of 1 is fine for this counter.
+        self.counterBytes.DefaultScale = 0
+
+        # Now register our counters with the performance monitor
+        perfObjectType = perfmon.ObjectType( (self.counterConnections, 
+                                              self.counterBytes) )
+        
+        self.perfManager = perfmon.PerfMonManager(
+                        self._svc_name_,
+                        (perfObjectType,),
+                        "perfmondata")
+                        
+    def TermPerfMon(self):
+        self.perfManager.Close()
+        self.perfManager = None
+    
+    def SvcStop(self):
+        # Before we do anything, tell the SCM we are starting the stop process.
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        # And set my event.
+        win32event.SetEvent(self.hWaitStop)
+
+    def SvcDoRun(self):
+        # Log a "started" message to the event log.
+        import servicemanager
+        servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE, 
+                servicemanager.PYS_SERVICE_STARTED,
+                (self._svc_name_, ''))
+                
+        # We create our named pipe.
+        pipeName = "\\\\.\\pipe\\PyPipeService"
+        openMode = win32pipe.PIPE_ACCESS_DUPLEX | win32file.FILE_FLAG_OVERLAPPED
+        pipeMode = win32pipe.PIPE_TYPE_MESSAGE
+        
+        # When running as a service, we must use special security for the pipe
+        sa = pywintypes.SECURITY_ATTRIBUTES()
+        # Say we do have a DACL, and it is empty
+        # (ie, allow full access!)
+        sa.SetSecurityDescriptorDacl ( 1, None, 0 )
+
+        pipeHandle = win32pipe.CreateNamedPipe(pipeName,
+            openMode,
+            pipeMode,
+            win32pipe.PIPE_UNLIMITED_INSTANCES,
+            0, 0, 6000, # default buffers, and 6 second timeout.
+            sa)
+
+        # Loop accepting and processing connections
+        while 1:            
+            try:
+                hr = win32pipe.ConnectNamedPipe(pipeHandle, self.overlapped)
+            except error, details:
+                print "Error connecting pipe!", details
+                pipeHandle.Close()
+                break
+                   
+            if hr==winerror.ERROR_PIPE_CONNECTED:
+                # Client is fast, and already connected - signal event
+                win32event.SetEvent(self.overlapped.hEvent)
+            # Wait for either a connection, or a service stop request.
+            timeout = win32event.INFINITE
+            waitHandles = self.hWaitStop, self.overlapped.hEvent
+            rc = win32event.WaitForMultipleObjects(waitHandles, 0, timeout)
+            if rc==win32event.WAIT_OBJECT_0:
+                # Stop event
+                break
+            else:
+                # Pipe event - read the data, and write it back.
+                # But first, increment our Performance Monitor data
+                self.counterConnections.Increment()
+                # (We only handle a max of 255 characters for this sample)
+                try:
+                    hr, data = win32file.ReadFile(pipeHandle, 256)
+                    win32file.WriteFile(pipeHandle, "You sent me:" + data)
+                    # And disconnect from the client.
+                    win32pipe.DisconnectNamedPipe(pipeHandle)
+                    # Update our performance monitor "bytes read" counter
+                    self.counterBytes.Increment(len(data))
+
+                    # Log a message to the event log indicating what we did.
+                    message = "Processed %d bytes for client connection" % \
+                             len(data)
+                    servicemanager.LogInfoMsg(message)
+                except win32file.error:
+                    # Client disconnected without sending data
+                    # or before reading the response.
+                    # Thats OK - just get the next connection
+                    continue
+
+        # cleanup our PerfMon counters.
+        self.TermPerfMon()
+
+        # Now log a "service stopped" message
+        servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE, 
+                servicemanager.PYS_SERVICE_STOPPED,
+                (self._svc_name_, ''))
+                    
+if __name__=='__main__':
+    win32serviceutil.HandleCommandLine(PipeService)
+```
+
+- the serial module, The Serial package is based on a set of serial communications libraries developed by MarshallSoft ( www.marshallsoft.com) over the last eight years 
+
+```
+>>> from Serial import Serial
+>>> # create a 'configuration dictionary' with the port settings
+>>> myconfig = Serial.PortDict()
+>>> myconfig['port'] = Serial.COM4
+>>> # create and open a port with these settings
+>>> myport = Serial.Port(myconfig)
+>>> myport.open()
+>>> myport.send('ATI\015') #ask modem to identify itself
+>>> print myport.read() #get back any response
+ATI
+
+Ericsson SH 888 Infrared Modem
+>>> # Python supports Infrared!  Cool!
+```
+
+    + capture function 
+    
+```
+from Serial import Serial
+import traceback
+import string
+
+def captureMark3Data(port=Serial.COM3):
+    
+    #fill a config dictionary with the settings we want
+    cfg = Serial.PortDict()
+    cfg['port'] = port
+    cfg['baud'] = Serial.Baud9600
+    cfg['parity'] = Serial.NoParity
+    cfg['stopBits'] = Serial.OneStopBit
+    cfg['timeOutMs'] = 10000   # ten seconds
+    
+    # create a Port object based on these settings
+    prt = Serial.Port(cfg)
+    prt.open()
+    
+    print 'Port open...'
+    
+    blocks = []
+    #read some data
+    try:
+        # first section is 22 bytes, followed by a pause
+        header = prt.read(22,timed=1)
+        blocks.append(header)
+        print 'read header'
+        
+        # followed by 24 blocks of 4102 bytes, and pauses
+        for i in range(24):
+            block = prt.read(4102, timed=1)
+            blocks.append(block)
+            print 'read block',i,'of 24'
+        
+        prt.close()
+        alldata = string.join(blocks, '')
+        return alldata
+        
+    except:   
+        # close the port but print the error message
+        prt.close()
+        traceback.print_exc()
+        return None
+```
+- microsoft communication control MSComm 
+
+
+```
+def MSCommDemo():
+    #talks to a modem on COM1
+    from win32com.client import Dispatch
+    comm = Dispatch('MSCOMMLib.MSComm')
+    comm.CommPort = 1    #COM1
+    comm.PortOpen = 1
+    try:
+        comm.Output = "AT\015"               # add a carriage return
+        inbuf = ''
+        now = time.time()
+        elapsed = time.time() - now
+        while (string.find(inbuf, 'OK') < 0) and (elapsed < 2):
+            inbuf = inbuf + str(comm.Input)  #remember the Unicode string!
+            elapsed = time.time() - now
+        print inbuf
+    finally:
+        comm.PortOpen = 0
+```
+
+- remote access services 
+
+```
+>>> import win32ras
+>>> win32ras.EnumEntries()   # what is in the phonebook?
+[('Assi Modem Pool',), ('Demon',), ('Demon Private',)]
+>>> win32ras.EnumConnections()  # show what's active now
+[]
+>>>
+
+>>> params = win32ras.GetEntryDialParams(None, 'Demon Internet')
+>>> params
+(('Demon Internet', '', '', 'username', '', ''), None)
+
+>>> import win32ras
+>>> myParams = ('Demon Internet','0845-3535666','',  \
+                            'username','password','')
+>>> (hras, success) = win32ras.Dial(None, None, myParams, None)
+>>> # do your stuff on the network now
+>>> win32ras.HangUp(hras)
+>>>
+```
+
+- sockets, Sockets can communicate between processes on the same machine. 
+
+    + socket server 
+    
+```
+# socketserver1.py - runs forever,
+# reverse each message received.
+from socket import *
+import string
+
+HOST = ''     # this means local
+PORT = 8578   #arbitrary, high number
+
+def serve():
+    # this reverses each message received, lasts forever
+    serversock = socket(AF_INET, SOCK_STREAM)
+    serversock.bind((HOST, PORT))
+    serversock.listen(1)   # max bcklog of 1-5 connections
+    print 'socket listening for connections...'
+    while 1:
+        handlersock, addr = serversock.accept()  
+
+        # now do something with the handler socket
+        print 'handler connected by', addr
+        data = handlersock.recv(1024)
+        print 'received', data
+        handlersock.send(string.upper(data))
+        handlersock.close()
+        print 'handler closed'
+
+if __name__ == '__main__':
+    serve()
+    
+[CLIENT]
+>>> from socket import *
+>>> clientsock = socket(AF_INET, SOCK_STREAM)
+>>> clientsock.connect('tahoe',8578)
+>>>
+```
+
+
+```
+# this sends strings over sockets more safely
+def safeSend(sock, message):
+    msglen = len(message)
+    totalsent = 0
+    while totalsent < msglen:
+        sent = sock.send(msg[totalsent:])
+        if sent == 0:
+            raise RuntimeError, 'connection broken'
+        totalsent = totalsent + sent
+```
+
+- other communicaton tool 
+
+    + named pipes, You open them by passing a suitable network path to CreateFile of the form \\mymachine\pipe\mypipe. Named pipes function over whatever network protocol NT is using; it might be TCP/IP, IPX, or NetBEUI.
+    
+    + remote procedure call, on windows Distributed COM (which builds on top of RPC) has made the RPC programming interface pretty much obsolete
+    
+    python support DCOM rather than rpc 
+    
+    
+
+# Gui development
+- tkinter, Tkinter is the Python interface to the Tk GUI toolkit current maintained by Scriptics (http://www.scriptics.com)
+
+tk 
+tkinter, python tk interface 
+tcl, language used by tk 
+widget 
+
+- pythinwin, Microsoft Foundation Classes (MFC) to Python. MFC is a C++ framework that provides an object-based model of the Windows GUI API, 
+
+PythonWin is a bit of a misnomer. PythonWin is really an application written to make use of the extensions that expose MFC to Python.
+
+    + python modules that provide the raw mfc functionality 
+    + python code that uses these modules to provide the pythonwin application 
+    
+```
+HWND hwnd = CreateWindow(...); // Create a handle to the window...
+EnableWindow(hwnd); // and enable it.
+
+CWnd wnd; // Create a window object.
+wnd.CreateWindow(...); // Create the Window.
+wnd.EnableWindow();// And enable it.
+```   
+
+there is an equivalent win32ui object. For example, the functionality of the MFC CWnd object is provided by a PyCWnd Python object; an MFC CDocument object by a PyCDocument object
+
+```
+>>> import win32ui
+>>> from pywin.mfc.dialog import Dialog
+>>> d=Dialog(win32ui.IDD_SIMPLE_INPUT)
+
+>>> d.CreateWindow()
+>>> button=d.GetDlgItem(win32ui.IDC_PROMPT1)
+>>> button.SetWindowText("Hello from Python")
+>>>
+```
+
+```
+# scribble1.py
+#
+# The starting framework for our scribble application.
+import win32ui
+import win32con
+import pywin.mfc.docview
+
+class ScribbleTemplate(pywin.mfc.docview.DocTemplate):
+    pass
+
+class ScribbleDocument(pywin.mfc.docview.Document):
+    def OnNewDocument(self):
+        """Called whenever the document needs initializing.
+        For most MDI applications, this is only called as the document
+        is created.
+        """
+        self.strokes = []
+        return 1
+
+class ScribbleView(pywin.mfc.docview.ScrollView):
+    def OnInitialUpdate(self):
+        self.SetScrollSizes(win32con.MM_TEXT, (0, 0))
+
+# Now we do the work to create the document template, and
+# register it with the framework.
+
+# For debugging purposes, we first attempt to remove the old template.
+# This is not necessary once our app becomes stable!
+try:
+    win32ui.GetApp().RemoveDocTemplate(template)
+except NameError:
+    # haven't run this before - that's ok
+    pass
+
+# Now create the template object itself...
+template = ScribbleTemplate(None, ScribbleDocument, None, ScribbleView)
+# Set the doc strings for the template.
+docs='\nPyScribble\nPython Scribble Document\nScribble documents (*.psd)\n.psd'
+template.SetDocStrings(docs)
+
+# Then register it with MFC.
+win32ui.GetApp().AddDocTemplate(template)
+```
+
+
+```
+class ScribbleView(pywin.mfc.docview.ScrollView):
+    def OnInitialUpdate(self):
+        self.SetScrollSizes(win32con.MM_TEXT, (0, 0))
+        self.HookMessage(self.OnLButtonDown,win32con.WM_LBUTTONDOWN)
+        self.HookMessage(self.OnLButtonUp,win32con.WM_LBUTTONUP)
+        self.HookMessage(self.OnMouseMove,win32con.WM_MOUSEMOVE)
+        self.bDrawing = 0
+        
+    def OnLButtonDown(self, params):
+        assert not self.bDrawing, "Button down message while still drawing"
+        startPos = params[5]
+        # Convert the startpos to Client coordinates.
+        self.startPos = self.ScreenToClient(startPos)
+        self.lastPos = self.startPos
+        # Capture all future mouse movement.
+        self.SetCapture()
+        self.bDrawing = 1
+        
+    def OnLButtonUp(self, params):
+        assert self.bDrawing, "Button up message, but not drawing!"
+        endPos = params[5]
+        endPos = self.ScreenToClient(endPos)
+        self.ReleaseCapture()
+        self.bDrawing = 0
+        # And add the stroke to the document.
+        self.GetDocument().AddStroke( self.startPos, endPos, self )
+        
+    def OnMouseMove(self, params):
+        # If Im not drawing at the moment, I don't care
+        if not self.bDrawing:
+            return
+        pos = params[5]
+        dc = self.GetDC()
+        # Setup for an inverting draw operation.
+        dc.SetROP2(win32con.R2_NOT)
+    
+        # "undraw" the old line
+        dc.MoveTo(self.startPos)
+        dc.LineTo(self.lastPos)
+
+        # Now draw the new position
+        self.lastPos = self.ScreenToClient(pos)
+        dc.MoveTo(self.startPos)
+        dc.LineTo(self.lastPos)
+        
+        
+# scribbleApp.py
+#
+# The application object for Python.
+from pywin.framework.app import CApp
+
+class ScribbleApplication(CApp):
+    def InitInstance(self):
+        # All we need do is call the base class,
+        # then import our document template.
+        CApp.InitInstance(self)
+        import scribble2
+
+# And create our application object.
+ScribbleApplication()
+```
+
+DocumentTemplate, you specify a resource ID. The previous example doesn’t specify a resource ID, so the default of win32ui.IDR_PYTHONTYPE is used. When a document is created, MFC uses the resource ID in the following ways:
+
+The menu with the ID is loaded and used for the document’s frame. This allows each document supported in an application to have a unique set of menus as is common in MDI applications.
+
+The icon with the ID is loaded and used for the document’s frame.
+
+The accelerator with that ID is loaded, providing document-specific shortcut keys to many of the menu functions.
+
+load the DLL (using win32ui.LoadLibrary()), and PythonWin locates and uses the resources in this DLL.
+
+- wxpython 
+
+wxPython is a Python extension module that encapsulates the wxWindows C++ class library.
+
+wxWindows is a free C++ framework designed to make cross-platform programming child’s play
+
+wxWindows itself. For example, on Win32 platforms the native list control is used, but on GTK
+
+wxPython is a Python extension module that provides a set of bindings from the wxWindows
+
+wxWindows sources, available from http://www.wxwindows.org/.
+
+```
+from wxPython.wx import *
+
+class MyApp(wxApp):
+    def OnInit(self):
+        frame = wxFrame(NULL, -1, "Hello from wxPython")
+        frame.Show(true)
+        self.SetTopWindow(frame)
+        return true
+
+app = MyApp(0)
+app.MainLoop()
+```
+
+wxPython home page at http://alldunn.com/wxPython/.
+
+- Microsoft on MFC can be found at http://msdn.microsoft.com/visualc/.
+
+
+
+# Active scripting 
+- Active Scripting-related tools can be found at http://msdn.microsoft.com/scripting/.   asp?
+
+python\win32comext\axscript\client\pyscript.py. You can run this script from Windows Explorer
+
+- Another handy Active Scripting tool is the Windows Scripting Host (WSH). WSH exposes an object model that makes it particularly suitable for tasks that are normally attempted with Windows batch files.
+
+WScript The top-level object containing information about the script being executed or the version of WSH
+
+WshArguments An object exposed via Wscript.Arguments
+
+WshShell An object providing access to shortcuts and other aspects of the Windows Shell API
+
+WshShortcut Represents a filesystem shortcut; provided by the WshShell object
+
+WshUrlShortcut Represents a URL shortcut; provided by the WshShell object
+
+WshCollection A general-purpose collection that provides the list of shared drives
+
+WshEnvironment An object that provides access to the Windows environment variables
+
+WshSpecialFolders  An object representing the special Windows folders
+
+
+```
+>>> from win32com.client import Dispatch
+>>> net=Dispatch("Wscript.Network")
+>>> netInfo=net.EnumNetworkDrives()
+>>> print "%s=%s" % (netInfo[0], netInfo[1])
+Z:=\\SKIPPY\d_drive
+>>>
+```
+
+Active Scripting is a COM-based technology and works by providing an object model for the end user
+
+language engine as a normal COM object. Thus, VBScript, JScript, and Python are the COM ProgIDs used for the languages described here. COM object (that is, an IDispatch pointer) with a name and attributes.
+
+- active script hosing in python, The COM specifications for applications using Active Scripting are not difficult to understand, and Python has additional helpers 
+
+Creates a PyIActiveScriptSite object. The win32com.axscript.server.axsite module
+
+Defines the object model. The win32com.axscript.server.axsite module allows you to specify a dictionary of string-object pairs
+
+Loads the code and passes it to the required language engine
+
+```
+# ActiveApp.py - Demonstration of a Python Active Scripting Application.
+import string, sys
+from win32com.axscript import axscript
+from win32com.axscript.server import axsite
+import pythoncom
+import win32com.server.util
+
+class MySite(axsite.AXSite):
+    # Our error handler will print to the console.
+    def OnScriptError(self, activeScriptError):
+        exc = activeScriptError.GetExceptionInfo()
+        print "Exception:", exc[1]
+        try:
+            sourceText = activeScriptError.GetSourceLineText()
+        except pythoncom.com_error:
+            sourceText = None
+        if sourceText is not None: 
+            context, lineNo, charNo = activeScriptError.GetSourcePosition()
+            print sourceText
+            indent = " " * (charNo-1)
+            print indent + "^"
+        return winerror.S_OK
+
+# A named object for our namespace
+# A normal Python COM object (minus registration info)
+class Application:
+    _public_methods_ = [ 'Echo' ]
+    def Echo(self, *args):
+        print string.join(map(str, args))
+
+# Our function that creates the site, creates the engine
+# and runs the code.
+def RunCode(engineName, code):
+    app = win32com.server.util.wrap( Application() )
+    # Create a dictionary holding our object model.
+    model = {
+      'Application' : app,
+    }
+
+    # Create the scripting site.
+    site = MySite(model)
+    # Create the engine and add the code.
+    engine = site.AddEngine(engineName)
+    engine.AddCode(code)
+    # Run the code.
+    engine.Start()
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print "Usage: ActiveApp.py Language ScriptFile"
+    else:
+        code = open(sys.argv[2]).read()
+        RunCode( sys.argv[1], code )
+```
+
+test the active script engine with VBScript:
+```
+
+rem Sample VBScript code to be used with ActiveApp.py
+
+sub JustForTheSakeOfIt
+    Application.Echo("Hello from VBScript")
+end sub
+
+rem Now call the Sub
+JustForTheSakeOfIt
+```
+
+```
+# Sample Python code to be used with ActiveApp.py
+
+def JustForTheSakeOfIt():
+    Application.Echo("Hello from Python")
+
+JustForTheSakeOfIt()
+```
+
+
+
+
+#  Extending and embedding with visual c++ and delphi 
+- extend Python using the C/C++ and Delphi languages. The topics we cover include:
+
+Writing a Python extension in C (or compiling someone else’s) by hand
+
+Using Simplified Wrapper and Interface Generator (SWIG) to make it easy to expose C and C++ libraries for use by Python
+
+Embedding a Python interpreter in a C++ application
+
+Dynamically calling DLLs without a C compiler
+
+- To write a Python extensions as a DLL or if you have the sources to an interesting Python extension
+
+Start Microsoft Visual C++.
+
+Select Tools → Options → Directories. Drop down the Show Directories For combo box, and select Include Files. Add the directory or directories where the Python headers can be located
+
+Select the combo box again, select Library files, and update the directories appropriately.
+
+Select OK to close the dialog, and you’re ready to go
+
+build the COM extension from sources, you may need to ensure your directories are set up so that PyWinTypes.h and PyWinTypes.lib from the Win32 extensions
+
+
+```
+/* spammodule.c - pasted from Python extending/embedding manual*/
+
+# include "Python.h"
+
+static PyObject *SpamError;
+
+static PyObject *spam_system(self, args)
+    PyObject *self;
+    PyObject *args;
+{
+    char *command;
+    int sts;
+    if (!PyArg_ParseTuple(args, "s", &command))
+        return NULL;    
+    sts = system(command);
+    return Py_BuildValue("i", sts);
+}
+
+static PyMethodDef SpamMethods[] = {
+    {"system",  spam_system, METH_VARARGS},
+    {NULL,      NULL}        /* Sentinel */
+};
+
+#ifdef MS_WIN32
+__declspec(dllexport)
+#endif
+
+void initspam()
+{
+    PyObject *m, *d;
+
+    m = Py_InitModule("spam", SpamMethods);
+    d = PyModule_GetDict(m);
+    SpamError = PyErr_NewException("spam.error", NULL, NULL);
+    PyDict_SetItemString(d, "error", SpamError);
+}
+```
+
+- The setup.in file contains the following two lines:
+
+*shared*
+spam spammodule.c
+
+http://starship.python.net/crew/da/compile/
+http://starship.python.net/crew/mhammond/ppw32/
+
+- using Visual C++ that builds our spam sample. Here are the three steps:
+
+Create a new project file.
+
+Modify the project settings.
+
+Build the project.
+
+    + create a new project 
+    
+Start Microsoft Visual C++.
+
+Choose File → New → Projects → Win32 Dynamic Link Library.
+
+Under Location, choose a directory. We have used D:\MyStuff.
+
+In the Project Name box, enter spam. A subdirectory called spam is suggested in the location box
+
+Select OK to start the New Project Wizard. When asked “What kind of DLL would you like to create?” choose “An empty DLL Project.”
+
+After a confirmation screen, VC++ creates an empty project, and the wizard exits.
+
+Place the spammodule.c source file into the new spam directory.
+
+Locate and select the File View tab at the bottom of the Workspace Explorer window.
+
+Right-click on Spam Files, and select Add Files To Project from the context menu that appears and select the spammodule.c source file.
+
+If you expand the Source Files tree and double-click on spammodule.c, it’s opened in Visual C++
+
+Choose Project → Settings. In the top left combo box, select the Win32 Release configuration.
+
+Select the C/C++ tab and drop down the Category combo box, stopping to admire the breathtaking lack of adherence to Microsoft’s own GUI design standards. Choose Code Generation, and a new property page appears on the C/C++ tab. Change “Use runtime library” to “Multithreaded DLL.” 
+
+Select the Link tab and change the name of the output file from Release/spam.dll to Release/spam.pyd
+
+- debug versus release builds 
+
+Release builds of your project must use the Multithreaded DLL and link with the standard Python .lib files.
+
+Debug builds of your project must use the Debug Multithreaded DLL C run-time library, must link with the _d version of the Python .lib files, and must themselves be named following the _d convention.
+
+The underlying issue is that Python and its extensions are DLLs, and these DLLs need the same C runtime library. Particularly at issue are FILE objects and memory allocated via malloc(). If all Python extensions aren’t using the same C runtime library, the FILE objects passed between Python and the extensions are considered invalid
+
+the underlying issue is that Python and all the extensions must be built with the same, shared C runtime library. Python’s use of _d is a convention that makes the more common errors less likely just run Python_d.exe under the debugger and your debug extension module can be debugged automatically.
+
+- SWIG (available at www.swig.org) is a tool written by David Beazley that helps connect programs written in high-level languages such as Python, Perl, and Tcl/Tk with low-level C and C++ code. 
+
+- embedding python in a delphi application 
+
+File → New → DLL to create a DLL project, and save it. Then create a new Pascal module (called just module.pas)
+
+```
+unit module;
+
+interface
+uses PythonEngine;
+
+procedure initdemodll; cdecl;
+var
+  gEngine : TPythonEngine;
+  gModule : TPythonModule;
+
+implementation
+
+function Add( Self, Args : PPyObject ) : PPyObject; far; cdecl;
+var
+  a, b : Integer;
+begin
+  with GetPythonEngine do
+    begin
+      if PyArg_ParseTuple( args, 'ii:Add', [@a, @b] ) <> 0 then
+        begin
+          Result := PyInt_FromLong( a + b );
+        end
+      else
+        Result := nil;
+    end;
+end;
+
+procedure initdemodll;
+begin
+  try
+    gEngine := TPythonEngine.Create(nil);
+    gEngine.AutoFinalize := False;
+    gEngine.LoadDll;
+    gModule := TPythonModule.Create(nil);
+    gModule.Engine := gEngine;
+    gModule.ModuleName := 'demodll';
+    gModule.AddMethod( 'add', @Add, 'add(a,b) -> a+b' );
+    gModule.Initialize;
+  except
+  end;
+end;
+
+initialization
+finalization
+  gEngine.Free;
+  gModule.Free;
+  frmAbout.Free;
+end.
+```
+
+- calldll, example http://starship.python.net/crew/mhammond/ppw32/.
+
+```
+>>> from dynwin.windll import *
+>>> mod1 = module('c:\\temp\\simple')  # loads the DLL
+>>> mod1.handle         # it can report its location in memory
+22806528
+>>> mod1.Min(27, 28)    # loads and executes Min function
+27
+>>> mod1.Min            # we now have a 'callable function' object...
+<callable function "Min">
+>>> mod1.Min.address    #...which knows its address too
+22836704
+```
+
+WinDLL is doing a lot of work behind the scenes here, using Python’s abilities to introspect and trap attribute access
+
+the DLL exports a function StringRepeat that repeats a string a number of times
+
+```
+>>> inBuf = cstring('spam')               # make a buffer holding a c string
+>>> outBuf = cstring('',50)               # make another big enough for output
+>>> mod1.StringRepeat(inBuf, outBuf, 10)  # returns the length of out string
+40
+>>> outBuf
+'spamspamspamspamspamspamspamspamspamspam'
+```
+
+- references 
+
+SWIG lives at http://www.swig.org/ and has good manuals available for download.
+
+CallDLL and WinDLL are available in the DynWin package from. The key files are included with the examples at 
+
+- system specific parameters and functions 
+
+exec_prefix A string giving the site-specific directory prefix where the platform-dependent Python files are installed
+
+exitfunc This value is not actually defined by the module but can be set by the user (or by a program) to specify a cleanup action
+
+setcheckinterval( interval )  Sets the interpreter’s check interval. This integer value determines how often the interpreter checks for periodic things such as thread switches
+
+
+
+
+
+# Appendixes 
