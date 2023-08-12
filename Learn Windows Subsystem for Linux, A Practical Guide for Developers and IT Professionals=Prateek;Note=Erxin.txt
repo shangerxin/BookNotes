@@ -1,0 +1,355 @@
+Learn Windows Subsystem for Linux, A Practical Guide for Developers and IT Professionals=Prateek;Note=Erxin
+
+# Front Matter
+- WSL2 is only supported on Windows 10, version 2004 (build 19041), and you will have to join the “Windows Insider Program” 
+
+- abbreviations
+
+
+
+Abbreviation      Expansion
+
+NT                New Technology
+
+Distro            Distribution Package
+
+OS                Operating System
+
+VM                Virtual Machine
+
+WSL               Windows Subsystem for Linux
+
+ELF               Executable and Linking Format
+
+    Program header table– That lists 0 or more memory segments; these memory segments contain information that is needed for runtime execution of the file.
+
+    Section header table– That lists 0 or more sections; that contain important data for linking and relocation.
+
+    File data– Data referred in the program header or section header table.
+
+PE                Portable Executable
+
+API               Application Programming Interface
+
+PEB               Process Environment Block
+
+-  low-level operations like
+
+Process management
+
+Interrupt handling
+
+Memory management
+
+Device management
+
+I/O communication
+
+File system
+
+- linux distribution urls 
+
+Distribution Name
+
+Download URL
+
+Ubuntu 18.04
+
+https://aka.ms/wsl-ubuntu-1804
+
+Ubuntu 18.04 ARM
+
+https://aka.ms/wsl-ubuntu-1804-arm
+
+Ubuntu 16.04
+
+https://aka.ms/wsl-ubuntu-1604
+
+Debian GNU/Linux
+
+https://aka.ms/wsl-debian-gnulinux
+
+Kali Linux
+
+https://aka.ms/wsl-kali-linux
+
+OpenSUSE Leap 42
+
+https://aka.ms/wsl-opensuse-42
+
+SUSE Linux Enterprise 12
+
+https://aka.ms/wsl-sles-12
+
+Fedora Remix for WSL
+
+https://github.com/WhitewaterFoundry/WSLFedoraRemix/releases/
+
+- enable wsl from windows features 
+
+- download from windows store 
+
+
+
+
+# Building mixed experiences 
+- wsl launch configuration 
+
+wsl.confg 
+
+three following sections:
+```
+[automount]
+
+[network]
+	
+[interop]
+```
+
+$ mout -l | grep drvfs 
+
+- WSL mounts your Windows file system drives in the /mnt/ 
+
+- The mount options under this property can include the following items:
+
+uid – The user ID used by the owner of all files
+	
+gid – The group ID used by the owner of all files
+
+umask – An octal mask of permissions to exclude all files and directories
+
+fmask – An octal mask of permissions to exclude all regular files
+
+dmask – An octal mask of permissions to exclude all directories
+
+- inerop section, This section of the wsl.conf file deals with two important settings for Windows-Linux interoperability
+
+- Windows-Linux Path Translation – wslpath
+
+- Shared Environment Variables – WSLENV
+
+modify the appropriate config file, like .profile, .bash_rc, and so on, which will set WSLENV to the desired value every time a new WSL session starts
+
+List of WSLENV flags and their descriptions
+Flag               Description
+
+/p                 Indication to translate the path from WSL to Windows and vice versa
+
+/l                 Indication that the environment variable is a list of paths
+
+/u                 Environment variables should only be created for WSL from Windows.
+
+/w                 Environment variables should only be created for Windows from WSL.
+
+$ export MYPATH=/mnt/c/Users 
+$ export WSLENV=MYPATH/p
+$ cmd.exe 
+> echo %MYPATH% 
+C:\Users 
+
+$ export MYPATHLIST=/mnt/c/Users:/mnt/c/temp
+$ export WSLENV=MYPATHLIST/l
+
+$ set WSLENV=FORWSL/u:FORWIN/w:MYPATHLIST/l:TEMPDIR/p
+
+
+
+# Managing WSL distributions 
+- list 
+
+wsl -l
+wsl --list
+
+- set default distribution 
+
+> wsl --setdefault <distribution-name>
+
+- any command you pass to wsl.exe will, by default, be executed in your default Linux distribution as demonstrated
+
+- backup or export a wsl 
+
+wsl --export Ubuntu-18.04 c:\temp\ubuntu1804.tar
+wsl --export SLES-12 SLES.tar
+
+- import a distro 
+
+wsl --import SLES-Imported c:\temp\ c:\temp\SLES.tar
+
+- unregister and uninstall wsl distros 
+
+wsl --unregister kali-linux
+
+- creating a custom wsl distro 
+
+GitHub: https://github.com/Microsoft/WSL-DistroLauncher. It is a C++ implementation reference of the Linux distribution installer/launcher.exe
+
+    + wsl api, you can read more about the functions here: https://docs.microsoft.com/en-us/windows/win32/api/wslapi/.
+
+WslConfigureDistribution( )         Modifies the behavior of a distribution registered with WSL
+
+WslGetDistributionConfiguration( )  Retrieves the current configuration of a distribution registered with WSL
+
+WslIsDistributionRegistered( )      Determines if a distribution is registered with WSL
+
+WslLaunch( )                        Launches a WSL process in the context of a particular distribution
+
+WslLaunchInteractive( )             Launches an interactive WSL process in the context of a particular distribution
+
+WslRegisterDistribution( )          Registers a new distribution with WSL
+
+WslUnregisterDistribution( )        Unregisters a distribution from the WSL
+
+
+
+# Exploring wsl 2 
+- better file io performance 
+- full system call 
+- windows version windows 10 2004
+- wsl is used for distributions and launching and interacting with subsystem 
+
+LXSS Manager keeps lists of which distributions are installed and which are running 
+
+This is achieved using the Linux Namespaces API http://man7.org/linux/man-pages/man7/namespaces.7.html
+
+- resize virtual hd 
+
+$ Resize-VHD -Path $VHD.FullName -SizeBytes <size>
+
+$ sudo mount -t devtmpfs none /dev
+Once that is done, then we have to find the root file system in use by filtering out file system of type ext4 using
+$ mount | grep ext4 
+
+
+
+# File system 
+- VFS, file systems are as follow, VFS component built into lxcore.sys that is modeled to emulate the Linux operating system’s Virtual File System (VFS)
+volfs, This is the primary file system on WSL that is used to store all Linux system files and your home directory and almost has feature parity with the Linux Virtual File System (VFS)
+/
+/root
+/home 
+
+drvfs, This file system is automatically mounted on Linux distributions to provide interoperability with Windows, so that drives mounted on the NT file system are accessible from the Windows Subsystem for Linux
+/mnt/c 
+/mnt/d
+
+tmpfs, Everything in tmpfs is temporary in the sense that no files are created on your persistent storage such as your hard drive
+
+procfs, procfs and sysfs are special file systems that represent system information like CPU, processes, drivers, devices, and configurations that are mostly dynamically generated when it is read
+
+sysfs, The multiple UNC provider (MUP) is a kernel-mode component part of the mup.sys binary that is responsible for redirecting any UNC-based remote file system access to a network redirector
+
+9P, plan 9 protocol, 9P (or the Plan 9 File System Protocol) is a network protocol that is used to set up a 9 file server (on WSL) and a client (on Windows) to bridge the Windows and Linux file systems and provide seamless interoperability. 
+
+- wsl file system architecture 
+
+wsl.exe <-> lxss manager service (lxss.sys) <-> 9p service <-> init process <-> /bin/bash 
+               |-> unix socket (mup.sys)    <-> mup.sys <-> cmd.exe 
+
+Windows process like CMD.exe or PowerShell.exe attempts to access Linux file on WSL using the UNC path \\wsl$\<packagename>.
+
+MUP achieves this by finding the network provider or the redirector that has been registered for such a type of request.
+
+    + Windows applications while creating files using the CreateFile API have the ability to pass a flag FILE_FLAG_POSIX_SEMANTICS which is an indication that case sensitivity is enabled for the file path. You can read more about this API and flag here: https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea.
+    
+    windows xp supported this function 
+    
+    + fsutil.exe to view or modify this flag using the following command syntax:
+
+fsutil.exe file queryCaseSensitiveInfo <directory path>
+fsutil.exe file setCaseSensitiveInfo <directory path>
+
+- C:\ drive in NTFS will be available in the WSL as /mnt/c/ and similarly D:\ as /mnt/d/.
+
+- Accessing Linux distribution file systems on UNC path: \\wsl$\
+
+This \\wsl$\<disto-name>\ UNC path can be accessed to modify Linux files residing in your distro from CMD.exe or PowerShell.exe, and changes will be reflected in your Linux distribution
+
+
+
+# Networking 
+- /etc/hosts file also known as the host file, which contains a static lookup table of hostnames and their respective IP addresses as demonstrated in Figure 7-2. The combination of /etc/resolv.conf and /etc/hosts makes the DNS support possible on the Windows Subsystem for Linux.
+
+$ ifconfig |grep eth 
+$ ping google.com -c 1 
+
+- sockets 
+
+- berkeley sockets 
+
+Berkeley sockets (also known as BSD sockets) is an API interface that allows inter-process communication (IPC). Any two endpoints, to establish communication
+
+socket(), Address family (AF) or domain– A socket can be one of these domains or address family.
+
+socket type 
+a) SOCK_DGRAM for UDP
+b) SOCK_STREAM for TCP
+c) SOCK_RAW for ICMP
+
+socekt protocol 
+bind() 
+listen()
+connect()
+send(), recv(), sendto(), and recvfrom()
+close()
+
+- Winsock and wsk winsock kernel 
+
+WSL1 and WSL2 both still populate /etc/resolv.conf and /etc/hosts files to make DNS resolution work
+
+
+
+# Linux development on wsl 
+- git 
+- windows terminal 
+- vscode 
+- docker desktop install enable wsl 2 based engine 
+
+take effect.
+
+Download - https://hub.docker.com/editions/community/docker-ce-desktop-windows/
+
+Installation - https://docs.docker.com/docker-for-windows/install/
+
+
+
+# Linux desktop on wsl 
+-  use “Xfce” as the desktop environment and “xRDP” as a service to run a Remote Desktop Protocol (RDP) Server on a Linux distribution
+
+- Xfce are these:
+Window Manager– Controls and manages the placement of windows on the screen
+
+Desktop Manager– Handles background image, menus, and the desktop
+
+Panel– Provides ability to switch between windows and applications
+
+Session Manager– Manages user login sessions
+
+Application Finder– Categorizes and displays installed applications so that they are easily accessible to the user
+
+File Manager– Provides file management capabilities in a graphical user interface
+
+Setting Manager– Controls all the settings of the desktop experience such as themes and display settings
+
+- xRDP is an open source tool which allows Windows users to access the Linux desktop remotely through Windows Remote Desktop Protocol (RDP) 
+
+Microsoft Terminal Services Client (MSTSC)
+
+FreeRDP
+
+Rdesktop
+
+NeutrinoRDP
+
+- install 
+
+$ sudo apt update && sudo apt upgrade –y
+$ sudo apt install xfce4 xrdp
+
+Change the settings in /etc/xrdp/xrdp.ini so that the xRDP server listens on port 5000 for Ubuntu 18.04 running over WSL using any text editor 
+$ sudo nano /etc/xrdp/xrdp.ini
+$ sudo service xrdp start
+
+use windows rdp to connect localhost:5000
+
+if install faled, try 
+ps> Get-Service LxssManager | Restart-Service
