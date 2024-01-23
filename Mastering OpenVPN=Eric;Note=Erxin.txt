@@ -1,0 +1,346 @@
+Mastering OpenVPN=Eric;Note=Erxin
+
+
+# Mastering OpenVPN 
+- OpenVPN was originally written by James Yonan with an initial release, Version 0.90, in 2001 under the GPL. The initial release allowed users to create a simple point-to-point VPN over UDP using the Blowfish cipher and, optionally, the SHA1 HMAC signature
+
+- OpenVPN Technologies, Inc. at https://openvpn.net/index.php/access-server/overview.html.
+
+- The tun/tap driver
+
+One of the basic building blocks of OpenVPN is the tun/tap driver
+
+- Deep Packet Inspection (DPI) can easily filter out OpenVPN traffic.
+
+- (http://openvpn.net) depicts how packets are encrypted for UDP transport, which is illustrated below.
+
+- hashing algorithms can be displayed using the following command:
+
+
+$ openvpn --show-tls
+
+- OpenSSL versus PolarSSL
+
+Starting with OpenVPN 2.3, support for a new SSL library has been added. The PolarSSL library (http://polarssl.org)
+
+
+
+
+# Point to point model 
+- The term point-to-point mode using pre-shared keys is often abbreviated to pre-shared keys.
+
+$ # openvpn \
+    --ifconfig 10.200.0.1 255.255.255.0 \
+    --dev tun \
+    --topology subnet
+	
+- secret key 
+$ openvpn --genkey --secret secret.key
+
+On the listening end (server), start the OpenVPN daemon:
+
+$ openvpn \
+    --ifconfig 10.200.0.1 10.200.0.2 \
+    --dev tun \
+    --secret secret.key \
+    --verb 7
+
+- use mutiple keys 
+
+OpenVPN supports the use of directional keys
+
+- routing 
+
+route add -net 192.168.4.0/24 gw 10.200.0.2
+
+$ openvpn \
+    --ifconfig 10.200.0.2 10.200.0.1 \
+    --dev tun \
+    --secret secret.key 1\
+    --remote openvpnserver.example.com \
+    --daemon --log /var/log/movpn-02-client.log
+	
+-  following configuration file movpn-02-02-server.conf: 
+```
+dev tun
+proto udp
+local  openvpnserver.example.com
+lport  1234
+remote openvpnclient.example.com
+rport  4321
+
+secret secret.key 0
+ifconfig 10.200.0.1 10.200.0.2
+route 192.168.4.0 255.255.255.0
+
+tun-ipv6
+ifconfig-ipv6 2001:610:120::200:0:1 2001:610:120::200:0:2
+
+user  nobody
+groupnobody  # use 'group nogroup' on Debian/Ubuntu
+persist-tun
+persist-key
+keepalive 10 60
+ping-timer-rem
+
+verb 3
+daemon
+log-append /var/log/openvpn.log
+```
+
+- Advanced IP-less setup
+
+The capability of OpenVPN to allow user-defined scripts to be run when the VPN connection is started allows for some advanced setups.
+
+- three way routing 
+
+
+$ openvpn –-genkey –-secret AtoB.key
+$ openvpn –-genkey –-secret AtoC.key
+$ openvpn –-genkey –-secret BtoC.key
+
+```
+dev tun
+proto udp
+port  1195
+remote siteAsecret AtoC.key 0
+ifconfig 10.200.0.5 10.200.0.6
+route 192.168.4.0 255.255.255.0 vpn_gateway 5
+route 192.168.5.0 255.255.255.0 vpn_gateway 10
+route-delay
+keepalive 10 60
+verb 3
+daemon
+log-append /var/log/openvpn-CtoA.log
+```
+
+vpn_gateway is a special OpenVPN keyword and it specifies the VPN remote endpoint address. 
+
+$ route <network> <netmask> vpn_gateway <metric>
+
+- bridged tap adapter on both ends 
+
+
+	
+	
+# PKIs and certificates 
+- Looking at the mailing list and IRC channel history, setup and maintenance of the Private Key Infrastructure (PKI) for X.509 certificates is a difficult concept
+
+- PKI certifcate revocation lists 
+
+These authorities are generally commercial vendors such as VeriSign, Go Daddy, Comodo, Trend Micro, various government entities, and many others.
+
+PKI using Easy-RSA
+
+At the time this chapter was written, Easy-RSA 2.2.2
+
+Easy-RSA can be found at https://github.com/OpenVPN/easy-rsa/releases.
+
+- Building the CA
+
+The build-ca subcommand first generates a Certificate Signing Request (CSR), and subsequently self-signs that request.
+
+- certifacte revocation list
+
+The gen-crl subcommand generates a CRL. Although, at this point, we only have a CA certificate, it is recommended to generate an empty CRL.
+
+- server certifactes 
+
+This prevents one of your client certificates from being used as a server in a Man-In-The-Middle (MITM)
+
+server certificate with the openssl command
+
+$  openssl x509 -noout -text -in /usr/local/etc/easy-rsa/pki/issued/movpn-server.crt
+
+- client certifact
+
+The certificate Common Name (CN) can be used to determine other parameters to be pushed on a given connection via client-connect scripts or the client-config-dir option. As of OpenVPN 2.3.7, there is still support for –client-cert-not-required
+
+The easyrsa command is used to build a client certificate
+
+$ ./easyrsa build-client-full client1
+
+- PKI using ssl-admin 
+
+To install ssl-admin on FreeBSD, install the security/ssl-admin port. For all other Unix-based systems,
+
+- OpenVPN server certificates
+
+
+- extract security hardware tokens, smart cards and PKCS 
+OpenVPN supports two-factor authentication by providing PKCS#11 support. Two-factor authentication
+
+- Aladdin eToken Pro 72K USB hardware token. (Aladdin Systems was bought by SafeNet (http://www.safenet.com). 
+
+- generating a certificate/private key pair 
+
+$ pkcs11-tool --module libeTPkcs11.so \
+  --keypairgen --key-type rsa:2048 \
+  --label "movpn" --id 20141001 --login
+  
+- Writing an X.509 certificate to the token
+
+$ openssl x509 -in movpn.crt -outform der -out movpn.der
+
+$ pkcs11-tool --module libeTPkcs11.so \
+  --write-object movpn.der --type cert \
+  --label movpn --id 20141001 --login
+  
+verify that the IDs of the private key and certificate match:
+
+$ pkcs11-tool --module libeTPkcs11.so --login -O
+
+geting a hardware token id 
+
+$ openvpn --show-pkcs11-ids  /usr/lib64/libeTPkcs11.so
+
+using a hardware token with openvpn 
+OpenVPN configuration file:
+cert myclient.crt
+key  myclient.key
+
+
+
+
+# Client/Server mode with tun devices 
+- setup client server mode configuration 
+```
+proto udp
+port 1194
+dev tun
+server 10.200.0.0 255.255.255.0
+topology subnet
+persist-key
+persist-tun
+keepalive 10 60
+
+dh       /etc/openvpn/movpn/dh2048.pem
+ca       /etc/openvpn/movpn/movpn-ca.crt
+cert     /etc/openvpn/movpn/server.crt
+key      /etc/openvpn/movpn/server.key
+
+user  nobody
+group nobody  # use ‘group nogroup’ on Debian/Ubuntu
+
+verb 3
+daemon
+log-append /var/log/openvpn.log
+```
+
+$ openvpn --config movpn-04-01-server.conf
+
+
+
+
+# Advanced deployment scenarios in tun mode 
+- Enabling file sharing over VPN
+
+As stated in the Routing and server-side routing section in the previous chapter, a VPN is only truly useful when the VPN clients have access to server-side resources.
+
+- using LDAP as a backend authentication mechnism 
+
+Using PAM (short for Pluggable Authentication Module), which is normally included in all Linux/UNIX operating systems.
+
+$ 
+sudo yum install openvpn-auth-ldap
+```
+proto udp
+port 1194
+dev tun
+server 10.200.0.0 255.255.255.0
+topology subnet
+persist-key
+persist-tun
+keepalive 10 60
+
+remote-cert-tls client
+tls-auth /etc/openvpn/movpn/ta.key 0
+dh       /etc/openvpn/movpn/dh2048.pem
+ca       /etc/openvpn/movpn/movpn-ca.crt
+cert     /etc/openvpn/movpn/server.crt
+key      /etc/openvpn/movpn/server.key
+
+user  nobody
+group nobody # use 'group nogroup' on Debian/Ubuntu
+
+verb 3
+daemon
+log-append /var/log/openvpn.log
+
+plugin /usr/lib64/openvpn/plugin/lib/openvpn-authldap.so \
+           "/etc/openvpn/movpn/movpn_ldap.conf"
+```
+
+movpn_ldap.conf file:
+```
+
+<LDAP> 
+  URL              ldaps://ldap.example.org 
+  Timeout          15 
+  TLSEnable      no 
+  FollowReferrals  yes 
+  TLSCACertFile    /etc/pki/tls/certs/ca-bundle.crt 
+  TLSCACertDir      /etc/pki/tls/certs 
+</LDAP> 
+
+<Authorization> 
+  BaseDN        "ou=LocalUsers,dc=example,dc=org" 
+  SearchFilter      "(&(uid=%u)(authorizedService=login))" 
+  RequireGroup  false 
+</Authorization> 
+```
+
+$ ldapsearch -x -H ldaps://ldap.example.org \
+     -b ou=LocalUsers,dc=example,dc=org \
+      "(&(uid=janjust)(authorizedService=login))" 
+	  
+- Using OpenVPN with HTTP or SOCKS proxies
+
+Request For Comments (RFC) at the following URLs:
+
+SOCKS5: https://www.ietf.org/rfc/rfc1928.txt
+HTTP: https://www.ietf.org/rfc/rfc2616.txt
+
+$ socks-proxy-server 1080 socks_auth.txt
+
+separate lines suffices:
+
+socks5user
+socks5pass
+
+
+
+
+# Client/Server mode with tap devices 
+- block first and second OpenVPN client:
+
+$ iptables -I FORWARD -i tap0 -o tap0 -s 10.222.0.2 -d 10.222.0.3 -j DROP
+
+```
+proto udp
+port 1194
+dev tap
+
+client
+remote openvpnserver.example.com
+nobind
+
+remote-cert-tls server
+tls-auth /etc/openvpn/movpn/ta.key 1
+ca   /etc/openvpn/movpn/movpn-ca.crt
+cert /etc/openvpn/movpn/client1.crt
+key  /etc/openvpn/movpn/client1.key
+
+auth-user-pass
+```
+
+
+
+# Scripting and plugins 
+
+# Using openvpn on mobile devices and home routers 
+
+# Troubleshooting 
+
+
+# Future direction 
