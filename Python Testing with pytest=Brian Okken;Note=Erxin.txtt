@@ -1,0 +1,413 @@
+Python Testing with pytest=Brian Okken;Note=Erxin
+
+
+# Install 
+- 
+$ python3 -m venv venv
+$ source venv/bin/activate
+(venv) $ pip install pytest
+
+- run 
+$ pytest test_one.py 
+
+- test discovery 
+
+test files should be named test_<something>.py or <something>_test.py.
+methods and functions should be named test_<something>.
+classes should be named Test<Something>.
+
+- knowledge-building tests 
+
+```
+from cards import Card
+ 	
+ 	
+def test_field_access():
+ 	    c = Card("something", "brian", "todo", 123)
+ 	    assert c.summary == "something"
+ 	    assert c.owner == "brian"
+ 	    assert c.state == "todo"
+ 	    assert c.id == 123
+ 	
+ 	
+def test_defaults():
+ 	    c = Card()
+ 	    assert c.summary is None
+ 	    assert c.owner is None
+ 	    assert c.state == "todo"
+ 	    assert c.id is None
+ 	
+ 	
+def test_equality():
+ 	    c1 = Card("something", "brian", "todo", 123)
+ 	    c2 = Card("something", "brian", "todo", 123)
+ 	    assert c1 == c2
+ 	
+ 	
+def test_equality_with_diff_ids():
+ 	    c1 = Card("something", "brian", "todo", 123)
+ 	    c2 = Card("something", "brian", "todo", 4567)
+ 	    assert c1 == c2
+```
+
+- assert statements 
+
+helper functions from unittest:
+
+pytest                       unittest
+
+assert something             assertTrue(something)
+
+assert not something         assertFalse(something)
+
+
+- group test methods 
+```
+class TestEquality:
+    def test_equality(self):
+        c1 = Card("something", "brian", "todo", 123)
+        c2 = Card("something", "brian", "todo", 123)
+        assert c1 == c2
+
+    def test_equality_with_diff_ids(self):
+        c1 = Card("something", "brian", "todo", 123)
+        c2 = Card("something", "brian", "todo", 4567)
+        assert c1 == c2
+    
+    def test_inequality(self):
+        c1 = Card("something", "brian", "todo", 123)
+        c2 = Card("completely different", "okken", "done", 123)
+        assert c1 != c2
+```
+$ pytest -v test_classes.py::TestEquality
+
+- running a subset of tests 
+
+    + single test method 
+pytest path/test_module.py::TestClass::test_method
+
+    + all test method in a class     
+pytest path/test_module.py::TestClass
+
+
+    + test function 
+pytest path/test_module.py::test_function
+
+    + test in a module 
+pytest path/test_module.py
+
+    + test in a directory 
+pytest path
+
+    + test match a pattern 
+pytest -k pattern
+
+
+# pytest Fixtures 
+- a simple fixture that return a number 
+
+@pytest.fixture()
+def some_data():
+    """Return answer to ultimate question."""
+    return 42
+
+Fixture can also be used to refer to the resource that is being set up by the fixture functions.
+
+- fixture scope 
+@pytest.fixture(scope="module")
+	def cards_db():
+	    with TemporaryDirectory() as db_dir:
+	        db_path = Path(db_dir)
+	        db = cards.CardsDB(db_path)
+	        yield db
+	        db.close()
+            
+- sharing fixture through a conftest.py file either in the same directory as the test file that’s using it or in some parent directory.
+
+
+# Parametrization 
+- @pytest.mark.parametrize() decorator to define the sets of arguments to pass to the test
+
+```
+@pytest.mark.parametrize(
+    "start_summary, start_state",
+    [
+        ("write a book", "done"),
+        ("second edition", "in prog"),
+        ("create a course", "todo"),
+    ],
+)
+def test_finish(cards_db, start_summary, start_state):
+    initial_card = Card(summary=start_summary, state=start_state)
+    index = cards_db.add_card(initial_card)
+
+    cards_db.finish(index)
+
+    card = cards_db.get_card(index)
+    assert card.state == "done"
+```
+
+- parametrizing fixtures 
+
+```
+@pytest.fixture(params=["done", "in prog", "todo"])
+def start_state(request):
+    return request.param
+```
+
+
+# Makers 
+- pytest there’s something special about a particular test. You can think of them like tags or labels
+
+@pytest.mark.filterwarnings(warning): This marker adds a warning filter to the given test.
+
+@pytest.mark.skip(reason=None): This marker skips the test with an optional reason.
+
+@pytest.mark.skipif(condition, ..., *, reason): This marker skips the test if any of the conditions are True.
+
+@pytest.mark.xfail(condition, ..., *, reason, run=True, raises=None, strict=xfail_strict): This marker tells pytest that we expect the test to fail.
+
+@pytest.mark.parametrize(argnames, argvalues, indirect, ids, scope): This marker calls a test function multiple times, passing in different arguments in turn.
+
+@pytest.mark.usefixtures(fixturename1, fixturename2, ...): This marker marks tests as needing all the specified fixtures.
+
+
+```
+@pytest.mark.skip(reason="Card doesn't support < comparison yet")
+def test_less_than():
+    c1 = Card("a task")
+    c2 = Card("b task")
+    assert c1 < c2
+```
+
+- run all tests, even those that we know will fail, we can use the xfail marker.
+
+- combining markers with fixtures 
+
+```
+@pytest.fixture(scope="function")
+def cards_db(session_cards_db, request, faker):
+    db = session_cards_db
+    db.delete_all()
+
+    # support for `@pytest.mark.num_cards(<some number>)`
+
+    # random seed
+    faker.seed_instance(101)
+    m = request.node.get_closest_marker("num_cards")
+    if m and len(m.args) > 0:
+        num_cards = m.args[0]
+        for _ in range(num_cards):
+            db.add_card(
+                Card(summary=faker.sentence(), owner=faker.first_name())
+            )
+    return db
+```
+
+
+# Working with project
+- determining test scope 
+
+- Using tox.ini, pyproject.toml, or setup.cfg in place of pytest.ini
+[tool.pytest.ini_options]
+
+
+[tool:pytest]
+
+
+- The __init__.py file affects pytest in one way and one way only: it allows you to have duplicate test file names.
+
+
+# Coverage 
+- install 
+$ pip install coverage 
+$ pip install pytest-cov 
+
+To run tests with coverage.py, you need to add the --cov flag 
+
+- generating html report 
+
+$ pytest --cov=cards --cov-report=html ch7
+
+running coverage for a directory 
+$ pytest --cov=cards --cov-report=html ch7
+
+
+# Mocking 
+- use the mock package to help us with standard library as unittest.mock
+
+- Typer is that it provides a testing interface. With it, we can call our application without having to resort to using subprocess.run
+
+
+# CI 
+- tox[38] is a command-line tool that allows you to run your complete suite of tests in multiple environments. tox is a great starting point when learning about CI.
+
+- tox uses project information in either setup.py or pyproject.toml for the package under test to create an installable distribution
+
+- adding a coverage report to tox 
+
+- running with github action 
+
+GitHub Actions[40] is a cloud-based CI system provided by GitHub
+
+
+
+# Debugging test failures 
+- flags 
+
+```
+-lf / --last-failed: Runs just the tests that failed last
+
+-ff / --failed-first: Runs all the tests, starting with the last failed
+
+-x / --exitfirst: Stops the tests session after the first failure
+
+--maxfail=num: Stops the tests after num failures
+
+-nf / --new-first: Runs all the tests, ordered by file modification time
+
+--sw / --stepwise: Stops the tests at the first failure. Starts the tests at the last failure next time
+
+--sw-skip / --stepwise-skip: Same as --sw, but skips the first failure
+```
+
+- debugging with pdb 
+
+pdb from pytest in a few different ways:
+
+Add a breakpoint() call to either test code or application code. When a pytest run hits a breakpoint() function call, it will stop there and launch pdb.
+
+Use the --pdb flag. With --pdb, pytest will stop at the point of failure. In our case, that will be at the assert len(the_list) == 2 line.
+
+Use the --trace flag. With --trace, pytest will stop at the beginning of each test.
+
+- command 
+h(elp): Prints a list of commands
+
+h(elp) command: Prints help on a command
+
+q(uit): Exits pdb
+
+l(ist) : Lists 11 lines around the current line. Using it again lists the next 11 lines, and so on.
+
+l(ist) .: The same as above, but with a dot. Lists 11 lines around the current line. Handy if you’ve use l(list) a few times and have lost your current position
+
+l(ist) first, last: Lists a specific set of lines
+
+ll : Lists all source code for the current function
+
+w(here): Prints the stack trace
+
+p(rint) expr: Evaluates expr and prints the value
+
+pp expr: Same as p(rint) expr but uses pretty-print from the pprint module. Great for structures
+
+a(rgs): Prints the argument list of the current function
+
+s(tep): Executes the current line and steps to the next line in your source code even if it’s inside a function
+
+n(ext): Executes the current line and steps to the next line in the current function
+
+r(eturn): Continues until the current function returns
+
+c(ontinue): Continues until the next breakpoint. When used with --trace, continues until the start of the next test
+
+unt(il) lineno: Continues until the given line number
+
+
+# Booster rockets 
+- find third party pytest plugins 
+https://docs.pytest.org/en/latest/reference/plugin_list.html
+
+https://pypi.org
+
+https://github.com/pytest-dev
+
+https://docs.pytest.org/en/latest/how-to/plugins.html
+
+- change output 
+pytest-instafail—Adds an --instafail flag that reports tracebacks and output from failed tests right after the failure. Normally, pytest reports tracebacks and output from failed tests after all tests have completed.
+
+pytest-sugar—Shows green checkmarks instead of dots for passing tests and has a nice progress bar. It also shows failures instantly, like pytest-instafail.
+
+pytest-html—Allows for html report generation. Reports can be extended with extra data and images, such as screenshots of failure cases.
+
+- for web 
+
+pytest-selenium—Provides fixtures to allow for easy configuration of browser-based tests. Selenium is a popular tool for browser testing.
+
+pytest-splinter—Built on top of Selenium as a higher level interface, this allows Splinter to be used more easily from pytest.
+
+pytest-django and pytest-flask—Help make testing Django and Flask applications easier with pytest. Django and Flask are two of the most popular web frameworks for Python.
+
+- for fake data 
+
+Faker—Generates fake data for you. Provides faker fixture for use with pytest
+
+model-bakery—Generates Django model objects with fake data.
+
+pytest-factoryboy—Includes fixtures for Factory Boy, a database model data generator
+
+pytest-mimesis—Generates fake data similar to Faker, but Mimesis is quite a bit faster
+
+- extend pytest functionality 
+
+pytest-cov—Runs coverage while testing
+
+pytest-benchmark—Runs benchmark timing on code within tests
+
+pytest-timeout—Doesn’t let tests run too long
+
+pytest-asyncio—Tests async functions
+
+pytest-bdd—Writes behavior-driven development (BDD)–style tests with pytest
+
+pytest-freezegun—Freezes time so that any code that reads the time will get the same value during a test. You can also set a particular date or time.
+
+pytest-mock—A thin-wrapper around the unittest.mock patching API
+
+- run parallel 
+
+$ pip install pytest-xdist
+$ pytest --count=10 -n=4 test_parallel.py
+
+
+# Buildinig plugin 
+- installable plugin 
+
+We start by installing Flit and running flit init inside a virtual environment and in the new directory:
+
+$ cd path/to/code/ch15/pytest_skip_slow
+$ pip install flit
+$ flit init
+
+set the pyproject.toml 
+```
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "pytest-skip-slow"
+authors = [{name = "Your Name", email = "your.name@example.com"}]
+readme = "README.md"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Framework :: Pytest"
+]
+dynamic = ["version", "description"]
+dependencies = ["pytest>=6.2.0"]
+requires-python = ">=3.7"
+
+[project.urls]
+Home = "https://github.com/okken/pytest-skip-slow"
+
+[project.entry-points.pytest11]
+skip_slow = "pytest_skip_slow"
+
+[project.optional-dependencies]
+test = ["tox"]
+
+[tool.flit.module]
+name = "pytest_skip_slow"
+```
