@@ -1,0 +1,457 @@
+Hypermodern Python Tooling=Claudio;Note=Erxin
+
+# Working with python 
+-  CPython, the reference implementation of Python, but it could also be any of a number of alternative implementations—​such as PyPy, a fast interpreter with just-in-time compilation, written in Python itself; or GraalPy,
+
+- different kinds 
+
+Frozen modules
+Some modules from the standard library are written in Python but have their bytecode embedded in the interpreter.
+
+Simple modules
+In the simplest case, a module is a single file containing Python source code.
+
+Packages
+Directories with __init__.py files are known as packages
+
+Namespace packages
+Directories with modules but no __init__.py are known as namespace packages.
+
+Extension modules, such as the math module, contain native code compiled from low-level languages like C.
+
+Builtins modules, are compiled into the interpreter. 
+
+Some modules from the standard library are written in Python but have their bytecode embedded in the interpreter
+
+Entry-point scripts
+
+- additional components 
+
+Shared libraries
+Python environments sometimes contain shared libraries that aren’t extension modules, named .dll on Windows, .dylib on macOS, and .so on Linux. 
+
+Header files
+Python installations contain header files for the Python/C API, an application programming interface for writing extension modules or embedding Python as a component in a larger application. 
+
+Static data
+Python installations also contain static data in various locations. 
+
+Tcl/Tk
+By default, Python installations also include Tcl/Tk, a toolkit for creating graphical user interfaces (GUIs) written in Tcl. 
+
+- Per-user environment 
+
+per-user installation is kept under a version-specific directory.4
+
+
+Platform	                                Third-party packages	                        Entry-point scripts
+Windows                                     %AppData%\Python\Python3x\site-packages         %AppData%\Python\Scripts
+macOS                                       ~/Library/Python/3.x/lib/python/site-packages   ~/Library/Python/3.x/bin
+Linux                                       ~/.local/lib/python3.x/site-packagesa           ~/.local/bin
+
+- virtual environment entry point 
+
+Files	                                Windows	            Linux and macOS
+Interpreter                             Scripts             bin
+Entry-point scripts                     Scripts             bin
+Third-party packages                    Lib\site-packages   lib/python3.x/site-packagesa
+Environment configuration               pyvenv.cfg          pyvenv.cfg
+
+
+> .venv\Scripts\python -m pip install httpx
+
+- Installing Applications with pipx, Install and Run Python Applications in Isolated Environments
+
+system package manager distributes pipx as a package, I recommend using that as the preferred installation method
+
+```
+$ apt install pipx
+$ brew install pipx
+$ dnf install pipx
+```
+update your PATH environment variable to include the shared script directory, using the ensurepath subcommand.
+
+provide the PyPI name using the --spec option, like this:
+
+$ pipx run --spec pip-tools pip-sync
+
+    + configure pipx 
+    
+$ export PIPX_DEFAULT_PYTHON=python3.12 # Linux and macOS
+> setx PIPX_DEFAULT_PYTHON python3.12   # Windows
+$ pip config set global.index-url https://example.com
+
+Most pip options are also available as environment variables:
+
+$ export PIP_INDEX_URL=https://example.com
+
+- managing environment with uv, uv is a drop-in replacement for core Python packaging tools, written in the Rust programming language. 
+
+While its uv venv and uv pip subcommands aim for compatibility with virtualenv and pip, uv also embraces evolving best practices
+
+$ pipx install uv
+
+$ uv venv 
+
+virtual environment using the --python option with a specification like 3.12 or python3.12; a full path to an interpreter also works. Uv discovers available interpreters by scanning your PATH
+
+its parent directories (using the same logic as the Python Launcher for Unix):
+
+$ uv pip install httpx
+
+- finding python modules 
+
+The Python Launcher locates interpreters using the Windows Registry, PATH (on Linux and macOS), and the VIRTUAL_ENV
+
+When the import system loads a module, it creates a module object and executes the module’s code using __dict__ as the global namespace.
+
+The __spec__ module holds the module spec, which I’ll talk about shortly. Packages also have a __path__ attribute, which contains locations to search for submodules
+
+Idempotency
+Importing modules can have side effects; for example, when executing module-level statements. Caching modules in sys.modules ensures that these side effects happen only once.
+
+
+- Finders and Loaders
+importlib.machinery.SourceFileLoader for pure Python modules
+
+importlib.machinery.SourcelessFileLoader for bytecode modules
+
+importlib.machinery.ExtensionFileLoader for binary extension modules
+
+zipimport.zipimporter to import modules from zip archives
+
+importlib.machinery.FileFinder to import modules from a directory
+
+- the standard library 
+
+Windows         Linux and macOS             Description 
+python3x.zip    lib/python3x.zip            compactness the standard library 
+Lib             lib/python3x                pure python modules 
+DLLs            lib/python3x/libdynload     binary extension modules 
+
+- site packages 
+
+The interpreter constructs the initial sys.path early on during initialization using a fairly fixed process. By contrast, the remaining locations on sys.path—known as site packages
+
+User site packages
+This directory holds third-party packages from the per-user environment.
+
+Site packages
+This directory holds third-party packages from the current environment, which is either a virtual environment or a system-wide installation.
+
+a few hooks for customization:
+
+.pth files
+Within site packages directories, any file with a .pth extension can list additional directories for sys.path, one directory per line. This works similarly to PYTHONPATH
+
+The sitecustomize module
+After setting up sys.path as described previously, the site module attempts to import the sitecustomize module, typically located in the site-packages directory.
+
+The usercustomize module
+If there is a per-user environment, the site module also attempts to import the usercustomize module, typically located in the user site-packages directory.
+
+run the site module as a command, it prints out your current module path
+$ py -m site
+
+```
+
+C:\Users\erxinsha\Downloads>py -m site
+sys.path = [
+    'C:\\Users\\erxinsha\\Downloads',
+    'C:\\Python312\\python312.zip',
+    'C:\\Python312\\DLLs',
+    'C:\\Python312\\Lib',
+    'C:\\Python312',
+    'C:\\Python312\\Lib\\site-packages',
+    'C:\\Python312\\Lib\\site-packages\\win32',
+    'C:\\Python312\\Lib\\site-packages\\win32\\lib',
+    'C:\\Python312\\Lib\\site-packages\\Pythonwin',
+]
+USER_BASE: 'C:\\Users\\erxinsha\\AppData\\Roaming\\Python' (doesn't exist)
+USER_SITE: 'C:\\Users\\erxinsha\\AppData\\Roaming\\Python\\Python312\\site-packages' (doesn't exist)
+ENABLE_USER_SITE: True
+```
+
+- Python lets you make that story true. The -P interpreter option omits the directory containing your script from the module path (or the current directory, if you’re running your program with py -m <module>). The -I interpreter option omits the per-user environment from the module path as well as any directories set with PYTHONPATH.
+
+re-run the site module with the -I and -P options, the module path is cut down to just the standard library and site packages
+
+
+
+# Python projects 
+- Store this script in a file called random_wikipedia_article.py and take it for a spin. Here’s a sample run:
+
+> py -m random_wikipedia_article
+
+- project 
+
+Metadata
+You can embed metadata inside a module, using attributes like __author__, __version__, or __license__
+
+The pyproject.toml File
+Example3-2 shows how to package the script from Example3-1 with a bare minimum of metadata
+
+pyproject.toml file
+```
+[project]
+name = "random-wikipedia-article"
+version = "0.1"
+
+[project.scripts]
+random-wikipedia-article = "random_wikipedia_article:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+```
+
+ The TOML website has a good introduction to the format.
+
+-  create a package for your new project using build, a dedicated build frontend maintained by the Python Packaging Authority (PyPA).
+
+$ pipx run build
+$ py -m venv buildenv
+
+- Python project managers Rye, Hatch, and PDM, and test automation tools like tox. Build backends include those shipped with the project managers Flit, Hatch, PDM, and Poetry, the traditional build backend setuptools
+
+exotic builders like Maturin, a build backend for Python modules written in the Rust programming language, and Sphinx Theme Builder
+
+upload the packages in dist using Twine, the official PyPI upload tool:
+
+$ pipx run twine upload --repository=testpypi dist/*
+
+- Managing Packages with Rye https://rye-up.com/
+
+Use the --script option to include an entry-point script:
+
+$ rye init random-wikipedia-article --script
+
+ The command rye build creates packages with build, the command rye publish uploads them using Twine, and the command rye sync performs an editable install using uv:
+
+$ rye build
+$ rye publish -r testpypi --repository-url https://test.pypi.org/legacy/
+$ rye sync
+
+- wheels and Sdists 
+
+“Building Packages with build”, build created two packages for your project:
+
+random_wikipedia_article-0.1.tar.gz
+
+random_wikipedia_article-0.1-py2.py3-none-any.whl
+
+every package: project.name and project.version. The project name uniquely identifies the project itself. 
+
+- https://learning.oreilly.com/library/view/hypermodern-python-tooling/9781098139575/ch03.html#sidebar_packages_single_sourcing_the_version
+
+- The Description and README
+The project.description field contains a short description as a string. This field will appear as the subtitle of your project page on PyPI.
+
+
+
+# Dependency management 
+- specify dependnecy for a project 
+
+editable install from the current directory:
+
+$ uv venv
+$ uv pip install --editable .
+
+the two packages are installed along with it:
+````
+[project]
+name = "random-wikipedia-article"
+version = "0.1"
+dependencies = ["httpx", "rich"]
+...
+````
+
+
+$ poetry config http-basic.<repo> <username>
+
+
+
+- publish a bugfix release to exclude that specific broken version:
+
+[project]
+dependencies = ["awesome>=1.2,!=1.3.1"]
+
+ou do need it here, so activate the optional feature using the syntax httpx[http2]:
+
+[project]
+dependencies = ["httpx[http2]>=0.27.0", "rich>=13.7.1"]
+
+- Optional dependencies of httpx (simplified)
+[project]
+name = "httpx"
+
+[project.optional-dependencies]
+http2 = ["h2>=3,<5"]
+brotli = ["brotli"]
+
+This is a common pattern in Python—so common it comes with a name and an acronym: “Easier to Ask Forgiveness than Permission” (EAFP).
+
+- requirements files 
+
+Requirements files are plain text files with dependency specifications on each line
+
+- This process is known as locking, or pinning, the project dependencies, which are listed in a lock file.
+
+ lock the dependencies on httpx and rich as shown below?
+```
+[project]
+dependencies = ["httpx[http2]==0.27.0", "rich==13.7.1"]
+```
+
+- freezing requirements with pip and uv 
+
+Pip and uv can generate these files from an existing environment:
+
+$ uv pip install .
+$ uv pip freeze
+
+install the project and its dependencies like this:
+
+$ uv pip install -r requirements.txt
+
+- compiling requirements wiht pip-tools and uv 
+
+pip-compile in an environment that matches the target environment for your project. If you use pipx, specify the target Python
+
+$ pipx run --python=3.12 --spec=pip-tools pip-compile
+
+$ uv pip install -r requirements.txt
+$ uv pip install --no-deps --no-cache .
+
+$ uv pip compile -p 3.12 pyproject.toml -o requirements.txt -P rich
+
+$ uv pip compile --extra=dev pyproject.toml -o dev-requirements.txt
+
+
+
+# Managing projects with poetry 
+- Poetry globally using pipx to keep its dependencies isolated from the rest of the system
+
+$ pipx install poetry 
+
+$ pipx reinstall --python=3.12 poetry
+
+install it side by side with the stable version:
+
+$ pipx install poetry --suffix=@preview --pip-args=--pre
+
+Poetry periodically to receive improvements and bugfixes:
+
+$ pipx upgrade poetry
+
+reate a new project using the command poetry new. As an example
+
+$ poetry new --src random-wikipedia-article
+
+Including the test suite in source distributions project.toml
+```
+packages = [{include = "random_wikipedia_article", from = "src"}]
+include = ["tests"]
+```
+
+managing dependencies 
+$ poetry add rich
+
+The caret (^) is a Poetry-specific extension to version specifiers, borrowed from npm, the package manager for Node.js.
+```
+rich = "^13.7.1"
+rich = ">=13.7.1,<14"
+```
+
+typically exclude minor releases:
+```
+rich = "~13.7.1"
+rich = ">=13.7.1,==13.7.*"
+```
+
+$ poetry add "rich>=13.7.1"
+
+- extras environment markers 
+you’ll activate the http2 extra for HTTP/2 support:
+
+$ poetry add "httpx>=0.27.0" --extras=http2
+
+- lock file, The TOML stanza for Rich in poetry.lock (simplified)
+```
+[[package]]
+name = "rich"
+version = "13.7.1"
+python-versions = ">=3.7.0"
+dependencies = {markdown-it-py = ">=2.2.0", pygments = ">=2.13.0,<3.0.0"}
+files = [
+    {file = "rich-13.7.1-py3-none-any.whl", hash = "sha256:4edbae3..."},
+    {file = "rich-13.7.1.tar.gz", hash = "sha256:9be308c..."},
+]
+```
+
+looked like after I added Rich:
+
+$ poetry show
+
+ visualize their relationship:
+
+$ poetry show --tree
+
+- update dependencies 
+
+using a single command:
+
+$ poetry update
+
+indirect dependency to update:
+
+$ poetry update rich
+
+remove it with poetry remove:
+
+$ poetry remove <package>
+
+- manage environment 
+
+.venv directory inside the project instead:
+
+$ poetry config virtualenvs.in-project true
+
+check the location of the current environment using the command poetry env info --path. 
+
+$ poetry env remove --all
+$ poetry env use 3.12
+
+ environment reflects any code changes immediately:
+
+$ poetry install
+
+launching a shell session with
+$ poetry shell
+
+run the application in your current shell session, using the command poetry run:
+$ poetry run random-wikipedia-article
+
+- publishing packages to repositories 
+
+$ poetry config pypi-token.pypi <token>
+
+$ poetry config repositories.testpypi https://test.pypi.org/legacy/
+
+$ poetry config pypi-token.testpypi <token>
+
+$ poetry publish --repository=testpypi
+
+- extending poetry with plugins 
+
+$ pipx inject poetry <plugin>
+
+
+- deploying environments with the bundle plugin 
+$ pipx inject poetry poetry-plugin-bundle
+
+
+
+
+
+
