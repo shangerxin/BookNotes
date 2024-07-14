@@ -440,7 +440,7 @@ import "fmt"
  
 func main() {
     var i func() int
-}2
+}
 ```
 
 ```
@@ -1406,48 +1406,754 @@ func main() {
 
 - Communicating between Goroutines Using Channels1
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	+ understanding channels 
 	
+	ch := make(chan int)
+
+	send value to channel you use the <- operator. The following example writes the value 5 into the ch channel:
+
+	ch <- 5
+
+	+ retrieves a value from the ch channel assigns it to a variable named value:
+
+	value := <- ch
+
+- How channels work 
+
+```
+package main
+ 
+import (
+    "fmt"
+    "time"
+)
+ 
+//---send data into a channel---
+func sendData(ch chan string) {
+    fmt.Println("Sending a string into channel…")
+    time.Sleep(2 * time.Second)
+    ch <- "Hello"
+}
+ 
+//---getting data from the channel---
+func getData(ch chan string) {
+    fmt.Println("String retrieved from channel:", <-ch)
+}
+ 
+func main() {
+    ch := make(chan string)
+ 
+    go sendData(ch)
+    go getData(ch)
+ 
+    fmt.Scanln()
+}
+```
+
+sum() that sums up a slice of integer values:
+```
+func sum(s []int, c chan int) {
+    sum := 0
+    for _, v := range s {
+        sum += v
+    }
+    c <- sum
+}
+```
+
+generate ten random numbers and assign it to a variable named s:
+```
+func main() {
+    s := []int{}
+    sliceSize := 10
+    for i := 0; i < sliceSize; i++ {
+        s = append(s, rand.Intn(100))
+    }
+}
+```
+
+deterministic state:
+
+rand.Seed(time.Now().UnixNano())
+
+call it as a goroutine:
+```
+func main() {
+    s := []int{}
+    sliceSize := 10
+    for i := 0; i < sliceSize; i++ {
+        s = append(s, rand.Intn(100))
+    }
+ 
+    c := make(chan int)
+    partSize := 2
+    parts := sliceSize / partSize
+    i := 0
+    for i < parts {
+        go sum(s[i*partSize:(i+1)*partSize], c)
+        i += 1
+    }
+}
+```
+
+- use a for loop, together with the select statement, like the following statements in bold:
+```
+func main() {
+    c1 := make(chan int)
+    c2 := make(chan int)
+ 
+    go fib(10, c1)             // generate 10 Fibonacci numbers
+    go counter(10, c2)         // generate 10 numbers
+ 
+    c1Closed := false
+    c2Closed := false
+ 
+    for {
+        select {
+        case n, ok := <-c1:
+            if !ok {
+                // channel closed and drained
+                c1Closed = true
+                if c1Closed && c2Closed {
+                    return
+                }
+            } else {
+                fmt.Println("fib()", n)
+            }
+        case m, ok := <c2:
+            if !ok {
+                // channel closed and drained
+                c2Closed = true
+                if c1Closed && c2Closed {
+                    return
+                }
+            } else {
+                fmt.Println("counter()", m)
+            }
+        }
+    }
+}
+```
+
+retrieve the value from the channel and assign it to a pair of variables:
+
+n, ok := <-c1
+
+- Using Buffered Channels
+
+So far, all my discussion on channels has centered on unbuffered channels. When you send a value to an unbuffered channel, your code will block until the value is received from the channel.
+create a buffered channel of length 5:
+```
+func sum(s []int, c chan int) {
+    sum := 0
+    for _, v := range s {
+        sum += v
+    }
+    c <- sum
+    fmt.Println("Done and can continue to do other work")
+}
+ 
+func main() {
+    s := []int{}
+    sliceSize := 10
+    for i := 0; i < sliceSize; i++ {
+        s = append(s, rand.Intn(100))
+    }
+ 
+    c := make(chan int, 5) // buffered channel of length 5
+    partSize := 2
+    parts := sliceSize / partSize
+    i := 0
+    for i < parts {
+        go sum(s[i*partSize:(i+1)*partSize], c)
+        i += 1
+    }
+ 
+    i = 0
+    total := 0
+    time.Sleep(1 * time.Second) // simulate retrieving at a later time
+    for i < parts {
+        partialSum := <-c // read from channel
+        fmt.Println("Partial Sum: ", partialSum)
+        total += partialSum
+        i += 1
+    }
+    fmt.Println("Total: ", total)
+    fmt.Scanln()
+}
+``` 
+
+
+# Organizing your code 
+- Go applications always have this first statement:
+
+package main
+
+main.go file looks like this:
+```
+
+package main
+ 
+import (
+    "fmt"
+    "math"
+)
+ 
+type Point struct {
+    X float64
+    Y float64
+}
+ 
+func (p Point) length() float64 {
+    return math.Sqrt(math.Pow(p.X, 2.0) + math.Pow(p.Y, 2.0))
+}
+ 
+func main() {
+    pt1 := Point{X: 2, Y: 3}
+    fmt.Println(pt1)
+    fmt.Println(pt1.length())
+}
+```
+
+you need to ensure:
+
+Both files are in the same directory.
+Both packages have the same package name (main).
+One of the files has a main() function.
+
+- go env command to find out the location of the GOPATH environment variable
+
+Modify the package name in point.go to geometry:
+
+```
+package geometry
+ 
+import (
+    "math"
+)
+ 
+type Point struct {
+    X float64
+    Y float64
+}
+ 
+func (p Point) Length() float64 {
+    return math.Sqrt(math.Pow(p.X, 2.0) + math.Pow(p.Y, 2.0))
+}
+```
+
+- organize package with directory 
+
+$GOPATH
+  |__src
+    |__geometry
+      |__coordinate
+        |__point.go
+		
+```
+// Package coordinate for coordinate geometry
+package coordinate
+ 
+import (
+    "math"
+)
+ 
+// Point represents a point in the 2-D coordinate space
+type Point struct {
+    X float64
+    Y float64
+}
+ 
+// Length calculates the length of point from the origin
+func (p Point) Length() float64 {
+    return math.Sqrt(math.Pow(p.X, 2.0) + math.Pow(p.Y, 2.0))
+}
+```
+
+ use the go install command, like the following:
+
+$ cd ~/go/src/geometry/coordinate
+$ go install
+
+- using third party packages 
+
+you can download third-party packages from central repositories like PyPI (https://pypi.org) or npm (www.npmjs.com)
+
+go get command followed by the URL of the package (without the https://), like this:
+
+$ go get github.com/hackebrot/turtle
+
+$GOPATH/src folder of your local computer, like this:
+
+$GOPATH
+  |__src
+  |  |__github.com
+  |    |__hackebrot
+  |    |  |__turtle
+  |    |    |__ …
+  |    |    |__ …
+
+  
+use this package, you simply import it into your package, like this:
+```
+package main
+ 
+import (
+    "fmt"
+    "github.com/hackebrot/turtle"
+)
+ 
+func main() {
+    emoji, ok := turtle.Emojis["smiley"]
+    if !ok {
+        fmt.Println("No emoji found.")
+    } else {
+        fmt.Println(emoji.Char)
+    }
+}
+```
+
+- go documentation 
+
+godoc by using the go get command:
+
+C:\Users\Wei-Meng Lee>go get golang.org/x/tools/cmd/godoc
+
+macOS
+
+On the Mac, download and install godoc:
+
+$ go get golang.org/x/tools/cmd/godoc
+
+
+- godoc as a web server type the following command in Terminal:
+
+$ launchctl load ~/Library/LaunchAgents/org.golang.godoc.plist
+$ launchctl unload ~/Library/LaunchAgents/org.golang.godoc.plist
+
+
+
+# Grouping packages into modules 
+- creating modules, To create a module, follow these steps:
+
+Create the following directories on your computer:
+
+$HOME
+  |__stringmod
+    |__strings
+      |__strings.go
+    |__quotes
+      |__quotes.go
+	  
+```
+package strings
+ 
+func internalFunction() {
+    // In Go, a name is exported (visible outside the package) if it begins
+    // with a capital letter
+}
+ 
+// Must begin with a capital letter in order to be exported
+func CountOddEven(s string) (odds, evens int) {
+    odds, evens = 0, 0
+    for _, c := range s {
+        if int(c)%2 == 0 {
+            evens++
+        } else {
+            odds++
+        }
+    }
+    return
+}
+```
+
+```
+package quotes
+ 
+import (
+    "github.com/hackebrot/turtle"
+)
+ 
+func GetEmoji(name string) string {
+    emoji, ok := turtle.Emojis[name]
+    if !ok {
+        return ""
+    }
+    return emoji.Char
+}
+```
+
+In Terminal or Command Prompt, type the following commands:
+
+$ cd ~/stringmod
+$ go mod init github.com/weimenglee/stringmod
+go: creating new go.mod: module
+github.com/weimenglee/stringmod
+
+making my module available for download on GitHub. I’ve set the download URL as github.com/weimenglee/stringmod
+
+- testing and building a module
+
+Add a new file named main.go in the stringmod folder:
+
+$HOME
+  |__stringmod
+    |__go.mod
+    |__main.go
+    |__strings
+      |__strings.go
+    |__quotes
+      |__quotes.go
+
+	  ```
+package main
+ 
+import (
+    "fmt"
+ 
+    "github.com/weimenglee/stringmod/quotes"
+    "github.com/weimenglee/stringmod/strings"
+)
+ 
+func main() {
+    o, e := strings.CountOddEven("12345")
+    fmt.Println(o, e) // 3 2
+ 
+    fmt.Println(quotes.GetEmoji("turtle"))
+}
+	  ```
+
+- pushing a module on github 
+
+publish the module to GitHub, accessible through the following link: https://github.com/weimenglee/stringmod.
+	
+-  install this newly published module on your local computer, use the following command:
+
+$ go get github.com/weimenglee/stringmod
+
+GOPATH, use the go env command
+
+directory pkg Contains the non-executable packages. These packages are typically imported by other applications or modules.
+
+
+
+
+# Seeing go in action 
+- you go to www.amazon.com and start adding items to your shopping cart.
+
+- fetching data from web services in go 
+
+The Get() function accepts a URL as its argument and returns two results:
+
+A Response struct
+An error
+
+- writing a go program to connect to a web api 
+
+Fixer plan by going to https://fixer.io/ and clicking the Sign Up Free button, as shown in Figure 15-2.
+
+URL to access the API:
+
+http://data.fixer.io/api/latest?access_key=<access_key>
+
+```
+package main
+ 
+import (
+    "fmt"
+    "io/ioutil"
+    "log"
+    "net/http"
+)
+ 
+func main() {
+    url :=
+ "http://data.fixer.io/api/latest?access_key=<access_key>"
+ 
+    if resp, err := http.Get(url); err == nil {
+        defer resp.Body.Close()
+        if body, err := ioutil.ReadAll(resp.Body);
+            err == nil {
+            fmt.Println(string(body))
+        } else {
+            log.Fatal(err)
+        }
+    } else {
+        log.Fatal(err)
+    }
+    fmt.Println("Done")
+}
+```
+
+```
+package main
+ 
+import (
+    "encoding/json"
+    "fmt"
+    "io/ioutil"
+    "log"
+    "net/http"
+)
+ 
+type Result struct {
+    Success   bool
+    Timestamp int
+    Base      string
+    Date      string
+    Rates     map[string]float64
+}
+ 
+type Error struct {
+    Success bool
+    Error   struct {
+        Code int
+        Type string
+        Info string
+    }
+}
+ 
+func main() {
+    url :=
+        "http://data.fixer.io/api/latest?access_key=" +
+        "<access_key>"
+ 
+    if resp, err := http.Get(url); err == nil {
+        defer resp.Body.Close()
+        if body, err := ioutil.ReadAll(resp.Body); err == nil {
+            var result Result
+            json.Unmarshal([]byte(body), &result)
+            if result.Success {
+                for i, v := range result.Rates {
+                    fmt.Println(i, v)
+                }
+            } else {
+                var err Error
+                json.Unmarshal([]byte(body), &err)
+                fmt.Println(err.Error.Info)
+            }
+        } else {
+            log.Fatal(err)
+        }
+    } else {
+        log.Fatal(err)
+    }
+    fmt.Println("Done")
+}
+
+if result.Success {
+    // create an array to store all keys
+    keys := make([]string, 0,
+        len(result.Rates))
+ 
+    // get all the keys---
+    for k := range result.Rates {
+        keys = append(keys, k)
+    }
+ 
+    // sort the keys
+    sort.Strings(keys)
+ 
+    // print the keys and values in
+    // alphabetical order
+    for _, k := range keys {
+        fmt.Println(k, result.Rates[k])
+    }
+ 
+    /*
+    for i, v := range result.Rates {
+        fmt.Println(i, v)
+    }
+    */
+} else {
+    var err Error
+    json.Unmarshal([]byte(body), &err)
+    fmt.Println(err.Error.Info)
+}
+
+func fetchData(API int) {
+    url := apis[API]
+    if resp, err := http.Get(url); err == nil {
+        defer resp.Body.Close()
+        if body, err := ioutil.ReadAll(resp.Body);
+            err == nil {
+ 
+            var result map[string]interface{}
+ 
+            json.Unmarshal([]byte(body), &result)
+            switch API {
+            case 1: // for the Fixer API
+                if result["success"] == true {
+                    fmt.Println(result["rates"].(
+                        map[string]interface{})["USD"])
+                } else {
+                    fmt.Println(result["error"].(
+                        map[string]interface{})["info"])
+                }
+            }
+        } else {
+            log.Fatal(err)
+        }
+    } else {
+        log.Fatal(err)
+    }
+}
+
+func main() {
+    apis = make(map[int]string)
+    apis[1] =
+       "http://data.fixer.io/api/latest?access_key=" +
+       "<access_key>"
+    apis[2] =
+       "http://api.openweathermap.org/data/2.5/weather?" +
+       "q=SINGAPORE&appid=<api_key>"
+ 
+    go fetchData(1)
+    go fetchData(2)
+ 
+    fmt.Scanln()
+}
+```
+
+
+- getting ready to serve using rest apis 
+
+A REST API uses several HTTP verbs for the clients to communicate with the service:
+
+GET: To retrieve a resource from the service
+PUT: To create a new resource or update an existing one on the service
+POST: To create a new resource on the service
+DELETE: To remove a resource from the service
+
+	+ REST API URL.
+	
+http://server-address/api/version/service-name/resource-name 
+
+- rest response, A REST API typically returns one of the following HTTP response codes:
+
+200 OK: The request was successful.
+201 Created: The request was successful and a resource was created. This response code is used to confirm the success of a PUT or POST request.
+400 Bad Request: The request was malformed. This happens especially with POST and PUT requests, when the data doesn't pass validation or is in the wrong format.
+404 Not Found: The required resource couldn’t be found. This response code is generally returned to all requests that point to a URL with no corresponding resource.
+401 Unauthorized: You need to perform authentication before accessing the resource.
+405 Method Not Allowed: The HTTP method used is not supported for this resource.
+409 Conflict: A conflict has occurred — for example, you’re using a POST request to create the same resource twice.
+500 Internal Server Error: Generally, a 500 response is used when processing fails due to unanticipated circumstances on the server side, causing the server to error out.
+
+-  get your rest api 
+
+```
+package main
+ 
+import (
+    "fmt"
+    "log"
+    "net/http"
+    "github.com/gorilla/mux"
+)
+ 
+func home(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "Welcome to the REST API!")
+}
+ 
+func main() {
+    router := mux.NewRouter()
+    router.HandleFunc("/api/v1/", home)
+ 
+    fmt.Println("Listening at port 5000")
+    log.Fatal(http.ListenAndServe(":5000", router))
+}
+```
+
+$ curl http://localhost:5000/api/v1/courses
+
+-  query string (it’s the part in bold):
+
+/api/v1/courses?country=SG&state=CA
+
+
+/api/version/service?key=value&key=value 
+
+bold to the allcourses() function:
+```
+func allcourses(w http.ResponseWriter, r *http.Request) {
+    // fmt.Fprintf(w, "List of all courses")
+    kv := r.URL.Query()
+ 
+    for k, v := range kv {
+        fmt.Println(k, v)
+    }
+}
+```
+
+- specifying request methods 
+
+Methods() function to specify the HTTP methods supported on a particular path:
+```
+func course(w http.ResponseWriter, r *http.Request) {
+    params := mux.Vars(r)
+    fmt.Fprintf(w, "Detail for course " +
+                   params["courseid"])
+    fmt.Fprintf(w, "\n")
+    fmt.Fprintf(w, r.Method)
+}
+```
+
+
+
+# Working with dataset 
+- setup mysql 
+
+download it here:
+
+macOS: https://dev.mysql.com/downloads/file/?id=499568
+Windows: https://dev.mysql.com/downloads/file/?id=499590
+
+Terminal/Command Prompt, type the following command:
+
+$ mysql -u root -p
+
+- creating a database and table 
+
+MySQL server. At the MySQL client prompt, type the following command:
+
+mysql> CREATE DATABASE CoursesDB;
+mysql> INSERT INTO Course (ID, Details) VALUES ("IOT210","Applied Go Programming");
+
+grant the account permission to access all databases and tables in the MySQL server, type the following command:
+
+mysql> GRANT ALL ON *.* TO 'gouser'@'localhost';
+
+- connecting to mysql database in go Terminal/Command Prompt:
+
+$ go get "github.com/go-sql-driver/mysql"
+
+```
+package main
+ 
+import (
+    "database/sql"
+    "fmt"
+    _ "github.com/go-sql-driver/mysql"
+)
+ 
+func main() {
+    // Use mysql as driverName and a valid DSN
+    db, err := sql.Open("mysql",
+        "gouser:password@tcp(127.0.0.1:3306)/CoursesDB")
+ 
+    // handle error
+    if err != nil {
+        panic(err.Error())
+    } else {
+        fmt.Println("Database object created")
+    }
+ 
+    // defer the close till after the main function has
+    // finished executing
+    defer db.Close()
+}
+```
 	
 	
 # Reference 
@@ -1457,7 +2163,204 @@ func main() {
 
 https://go.dev/talks/2012/splash.article	
 	
+DSN, data source name The DSN has the following format:
+
+<user>:<password>@tcp(<ip_address>:<port>)/<DB_name>
 	
+- retrieving data 
+```
+package main
+ 
+import (
+    "database/sql"
+    "fmt"
+ 
+    _ "github.com/go-sql-driver/mysql"
+)
+ 
+// map this type to the record in the table
+type Course struct {
+    ID      string
+    Details string
+}
+ 
+func GetRecords(db *sql.DB) {
+    results, err := db.Query("Select * FROM Course")
+ 
+    if err != nil {
+        panic(err.Error())
+    }
+ 
+    for results.Next() {
+        // map this type to the record in the table
+        var course Course
+        err = results.Scan(&course.ID,
+            &course.Details)
+        if err != nil {
+            panic(err.Error())
+        }
+ 
+        fmt.Println(course.ID,
+            "-", course.Details)
+    }
+}
+ 
+func main() {
+    // Use mysql as driverName and a valid DSN
+    db, err := sql.Open("mysql",
+        "gouser:password@tcp(127.0.0.1:3306)/CoursesDB")
+ 
+    // handle error
+    if err != nil {
+        panic(err.Error())
+    } else {
+        fmt.Println("Database object created")
+        GetRecords(db)
+    }
+ 
+    // defer the close till after the main function has
+    // finished executing
+    defer db.Close()
+}
 	
-	
-	
+```
+
+- insert record 
+
+```
+func InsertRecord(db *sql.DB, ID string, Details string) {
+    // use parameterized SQL statement
+    result, err := db.Exec(
+      "INSERT INTO Course VALUES (?, ?)", ID, Details)
+    if err != nil {
+        fmt.Println(err.Error())
+    } else {
+        if count, err := result.RowsAffected(); err == nil {
+            fmt.Println(count, "row(s) affected")
+        }
+    }
+}
+```
+
+- modify record 
+
+```
+func EditRecord(db *sql.DB, ID string, Details string) {
+    result, err := db.Exec(
+        "UPDATE Course SET Details=? WHERE ID=?",
+        Details, ID)
+    if err != nil {
+        fmt.Println(err.Error())
+    } else {
+        if count, err := result.RowsAffected();
+            err == nil {
+            fmt.Println(count, "row(s) affected")
+        }
+    }
+}
+```
+
+# The part of tens 
+- Tem useful go packages to create applications 
+
+color 
+```
+package main
+ 
+import "github.com/fatih/color"
+ 
+func main() {
+    color.Red("Error Message")
+    color.Green("Retro…")
+    color.Blue("Color is cool!")
+    customBg :=
+        color.New(color.FgBlue).Add(
+            color.BgWhite).Add(color.Italic)
+    customBg.Println("How does this look like?")
+}
+```
+
+
+now 
+```
+package main
+ 
+import (
+    "fmt"
+    "time"
+ 
+    "github.com/jinzhu/now"
+)
+ 
+func main() {
+    fmt.Println(time.Now().Date())
+    // 2020 December 8
+ 
+    fmt.Println(now.Monday().Date())
+    // 2020 December 7
+ 
+    fmt.Println(now.BeginningOfWeek().Date())
+    // 2020 December 6
+ 
+    fmt.Println(now.EndOfWeek().Date())
+    // 2020 December 12
+ 
+    t, err := now.Parse("2020-12-13")
+    if err == nil {
+        fmt.Println(t)
+        // 2020-12-13 00:00:00 +0800 +08
+    }
+}
+```
+
+go-pushbullet, android push notification  
+
+goid, generate uuid 
+
+json2go 
+
+gojq, decode json string using unmarshal function 
+
+turtle, make your go program resonate with kids 
+
+go-http-client 
+
+notify 
+
+gosx-notifier, for mac users, create a notification on your macos desktop 
+
+
+# Ten go resource 
+- A Tour of Go (https://tour.golang.org/) is an interactive tutorial where you can learn, read
+
+- Go by Example (https://gobyexample.com) is a hands-on introduction to Go programming.
+
+- A Tour of Go (https://tour.golang.org/) is an interactive tutorial where you can learn, read, and write Go code directly
+
+- Google using Go internally? The Golang FAQ (https://golang.org/doc/faq) is maintained by the Go team
+
+- Go Bootcamp (http://www.golangbootcamp.com/book/) is a companion book to the Go Bootcamp event organized for the first time in Santa Monica
+
+- Effective Go (https://golang.org/doc/effective_go.html) provides tips for writing clear, idiomatic Go code.
+
+- Gophercises (https://gophercises.com) is a free course composed of mini-exercises to help Go developers practice writing Go programs
+
+- Tutorialspoint is a website dedicated to providing online education in a variety of fields. 
+
+- get answers to your questions on Go (https://stackoverflow.com/questions/tagged/go). 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
