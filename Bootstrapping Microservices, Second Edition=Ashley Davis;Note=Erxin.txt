@@ -1,1 +1,270 @@
 Bootstrapping Microservices, Second Edition=Ashley Davis;Note=Erxin
+
+
+# Creating your first microservices 
+- we’ll build a single microservice and run it using Node.js directly on our development computer. We’ll edit our code using VS Code or some other IDE
+
+$ npm init -y 
+
+- instal express 
+
+$ npm install --save express
+
+- create express boiler plate 
+
+$ Creating the Express boilerplate
+
+
+- simple stream video server 
+
+```
+const express = require("express");
+const fs = require("fs");                                 ①
+ 
+const app = express();
+ 
+const port = 3000;
+ 
+app.get("/video", async (req, res) => {                   ②
+  const videoPath = 
+          "../videos/SampleVideo_1280x720_1mb.mp4";     ③
+  const stats = await fs.promises.stat(videoPath);        ④
+ 
+  res.writeHead(200, {                                    ⑤
+    "Content-Length": stats.size,
+    "Content-Type": "video/mp4",
+  });  
+  fs.createReadStream(videoPath).pipe(res);               ⑥
+});
+ 
+app.listen(port);
+```
+
+- configure express 
+
+```
+const express = require("express");
+const fs = require("fs");
+ 
+const app = express();
+ 
+if (!process.env.PORT) {         ①
+  throw new Error(--snip--);     ①
+}                                ①
+ 
+const PORT = process.env.PORT;   ②
+ 
+--snip--
+ 
+app.listen(PORT)                 ③
+```
+
+- setup production 
+
+$ npm install
+$ npm install --omit=dev
+
+
+# Publish microservice 
+- docker 
+
+Docker website at https://docs.docker.com.
+
+Create a Dockerfile for our microservice.
+
+Package our microservice as a Docker image.
+
+Test the published image by booting it as a container.
+
+- dockerfile of the microservice 
+```
+FROM node:18.17.1        ①
+ 
+WORKDIR /usr/src/app     ②
+COPY package*.json ./    ③
+RUN npm ci --omit=dev    ④
+COPY ./src ./src         ⑤
+COPY ./videos ./videos   ⑥
+ 
+CMD npm start            ⑦
+```
+
+build 
+
+$ docker build -t video-streaming --file Dockerfile .
+
+booting microservice docker image 
+$ docker run -d -p 3000:3000 -e PORT=3000 video-streaming
+
+stop container 
+$ docker stop <container-id>
+
+push to registery 
+$ docker push bmdk1.azurecr.io/video-streaming:1
+
+- Docker commands
+
+Command                                 Description
+
+docker --version                        Checks that Docker is installed and prints the version number
+
+docker container list                   Lists running containers
+
+docker container list -a                Lists all containers (running and stopped)
+
+docker image list                       Lists local images
+
+docker build -t <tag> --file <docker-file> .       Builds an image from assets in the current directory according to the instructions in docker-file. The -t argument tags the image with a name you specify.
+
+docker run -d -p <host-port>:<container-port> -e <name>=<value><tag>       Instantiates a container from an image. If the image isn’t available locally, it can be pulled from a remote registry (assuming the tag specifies the URL of the registry).
+
+                                        The -d argument runs the container in detached mode, so it won’t be bound to the terminal and you won’t see the output. Omit this argument to see output directly, but this also locks your terminal.
+
+                                        The -p argument allows you to bind a port on the host to a port in the container.
+
+                                        The -e argument allows you to set environment variables.
+
+docker logs <container-id>              Retrieves output from a particular container. You need this to see the output when running a container in detached mode.
+
+docker login <url> --username <username> --password <password>      Authenticates with your private Docker registry so that you can run other commands against it
+
+docker tag <existing-tag> <new-tag>     Adds a new tag to an existing image. To push an image to your private container registry, you must first tag it with the URL of your registry.
+
+docker push <tag>                       Pushes an appropriately tagged image to your private Docker registry. The image should be tagged with the URL of your registry.
+
+docker exec -it <container-id> sh       Shells into a particular container to inspect and debug it from the inside 
+
+docker stop <container-id>              Stops a particular container locally
+
+docker rm <container-id>                Removes a particular container locally (it must be stopped first)
+
+docker rmi <image-id> --force        Removes a particular image locally (any containers must be removed first). The --force argument removes images even when they have been tagged multiple times.
+
+
+
+# Data management for microservice 
+- docker compose, manage multiple containers at the same time 
+- azuer storage, a service to store file 
+- @azure/storage-blob, npm package to retrieve file 
+- mongodb, no sql type of database
+
+
+# Communicate between microservices 
+- sending with http 
+- using live reload at the application level for faster iteration 
+$ docker compose up --build
+$ docker compose build history
+$ docker compose restart history
+
+- sending indirect messages between microservices with rabbitmq 
+- choosing between using direct and indirect message 
+- Splitting our Dockerfile for development and production
+In chapter 2, we talked about being able to run our microservices in either development mode or production mode.
+
+
+# The road to production 
+- tools 
+
+kubernetes, computing platform that we use to host our microservices in production.
+kubectl, Kubectl is the command-line tool for interacting with a Kubernetes
+azure cli, Azure CLI to configure kubectl for access to our Kubernetes
+
+A pod is the basic unit of computation in Kubernetes
+
+documentation at https://docs.docker.com/desktop/kubernetes/.
+
+deploying our microservices to kubernetes 
+```
+apiVersion: apps/v1
+kind: Deployment                          ①
+metadata:
+  name: video-streaming                   ②
+spec:
+  replicas: 1                             ③
+  selector:
+    matchLabels:
+      app: video-streaming                ④
+  template:                               ⑤
+    metadata:
+      labels:
+        app: video-streaming              ④
+    spec:
+      containers: 
+      - name: video-streaming
+        image: video-streaming:1          ⑥
+        imagePullPolicy: Never            ⑦
+        env:                              ⑧
+        - name: PORT
+          value: "4000"                   ⑨
+---                                       ⑩
+apiVersion: v1
+kind: Service                             ⑪
+metadata:
+  name: video-streaming                   ⑫
+spec:
+  selector:
+    app: video-streaming                  ④
+  type: NodePort                          ⑬
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 4000                    ⑭
+      nodePort: 30000        
+```
+
+Deployments, services, and pods are associated with each other by labels.
+
+$ kubectl config use-context docker-desktop
+$ kubectl config get-contexts
+$ kubectl get pods
+$ kubectl get pods --namespace kube-system
+
+deploy to local 
+$ kubectl apply -f scripts/deploy.yaml
+$ kubectl get deployments
+$ kubectl get services
+
+
+
+# Infrastructure as code 
+- tool 
+terraform 
+
+Terraform is a tool and a language for configuring infrastructures for cloud-based applications.
+
+- terraform apply in our project for the first time, Terraform will have generated its state file terraform.tfstate. 
+
+$ terraform init
+
+
+
+# Testing for microservice 
+- tools 
+jest 
+playwright 
+
+- Playwright is a fantastic all-in-one-tool for testing web pages. It’s simple to install and start using and has a great automated configuration generator, which includes running tests on multiple browsers 
+
+transparently downloads the browsers for you). By default, Playwright runs in headless (not visible) mode, which makes it easy to get working in your CI/CD pipeline
+
+
+
+# Shpping fixtube 
+- FlixTube from a high level. You know the basic purpose of each microservice. You know how to build, run, and test the application on your development computer
+
+main page of FlixTube (the video list) after some videos have been uploaded to it
+
+- One CD pipeline per microservice
+
+
+# Health microservice 
+- logging 
+- error handling 
+- automatic health checks 
+- observabiliity 
+
+
+
+# Pathways to scalability 
+- multi team 
+- independent code responsibility 

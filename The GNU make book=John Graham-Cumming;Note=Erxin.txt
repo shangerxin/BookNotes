@@ -1,20 +1,152 @@
 ﻿The GNU make book=John Graham-Cumming;Note=Erxin
 
 
+# The basic revisited 
+- covers the differences between GNU make versions 3.79.1, 3.81, 3.82, and 4.0
 
+- It’s possible to prevent a definition in a makefile from overriding the environment by specifying the -e (or --environment-overrides) option on the command line of GNU make
 
+- Setting Variables from Outside the Makefile
 
+$ make BUILD_DEBUG=no
 
+- make hammer: the -e switch, which makes the environment take precedence. But that affects every variable
 
+```
+$ export BUILD_DEBUG=no
+$ make
+BUILD_DEBUG is yes
+$ make -e
+BUILD_DEBUG is no
+$ make -e BUILD_DEBUG=maybe
+BUILD_DEBUG is maybe
+```
 
+- Replace the setting of BUILD_DEBUG in the original makefile with this:
 
+ifndef BUILD_DEBUG
+BUILD_DEBUG := yes
+endif
 
+- You can remove a variable from the environment with unexport. 
 
+- a call to $(shell) would be the same as that used in the execution of a rule’s commands.
 
+The environment used by $(shell) is exactly the same as the environment when GNU make was started
 
+- MAKEFLAGS, MFLAGS, and MAKELEVEL. The MAKEFLAGS and MFLAGS variables contain the flags specified on the command line
 
+- Target-Specific Variables
 
+```
+   .PHONY: all foo bar baz
 
+➊ VAR = global scope
 
+   all: foo bar
+   all: ; @echo In $@ VAR is $(VAR)
 
+   foo: ; @echo In $@ VAR is $(VAR)
 
+➋ bar: VAR = local scope
+   bar: baz
+   bar: ; @echo In $@ VAR is $(VAR)
+
+   baz: ; @echo In $@ VAR is $(VAR)
+   
+$ make
+In foo VAR is global scope
+In baz VAR is local scope
+In bar VAR is local scope
+In all VAR is global scope
+```
+
+The all target requires that foo and bar be built, whereas bar depends on baz. 
+
+- pattern specific variable 
+
+The last line ➊ sets VAR to the value starts with f for any target beginning with f
+```
+   .PHONY: all foo bar baz
+
+   VAR = global scope
+
+   all: foo bar
+   all: ; @echo In $@ VAR is $(VAR)
+
+   foo: ; @echo In $@ VAR is $(VAR)
+
+   bar: VAR = local scope
+   bar: baz
+   bar: ; @echo In $@ VAR is $(VAR)
+
+   baz: ; @echo In $@ VAR is $(VAR)
+
+➊ f%: VAR = starts with f
+
+$ make
+In foo VAR is starts with f
+In baz VAR is local scope
+In bar VAR is local scope
+In all VAR is global scope
+```
+
+Obviously, it would be possible to change the value of CPPFLAGS globally by adding the line CPPFLAGS += -Wcomment to the makefile.
+```
+lib1/%.o: CPPFLAGS += -fast
+```
+
+- The MAKE_VERSION variable contains the version number of GNU make
+- .FEATURES default variable, which contains a list of supported features. 
+
+is_feature = $(if $(filter $1,$(.FEATURES)),T)
+
+- The $(eval) function is a powerful GNU make feature that was added in version 3.80
+
+- using boolean values 
+
+Both GNU make’s $(if) function and ifdef construct treat the empty string and undefined variables as false
+
+```
+EMPTY =
+VAR = $(EMPTY)
+$(if $(VAR),$(info if-part),$(info else-part))
+```
+
+- Undefined Variables in Conditionals
+
+```
+VAR =
+ifdef VAR
+$(info VAR is defined)
+else
+$(info VAR is undefined)
+endif
+```
+
+- consistent true value 
+```
+make-truth = $(if $1,T)
+➊ $(call make-truth, )
+   $(call make-truth,true)
+   $(call make-truth,a b c)
+```
+
+- Built-in Logical Operators (GNU make 3.81 and Later)
+
+```
+have_native_and := $(and T,T)
+have_native_or := $(or T,T)
+```
+
+- command detection 
+
+```
+HAVE_CURL to a non-empty string if curl is present:
+
+HAVE_CURL := $(shell which curl)
+
+ifndef HAVE_CURL
+$(error curl is missing)
+endif
+```
