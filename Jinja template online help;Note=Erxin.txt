@@ -33,8 +33,56 @@ configurable syntax
 # API 
 
 # Sandbox 
+- The Jinja sandbox can be used to render untrusted templates.
+
+```
+from jinja2.sandbox import SandboxedEnvironment
+env = SandboxedEnvironment()
+func = lambda: "Hello, Sandbox!"
+env.from_string("{{ func() }}").render(func=func)
+'Hello, Sandbox!'
+env.from_string("{{ func.__code__.co_code }}").render(func=func)
+Traceback (most recent call last):
+  ...
+SecurityError: access to attribute '__code__' of 'function' object is unsafe.
+```
+
 
 # Native python types 
+- The default Environment renders templates to strings. With NativeEnvironment, rendering a template produces a native Python types
+
+```
+env = NativeEnvironment()
+t = env.from_string('{{ x + y }}')
+result = t.render(x=4, y=2)
+print(result)
+6
+print(type(result))
+int
+
+
+t = env.from_string('[{% for item in data %}{{ item + 1 }},{% endfor %}]')
+result = t.render(data=range(5))
+print(result)
+[1, 2, 3, 4, 5]
+print(type(result))
+
+
+class Foo:
+    def __init__(self, value):
+        self.value = value
+
+result = env.from_string('{{ x }}').render(x=Foo(15))
+print(type(result).__name__)
+Foo
+print(result.value)
+15
+```
+
+- reference 
+https://jinja.palletsprojects.com/en/3.1.x/nativetypes/#api
+
+
 
 # Template designer document 
 - synopsis, Jinja can generate any text-based format (HTML, XML, CSV, LaTeX, etc.). A Jinja template doesn’t need to have a specific extension: .html, .xml, or any other extension is just fine
@@ -223,7 +271,7 @@ other whitespace (spaces, tabs, newlines etc.) is returned unchanged
         {%+ if something %}yay{% endif %}
 </div>
 
-    + manually trip whitespaces, add a minus sign (-) to the start or end of a block (e.g. a For tag), a comment, or a variable expression, the whitespaces before or after that block will be removed 
+    + manually trip whitespaces, add a minus sign (-) %- to the start or end of a block (e.g. a For tag), a comment, or a variable expression, the whitespaces before or after that block will be removed 
     
 {% for item in seq -%}
     {{ item }}
@@ -537,6 +585,10 @@ two examples:
 - expressions 
 
 literals 
+```
+42 / 123_456
+Integers are whole numbers without a decimal part. The ‘_’ character can be used to separate groups for legibility.
+```
 
 math 
 
@@ -547,8 +599,15 @@ logics
 other operators 
 
 if expression 
+```
+{% extends layout_template if layout_template is defined else 'default.html' %}
+```
 
-python methods 
+python methods
+```
+{{ page.title.capitalize() }}
+```
+ 
 
 - builtin tests 
 
@@ -608,6 +667,228 @@ mapping()
 
 sequence()
 
+- builtin filters 
+
+abs()
+
+forceescape()
+
+map()
+
+select()
+
+unique()
+
+attr()
+
+format()
+
+max()
+
+selectattr()
+
+upper()
+
+batch()
+
+groupby()
+
+min()
+
+slice()
+
+urlencode()
+
+capitalize()
+
+indent()
+
+pprint()
+
+sort()
+
+urlize()
+
+center()
+
+int()
+
+random()
+
+string()
+
+wordcount()
+
+default()
+
+items()
+
+reject()
+
+striptags()
+
+wordwrap()
+
+dictsort()
+
+join()
+
+rejectattr()
+
+sum()
+
+xmlattr()
+
+escape()
+
+last()
+
+replace()
+
+title()
+
+filesizeformat()
+
+length()
+
+reverse()
+
+tojson()
+
+first()
+
+list()
+
+round()
+
+trim()
+
+float()
+
+lower()
+
+safe()
+
+truncate()
+
+- builtin tests 
+
+List of Builtin Tests
+boolean()
+
+even()
+
+in()
+
+mapping()
+
+sequence()
+
+callable()
+
+false()
+
+integer()
+
+ne()
+
+string()
+
+defined()
+
+filter()
+
+iterable()
+
+none()
+
+test()
+
+divisibleby()
+
+float()
+
+le()
+
+number()
+
+true()
+
+eq()
+
+ge()
+
+lower()
+
+odd()
+
+undefined()
+
+escaped()
+
+gt()
+
+lt()
+
+sameas()
+
+upper()
+
+- list of global functions 
+
+jinja-globals.range([start, ]stop[, step])
+
+jinja-globals.lipsum(n=5, html=True, min=20, max=100)¶
+Generates some lorem ipsum for the template. By default, five paragraphs of HTML are generated with each paragraph between 20 and 100 words. If html is False, regular text is returned.
+
+jinja-globals.dict(\**items)
+A convenient alternative to dict literals. {'foo': 'bar'} is the same as dict(foo='bar').
+
+class jinja-globals.cycler(\*items)
+Cycle through values by yielding them one at a time, then restarting once the end is reached.
+```
+{% set row_class = cycler("odd", "even") %}
+<ul class="browser">
+{% for folder in folders %}
+  <li class="folder {{ row_class.next() }}">{{ folder }}
+{% endfor %}
+{% for file in files %}
+  <li class="file {{ row_class.next() }}">{{ file }}
+{% endfor %}
+</ul>
+```
+
+class jinja-globals.joiner(sep=', ')
+A tiny helper that can be used to “join” multiple sections.
+```
+{% set pipe = joiner("|") %}
+{% if categories %} {{ pipe() }}
+    Categories: {{ categories|join(", ") }}
+{% endif %}
+{% if author %} {{ pipe() }}
+    Author: {{ author() }}
+{% endif %}
+{% if can_edit %} {{ pipe() }}
+    <a href="?action=edit">Edit</a>
+{% endif %}
+```
+
+class jinja-globals.namespace(...)
+Creates a new container that allows attribute assignment using the {% set %} tag:
+```
+{% set ns = namespace() %}
+{% set ns.foo = 'bar' %}
+```
+
+- Extensions 
+i10n, If the i18n Extension is enabled, it’s possible to mark text in the template as translatable. To mark a section as translatable, use a trans block:
+
+```
+{% trans %}Hello, {{ user }}!{% endtrans %}
+
+{% trans user=user.username %}Hello, {{ user }}!{% endtrans %}
+```
+
 
 
 
@@ -619,15 +900,91 @@ https://jinja.palletsprojects.com/en/2.11.x/extensions/#adding-extensions
 
 https://jinja.palletsprojects.com/en/2.11.x/extensions/#i18n-extension
 
+mark a section as translatable, use a trans block:
+```
+{% trans %}Hello, {{ user }}!{% endtrans %}
+
+{% trans book_title=book.title, author=author.name %}
+This is {{ book_title }} by {{ author }}
+{% endtrans %}
+
+{% trans count=list|length %}
+There is {{ count }} {{ name }} object.
+{% pluralize %}
+There are {{ count }} {{ name }} objects.
+{% endtrans %}
+```
+
+context can be passed to the trans tag to use pgettext and npgettext.
+```
+_(message): Alias for gettext.
+
+gettext(message): Translate a message.
+
+ngettext(singluar, plural, n): Translate a singular or plural message based on a count variable.
+
+pgettext(context, message): Like gettext(), but picks the translation based on the context string.
+
+npgettext(context, singular, plural, n): Like npgettext(), but picks the translation based on the context string.
+```
+
+print a translated string like this:
+
+{{ _("Hello, World!") }}
+
+use the format filter.
+
+{{ _("Hello, %(user)s!")|format(user=user.username) }}
+
+
 - expression statement 
+
+If the expression-statement extension is loaded, a tag called do is available that works exactly like the regular variable expression ({{ ... }}); except it doesn’t print anything. 
+```
+{% do navigation.append('a string') %}
+```
 
 - loop controls 
 
+a loop that skips every second item:
+```
+{% for user in users %}
+    {%- if loop.index is even %}{% continue %}{% endif %}
+    ...
+{% endfor %}
+```
+
+a loop that stops processing after the 10th iteration:
+```
+{% for user in users %}
+    {%- if loop.index >= 10 %}{% break %}{% endif %}
+{%- endfor %}
+```
 - debug statement 
+
+<pre>{% debug %}</pre>
+
+Debug Extension is enabled, a {% debug %} tag will be available to dump the current context as well as the available filters and tests. 
+
 
 - with statement 
 
-- autoescape overrides 
+The with statement makes it possible to create a new inner scope. Variables set within this scope are not visible outside of the scope.
+
+```
+{% with %}
+    {% set foo = 42 %}
+    {{ foo }}           foo is 42 here
+{% endwith %}
+foo is not visible here any longer
+```
+
+In particular in newer Jinja versions the following code always refers to the variable a from outside the with block:
+```
+{% with a={}, b=a.attribute %}...{% endwith %}
+```
+
+- autoescape overrides, If you want you can activate and deactivate the autoescaping from within the templates.
 
 {% autoescape true %}
     Autoescaping is active within this block
@@ -638,16 +995,86 @@ https://jinja.palletsprojects.com/en/2.11.x/extensions/#i18n-extension
 {% endautoescape %}
 
 
+
+
 # Integration 
+Flask 
+Django
+Babel, https://babel.readthedocs.io/en/latest/intro.html 
+```
+the project needs a Jinja section in its Babel extraction method mapping file:
+
+[jinja2: **/templates/**.html]
+encoding = utf-8
+```
+
+Pylons, https://pylonsproject.org/
+
+
 
 # Switching from other template engines 
+Django
+Mako
+
+
 
 # Tips and tricks 
+- Without a doubt you should try to remove as much logic from templates as possible. 
+- Jinja provides a feature that can be enabled to escape HTML syntax in rendered templates. 
+- Usually child templates extend from one template that adds a basic HTML skeleton. However it’s possible to put the extends tag into an if tag to only extend from the layout template 
+```
+{% if not standalone %}{% extends 'default.html' %}{% endif -%}
+<!DOCTYPE html>
+<title>{% block title %}The Page Title{% endblock %}</title>
+<link rel="stylesheet" href="style.css" type="text/css">
+{% block body %}
+  <p>This is the page body.</p>
+{% endblock %}
+```
+
+- alternating rows 
+you can use the cycle method on the loop object:
+```
+<ul>
+{% for row in rows %}
+  <li class="{{ loop.cycle('odd', 'even') }}">{{ row }}</li>
+{% endfor %}
+</ul>
+```
 
 # Frequently asked questions 
 
+```
+{% set navigation_bar = [
+    ('/', 'index', 'Index'),
+    ('/downloads/', 'downloads', 'Downloads'),
+    ('/about/', 'about', 'About')
+] -%}
+{% set active_page = active_page|default('index') -%}
+...
+<ul id="navigation">
+{% for href, id, caption in navigation_bar %}
+  <li{% if id == active_page %} class="active"{% endif %}>
+  <a href="{{ href|e }}">{{ caption|e }}</a></li>
+{% endfor %}
+</ul>
+...
+```
 
+- accessing the parent loop, have access to an outer loop it’s possible to alias it:
 
+```
+<table>
+{% for row in table %}
+  <tr>
+  {% set rowloop = loop %}
+  {% for cell in row %}
+    <td id="cell-{{ rowloop.index }}-{{ loop.index }}">{{ cell }}</td>
+  {% endfor %}
+  </tr>
+{% endfor %}
+</table> 
+```
 
 
 

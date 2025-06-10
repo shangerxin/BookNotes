@@ -1,0 +1,221 @@
+C# 12 what's news=Erxin
+
+# New features 
+- Primiary constructors 
+
+create primary constructors in any class and struct. Primary constructors are no longer restricted to record types.
+
+all explicitly declared constructors must call the primary constructor using this() syntax. Adding a primary constructor to a class prevents the compiler from declaring an implicit parameterless constructor. 
+
+
+```
+public readonly struct Distance(double dx, double dy)
+{
+    public readonly double Magnitude { get; } = Math.Sqrt(dx * dx + dy * dy);
+    public readonly double Direction { get; } = Math.Atan2(dy, dx);
+}
+
+//none mutable properties 
+public struct Distance(double dx, double dy)
+{
+    public readonly double Magnitude => Math.Sqrt(dx * dx + dy * dy);
+    public readonly double Direction => Math.Atan2(dy, dx);
+
+    public void Translate(double deltaX, double deltaY)
+    {
+        dx += deltaX;
+        dy += deltaY;
+    }
+
+    public Distance() : this(0,0) { }
+}
+
+//dependency injection 
+public interface IService
+{
+    Distance GetDistance();
+}
+
+public class ExampleController(IService service) : ControllerBase
+{
+    [HttpGet]
+    public ActionResult<Distance> Get()
+    {
+        return service.GetDistance();
+    }
+}
+```
+
+- Collection expressions 
+
+Array types, such as int[].
+System.Span<T> and System.ReadOnlySpan<T>.
+Types that support collection initializers, such as System.Collections.Generic.List<T>.
+
+```
+// Create an array:
+int[] a = [1, 2, 3, 4, 5, 6, 7, 8];
+
+// Create a list:
+List<string> b = ["one", "two", "three"];
+
+// Create a span
+Span<char> c  = ['a', 'b', 'c', 'd', 'e', 'f', 'h', 'i'];
+
+// Create a jagged 2D array:
+int[][] twoD = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+
+// Create a jagged 2D array from variables:
+int[] row0 = [1, 2, 3];
+int[] row1 = [4, 5, 6];
+int[] row2 = [7, 8, 9];
+int[][] twoDFromVariables = [row0, row1, row2];
+
+int[] row0 = [1, 2, 3];
+int[] row1 = [4, 5, 6];
+int[] row2 = [7, 8, 9];
+int[] single = [.. row0, .. row1, .. row2];
+foreach (var element in single)
+{
+    Console.Write($"{element}, ");
+}
+// output:
+// 1, 2, 3, 4, 5, 6, 7, 8, 9,
+```
+
+- Inline arrays,  use them transparently when they're exposed as System.Span<T> or System.ReadOnlySpan<T> objects from runtime APIs 
+
+Inline arrays enable a developer to create an array of fixed size in a struct type. A struct with an inline buffer should provide performance characteristics similar to an unsafe fixed size buffer.
+
+```
+[System.Runtime.CompilerServices.InlineArray(10)]
+public struct Buffer
+{
+    private int _element0;
+}
+
+var buffer = new Buffer();
+for (int i = 0; i < 10; i++)
+{
+    buffer[i] = i;
+}
+
+foreach (var i in buffer)
+{
+    Console.WriteLine(i);
+}
+```
+
+- Optinal prameters in lambda expressions 
+
+- You can now define default values for parameters on lambda expressions.
+
+- ref readonly parameters, C# added in parameters as a way to pass readonly references.   
+
+- Alias any types, using alias directive to alias any type, not just named types. 
+
+using Point = (int x, int y);
+
+
+- Experimental attribute,  marked with the System.Diagnostics.CodeAnalysis.ExperimentalAttribute to indicate an experimental feature. 
+
+```
+Copy
+// This is not legal.
+// Error CS9132: Using alias cannot be a nullable reference type
+using X = string?;
+
+// This is legal.
+// The alias is to `List<...>` which is itself not a nullable
+// reference type itself, even though it contains one as a type argument.
+using Y = System.Collections.Generic.List<string?>;
+
+
+
+using Signal signal = GetCancellationSignal();
+
+WriteIntroduction();
+
+try
+{
+    Coordinates? lastObservedCoordinates = null;
+
+    await foreach (var coordinate
+        in GetCoordinateStreamAsync(signal.Token))
+    {
+        (Coordinates coordinates, GeoCode geoCode) = coordinate;
+
+        // Use extension method, that extends the aliased type.
+        var cardinalizedCoordinates = coordinates.ToCardinalizedString();
+
+        // Write UFO coordinate details to the console.
+        WriteUfoCoordinateDetails(coordinates, cardinalizedCoordinates, geoCode);
+
+        // Write travel alert, including distance traveled.
+        WriteUfoTravelAlertDetails(coordinates, lastObservedCoordinates);
+
+        await Task.Delay(UfoSightingInterval, signal.Token);
+
+        lastObservedCoordinates = coordinates;
+    }
+}
+catch (Exception ex) when (Debugger.IsAttached)
+{
+    // https://x.com/davidpine7/status/1415877304383950848
+    _ = ex;
+    Debugger.Break();
+}
+```
+
+- Interceptors 
+
+An interceptor is a method that can declaratively substitute a call to an interceptable method with a call to itself at compile time
+
+Interceptors provide a limited facility to change the semantics of existing code by adding new code to a compilation, for example in a source generator.
+
+
+```
+using System;
+using System.Runtime.CompilerServices;
+
+var c = new C();
+c.InterceptableMethod(1); // L1: prints "interceptor 1"
+c.InterceptableMethod(1); // L2: prints "other interceptor 1"
+c.InterceptableMethod(2); // L3: prints "other interceptor 2"
+c.InterceptableMethod(1); // prints "interceptable 1"
+
+class C
+{
+    public void InterceptableMethod(int param)
+    {
+        Console.WriteLine($"interceptable {param}");
+    }
+}
+
+// generated code
+static class D
+{
+    [InterceptsLocation(version: 1, data: "...(refers to the call at L1)")]
+    public static void InterceptorMethod(this C c, int param)
+    {
+        Console.WriteLine($"interceptor {param}");
+    }
+
+    [InterceptsLocation(version: 1, data: "...(refers to the call at L2)")]
+    [InterceptsLocation(version: 1, data: "...(refers to the call at L3)")]
+    public static void OtherInterceptorMethod(this C c, int param)
+    {
+        Console.WriteLine($"other interceptor {param}");
+    }
+}
+```
+
+A method indicates that it is an interceptor by adding one or more [InterceptsLocation] attributes. These attributes refer to the source locations of the calls it intercepts.
+
+[InterceptsLocation] attributes included in source are emitted to the resulting assembly, just like other custom attributes.
+
+File-local declarations of this type (file class InterceptsLocationAttribute) are valid and usages are recognized by the compiler when they are within the same file and compilation. 
+
+Conflicting interceptors
+If more than one interceptor refers to the same location, it is a compile-time error.
+

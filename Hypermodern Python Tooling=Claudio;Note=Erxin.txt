@@ -450,8 +450,300 @@ $ pipx inject poetry <plugin>
 - deploying environments with the bundle plugin 
 $ pipx inject poetry poetry-plugin-bundle
 
+$ $ poetry bundle venv --python=/usr/bin/python3 --only=main app
+
+
+
+# Testing and stgatic analysis 
+# Testing with pytest 
+- write a test 
+
+```
+def main():
+    with urllib.request.urlopen(API_URL) as response:
+        data = json.load(response)
+
+    print(data["title"], end="\n\n")
+    print(textwrap.fill(data["extract"]))
+    
+    
+import subprocess
+import sys
+
+def test_output():
+    args = [sys.executable, "-m", "random_wikipedia_article"]
+    process = subprocess.run(args, capture_output=True, check=True)
+    assert process.stdou
+```
+
+- managing test dependencies 
+
+```
+[project.optional-dependencies]
+tests = ["pytest>=8.1.1"]
+
+# install pytest 
+$ uv pip install -e ".[tests]"
+
+$ uv pip compile --extra=tests pyproject.toml -o dev-requirements.txt
+$ uv pip sync dev-requirements.txt
+$ uv pip install -e . --no-deps
+```
+
+- run test 
+$ py -m pytest
+
+- Fixtures are functions declared with the pytest.fixture decorator:
+
+@pytest.fixture
+def file():
+    return io.StringIO()
+
+-  can instruct pytest to create a fixture only once during the entire test session, using a session-scoped fixture:
+
+@pytest.fixture(scope="session")
+def httpserver():
+    ...
+    
+- The pytest-xdist plugin spawns a worker process on each processor and distributes tests randomly across the workers. The randomization also helps detect hidden dependencies between your tests.
+
+$ py -m pytest -n auto
+
+
+
+# Measuring coverage with coverage.py 
+- Python’s standard library includes a coverage tool in the trace module. Let’s use it to measure test coverage for the random-wikipedia-article
+- Coverage.py is a mature and widely used code coverage tool for Python. 
+
+you compile an aggregated report from the data with coverage report. Each command has a table in pyproject.toml under tool.coverage.
+
+$ py -m coverage run -m pytest
+
+- show the coverage report in the terminal:
+
+$ py -m coverage repor
+
+- Coverage.py also supports branch coverage, which looks at all the transitions between statements in your code and measures the percentage of those traversed during the tests. You should always enable it, as it’s more precise than statement coverage:
+```
+[tool.coverage.run]
+branch = true
+```
+
+$ py -m coverage run -m pytest
+$ py -m coverage report
+
+- testing multiple environment 
+
+```
+[project]
+requires-python = ">=3.7"
+```
+
+- restore lower bounds using the older versions of the packages 
+
+```
+importlib-metadata>=6.7.0; python_version < '3.8'
+
+# Update the __init__.py module to fall back to the backport:
+
+if sys.version_info >= (3, 8):
+    from importlib.metadata import metadata
+else:
+    from importlib_metadata import metadata
+```
+
+- Re-run Coverage.py with the --append option and confirm you have full test coverage:
+
+$ py -m coverage run --append -m pytest
+$ py -m coverage report
+
+
+- measure in subprocesses  
+
+Install a _coverage.pth file into the site-packages directory of your environment, with the following contents:
+
+```
+import coverage; coverage.process_startup()
+```
+
+set the environment variable 
+
+COVERAGE_PROCESS_START. On Linux and macOS, use this syntax:
+
+$ export COVERAGE_PROCESS_START=pyproject.toml
+
+On Windows, use the following syntax instead:
+
+> $env:COVERAGE_PROCESS_START = 'pyproject.toml'
+
+Without parallel mode, the main process overwrites the coverage data from the subprocess, because both use the same data file.
+
+- Configuring Coverage.py in pyproject.toml 
+
+```
+[tool.coverage.run]
+source = ["random_wikipedia_article", "tests"]
+branch = true
+parallel = true
+omit = ["*/__main__.py"]  # avoid this if you can
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
+```
 
 
 
 
+# Automation with Nox 
+- install 
 
+$ pipx install --python=3.12 nox
+
+- A session for running the test suite
+
+```
+import nox
+
+@nox.session
+def tests(session):
+    session.install(".", "pytest")
+    session.run("pytest")
+    
+session.install(".", "pytest", "pytest-httpserver", "factory-boy")
+```
+
+- can install your dependencies from a requirements file:
+
+session.install("-r", "dev-requirements.txt")
+session.install(".", "--no-deps")
+
+- working with sessions 
+
+noxfile.py may accumulate a number of sessions. The --list option gives you a quick overview of them. 
+
+- Running tests across multiple Python versions
+```
+@nox.session(python=["3.12", "3.11", "3.10"])
+def tests(session):
+    session.install(".[tests]")
+    session.run("pytest")
+```
+  
+
+narrow sessions by Python version using the option --python:
+
+$ nox --python 3.12
+nox > Running session tests-3.12
+...
+
+
+- automating coverage 
+
+```
+@nox.session(python=["3.12", "3.11", "3.10"])
+def tests(session):
+    session.install(".[tests]")
+    session.run("coverage", "run", "-m", "pytest", *session.posargs)
+```
+
+- Reporting the code coverage
+ 
+@nox.session
+def coverage(session):
+    session.install("coverage[toml]")
+    if any(Path().glob(".coverage.*")):
+        session.run("coverage", "combine")
+    session.run("coverage", "report")
+    
+- Testing the project with multiple Django versions
+@nox.session
+@nox.parametrize("django", ["5.*", "4.*", "3.*"])
+def tests(session, django):
+    session.install(".", "pytest-django", f"django=={django}")
+    session.run("pytest")
+    
+@nox.session
+@nox.parametrize("a", ["1.0", "0.9"])
+@nox.parametrize("b", ["2.2", "2.1"])
+def tests(session, a, b):
+    print(a, b)  # all combinations of a and b
+    
+- Using a constraints file to lock session dependencies
+@nox.session(python=["3.12", "3.11", "3.10"])
+def tests(session):
+    session.install("-c", "constraints.txt", ".[tests]")
+    ...
+
+@nox.session
+def coverage(session):
+    session.install("-c", "constraints.txt", "coverage[toml]")
+    ...
+    
+- invoking poetry install with Nox
+
+alternative approach to using Nox with Poetry projects. The nox-poetry package is an unofficial plugin for Nox that lets you write sessions without worrying about locking, using plain session.install
+
+
+
+# Linting with Ruff and Pre-commit 
+- In 1978, Stephen C. Johnson, a researcher at Bell Labs, wrote a program that could detect a number of bugs and obscurities in C code. He named the program after the fluff on your pullover when you take it out of the washing machine: Lint. 
+
+Install Ruff globally with pipx:
+
+$ pipx install ruff
+
+$ pipx run ruff check --extend-select B
+
+$ ruff check
+
+command ruff linter:
+
+$ ruff linter
+
+- A Nox session for linting with pre-commit
+nox.options.sessions = ["lint", "tests"]
+
+@nox.session
+def lint(session):
+    options = ["--all-files", "--show-diff-on-fail"]
+    session.install("pre-commit")
+    session.run("pre-commit", "run", *options, *session.posargs)
+    
+-  run autopep8 on the code example with default settings:
+
+$ pipx run autopep8 example.py
+
+- APF formatter borrows its design and sophisticated formatting algorithm from clang-format. The name YAPF stands for “Yet Another Python Formatter.”
+
+
+
+# Using types for safety and inpsection 
+- duck typing: “If it looks like a duck and quacks like a duck, then it must be a duck.”
+
+- type-checker playgrounds:
+
+mypy Playground
+
+Pyright Playground
+
+Pyre Playground
+
+- generitic typing 
+
+type over which you can iterate in a for loop in other words, any iterable:
+
+from collections.abc import Iterable
+
+def first[T](values: Iterable[T]) -> T:
+    for value in values:
+        return value
+    raise ValueError("no values")
+    
+- Let’s inspect the type annotations of the Article class from in runtime 
+
+>>> import inspect
+>>> inspect.get_annotations(Article)
+{'title': <class 'str'>, 'summary': <class 'str'>}
+
+- statistic type checking with mypy 
