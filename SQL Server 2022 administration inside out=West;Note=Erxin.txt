@@ -1,0 +1,948 @@
+SQL Server 2022 administration inside out=West;Note=Erxin
+
+# Install 
+- SQL Server is fully supported on Red Hat Enterprise Linux (RHEL), SUSE Linux Enterprise Server (SLES), Ubuntu
+- The Data Migration Assistant tool performs an Azure SQL Database
+-  improvements by visiting https://learn.microsoft.com/analysis-services/what-s-new-in-sql-server-analysis-services.
+- features, see https://learn.microsoft.com/sql/reporting-services/what-s-new-in-sql-server-reporting-services-ssrs.
+- The SQLCMD utility is used to run T-SQL statements, stored procedures, or script files, using an ODBC connection to a SQL Server instance.
+- mssql-cli include:
+
+IntelliSense for T-SQL
+Syntax highlighting
+Multi-line editing
+Support for configuration files
+
+mssql-cli at https://learn.microsoft.com/sql/tools/mssql-cli.
+- The Bulk Copy Program (BCP), introduced in 1992 with the release of the very first edition of SQL Server
+
+Use sp_tableoption to set table lock on bulk load (TABLOCK) to ON.
+
+SQL Server, available at https://learn.microsoft.com/sql/tools/sqlcmd-utility.
+
+- Server 2022 Configuration Manager on the Windows Start menu under Apps 
+
+- SQL Server Management Studio (SSMS) is the de facto standard SQL Server database development and management tool. 
+
+Server Registration feature within SSMS, select View > Registered Servers or press Ctrl+Alt+G.
+IntelliSense is a ubiquitous Microsoft technology found in many of its products to help with code completion
+Insert Snippet options. You can find these by choosing Edit > IntelliSense > Insert Snippet. You can also double-click the Function folder to see the available snippets
+Activity Monitor window, right-click the SQL Server instance in the Object Explorer pane and select Activity Monitor
+you can select a database, right-click, and choose Generate Scripts to open the familiar Generate Scripts
+Extend the features of Azure data studio,  Extensions pane. To access the Extensions pane, select View > Extensions
+
+- Query tuning assistant 
+official documentation at https://learn.microsoft.com/sql/relational-databases/performance/upgrade-dbcompat-using-qta.
+
+
+
+# Introduction to database server components 
+- memory 
+- central processing unit 
+- data storage 
+
+IOPS. Short for input/output operations per second. IOPS is the number of reads and writes per second.
+
+persistent memory at https://docs.pmem.io/.
+
+- RAID 
+
+RAID 1+0. With RAID 1+0, also called RAID 10, two drives are configured in a mirror (RAID 1) for redundancy, and then each mirror is striped together (RAID 0) for performance reasons
+
+RAID 0+1. With RAID 0+1, the drives are striped first (RAID 0), and then mirrored across the entire RAID 0 set (RAID 1).
+Usable space for RAID 0+1 and 1+0 is 50 percent of the raw capacity. To ensure full recovery from failure in a RAID 1+0 or 0+1 configuration
+
+RAID 5+0. With RAID 5+0, also called RAID 50, three or more drives are configured in a RAID 5 set, which is then striped (with no parity) with at least one other RAID 5 set of the same configuration.
+
+RAID 1+0 offers the best performance and redundancy.
+
+- production environment.
+
+To learn more, see https://learn.microsoft.com/sql/relational-databases/logs/control-transaction-durability.
+
+- Kerberos is the default authentication protocol used in a Windows AD domain; it is the replacement of NT LAN Manager (NTLM).
+
+- A virtual CPU (vCPU) maps to a logical core, but in practice, the time slots are shared evenly over each core in the physical 
+
+- you can configure mixed extents on a user database by using the following command:
+
+ALTER DATABASE <dbname> SET MIXED_PAGE_ALLOCATION ON;
+
+- The transaction log file usually has the file extension .ldf.
+
+SQL Server uses a technique called write-ahead logging (WAL), which ensures that no changes are written to the data file before the necessary log record is written to the drive in a permanent
+
+- Checkpoints can be activated in a number of different scenarios. The most common is the automatic checkpoint, which is governed by the recovery interval setting
+- SQL Server 2019 introduced accelerated database recovery (ADR)
+
+Persisted version store (PVS). This works in a similar way to read committed snapshot isolation (RCSI), recording a previously committed version
+
+Logical revert. If a long-running transaction is aborted, the versioned rows created by the PVS can be safely ignored by concurrent transactions.
+
+Secondary log stream (sLog). The sLog is a low-volume in-memory log stream that records non-versioned operations 
+
+Cleaner. This asynchronous process periodically cleans page versions that are no longer required.
+
+- too many tempdb data files could severely harm SQL Server performance.
+
+- Allocate CPU cores with an affinity mask
+It is possible to assign only certain logical processors to SQL Server. This might be necessary on systems that are used for instance stacking 
+
+- instant file initialization (IFI), a feature enabled by the Perform Volume Maintenance Tasks Active Directory policy, data files can be instantly resized without zeroing-out the underlying file
+
+
+# Deployment
+- recommend you acquire the following before starting SQL Server Setup:
+
+Active Directory (AD) service accounts for the SQL Server service
+
+The latest download of cumulative updates 
+
+A licensing decision around the number of processors and the edition to buy
+
+A secure enterprise digital location for various passwords you will generate
+
+A decision as to whether to install the default or a named instance
+
+A plan for where SQL Server files will go, with each volume formatted to the 64-KB disk unit allocation size
+
+- SQL Server service accounts are the accounts used to handle the communication of services between the OS and SQL Server. Using AD accounts on Windows for these accounts is a best practice. 
+
+- SQL Server installation (the volume letters don’t matter):
+
+Volume C. The OS. Some SQL Server files must be installed here.
+
+Volume E. SQL Server installation files, log files, SQL Server database data files.
+
+Volume F. SQL Server database log files.
+
+Volume G. SQL Server tempdb data files and log files. (Alternatively, use the D: Temporary Storage volume on Azure Windows VMs.)
+
+Volume H. SQL Server backups (if written locally).
+
+- You can install as many as 50 SQL Server instances on a Windows Server, although we obviously do not recommend this
+
+a unique instance name, such as servername\instancename.
+
+- Enabling Mixed Mode (SQL and Windows Authentication Mode) activates SQL Authenticated logins. Be aware that SQL Authentication is not on by default, and isn’t the recommended method of connection.
+
+- Database Engine Configuration page under the new MaxDOP tab. effectively the same as a MAXDOP setting of 0, which allows for unlimited parallelism.
+
+- machine learning feature 
+
+possible for developers to integrate with the R and Python language extensions using standard Transact-SQL (T-SQL) statements.
+
+EXEC sp_configure  'external scripts enabled';
+
+- The PolyBase connector is a much-marketed feature for allowing native connectors for external data sources—even non-Microsoft or non–relational database platforms like Oracle, Teradata, and MongoDB.
+
+- setup from commandline 
+
+.\setup.exe /ConfigurationFile=c:\install\SQL2019_basic.INI
+
+setup.exe /SQLSVCPASSWORD="securepwd" /ConfigurationFile="d:\SQL\PROD_Install.INI"
+
+- Kubernetes support for SQL Server
+Microsoft introduced support for Kubernetes after the release of SQL Server 2017
+
+- biggest attractions of running SQL Server in a container is that your choice of OS does not matter.
+
+
+# Install on Linux 
+- Configure NUMA nodes
+For computers with more than one NUMA node, use the sysctl command to disable auto-NUMA balancing, setting kernel.numa_balancing to 0. 
+...
+
+
+# Provision and configure sql server databases 
+- The following is a sample migration checklist using only a full backup/restore:
+
+Begin the application outage.
+
+Perform a full backup of the database on the old instance.
+
+Copy the database backup file to the new server.
+
+Restore the full backup on the new instance.
+
+Resolve any SQL-authenticated login issues or any other changes necessary before directing database queries to the new instance.
+
+Image This is covered in more detail in Chapter 12, in the section, “Perform common security administration tasks.”
+
+Change the connection strings in applications and/or DNS and/or aliases.
+- following strategy:
+
+Perform a full backup of the database on the old instance.
+
+Copy the database backup file to the new server.
+
+Restore the full backup using the WITH NORECOVERY option on the new instance.
+
+Begin the application outage.
+
+Take a differential backup and then a log backup of the database on the old instance.
+
+Copy the differential backup file and the log backup file to the new server.
+
+Restore the differential backup file WITH NORECOVERY on the new instance.
+
+Restore the transaction log backup WITH RECOVERY on the new instance.
+
+Resolve any SQL-authenticated login issues or any other changes necessary before directing database queries to the new instance.
+
+Change the connection strings in applications, DNS, and/or aliases.
+
+End the application outage.
+
+- Detaching, copying, and attaching database files also accomplishes the goal of placing the database on a new instance. It is relatively straightforward to disassociate (detach) the files from the old SQL Server, copy the files to the new instance, and then attach the files to the new SQL Server.
+
+Taking a database offline is an excellent intermediate administrative step before you DETACH or DROP a database
+
+- move data with, A BACPAC file is an XML format file that contains the database schema and row data, allowing for the migration of databases, ideally at the start of a development/migration phase
+
+- Alternatively, you can use the ALTER DATABASE command to change the COMPATIBILITY_LEVEL setting.
+
+- Move databases within instances
+
+ALTER DATABASE [database_name] SET OFFLINE;
+
+;exclusive access to the database, you can use the ROLLBACK IMMEDIATE syntax t
+
+ALTER DATABASE [database_name] SET OFFLINE WITH ROLLBACK IMMEDIATE;
+
+ALTER DATABASE [database_name] SET ONLINE;
+
+- single user mode 
+
+By default, all databases are in MULTI_USER mode. Sometimes, it is necessary to gain exclusive access to a database with a single connection, typically in SQLCMD or in an SSMS query window.
+
+ALTER DATABASE [database_name] SET SINGLE_USER;
+
+
+# Understand the table features 
+- [var]char columns can store strings from double-byte character sets, and can use UTF-8 collations, which may require 2 or 4 bytes to store one character. The following subsection includes full coverage of UTF-8 collations.
+
+n[var]char columns can store characters in the Unicode supplementary character range, which may require 4 bytes.
+
+use a UTF-8 collation, the encoding is automatically updated.
+
+using UTF-16 encoding (with the nchar and nvarchar data types) is highly recommended.
+
+- collation test 
+```
+-- If COUNT > 0, then there are rows whose data size will be larger than the
+-- current column width supports
+SELECT COUNT(*)
+FROM dbo.CollationTest
+WHERE DATALENGTH(
+    CAST(CAST(val AS VARCHAR(32))
+        COLLATE Latin1_General_100_CS_AS_SC_UTF8 AS VARCHAR(32))) > 8;
+```
+
+- max instead of a value between 1 and 8,000 bytes (for varchar) or between 1 and 4,000 byte-pairs (for nvarchar), the storage limit increases to 2 GB. If the column’s value exceeds 8,000 bytes, the data is not stored in the table’s storage structure.
+
+T-SQL statement enables the large_value_types_out_of_row option for the PurchaseOrders table in the WideWorldImporters 
+
+- time 
+
+date. If you need to store only a date without time or time zone information
+
+datetimeoffset. This data type provides the same precision and range as datetime2 but includes an offset value in hours and minutes to indicate the difference from UTC
+
+time. This data type stores a time-of-day value consisting of hours, minutes, seconds, and fractional seconds, with a precision up to 100 nanoseconds.
+
+datetime data type despite the availability of the better datetime2 type, we also observe the common use of the lower-precision functions CURRENT_TIMESTAMP, GETDATE(), and GETUTCDATE()
+
+replacement functions available in SYSDATETIME(), SYSDATETIMEOFFSET(), and SYSUTCDATETIME()
+
+- SQL Server provides the binary data type to store fixed-length binary values, and varbinary to store variable-length binary values. 
+
+both data types, you specify the number of bytes that will be stored, up to 8,000. If you need to store more than 8,000 bytes, you can specify varbinary(max). This will allow up to 2 GB to be stored
+
+- The xml data type is designed to store XML documents or snippets. just storing the data as plain XML in an xml data type can alleviate the column sprawl. 
+
+- JSON data from the CustomFields column using the JSON_QUERY() function.
+
+- The name timestamp is the same as the SQL ISO standard timestamp, but it does not work according to the ISO standard.
+
+rowversion, keep the following restrictions in mind:
+
+A table can have only a single rowversion column. 
+
+You cannot specify a value for the rowversion column in INSERT or UPDATE statements. 
+
+rowversion values are not unique across databases or instances.
+
+Duplicate rowversion values can exist in a single database if a new table is created by using the SELECT INTO syntax. The new table’s rowversion values will be the same as those of the source table. This behavior might be desired when, for example, modifying a table’s schema by creating a new table and copying all the data into it. 
+
+Many object-relational mappers (ORMs), including Entity Framework, support using a rowversion column type to implement optimistic concurrency.
+
+- The uniqueidentifier data type stores a 16-byte value known as a globally unique identifier (GUID). SQL Server can generate GUIDs using one of two functions: NEWID() and NEWSEQUENTIALID().
+
+generated using NEWID() were originally generated by incorporating a system’s network interface card (NIC) MAC address
+
+A NIC change can occur with regularity on virtualized and PaaS platforms. With NEWSEQUENTIALID(), you will eventually experience fragmentation because the sequential GUIDs will have a smaller value than the previous sequence after a restart.
+
+- The hierarchyid data type enables an application to store and query hierarchical data in a tree structure.
+
+- Default constraints are useful in a number of scenarios, most notably when adding a new non-nullable column to a table with existing data.      
+
+```
+ALTER TABLE [Application].People
+    ADD PrimaryLanguage nvarchar(50) NOT NULL
+        CONSTRAINT DF_Application_People_PrimaryLanguage DEFAULT 'English';
+```
+
+- A sequence is a database object that generates numeric values in a specified order. Unlike the new SQL Server 2022 function GENERATE_SERIES()
+
+
+- Using NEXT VALUE FOR multiple times for the same sequence in the same statement will result in only one value per row being used.
+
+-= graph tables
+In SQL Server, you store graph data in two table types: node and edge tables.
+
+···
+CREATE TABLE dbo.People (
+     PersonId int NOT NULL PRIMARY KEY CLUSTERED,
+     FirstName nvarchar(50) NOT NULL,
+     LastName nvarchar(50) NOT NULL
+) AS NODE;
+CREATE TABLE dbo.Relationships (
+    RelationshipType nvarchar(50) NOT NULL,
+    -- Two people can only be related once
+    CONSTRAINT UX_Relationship UNIQUE ($from_id, $to_id),
+    CONSTRAINT EC_People_ConnectsTo_People CONNECTION (dbo.People TO dbo.People)
+) AS EDGE;
+···
+
+Need to explicitly define edges as tables. Graphs model pairwise relations between entities (the nodes). 
+
+Polymorphism is the ability to find a node of any type connected to a specified starting node. In SQL Server, a workaround for graph models with few node and edge types
+
+- Large objects (LOBs), including XML and binary large objects (BLOBs), can be used to store files. 
+
+three requirements to take advantage of FILESTREAM
+
+FILESTREAM’s performance benefits kick in when the average BLOB size is 1 MB or larger
+ 
+BLOBs exceed 2 GB in size, you will need to use FILESTREAM. The varbinary(max) data type supports a maximum BLOB size of 2 GB
+
+FILESTREAM BLOBs are stored in the file system, they are managed by the Database Engine
+
+- FileTable makes it possible to access BLOBs managed by the Database Engine using traditional file share semantics. 
+
+- Table partitioning occurs when you design a table that stores data from a single logical entity in physically separate structures. 
+
+Horizontal partitioning is often applied to relational data warehouses. A common data warehouse operation is loading a significant amount of data
+
+Vertical partitioning makes sense when a single table would ordinarily contain many columns, some of which might contain large values 
+
+- access Hadoop with PolyBase in SQL Server
+
+On Windows, see https://learn.microsoft.com/sql/relational-databases/polybase/polybase-installation.
+
+On Linux (Red Hat, Ubuntu, or SUSE), see https://learn.microsoft.com/sql/relational-databases/polybase/polybase-linux-setup.
+
+SQL Server for data virtualization or loading data using PolyBase. The most common use cases are loading data with bulk INSERT or OPENROWSET
+
+nstallation and running of PolyBase.
+
+sys.external_data_sources. Used to identify external data sources and to give visibility into related metadata.
+sys.external_file_formats. Used to obtain details on the external file format for the sources.
+sys.external_tables. Contains a row for each external table in the current database. 
+
+```
+-- Create database scoped credential
+IF NOT EXISTS(SELECT * FROM sys.credentials WHERE name = 'sqlserver2022parquets3')
+BEGIN
+ CREATE DATABASE SCOPED CREDENTIAL sqlserver2022parquets3 --PolyBaseS3
+ WITH IDENTITY = 'S3 Access Key',
+ SECRET = '######';
+END
+-- Create external source
+-- Can use URL not just IP address
+CREATE EXTERNAL DATA SOURCE sqlserver2022parquetdc
+WITH
+(
+    LOCATION = 's3://sqlserver2022parquet.s3.us-east-1.amazonaws.com/',
+    CREDENTIAL = sqlserver2022parquets3
+);
+-- Create external file format
+CREATE EXTERNAL FILE FORMAT ParquetFileFormat WITH (FORMAT_TYPE = PARQUET);
+GO
+-- Create external table
+-- Location below specifies folder and filename
+CREATE EXTERNAL TABLE Warehouse.ColdRoomTemperaturesParquet (
+    [ColdRoomTemperatureID] [bigint] ,
+    [ColdRoomSensorNumber] [int] ,
+    [RecordedWhen] [datetime2](7) ,
+    [Temperature] [decimal](10, 2) ,
+    [ValidFrom] [datetime2](7) ,
+    [ValidTo] [datetime2](7)  )
+WITH (LOCATION = '/output/ColdRoomTemperatures.parquet',
+DATA_SOURCE = sqlserver2022parquetdc,
+FILE_FORMAT = ParquetFileFormat);
+GO
+-- Query data directly from S3 storage with OPENROWSET
+SELECT  TOP 1 *
+FROM    OPENROWSET
+        (   BULK 'output/ColdRoomTemperatures.parquet',
+            FORMAT       = 'PARQUET',
+            DATA_SOURCE  = 'sqlserver2022parquetdc'
+        ) AS [cc];
+-- Can query the external table directly as well
+SELECT  TOP 1 *
+FROM Warehouse.ColdRoomTemperaturesParquet;
+```
+
+
+```
+-- Create database scoped credential
+IF NOT EXISTS(SELECT * FROM sys.credentials WHERE name = 'sqlserver2022mysql')
+BEGIN
+ CREATE DATABASE SCOPED CREDENTIAL sqlserver2022mysql
+ WITH IDENTITY = 'sqlzelda',
+ SECRET = '<Strong Password>';
+END
+-- Create external source
+CREATE EXTERNAL DATA SOURCE sqlserver2022mysqldc
+WITH ( LOCATION = 'odbc://localhost:3306',
+CONNECTION_OPTIONS = 'Driver={MySQL ODBC 8.0 ANSI Driver};
+ServerNode = localhost:3306',
+--PUSHDOWN = ON,
+CREDENTIAL = sqlserver2022mysql );
+-- Create external table
+-- Location below specifies folder and filename
+CREATE EXTERNAL TABLE Warehouse.ColdRoomTemperatureMySQL
+(
+    ColdRoomTemperatureID INT NOT NULL,
+    ColdRoomSensorNumber INT NOT NULL,
+    Temperature DECIMAL(10, 2) NOT NULL--,
+)
+ WITH
+ (
+    LOCATION='coldroom.coldroomtemperatures',
+    DATA_SOURCE = sqlserver2022mysqldc
+ );
+GO
+-- Add index to external table
+CREATE STATISTICS stx_coldroomsensornumber
+ON Warehouse.ColdRoomTemperatureMySQL (ColdRoomSensorNumber)
+WITH FULLSCAN;
+-- Can query the external table directly as well
+SELECT TOP 1 ColdRoomTemperatureID
+```
+
+
+# SQL server management 
+- Repair database data file corruption DBCC CHECKDB option for REPAIR_ALLOW_DATA_LOSS
+
+- recover from database transaction log file corruption 
+
+ALTER DATABASE DemoDb SET EMERGENCY, SINGLE_USER;
+ALTER DATABASE DemoDb REBUILD LOG
+ON (NAME= DemoDb_Log, FILENAME = 'F:\DATA\DemoDb_new.ldf');
+ALTER DATABASE DemoDb SET MULTI_USER;
+
+- measure page splits in aggregate on Windows Server, as shown here:
+
+Click here to view code image
+
+SELECT * FROM sys.dm_os_performance_counters WHERE counter_name ='Page Splits/sec';
+
+- Monitor index fragmentation
+You can find the extent to which an index is fragmented by interrogating the sys.dm_db_index_physical_stats dynamic management function (DMF).
+
+```
+USE WideWorldImporters;
+SELECT
+DB = db_name(s.database_id)
+, [schema_name] = sc.name
+, [table_name] = o.name
+, index_name = i.name
+, s.index_type_desc
+, s.partition_number -- if the object is partitioned
+, avg_fragmentation_pct = s.avg_fragmentation_in_percent
+, s.page_count -- pages in object partition
+FROM sys.indexes AS i
+CROSS APPLY sys.dm_db_index_physical_stats
+(DB_ID(),i.object_id,i.index_id, NULL, NULL) AS s
+INNER JOIN sys.objects AS o ON o.object_id = s.object_id
+INNER JOIN sys.schemas AS sc ON o.schema_id = sc.schema_id
+WHERE i.is_disabled = 0
+AND o.object_id = OBJECT_ID('Sales.Orders');
+```
+
+- Performing an INDEX REBUILD operation on a rowstore index (clustered or nonclustered) physically re-creates the index B-tree leaf level. 
+
+- update the statistics for an individual table is as follows:
+
+UPDATE STATISTICS [Sales].[Invoices];
+
+- increase concurrency of shrink operations, by allowing DBCC SHRINKDATABASE and DBCC SHRINKFILE to patiently wait for locks
+
+- use extended events to capture deadlocks 
+
+T-SQL. Let’s query one of the default Extended Events sessions, system_health, for deadlocks.
+
+```
+DECLARE @XELFile nvarchar(256), @XELFiles nvarchar(256)
+           , @XELPath nvarchar(256);
+--Get the folder path where the system_health .xel files are
+SELECT     @XELFile =       CAST(t.target_data as XML)
+          .value('EventFileTarget[1]/File[1]/@name', 'NVARCHAR(256)')
+FROM sys.dm_xe_session_targets t
+     INNER JOIN sys.dm_xe_sessions s
+      ON s.address = t.event_session_address
+WHERE s.name = 'system_health' AND t.target_name = 'event_file';
+--Provide wildcard path search for all currently retained .xel files
+SELECT @XELPath =
+    LEFT(@XELFile, Len(@XELFile)-CHARINDEX('\',REVERSE(@XELFile)))
+SELECT @XELFiles = @XELPath + '\system_health_*.xel';
+--Query the .xel files for deadlock reports
+SELECT DeadlockGraph = CAST(event_data AS XML)
+     , DeadlockID = Row_Number() OVER(ORDER BY file_name, file_offset)
+FROM sys.fn_xe_file_target_read_file(@XELFiles, null, null, null) AS F
+WHERE event_data like '<event name="xml_deadlock_report%';
+```
+
+- Perhaps the most important takeaway from Log Analytics is the ability to add or create solution packages. 
+
+- change developer edition connection limitation for TCP/IP 
+
+Or directly change registry key Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQLServer\SuperSocketNetLib\Tcp 
+Eabled to 1
+
+
+# Automate sql server administration 
+- Database Mail uses Simple Mail Transfer Protocol (SMTP) to send email.
+
+```
+--Find recent unsent emails
+SELECT m.send_request_date, m.recipients, m.copy_recipients, m.blind_copy_recipients
+, m.[subject], m.send_request_user, m.sent_status
+FROM msdb.dbo.sysmail_allitems AS m
+WHERE
+-- Only show recent day(s)
+m.send_request_date > dateadd(day, -3, sysdatetime())
+-- Possible values are sent (successful), unsent (in process),
+-- retrying (failed but retrying), failed (no longer retrying)
+AND m.sent_status <> 'sent'
+ORDER BY m.send_request_date DESC;
+```
+
+- SQL Server Agent is like Windows Task Scheduler (and cron on Linux), but it has several advantages for automating SQL Server tasks
+
+A job can be automatically started based on a number of conditions, including the following:
+
+A predefined schedule or schedules
+
+In response to an alert
+
+As a result of running the dbo.sp_start_job stored procedure in the msdb database
+
+When SQL Server Agent starts
+
+When the host computer is idle
+
+```
+EXEC msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Health Check';
+```
+
+- job step is run to verify that the security has not changed.
+
+A subsystem can be one of the following items:
+
+Operating system (CmdExec)
+
+Replication agent (Snapshot, Log Reader, Distribution, Merge, or Queue Reader)
+
+Analysis Services query or Analysis Services command
+
+SSIS package execution
+
+PowerShell script
+
+Microsoft ActiveX script (discontinued as of SQL Server 2016; replaced with PowerShell script)
+
+To set up a SQL Server Agent job in SSMS, your login must be a member of the sysadmin server role or one of the SQL Server Agent database roles in the msdb database.
+
+
+```
+--Jobs still running
+DECLARE @xp_sqlagent_enum_jobs TABLE (
+id int not null IDENTITY(1,1) PRIMARY KEY,
+Job_ID uniqueidentifier not null,
+Last_Run_Date int not null,
+Last_Run_Time int not null,
+Next_Run_Date int not null,
+Next_Run_Time int not null,
+Next_Run_Schedule_ID int not null,
+Requested_To_Run int not null,
+Request_Source int not null,
+Request_Source_ID varchar(100) null,
+Running int not null,
+Current_Step int not null,
+Current_Retry_Attempt int not null,
+[State] int not null);
+
+INSERT INTO @xp_sqlagent_enum_jobs
+EXEC master.dbo.xp_sqlagent_enum_jobs 1, '';
+
+SELECT j.name
+, state_desc = CASE ej.state
+WHEN 0 THEN 'not idle or suspended'
+WHEN 1 THEN 'Executing'
+WHEN 2 THEN 'Waiting for thread'
+WHEN 3 THEN 'Between retries'
+WHEN 4 THEN 'Idle'
+WHEN 5 THEN 'Suspended'
+WHEN 7 THEN 'Performing completion actions'
+END
+, *
+ FROM msdb.dbo.sysjobs j
+ LEFT OUTER JOIN @xp_sqlagent_enum_jobs ej
+ ON j.job_id = ej.Job_ID
+ORDER BY j.name;
+```
+
+right-click it in SSMS and select Job History on the shortcut menu. History is stored for each job step
+
+- wmi 
+
+You can see an example of a WMI event alert at https://learn.microsoft.com/sql/relational-databases/wmi-provider-server-events/sample-creating-a-sql-server-agent-alert-with-the-wmi-provider.
+
+Image You can reference the WMI provider classes and properties at https://learn.microsoft.com/sql/relational-databases/wmi-provider-server-events/wmi-provider-for-server-events-classes-and-properties.
+
+- databases with the maintenance plan
+
+- Understand backup priority values
+In SSMS, in Object Explorer, expand the Always On High Availability node for the instance of the primary replica, and then the Availability Groups node.
+
+- PowerShell Gallery or directly from https://dbatools.io. This suite has furthered the development of helpful PowerShell cmdlets
+
+
+
+# Develop, deploy and manage data recovery 
+- Ransomware is a kind of malware designed to deny a user or organization access to files on their computer by encrypting them
+
+
+- different backup types:
+
+Full
+
+Differential
+
+Transaction log
+
+- SQL Server recovery models
+
+full
+
+bulk-logged 
+
+simple Only full and differential backups can be created.
+
+ALTER DATABASE <dbname> SET RECOVERY [ FULL | BULK_LOGGED | SIMPLE ];
+
+- A database snapshot is a read-only static view of a database at the point in time the snapshot was created
+
+```
+CREATE DATABASE WideWorldImporters_202211021045 ON
+( NAME = WideWorldImporters, FILENAME =
+'C:\Program Files\Microsoft SQL Server\MSSQL16.MSSQLSERVER\MSSQL\Data\WideWorldImporters
+_data_202211021045.ss' )
+AS SNAPSHOT OF WideWorldImporters;
+
+RESTORE DATABASE WideWorldImporters FROM
+DATABASE_SNAPSHOT = ' WideWorldImporters_202211021045';
+```
+
+- A media set is an ordered collection of a fixed type and number of devices
+
+
+
+# Implementg high availability and disaster recovery 
+- organization’s Recovery Time Objective (RTO) and Recovery Point Objective (RPO).
+- High availability (HA). 
+- Disaster recovery (DR). 
+- Online (ON). Refers to the fact that the secondary replicas can be read-only and allowed for the offloading of heavy-duty report workloads.
+
+- Windows Server Failover Clustering (WSFC) is a Windows Server feature. Each server that will act as a cluster node must have this feature
+- When configuring SQL Server as a cluster resource, you should configure the cluster resources for a single instance in a single cluster resource group. 
+
+-  SQL Server instances might be configured on multiple servers:
+
+Server 1
+
+SQL Instance A. Active
+
+SQL Instance B. Passive
+
+Server 2
+
+SQL Instance A. Passive
+
+SQL Instance B. Active
+
+
+If you run each instance on separate hardware, you’ll need n + 1 cluster nodes, where n is the number of SQL Server instances.
+
+- Windows Server Failover Cluster (WSFC)
+WSFC is the original supported architecture. It relies on the underlying cluster quorum for failover, discussed earlier in this chapter
+
+- With distributed availability groups, you can have an AG treat another AG, typically over a WAN, as a secondary replica. The read-only secondary replicas can be globally dispersed, offloading workloads to regional read-only secondary replicas.
+
+- The REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT setting establishes a minimum number of synchronized replicas, 
+
+- Introduced in SQL Server 2016, automatic seeding handles the data copy, performing a backup using the endpoint as a virtual backup device
+
+- Full, Join Only(manual backup, copy and restore)
+
+- add data base 
+
+ALTER AVAILABILITY GROUP [LinuxAG1] ADD DATABASE [<dbname>];
+
+SELECT * FROM sys.databases WHERE name = '<dbname>';
+SELECT DB_NAME(database_id) AS 'database', synchronization_state_desc
+FROM sys.dm_hadr_database_replica_states;
+
+configuration-only replica are available at https://learn.microsoft.com/sql/linux/sql-server-linux-availability-group-ha#two-synchronous-replicas-and-a-configuration-only-replica.
+
+
+# Security 
+- Windows-authenticated logins take advantage of authentication that’s built into Windows clients to seamlessly pass credentials in a Windows or domain environment.
+- SQL Server Authentication is an authentication method that stores usernames and passwords of server principals in the master database of the SQL Server instance. 
+- The last four authentication types are Azure-based, working in Azure SQL Database, Azure SQL Managed Instance, Azure Synapse, and in SQL Server 2022 on-premises SQL Servers using Azure AD credentials.
+- You can list out the server principals, including the certificate-mapped ones, using the following query:
+
+Click here to view code image
+
+SELECT name, type_desc, is_disabled
+FROM    sys.server_principals
+ORDER BY type_desc;
+
+- important terminology:
+
+Scope. The scope of a principal dictates what kinds of access it can be given. SQL Server has two scopes of principals:
+
+Server. This enables principals to access SQL Server from outside the system and use resources at the instance level. This includes access by people and services.
+
+Database. Once a principal has accessed the server, each individual database has a security system of its own to determine what can be done with the contents of the database.
+
+Login. The primary server principal used to access resources is commonly called a login.
+
+User. The primary database principal used to access database resources is commonly called a user.
+
+Role. Another type of principal that is available at either scope is a role, which enables you to bundle privileges to grant to another principal (a user or even another role). We cover roles in detail later in this chapter.
+
+- three statments to give tr take away permissions 
+
+
+GRANT. Gives a user access to a resource if they have not also been denied access.
+
+DENY. Disallows access to a resource even the user has been granted access in a different way.
+
+REVOKE. Think of this as the DELETE statement for security. REVOKE deletes a GRANT or DENY statement that has been applied.
+
+The Enforce Password Policy check box is selected by default when you open the Login
+
+- audit
+
+Audit. The SQL Server audit object is a collection of server or database actions (which might also be grouped together).
+
+Database audit specification. You can monitor audit events and audit action groups.
+
+Target. You can send audit results to the Windows Security event log, the Windows Application event log, or an audit file on the file system.
+
+
+```
+USE master;
+GO
+-- Create the server audit.
+CREATE SERVER AUDIT Sales_Security_Audit
+     TO FILE (FILEPATH = 'C:\SalesAudit');
+GO
+-- Enable the server audit.
+ALTER SERVER AUDIT Sales_Security_Audit
+    WITH (STATE = ON);
+GO
+```
+
+
+
+# Performance 
+- ACID properties are as follows:
+
+Atomicity. A transaction is committed as an all or nothing operation and cannot leave the database in an incomplete state.
+
+Consistency. A transaction brings the entire database from one state to another—not just a shard of a database.
+
+Isolation. Transactions, though handled concurrently, are processed sequentially and independently. Incomplete transactions should not be visible to other transactions.
+
+Durability. In the event of hardware failure, committed data survives. The data must exist in non-volatile memory.
+
+- phenomena can occur between tow transations 
+
+dirty read 
+
+non-repeatable read 
+
+phantom read 
+
+readingg a previously committed version of data 
+
+- lockable resource 
+
+row
+row identifier
+key 
+key range, a rangge of key values 
+extent, a contiguous group of eight 8 kb pages 
+page, an 8 kb index or data page 
+HoBT, an entire or B-tree structure 
+Object, an entire table, view, function, stored procedure etc. 
+Application, user defined 
+Metadata, metadata about the schema, such as catalog 
+Database 
+Allocation unit 
+File
+
+- Lock types 
+Shared 
+Execlusive 
+Update 
+Intent 
+Schema 
+
+- observe locks 
+
+```
+
+--This query will return a plethora of information
+--in addition to just the session that is blocked
+SELECT r.session_id, r.blocking_session_id, *
+FROM sys.dm_exec_sessions s
+LEFT OUTER JOIN sys.dm_exec_requests r ON r.session_id = s.session_id;
+--note: requests represent actions that are executing, sessions are connections,
+--hence LEFT OUTER JOIN
+```
+
+- using the REPEATABLE READ isolation level. A read in the REPEATABLE READ isolation level will block a write. The transactions are explicitly declared using the BEGIN/COMMIT TRANSACTION
+
+```
+--Transaction 2
+BEGIN TRANSACTION;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+UPDATE Demo.RR_Test_Prevent
+SET  Type = 2
+WHERE Type = 1;
+--Transaction 1
+COMMIT TRANSACTION;
+```
+
+
+# Understand and design indexes 
+- All scripts for this book are all available for download at https://www.MicrosoftPressStore.com/SQLServer2022InsideOut/downloads.
+- clustered index key types 
+
+increasing sequential value 
+
+unique 
+
+nonchanging 
+
+narrow data type, narrow data type guidance should also steer you away from using the uniqueidentifier field, which is 16 bytes per row
+
+
+- cluster and noncluster index 
+
+CREATE INDEX IDX_NC_InvoiceLines_InvoiceID_StockItemID_UnitPrice_Quantity
+ON [Sales].[InvoiceLines] (InvoiceID, StockItemID, UnitPrice, Quantity);
+CREATE INDEX IDX_NC_InvoiceLines _StockItemID_InvoiceID
+ON [Sales].[InvoiceLines] (StockItemID, InvoiceID);
+
+
+CREATE NONCLUSTERED INDEX [FK_Sales_Invoices_CustomerID]
+ON [Sales].[Invoices]
+( CustomerID ASC );
+
+- the Database Engine uses a structure known as row identifier (RID), which uniquely identifies every row for internal purposes. The structure of the heap has no order when it is stored. RIDs do not change, so when a record is updated, a forwarding pointer is created in the old location to point to the new.
+
+- SQL Server 2019 is the OPTIMIZE_FOR_SEQUENTIAL_KEY index option, which improves the concurrency of the page needing rapid inserts for rowstore indexes from multiple threads.
+
+
+- The index options ALLOW_PAGE_LOCKS, ALLOW_ROW_LOCKS, OPTIMIZE_FOR_SEQUENTIAL_KEY, IGNORE_DUP_KEY, and STATISTICS_NORECOMPUTE can be set without a rebuild
+
+- properties of ideal nonclustered indexes:
+
+Broad enough to serve multiple queries, not just designed to suit one query.
+
+Well-ordered keys eliminate unnecessary sorting in high-value queries.
+
+Well-stocked INCLUDE sections prevent lookups in high-value queries, but can become out of control if too much value without investigation is given to the missing index DMVs.
+
+Proven beneficial usage over time in the sys.dm_db_index_usage_stats DMV.
+
+Unique when possible (keep in mind a table can have multiple uniqueness criteria).
+
+Key column order matters, so in a compound index, it is likely best for the most selective (with the most distinct values) columns to be listed first.
+
+- Nonclustered indexes are a sort of vertical partition of a table, but you can also create a horizontal filter of an index. A filtered index has powerful potential uses to serve up prefiltered data.
+
+- Batch mode is one of the existing features lumped into the intelligent query processing (IQP) umbrella—a collection of performance improvements. 
+
+- Full-Text Search feature, you can take advantage of the full-text service (fdhost.exe) to query vast amounts of data using special full-text syntax, looking for word forms, phrases, thesaurus lookups, word proximity, and more. 
+
+
+# Cloud 
+- To install PowerShell 7, see https://learn.microsoft.com/powershell/scripting/install/installing-powershell. The GitHub releases page at https://github.com/PowerShell/PowerShell/releases lists stable
+
+- infrastructure as  a service 
+- Platform as a service
+With PaaS resources, you can focus on a task without having to worry about the administration and maintenance surrounding that task. 
+
+- database engine 
+
+SQL Server Agent. To schedule maintenance tasks or other activities
+
+SQL Server Integration Services (SSIS). To load or extract data
+
+SQL Server Reporting Services (SSRS). To provide report functionality
+
+SQL Server Analysis Services (SSAS). To support analytical workloads
+
+-  visit https://learn.microsoft.com/azure/sql-database/sql-database-file-space-management#understanding-types-of-storage-space-for-an-elastic-pool.
+
+
+-  availability groups (AGs). If you currently use AGs, you will find there are several operations that are not supported, including:
+
+Creating AGs
+
+Altering AGs
+
+Dropping AGs
+
+Creating endpoints for database mirroring
+
+The SET HADR clause of the alter database statement
+
+-  different subnet after provisioning.
+
+Image For more information, see https://learn.microsoft.com/azure/azure-sql/managed-instance/vnet-subnet-move-instance.
+
+Once the VNet is installed, you can complete the provisioning using 
+
+- For a VM on-premises, the connection method is a bit different because you need to attach a VPN gateway to the managed instance. 
+
+-  documentation directly for each solution:
+
+Microsoft Access. https://learn.microsoft.com/sql/ssma/access/sql-server-migration-assistant-for-access-accesstosql.
+
+DB2. https://learn.microsoft.com/sql/ssma/db2/migrating-db2-data-into-sql-server-db2tosql.
+
+MySQL. https://learn.microsoft.com/sql/ssma/mysql/sql-server-migration-assistant-for-mysql-mysqltosql.
+
+Oracle. https://learn.microsoft.com/sql/ssma/oracle/sql-server-migration-assistant-for-oracle-oracletosql.
+
+SAP Adaptive Server Enterprise (ASE) (formerly SAP Sybase ASE). https://learn.microsoft.com/sql/ssma/sybase/sql-server-migration-assistant-for-sybase-sybasetosql.
