@@ -1,0 +1,981 @@
+sed & awk, 2nd Edition=Dale Dougherty;Note=Erxin
+
+# Sample code 
+- ftp 
+$ ftp ftp.oreilly.com
+Connected to ftp.oreilly.com.
+220 FTP server (Version 6.21 Tue Mar 10 22:09:55 EST 1992) ready.
+Name (ftp.oreilly.com:yourname): anonymous
+331 Guest login ok, send domain style e-mail address as password.
+Password: yourname@domain.name   (Use your user name and host here)
+230 Guest login ok, access restrictions apply.
+ftp> cd /published/oreilly/nutshell/sedawk_2
+250 CWD command successful.
+ftp> binary   (Very important! You must specify binary transfer for compressed files.)
+200 Type set to I.
+ftp> get progs.tar.gz
+200 PORT command successful.
+150 Opening BINARY mode data connection for progs.tar.gz.
+226 Transfer complete.
+ftp> quit
+221 Goodbye.
+
+- ftp mail 
+
+$ mail ftpmail@online.oreilly.com
+Subject:
+reply-to yourname@domain.name     (Where you want files mailed)
+open
+cd /published/oreilly/nutshell/sedawk_2
+dir
+mode binary
+uuencode
+get progs.tar.gz
+quit
+
+- bitftp 
+
+FTP  ftp.oreilly.com  NETDATA
+USER  anonymous
+PASS  yourname@yourhost.edu   Put your Internet email address here (not your BITNET address)
+CD /published/oreilly/nutshell/sedawk_2
+DIR
+BINARY
+GET  progs.tar.gz
+QUIT
+
+- uucp 
+
+UUCP is standard on virtually all UNIX systems and is available for IBM-compatible PCs and Apple Macintoshes
+
+uucp uunet\!~/published/oreilly/nutshell/sedawk_2/progs.tar.gz yourhost\!~/yourname/
+
+The backslashes can be omitted if you use a Bourne-style shell (sh, ksh, bash, zsh, pdksh) instead of csh or tcsh. 
+
+
+
+# a pattern matching programming language 
+- awk allows you to do are:
+
+View a text file as a textual database made up of records and fields.
+
+Use variables to manipulate the database.
+
+Use arithmetic and string operators.
+
+Use common programming constructs such as loops and conditionals.
+
+Generate formatted reports.
+
+Define functions.
+
+Execute UNIX commands from a script.
+
+Process the result of UNIX commands.
+
+Process command-line arguments more gracefully.
+
+Work more easily with multiple input streams.
+
+- four hurdles to mastering sed and awk 
+
+How to use sed and awk. This is a relatively low hurdle to clear because, fortunately, sed and awk work in a very similar manner
+
+To apply UNIX regular expression syntax
+
+interact with the shell.
+
+The knack of script writing. 
+
+
+# Understand basic operation 
+- When you open a file using  ed, the original UNIX line editor.
+
+open a file using ed, it displays the number of characters in the file and positions you at the last line.
+
+$ ed test
+339
+
+enter the print command, p, to display the current line.
+
+> p
+label on the first box.
+
+To move to a line, you specify its address. An address might consist of a line number
+> #<line number>
+
+delete a line with d 
+
+> 1
+You might think of a regular expression
+d
+
+letter g for global.
+
+g/regular/d
+
+substitution command, s, in ed is:
+> [address]s/pattern/replacement/flag
+
+An address must be specified to direct this command to act upon more than the current line. 
+> /regular/s/regular/complex/g
+
+On any line that contains the string “regular expression,” replace “regular” with “complex.” If the address and the pattern are the same, you can tell ed by specifying two consecutive delimiters (//).
+g/regular/s//complex/g
+
+a file named ed-script, the following command executes the script:
+$ ed test < ed-script 
+
+The print statement replaces the p command, for example. The concept of addressing is carried over
+/regular/{print}
+
+
+# Using sed 
+- specify the simple instructions 
+
+$ sed [-e] 'instruction' file 
+
+the -e option is necessary only when you supply more than one instruction on the command line.
+
+- help 
+
+```
+Usage: sed [OPTION]... {script-only-if-no-other-script} [input-file]...
+
+  -n, --quiet, --silent
+                 suppress automatic printing of pattern space
+      --debug
+                 annotate program execution
+  -e script, --expression=script
+                 add the script to the commands to be executed
+  -f script-file, --file=script-file
+                 add the contents of script-file to the commands to be executed
+  --follow-symlinks
+                 follow symlinks when processing in place
+  -i[SUFFIX], --in-place[=SUFFIX]
+                 edit files in place (makes backup if SUFFIX supplied)
+  -l N, --line-length=N
+                 specify the desired line-wrap length for the `l' command
+  --posix
+                 disable all GNU extensions.
+  -E, -r, --regexp-extended
+                 use extended regular expressions in the script
+                 (for portability use POSIX -E).
+  -s, --separate
+                 consider files as separate rather than as a single,
+                 continuous long stream.
+      --sandbox
+                 operate in sandbox mode (disable e/r/w commands).
+  -u, --unbuffered
+                 load minimal amounts of data from the input files and flush
+                 the output buffers more often
+  -z, --null-data
+                 separate lines by NUL characters
+      --help     display this help and exit
+      --version  output version information and exit
+
+If no -e, --expression, -f, or --file option is given, then the first
+non-option argument is taken as the sed script to interpret.  All
+remaining arguments are names of input files; if no input files are
+specified, then the standard input is read.
+
+GNU sed home page: <https://www.gnu.org/software/sed/>.
+General help using GNU software: <https://www.gnu.org/gethelp/>.
+E-mail bug reports to: <bug-sed@gnu.org>.
+```
+
+- three ways to specify multiple instructions on the command line
+    + with a semicolon.
+
+sed 's/ MA/, Massachusetts/; s/ PA/, Pennsylvania/' list
+
+    +  each instruction by -e.
+
+sed -e 's/ MA/, Massachusetts/' -e 's/ PA/, Pennsylvania/' list
+
+    + Use the multiline entry capability of the Bourne shell
+$ sed ' 
+> s/ MA/, Massachusetts/
+> s/ PA/, Pennsylvania/
+> s/ CA/, California/' list 
+
+- incomplete syntax is entered:
+
+$ sed -e 's/MA/Massachusetts' list
+
+GNU sed is more helpful:
+
+$ gsed -e 's/MA/Massachusetts' list
+gsed: Unterminated `s' command
+
+- script files using the -f option, requires that you specify the name of the script file on the command line. 
+
+$ sed -f scriptfile file
+
+- save to output file 
+
+$ sed -f sedscr list > newlist
+
+- suppressing automatic display of input lines,  The -n option suppresses the automatic output. When specifying this option, each instruction intended to produce output must contain a print command
+
+$ sed -n -e 's/MA/Massachusetts/p' list
+
+
+# Using awk 
+- running awk 
+
+$ awk 'instructions' files
+
+- Awk, in the usual case, interprets each input line as a record and each word on that line, delimited by spaces or tabs, as a field. (These defaults can be changed.) One or more consecutive spaces or tabs count as a single delimiter. Awk allows you to reference these fields, in either patterns or procedures.
+
+$ awk '{ print $1 }' list
+John
+Alice
+Orville
+Terry
+Eric
+Hubert
+Amy
+Sal
+
+- a pattern “/MA/” is specified but there is no procedure. The default action is to print each line that matches the pattern.
+
+$ awk '/MA/' list
+John Daggett, 341 King Road, Plymouth MA
+
+
+next example uses a print statement to limit the output to the first field of each record.
+$ awk '/MA/ { print $1 }' list
+
+the -F option to change the field separator to a comma.
+$ awk -F, '/MA/ { print $1 }' list
+
+Multiple commands are separated by semicolons.
+$ awk -F, '{ print $1; print $2; print $3 }' list
+
+Messages can be caused by any of the following:
+Not enclosing a procedure within braces ({})
+
+- options 
+```
+-f	
+Filename of script follows.
+
+-F	
+Change field separator.
+
+-v	
+var=value follows.
+```
+
+
+# Using sed and awk together 
+- example sed script file 
+
+$ cat nameState
+s/ CA/, California/
+s/ MA/, Massachusetts/
+s/ OK/, Oklahoma/
+s/ PA/, Pennsylvania/
+s/ VA/, Virginia/
+
+- extracts the name of the state from each record. list is the example text file 
+
+$ sed -f nameState list | awk -F, '{ print $4 }'
+
+- sort | uniq -c, which would sort the states into an alphabetical list with a count of the number of occurrences of each state.
+
+- awk script shows the byState program.
+```
+#! /bin/sh
+awk -F, '{ 
+	print $4 ", " $0 
+	}' $* | 
+sort |
+awk -F, '
+$1 == LastState { 
+      print "\t" $2
+}
+$1 != LastState { 
+      LastState = $1
+      print $1
+      print "\t" $2
+}'
+```
+
+- change the example to sh script 
+ $ sed -f nameState list | byState
+ 
+
+
+# Understanding regular expression by syntax 
+- expression, even in computer terminology, is not something to be interpreted literally. It is something that needs to be evaluated. An expression describes a result.
+
+- grep, sed, and awk all use regular expressions. However, not all of the metacharacters used in regular expression syntax are available for all three programs.
+
+- regular syntax 
+. Matches any single character except newline
+* Matches any number (including zero) of the single character
+[...] Matches any one of the class of characters enclosed between the brackets.
+^ First character of regular expression
+$ As last character of regular expression
+{n,m} Matches a range of occurrences of the single character
+\ Escapes the special character 
+extended 
+followed + Matches one or more occurrences
+
+
+- POSIX character class additions
+The POSIX standard formalizes the meaning of regular expression characters and operators. The standard defines two classes of regular expressions: Basic Regular Expressions (BREs), which are the kind used by grep and sed, and Extended Regular Expressions, which are the kind used by egrep and awk.
+
+the French è is an alphabetic character, but the typical character class [a-z] would not match it.
+
+“bracket expression” in the POSIX standard. Within bracket expressions, beside literal characters such as a, !, and so on, you can have additional components.
+
+    + components 
+    
+    1. Character classes. A POSIX character class consists of keywords bracketed by [: and :]. The keywords describe different classes of characters such as alphabetic characters, control characters,
+    
+    2. Collating symbols. A collating symbol is a multicharacter sequence that should be treated as a unit. It consists of the characters bracketed by [. and .].
+    
+    3. Equivalence classes. An equivalence class lists a set of characters that should be considered equivalent, such as e and è. It consists of a named element from the locale, bracketed by [= and =]
+    
+    + For example [[:alpha:]!] matches any single alphabetic character or the exclamation point, [[.ch.]] matches the collating element ch, but does not match just the letter c or the letter h. In a French locale, [[=e=]] might match any of e, è, or é.
+    
+    + POSIX character classes 
+    
+Class	Matching Characters
+[:alnum:]	Printable characters (includes whitespace)
+[:alpha:]	Alphabetic characters
+[:blank:]	Space and tab characters
+[:cntrl:]	Control characters
+[:digit:]	Numeric characters
+[:graph:]	Printable and visible (non-space) characters
+[:lower:]	Lowercase characters
+[:print:]	Printable characters (includes whitespace)
+[:punct:]	Punctuation characters
+[:space:]	Whitespace characters
+[:upper:]	Uppercase characters
+[:xdigit:]	Hexadecimal digits
+
+- example 
+
+$ grep "can[□no']*t" sample
+I cannot do it
+I can not do it
+I can't do it
+I cant do it
+
+□ stand for space 
+
+North American local phone number could be described with the following regular expression:
+[0-9]\{3\}-[0-9]\{4\}
+
+- alternative operations 
+The vertical bar (|) metacharacter, part of the extended set of metacharacters UNIX|LINUX|NETBSD
+
+- Grouping Operations
+
+BigOne(□Computer)?
+
+compan(y|ies)
+
+- gres replacement, Then we’ll use a program that works like grep but also allows you to specify a replacement
+
+$ gres "A*Z" "00" test
+All of us, including 00ippy, our dog
+
+It can be created using a simple shell script that invokes sed to do the work.
+
+$ cat gres
+```
+if [ $# -lt "3" ] 
+then 
+	echo Usage: gres pattern replacement file
+	exit 1
+fi
+pattern=$1
+replacement=$2
+if [ -f $3 ] 
+then 
+	file=$3
+else
+	echo $3 is not a file.
+	exit 1
+fi
+A="`echo | tr '\012' '\001' `" # See footnote[11]
+sed -e "s$A$pattern$A$replacement$A" $file
+```
+
+$ gres "A.*Z" "00" sample
+00ippy, our dog
+
+
+# Writing sed scripts 
+- three basic principles of how sed works:
+
+All editing commands in a script are applied in order to each line of input.
+
+Commands are applied to all lines (globally) unless line addressing restricts the lines affected by editing commands.
+
+The original input file is unchanged; the editing commands modify a copy of original input line and the copy is sent to standard output.
+
+- applying commands in a script following script to change “pig” to “cow” and “cow” to “horse”:
+
+s/pig/cow/g
+s/cow/horse/g
+
+- the N command reads another line into the pattern space without removing the current line, so you can test for patterns across multiple lines. 
+
+- add location limitation for the lines, just lines containing “Sebastopol.”
+/Sebastopol/s/CA/California/g
+
+- the following example deletes only the first line:
+1d
+
+- input stream has only one last line. It can be specified using the addressing symbol $. The following example deletes the last line
+$d
+
+The following command deletes from line 50 to the last line in the file
+50,$d
+
+- Braces ({}) are used in sed to nest one address inside another or to apply multiple commands at the same address
+
+/^\.TS/,/^\.TE/{
+      /^$/d
+}
+
+/^\.TS/,/^\.TE/{
+	/^$/d
+  	s/^\.ps 10/.ps 8/
+  	s/^\.vs 12/.vs 10/
+}
+
+- testing and saving output 
+
+has a built-in safeguard so that you don’t make changes to the original file. Thus, the following command line:
+
+$ sed -f sedscr testfile
+
+to capture this output in a new file if you want to save it.
+
+$ sed -f sedscr testfile > newfile
+
+use the diff program to point out the differences between the two files.
+
+$ diff testfile newfile
+
+- shell script testsed automates the process of saving the output of sed in a temporary file.
+```
+for x
+do
+	sed -f sedscr $x > tmp.$x
+done
+```
+
+- runsed The shell script runsed was developed to make changes to an input file permanently. In other words, it is used in cases when you would want the input file and the output file to be the same
+
+```
+#! /bin/sh
+
+for x
+do
+   echo "editing $x: \c"
+   if test "$x" = sedscr; then
+      echo "not editing sedscript!" 
+   elif test -s $x; then 
+      sed -f sedscr $x > /tmp/$x$$
+      if test -s /tmp/$x$$
+      then 
+         if cmp -s $x /tmp/$x$$
+         then
+            echo "file not changed: \c"
+         else
+            mv $x $x.bak  # save original, just in case
+            cp /tmp/$x$$ $x
+         fi
+         echo "done"
+      else 
+         echo "Sed produced an empty file\c"
+         echo " - check your sedscript."
+      fi
+      rm -f /tmp/$x$$
+   else
+      echo "original file is empty."
+   fi
+done
+echo "all done"
+```
+
+- Shell metacharacters can be used to specify a set of files.
+
+$ runsed ch0?
+
+- four type of scripts 
+    + Multiple Edits to the Same File
+    + Making Changes Across a Set of Files
+    + Extracting Contents of a File
+    + Extracting a macro definition
+    + Generating an outline
+ the -n option to keep it from printing out the entire file. With this option, sed will print only the lines it is explicitly told to print via the print command. 
+ 
+ 
+# Basic sed commands 
+- new editing commands: d (delete), a (append), i (insert), and c (change). We also look at ways to change the flow control 
+- syntax 
+
+these commands, our convention is to specify:
+
+[address]command
+
+address { 
+		command1
+		command2
+		command3
+}
+
+commands can be placed on the same line if each one is separated by a semicolon.
+```
+n;d
+```
+putting a space after the n command causes a syntax error. Putting a space before the d command is okay
+
+- comment 
+
+(#) must be the first character on the line. The syntax of a comment line is:
+```
+#[n]
+```
+
+- Substitution, s
+
+[address]s/pattern/replacement/flags
+where the flags that modify the substitution are:
+
+n  A number (1 to 512) indicating that a replacement should be made for only the nth occurrence of the pattern.
+
+g  Make changes globally on all occurrences in the pattern space. Normally only the first occurrence is replaced.
+
+p  Print the contents of the pattern space.
+
+w file Write the contents of the pattern space to file.
+
+- use other character to seperate the regular expression 
+
+Unlike addresses, which require a slash (/) as a delimiter, the regular expression can be delimited by any character except a newline. Thus, if the pattern contained slashes, you could choose another character, such as an exclamation mark
+
+- special meaning replacement section, only the following characters have special meaning:
+
+&  Replaced by the string matched by the regular expression.
+
+\n Matches the nth substring (n is a single digit) previously specified in the pattern using “\(” and “\)”.
+
+\  Used to escape the ampersand (&), the backslash (\), and the substitution command’s delimiter when they are used literally in the replacement section.
+
+- example 
+
+s/•/>/2
+“•” represents an actual tab character, which is otherwise invisible on the screen.
+
+the input is a one-line file such as the following:
+Column1•Column2•Column3•Column4
+
+the output produced by running the script on this file will be:
+Column1•Column2>Column3•Column4
+
+- As a metacharacter, the ampersand (&) represents the extent of the pattern match, not the line that was matched.
+
+s/UNIX/\\s-2&\\s0/g
+
+Because backslashes are also replacement metacharacters, two backslashes are necessary to output a single backslash. The “&” in the replacement string refers to “UNIX.” If the input line is:
+
+on the UNIX Operating System.
+
+the substitute command produces:
+
+on the \s-2UNIX\s0 Operating System.
+
+    + another example 
+    
+A regular expression can match the different combination of numbers, so we use “&” in the replacement string and surround whatever was matched.
+
+s/See Section [1-9][0-9]*\.[1-9][0-9]*/(&)/
+
+The replacement string recalls the first saved substring as “\1” and the second as “\2,” which is surrounded by bold-font requests
+
+s/\(See Section \)\([1-9][0-9]*\.[1-9][0-9]*\)/\1\\fB\2\\fP/
+
+    + example 
+$ cat test1
+first:second
+one:two
+$ sed  's/\(.*\):\(.*\)/\2:\1/' test1
+second:first
+two:one
+
+-  as a series of sed substitute commands.
+```
+#! /bin/sh
+# index.edit -- compile list of index entries for editing.
+grep "^\.XX" $* | sort -u |
+sed '
+s/^\.XX \(.*\)$/\/^\\.XX \/s\/\1\/\1\//'
+```
+
+- Delete 
+
+showed a command to delete blank lines:
+
+/^$/d
+
+- Append, insert and change 
+
+The syntax follows:
+
+append	[line-address]a\
+	text
+insert	[line-address]i\
+	text
+change	[address]c\
+	text
+    
+    + example 
+    
+inserts two lines of text at a line matching “<Larry’s Address>”:
+
+/<Larry's Address>/i\
+4700 Cross Court\
+French Lick, IN
+
+ run on a file containing a mail message:
+
+/^From /,/^$/c\
+<Mail Header Removed>
+
+, enclosed in braces, that act on a range of lines. For instance, the following script, two location expressions 
+```
+/^From /,/^$/{
+	s/^From //p
+	c\
+<Mail Header Removed>
+}
+```
+
+inserts two new lines of text before the first line of a file:
+```
+1i\
+.so macros\
+.ds CH First Draft
+```
+
+shows the append command adding a line to the end of a file:
+```
+$a\
+End of file
+```
+
+
+- transform command is peculiar, not only because it is the least mnemonic of all sed commands. This command transforms each character by position in string abc to its equivalent in string xyz
+
+- The print command (p) causes the contents of the pattern space to be output
+
+// sed.debug
+/^\.Ah/{
+p
+s/"//g
+s/^\.Ah //p
+}
+```
+$ sed -f sed.debug ch05
+.Ah "Comment"
+Comment
+.Ah "Substitution"
+Substitution
+.Ah "Delete"
+Delete
+.Ah "Append, Insert and Change"
+Append, Insert and Change
+.Ah "List"
+List
+```
+
+    + sign (=) following an address prints the line number
+    
+#n print line number and line with if statement
+/       if/{
+=
+p
+}
+
+- next command (n) outputs the contents of the pattern space and then reads the next line of input without returning to the top of the script
+
+[address]n
+
+
+```
+.H1 "On Egypt"
+
+Napoleon, pointing to the Pyramids, said to his troops: 
+"Soldiers, forty centuries have their eyes upon you."
+```
+
+following script removes that blank line after .H1:
+
+/^\.H1/{
+n
+/^$/d
+}
+
+-  reading and writing files 
+
+[line-address]r file
+[address]w file
+
+-  quit command (q) causes sed to stop reading new input lines
+
+
+[line-address]q                                        
+
+
+sed -n "
+/^\.de *$mac/,/^\.\.$/{
+p
+/^\.\.$/q
+}" $file
+
+
+# Advance sed commands 
+- three groupings 
+
+Working with a multiline pattern space (N,D,P).
+
+Using the hold space to preserve the contents of the pattern space and make it available for subsequent commands (H,h,G,g,x).
+
+Writing scripts that use branching and conditional instructions to change the flow of control (:,b,t).
+
+- example 
+
+The following script looks for “Operator” at the end of a line, reads the next line of input and then makes the replacement.
+
+/Operator$/{
+N
+s/Owner and Operator\nGuide/Installation Guide/
+}
+-  multiline delete 
+
+The delete command (d) deletes the contents of the pattern space and causes a new line of input to be read with editing resuming at the top of the script.
+```
+# reduce multiple blank lines to one; version using d command
+/^$/{
+	N
+	/^\n$/d
+}
+```
+
+- multiline print, The multiline Print command differs slightly from its lowercase cousin
+
+/UNIX$/{
+        N
+        /\nSystem/{
+        s// Operating &/
+        P
+        D
+        }
+}
+
+
+The Next command appends a new input line to the current line in the pattern space. After the substitute command is applied to the multiline pattern space, the first part of the pattern space is output by the Print command and then removed by the Delete command. That means the current line is output and the new line becomes the current line. The Delete command prevents the script from reaching bottom, which would output both lines and clear the contents of the pattern space. The Delete command lets us preserve the second portion of the pattern space and pass control to the top of the script where all the editing commands can now be applied to that line. One of those commands is the Next command which reads another new line into the pattern space
+
+- hold that line, The pattern space is a buffer that contains the current input line
+
+There is also a set-aside buffer called the hold space. The contents of the pattern space can be copied to the hold space and the contents of the hold space can be copied to the pattern space. A group of commands allows you to move data between the hold space and the pattern space. 
+
+
+Hold	h or H	
+Copy or append contents of pattern space to hold space.
+
+Get	g or G	
+Copy or append contents of hold space to pattern space.
+
+Exchange	x	
+Swap contents of hold space and pattern space.
+
+
+    + example 
+    
+we have a file contains 
+```
+1
+2
+11
+22
+111
+222
+```
+    
+```    
+# Reverse flip
+/1/{
+h
+d
+}
+/2/{
+G
+}
+```
+
+$ sed -f sed.flip test.flip
+2
+1
+22
+11
+222
+111
+
+
+Without the delete command, control would reach the bottom of the script and the contents of the pattern space would be output. If the script used the next (n) command instead of the delete command, the contents of the pattern space would also be output. could also see what happens if you use g instead of G.
+
+- advanced flow control commands 
+
+The branch (b) and test (t) commands transfer control in a script to a line containing a specified label. 
+
+A label is put on a line by itself that begins with a colon:
+
+:mylabel
+
+you specify the label in a branch or test command, a space is permitted between the command and the label itself:
+
+b mylabel
+
+    + branch command allows you to transfer control to another line in the script.
+
+[address]b[label]
+
+
+        * example 
+        
+which means command1 then command2 will be executed again.
+
+:top
+command1
+command2
+/pattern/b top
+command3
+
+- test command, it implies a conditional branch. Its syntax follows:
+
+The test command branches to a label (or the end of the script) if a successful substitution has been made
+
+[address]t[label]
+
+If no label is supplied, control falls through to the end of the script. If the label is supplied, then execution resumes at the line following the label.
+
+
+# Writing scripts for awk 
+- pattern matching 
+
+/^$/ { print "This is a blank line." }
+
+$ awk -f awkscr test
+This is a blank line.
+
+- comments 
+```
+#  blank.awk -- Print message for each blank line.
+/^$/ { print "This is a blank line." }
+```
+
+- escape 
+
+Escape Sequences
+Sequence	Description
+\a	Alert character, usually ASCII BEL character
+\b	Backspace
+\f	Formfeed
+\n	Newline
+\r	Carriage return
+\t	Horizontal tab
+\v	Vertical tab
+\ddd	Character represented as 1 to 3 digit octal value
+\xhex	Character represented as hexadecimal value[4]
+\c	Any literal character c (e.g., \” for ")[5]
+
+- Arithmetic Operators
+Operator	Description
++	Addition
+-	Subtraction
+*	Multiplication
+/	Division
+%	Modulo
+^	Exponentiation
+**	Exponentiation[6]
+
+- system variables 
+
+The system variable FS defines the field separator. 
+
+output equivalent of FS is OFS, which is a space by default. We’ll see an example of redefining OFS
+
+Awk also defines RS, the record separator, as a newline. RS is a bit unusual; it’s the only variable where awk only pays attention to the first character of the value.
+
+
+```
+# phonelist.awk -- print name and phone number. 
+# input file -- name, company, street, city, state and zip, phone
+BEGIN { FS = ", *" }  # comma-delimited fields
+{ print $1 ", " $6 } 
+END { 	print ""
+	print NR, "records processed." }
+```
+
+-  set the record separator to the empty string, which stands for a blank line.
+
+BEGIN { FS = "\n"; RS = "" }
+
+- Relational Operators
+Operator	Description
+<	Less than
+>	Greater than
+<=	Less than or equal to
+>=	Greater than or equal to
+==	Equal to
+!=	Not equal to
+~	Matches
+!~	Does not match
+
+-  Boolean Operators
+Operator	Description
+||	Logical OR
+&&	Logical AND
+!	Logical NOT
+
+- example write an action that is controlled by the END rule.
+
+END { print "Total: ", sum, "bytes (" filenum " files)" }
+We can also use the BEGIN rule to add column headings to the report.
+
+BEGIN { print "BYTES", "\t", "FILE" }
+
+- format print 
+
+The printf statement can output a simple string just like the print statement.
+
+awk 'BEGIN { printf ("Hello, world\n") }'
+
+    + Format Specifiers Used in printf
+Character	Description
+c	ASCII character
+d	Decimal integer
+i	Decimal integer. (Added in POSIX)
+e	Floating-point format ([-]d.precisione[+-]dd)
+E	Floating-point format ([-]d.precisionE[+-]dd)
+f	Floating-point format ([-]ddd.precision)
+g	e or f conversion, whichever is shortest, with trailing zeros removed
+G	E or f conversion, whichever is shortest, with trailing zeros removed
+o	Unsigned octal value
+s	String
+x	Unsigned hexadecimal number. Uses a-f for 10 to 15
+X	Unsigned hexadecimal number. Uses A-F for 10 to 15
+%	Literal %
+
+- information retrieval 
