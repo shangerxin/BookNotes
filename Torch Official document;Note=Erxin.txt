@@ -1,0 +1,121 @@
+Torch Official document;Note=Erxin\
+
+# torch.export tutorial
+- https://docs.pytorch.org/tutorials/intermediate/torch_export_tutorial.html#basic-usage
+- torch.export() is the PyTorch 2.X way to export PyTorch models into standardized model representations
+
+```
+export(
+    mod: torch.nn.Module,
+    args: Tuple[Any, ...],
+    kwargs: Optional[Dict[str, Any]] = None,
+    *,
+    dynamic_shapes: Optional[Dict[str, Dict[int, Dim]]] = None
+) -> ExportedProgram
+```
+
+
+
+
+
+
+
+
+
+
+# the custom operators manual
+- A kernel is a function that accepts Tensors and/or raw pointers to memory and performs a useful computation (for example, matrix multiplication, attention, etc).
+
+- An operator is glue code for the PyTorch runtime that tells it about the computation. A single operator can be associated with multiple kernels (for example, torch.add has a kernel for CPU and a kernel for CUDA)
+
+-  existing operators work with torch.compile.
+TL;DR
+
+manually use opcheck to test the custom op
+```
+import torch
+import unittest
+from torch.library import opcheck
+
+def sin_sample_inputs():
+    sample_inputs = [
+        (torch.randn(3, requires_grad=True, device='cpu'),),
+        (torch.randn(3, requires_grad=True, device='cuda'),),
+    ]
+
+class TestOps(unittest.TestCase):
+    def test_sin(self):
+        sample_inputs = sin_sample_inputs()
+        for i in range(len(sample_inputs)):
+            opcheck(torch.ops.aten.sin.default, sample_inputs[i])
+
+```
+
+- how to define a custom operator 
+```
+@torch.library.custom_op("your_namespace::sin", mutates_args=())
+def sin(x: torch.Tensor) -> torch.Tensor:
+    return torch.from_numpy(np.sin(x.numpy(force=True))
+```
+
+- using torch.library.define 
+```
+torch.library.define("your_namespace::sin(Tensor x) -> Tensor")
+```
+
+- cpp define a custom operator 
+```
+
+#include <torch/library.h>
+
+// Define the operator
+TORCH_LIBRARY(your_namespace, m) {
+    m.def("sin(Tensor x) -> Tensor");
+}
+
+```
+
+- add CPU/CUDA/Backend implementations
+
+```
+@torch.library.register_kernel("your_namespace::sin", "cpu")
+def _(x: torch.Tensor) -> torch.Tensor:
+    # your CPU implementation
+    ...
+
+@torch.library.register_kernel("your_namespace::sin", "cuda")
+def _(x: torch.Tensor) -> torch.Tensor:
+    # your CUDA implementation
+    ...
+
+```
+
+- add cpu cuda backend 
+
+```
+
+Tensor custom_sin_cpu(const Tensor& x) {
+    // Replace this with at::sin if you want to test it out.
+    return my_custom_sin_implementation_on_cpu(x);
+}
+
+// Register the CPU implementation for the operator
+TORCH_LIBRARY_IMPL(your_namespace, CPU, m) {
+    m.impl("sin", &custom_sin_cpu);
+}
+
+Tensor custom_sin_cuda(const Tensor& x) {
+    // Replace this with at::sin if you want to test it out.
+    return my_custom_sin_implementation_on_cuda(x);
+}
+
+// Register the CUDA implementation for the operator
+TORCH_LIBRARY_IMPL(your_namespace, CUDA, m) {
+    m.impl("sin", &custom_sin_cuda);
+}
+
+```
+
+... 
+
+
