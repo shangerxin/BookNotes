@@ -925,7 +925,7 @@ Awk also defines RS, the record separator, as a newline. RS is a bit unusual; it
 BEGIN { FS = ", *" }  # comma-delimited fields
 { print $1 ", " $6 } 
 END { 	print ""
-	print NR, "records processed." }
+	print NR, "records processed." }32.0.101.8425
 ```
 
 -  set the record separator to the empty string, which stands for a blank line.
@@ -1457,3 +1457,231 @@ END {
 }
 
 - The system( ) function executes a command supplied as an expression.
+
+BEGIN { if (system("mkdir dale") != 0) 
+		print "Command Failed" }
+
+- Menu-Based Command Generator
+
+$ cat uucp_commands
+UUCP Status Menu
+Look at files in PUBDIR:find /var/spool/uucppublic -print
+Look at recent status in LOGFILE:tail /var/spool/uucp/LOGFILE
+Look for lock files:ls /var/spool/uucp/*.LCK
+
+
+```
+BEGIN { FS = ":"
+if ((getline < CMDFILE) > 0)
+	title = $1
+else
+	exit 1
+while ((getline < CMDFILE) > 0) {
+	# load array
+	++sizeOfArray
+	# array of menu items
+	menu[sizeOfArray] = $1
+	# array of commands associated with items
+	command[sizeOfArray] = $2
+	} 
+...
+}
+```
+
+read the first line of this file and assign it to a variable named title. The rest of the lines contain two fields and are read into two arrays, one for the menu items and one for the commands to be executed. 
+
+The variable CMDFILE is the name of the menu-command file, which is passed as a command-line parameter.
+$ awk script CMDFILE="uucp_commands" -
+
+your version of awk doesn’t have the -v option, you can pass the value of CMDFILE as a shell variable. Create a shell script to execute awk. and chane the line to 
+while ((getline < '"$CMDFILE"') > 0 ) ...
+
+function to display the menu 
+```
+function display_menu( ) {
+	# clear screen -- comment out if clear does not work
+	system("clear")
+	# print title, list of items, exit item, and prompt
+	print "\t" title
+	for (i = 1; i <= sizeOfArray; ++i)
+		printf "\t%d. %s\n", i, menu[i]
+	printf "\t%d. Exit\n", i
+	printf("Choose one: ")
+}
+```
+
+the full script invoke program in full:
+```
+awk -v CMDFILE="uucp_commands"  '# invoke -- menu-based
+                                  # command generator
+# first line in CMDFILE is the title of the menu
+# subsequent lines contain: $1 - Description;
+# $2 Command to execute
+BEGIN { FS = ":" 
+# process CMDFILE, reading items into menu array 
+  if ((getline < CMDFILE) > 0)
+	title = $1
+  else
+	exit 1
+  while ((getline < CMDFILE) > 0) {
+	# load array
+	++sizeOfArray
+	# array of menu items
+	menu[sizeOfArray] = $1
+	# array of commands associated with items
+	command[sizeOfArray] = $2
+  } 
+  # call function to display menu items and prompt
+  display_menu( )
+}
+# Applies the user response to prompt
+{
+   # test value of user response
+   if ($1 > 0 && $1 <= sizeOfArray) {
+	# print command that is executed
+	printf("Executing ... %s\n", command[$1]) 
+	# then execute it. 
+	system(command[$1])
+	printf("<Press RETURN to continue>")
+ 	# wait for input before displaying menu again
+	getline
+   }
+   else 
+	exit	
+   # re-display menu 
+   display_menu( )
+}
+
+function display_menu( ) {
+	# clear screen -- if clear does not work, try "cls"
+	system("clear")
+	# print title, list of items, exit item, and prompt
+	print "\t" title
+	for (i = 1; i <= sizeOfArray; ++i)
+		printf "\t%d. %s\n", i, menu[i]
+	printf "\t%d. Exit\n", i
+	printf("Choose one: ")
+}' -
+```
+
+output is displayed:
+
+UUCP Status Menu
+        1. Look at files in PUBDIR
+        2. Look at recent status in LOGFILE
+        3. Look for lock files
+        4. Exit
+Choose one:
+
+
+- directin output to files and pipes 
+
+operators “>” or “>>”. For example, the following statement writes the current record to the file data.out:
+
+print > "data.out"
+
+direct output to a pipe. The command
+
+print | command
+
+- generating columnar reports 
+
+two sample customer records from the customer order file:
+
+Charlotte Webb 
+P.O  N61331 97 Y 045 	Date: 03/14/97
+#1 3  7.50
+#2 3  7.50
+#3 1  7.50
+#4 1  7.50
+#7 1  7.50 
+
+Martin S. Rossi 
+P.O  NONE 	Date: 03/14/97
+#1 2  7.50
+#2 5  6.75
+
+awk '/^#/ {
+		amount = $2 * $3
+		printf "%s %6.2f\n", $0, amount
+		next
+	 }
+{ print }' $*
+
+
+- Debugging 
+
+Before you begin debugging a program, make a copy of it. This is extremely important.
+
+use the print statement to print the value of the variable 
+
+est that the input reaches part of a program. For instance, when debugging the masterindex program, described in
+
+Commenting Out Loud
+Another technique is simply commenting out a series of lines that may be causing problems to see whether they really are. 
+
+- limitations 
+
+most systems.
+
+Table 10.1. Limitations
+Item	Limit
+Number of fields per record	100
+Characters per input record	3000
+Characters per output record	3000
+Characters per field	1024
+Characters per printf string	3000
+Characters in literal string	400
+Characters in character class	400
+Files open	15
+Pipes open	1
+
+- invoke awk using the #! syntax 
+
+ “#!” syntax is an alternative syntax for invoking awk from a shell script. 
+
+ #!/bin/awk -f
+
+```
+ #!/bin/awk
+{ print $1 }
+```
+
+```
+#!/bin/sh
+/bin/awk '{ print $1 }'
+```
+
+- flock of awks, different version may have slightly different sytnax  
+
+- free available awk 
+
+common extensions 
+
+ free awks extend the delete statement, making it possible to delete all the elements of an array at one time. The syntax is:
+
+delete array
+
+flusing buffered output,  fflush( ). Like close( ), the argument to fflush( ) is the name of an open file or pipe. Unlike close( ), the fflush( ) function only works on output files and pipes.
+
+ output of the program is directed to a file:
+
+printf "Enter your name:" >"/dev/tty"
+
+The nextfile statement is similar to next, but it operates at a higher level. When nextfile is executed, the current data file is abandoned, and processing starts over at the top of the script, using the first record of the following file. 
+
+- bell labs awk 
+
+- gnu awk (gawk)
+
+- Michael’s awk (mawk)
+
+- commercial awks 
+
+MKS awk
+
+Thompson Automation awk (tawk)
+
+- full featured applications 
+
+ first program, spellcheck, provides an interactive interface to the UNIX spell program. The second application, masterindex, is a batch program for generating an index for a book
