@@ -1,0 +1,1092 @@
+Docker Deep Dive - Fifth Edition=Nigel;Note=Erxin
+
+# Big picture stuff 
+- old days 
+vmware 
+wmwarts 
+containers 
+- docker container relative standards
+- un Linux containers on Windows systems that have the WSL 2 backend installed.
+- Wasm (WebAssembly) is a modern binary instruction set that builds applications that are smaller, faster, more secure, and more portable than containers.
+
+- docker client and engine 
+
+cli -> server (engine)
+- container relative standard projects 
+
+ Some of these include:
+
+The OCI
+The CNCF
+The Moby Project
+
+-  OCI maintains three standards called specs,  Open Container Initiative (OCI) is a governance council responsible for low-level container-related standards.
+
+The image-spec
+The runtime-spec
+The distribution-spec
+
+Docker implement all three OCI specs. For example:
+
+The Docker builder (BuildKit) creates OCI compliant-images
+Docker uses an OCI-compliant runtime to create OCI-compliant containers
+Docker Hub implements the OCI distribution spec and is an OCI-compliant registry
+
+- The Cloud Native Computing Foundation (CNCF) is another Linux Foundation project that is influential in the container ecosystem. I
+
+three phases or stages:
+
+Sandbox
+Incubating
+Graduated
+
+- Docker uses at least two CNCF technologies — containerd and Notary.
+
+
+# Get docker 
+- docker desktop, Docker Desktop is a desktop app from Docker, Inc. and is the best way to work with containers. You get the Docker Engine, a slick UI, all the latest plugins and features
+
+    + Windows requires all of the following:
+
+64-bit version of Windows 10/11
+Hardware virtualization support must be enabled in your system’s BIOS
+WSL 2
+- multipass, Multipass installations don’t ship with out-of-the-box support for features such as docker scout, docker debug, and docker init.
+
+only need three commands:
+
+$ multipass launch 
+$ multipass ls
+$ multipass shell
+
+$ multipass launch docker --name node1
+
+$ multipass launch docker --name node1
+
+$ docker --version
+Docker version 26.1.0, build 9714adc
+
+$ docker info
+
+- server installed on linux 
+
+latest instructions.
+
+$ sudo snap install docker
+
+$ sudo docker --version
+Docker version 27.2.0, build 3ab4256
+
+$ sudo docker info
+
+create a docker group and add your user account to it.
+
+$ sudo groupadd docker
+
+. Yours may be different.
+
+$ sudo service docker start
+
+
+# The big picture 
+- ops perspective 
+
+ a container image, and running it as a container.
+
+ - you’ll complete all of the following:
+
+Check Docker is working
+Download an image
+Start a container from the image
+Execute a command inside the container
+Delete the container
+
+- Copying new images onto your Docker host is called pulling. Pull the ubuntu:latest image.
+
+$ docker pull nginx:latest
+
+- docker images command.
+
+$ docker images
+
+-  see the running container.
+
+$ docker ps
+CONTAINER ID   IMAGE          COMMAND        CREATED      STATUS      PORTS                  NAMES
+e08c35352ff3   nginx:latest   "/docker..."   3 mins ago   Up 2 mins   0.0.0.0:8080->80/tcp   test
+
+
+- docker run command to start a new container called test from the ubuntu:latest image.
+
+$ docker run --name test -d -p 8080:80 nginx:latest
+
+- Run the following command to attach your shell to a new Bash process inside the container.
+
+$ docker exec -it test bash
+
+-  ps command to list running processes.
+
+root@e08c35352ff3:/# ps -elf
+
+- kill the container using the docker stop and docker rm commands.
+
+$ docker stop test
+
+ take a few seconds for the container to stop.
+
+$ docker rm test
+
+- docker ps command with the -a flag to list all containers
+
+$ docker ps -a
+CONTAINER ID    IMAGE    COMMAND    CREATED    STATUS    PORTS    NAMES
+
+- DEV perspective 
+
+Clone an app from a GitHub repo
+Inspect the app’s Dockerfile
+Containerize the app
+Run the app as a container
+
+git CLI for this to work.
+
+$ git clone https://github.com/nigelpoulton/psweb.git
+
+    + List the contents of the application’s Dockerfile.
+
+$ cat Dockerfile
+```
+FROM alpine
+LABEL maintainer="nigelpoulton@hotmail.com"
+RUN apk add --update nodejs npm curl
+COPY . /src
+WORKDIR /src
+RUN  npm install
+EXPOSE 8080
+ENTRYPOINT ["node", "./app.js"]
+```
+
+Run the following docker build command to create a new image based on the instructions in the Dockerfile.
+
+$ docker build -t test:latest .
+
+after build check the images. there should have an image called test:latest.
+
+$ docker images
+REPO     TAG      IMAGE ID        CREATED          SIZE
+test     latest   0435f2738cf6    21 seconds ago   160MB
+
+    + run the commands on single line to run app as a container 
+
+$ docker run -d \
+  --name web1 \
+  --publish 8080:8080 \
+  test:latest
+
+on Docker Desktop, connect to localhost:8080 or 127.0.0.1:8080. If you’re following along on Multipass, connect to your Multipass VM’s 192.168 address on port 8080. Run an ip a | grep 192 command from within the Multipass VM, or run a multipass ls from your local machine to find the address.
+
+    + clean up, terminate the container and delete the image.
+
+$ docker rm web1 -f
+
+
+# The technical stuff 
+- docker engine 
+
+Docker Engine – The TLDR
+The Docker Engine
+The influence of the Open Container Initiative (OCI)
+runc
+containerd
+Starting a new container (example)
+What’s the shim all about
+How it’s implemented on Linux
+
+- components of docker 
+
+docker cli -> {docker engine -> plugins & other 
+                daemon  
+                container d 
+                runc 
+              }
+
+- Docker Engine had two major components:
+
+The Docker daemon (sometimes referred to as just “the daemon”)
+LXC
+
+Relying on LXC posed several problems for the Docker project.
+
+First, LXC is Linux-specific, and Docker had aspirations of being multi-platform.
+
+- Open Container Initiative (OCI)
+Around the same time that Docker, Inc. was refactoring the Engine, the OCI was in the process of defining two container-related standards:
+
+Image Specification (image-spec)
+Runtime Specification (runtime-spec)
+
+As previously mentioned, runc (pronounced “run see” and always written with a lowercase “r”) is the reference implementation of the OCI runtime-spec. 
+
+- containerd (pronounced “container dee” and always written with a lowercase “c”) is another tool that Docker created while stripping functionality out of the daemon.
+
+Cloud Native Computing Foundation (CNCF). At the time of writing, containerd is a graduated CNCF project, meaning it’s stable and production-ready. 
+
+https://github.com/containerd/containerd/releases
+
+- starting a new container example 
+$ docker run -d --name ctr1 nginx
+
+Run a docker ps command to see if the container is running.
+$ docker ps
+CONTAINER ID   IMAGE    COMMAND                  CREATED         STATUS         PORTS    NAMES
+9cfb0c9aacb2   nginx    "/docker-entrypoint.…"   9 seconds ago   Up 9 seconds   80/tcp   ctr1
+
+The daemon can expose the API on a local socket or over the network. 
+
+The daemon communicates with containerd via a CRUD-style API over gRPC.
+
+If you started the NGINX container earlier, you should delete it using the following command.
+
+$ docker rm ctr1 -f
+
+    + graph 
+
+$ docker CLI 
+|
+v
+daemon 
+|
+V
+containerd 
+| 
+V
+ship 
+{RC RUNC}
+
+- shim, diagrams in the chapter have shown a shim component.
+
+following benefits:
+
+Daemonless containers
+Improved efficiency
+Pluggable OCI layer
+
+It reports on the container’s status and performs low-level tasks such as keeping the container’s STDIN and STDOUT streams open.
+
+- implemented on linux, separate binaries:
+
+/usr/bin/dockerd (the Docker daemon)
+/usr/bin/containerd
+/usr/bin/containerd-shim-runc-v2
+/usr/bin/runc
+
+
+# Working with images 
+- follows:
+
+Docker images – The TLDR
+Intro to images
+Pulling images
+Image registries
+Image naming and tagging
+Images and layers
+Pulling images by digest
+Multi-architecture images
+Vulnerability scanning with Docker Scout
+Deleting images
+
+-  Image, Docker image, container image, and OCI image.
+
+image build -> containers(s) Run 
+
+The docker run command is the most common way to start a container from an image.
+
+multiple containers use the same image, you can only delete the image after you’ve deleted all the containers using it.
+
+Windows-based images can be gigabytes in size and take a long time to push and pull.
+
+- pulling
+
+    + example pull redis imageg 
+
+$ docker pull redis
+
+an image that shares a common layer with the Redis image. You’ll learn about this very soon, but images can share layers
+
+- image registries 
+
+build > share > run pipeline.
+
+The most common registry is Docker Hub, but others exist, including 3rd-party internet-based registries and secure on-premises registries. 
+
+Docker Hub has the concept of official repositories that are home to images vetted and curated by Docker and the application vendor.
+
+    + Docker Hub namespace:
+
+nginx: https://hub.docker.com/_/nginx/
+busybox: https://hub.docker.com/_/busybox/
+redis: https://hub.docker.com/_/redis/
+mongo: https://hub.docker.com/_/mongo/
+
+- unofficial repositories that you should be very careful when using.
+
+nigelpoulton/gsd — https://hub.docker.com/r/nigelpoulton/gsd-book/
+nigelpoulton/k8sbook — https://hub.docker.com/r/nigelpoulton/k8sbook/
+
+- format for a docker pull command pulling an image from an official repository is
+
+$ docker pull redis:latest
+
+    + Pulling images from unofficial repositories is almost the same as pulling from official repositories — you just need to add a Docker Hub username or organization name before the repository name. 
+
+$ docker pull nigelpoulton/tu-demo:v2
+
+    + pulls the latest image from Brandon Mitchell’s regclient/regsync repo on GitHub Container Registry (ghcr.io).
+
+$ docker pull ghcr.io/regclient/regsync:latest
+
+- You can give a single image as many tags as you want.
+
+two — the b4210d0aa52f image is tagged as latest and v1.
+
+$ docker images
+REPOSITORY               TAG       IMAGE ID       CREATED          SIZE
+nigelpoulton/tu-demo     latest    b4210d0aa52f   2 days ago       115MB
+nigelpoulton/tu-demo     v1        b4210d0aa52f   2 days ago       115MB
+nigelpoulton/tu-demo     v2        6ba12825d092   12 minutes ago   115MB
+
+he latest tag refers to the same image as the v1 tag, which is actually older than the v2 image.
+
+- look at all of the following ways to inspect layer information:
+
+Pull operations
+The docker inspect command
+The docker history command
+
+    + pull the node:latest image and observe it pulling the individual layers. 
+
+$ docker pull node:latest
+latest: Pulling from library/ubuntu
+952132ac251a: Pull complete
+82659f8f1b76: Pull complete
+c19118ca682d: Pull complete
+8296858250fe: Pull complete
+24e0251a0e2c: Pull complete
+Digest: sha256:f4691c96e6bbaa99d...28ae95a60369c506dd6e6f6ab
+Status: Downloaded newer image for node:latest
+docker.io/node:latest
+
+    + Another way to see image layers is to inspect the image with the docker inspect command.
+
+$ docker inspect node:latest
+[
+    {
+        "Id": "sha256:bd3d4369ae.......fa2645f5699037d7d8c6b415a10",
+        "RepoTags": [
+            "node:latest"
+
+        <Snip>
+
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:c8a75145fc...894129005e461a43875a094b93412",
+                "sha256:c6f2b330b6...7214ed6aac305dd03f70b95cdc610",
+                "sha256:055757a193...3a9565d78962c7f368d5ac5984998",
+                "sha256:4837348061...12695f548406ea77feb5074e195e3",
+                "sha256:0cad5e07ba...4bae4cfc66b376265e16c32a0aae9"
+            ]
+        }
+    }
+]
+
+    + docker history command to inspect an image and see its layer data. However, this command shows the build history of an image and is not a strict list of layers in the final image.
+
+- Base layers
+All Docker images start with a base layer, and every time you add new content, Docker adds a new layer.
+
+ you update files and make other changes to images by adding new layers containing the changes.
+
+ . Almost all Docker setups use the overlay2 driver, but zfs, btrfs, and vfs are alternative options.
+
+ the layers will be merged as the unified view of multi layer image to be used in the container.
+
+ - Layers are also shared on the registry side. This means you can store lots of similar images in a registry, and the registry will save space
+
+ already pulled an image by name, you can see its digest by running a docker images command with the --digests flag as shown.
+
+$ docker images --digests alpine
+
+before pulling it, you can use the docker buildx imagetools command. The following example retrieves the image digest for the nigelpoulton/k8sbook/latest image on Docker Hub.
+
+$ docker buildx imagetools inspect nigelpoulton/k8sbook:latest
+
+ use the digest to pull the image. I’ve trimmed the command and the output for readability.
+
+$ docker pull nigelpoulton/k8sbook@sha256:13dd59a0...bce2e14b
+
+The following curl command queries Docker Hub for the digest of the same image.
+
+$ curl "https://hub.docker.com/v2/repositories/nigelpoulton/k8sbook/tags/?name=latest" \
+  |jq '.results[].digest'
+
+- own digests as follows:
+
+Images digests are a crypto hash of the image’s manifest file
+Layer digests are a crypto hash of the layer’s contents
+
+two hashes:
+
+Content hash (uncompressed)
+Distribution hash (compressed)
+
+- different architectures supported behind the alpine:latest tag.
+
+$ docker buildx imagetools inspect alpine
+
+$ docker run --rm golang go version
+
+Windows users should replace the grep command with Select-String architecture,os
+
+$ docker manifest inspect golang | grep 'architecture\|os'
+
+- multi-architecture imaes 
+
+the Registry API supports two important constructs:
+
+    Manifest lists
+    Manifests
+The manifest list is exactly what it sounds like — a list of architectures supported by an image tag.
+
+    + This means you can do a docker pull alpine on any architecture and get the correct version of the image. 
+
+    + example 
+$ docker buildx imagetools inspect alpine
+Name:      docker.io/library/alpine:latest
+MediaType: application/vnd.docker.distribution.manifest.list.v2+json
+Digest:    sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b
+
+Manifests:
+  Name:      docker.io/library/alpine:latest@sha256:6457d53f...628977d0
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/amd64
+
+  Name:      docker.io/library/alpine:latest@sha256:b229a851...d144c1d8
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/arm/v6
+
+  Name:      docker.io/library/alpine:latest@sha256:ec299a7b...33b4c6fe
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/arm/v7
+
+  Name:      docker.io/library/alpine:latest@sha256:a0264d60...93467a46
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/arm64/v8
+
+  Name:      docker.io/library/alpine:latest@sha256:15c46ced...ab073171
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/386
+
+  Name:      docker.io/library/alpine:latest@sha256:b12b826d...ba52a3a2
+  MediaType: application/vnd.docker.distribution.manifest.v2+json
+  Platform:  linux/ppc64le
+
+  echo mediatype, *.json is the manifest file 
+
+- example golang 
+Linux on arm64 example:
+
+$ docker run --rm golang go version
+<Snip>
+go version go1.23.4 linux/arm64
+Windows on x64 example:
+
+> docker run --rm golang go version
+<Snip>
+go version go1.23.4 windows/amd64
+
+- Windows users should replace the grep command with Select-String architecture,os
+
+$ docker manifest inspect golang | grep 'architecture\|os'
+            "architecture": "amd64",
+            "os": "linux"
+            "architecture": "arm",
+            "os": "linux",
+            "architecture": "arm64",
+            "os": "linux",
+            "architecture": "386",
+            "os": "linux"
+            "architecture": "mips64le",
+            "os": "linux"
+            "architecture": "ppc64le",
+            "os": "linux"
+            "architecture": "s390x",
+            "os": "linux"
+            "architecture": "amd64",
+            "os": "windows",
+            "os.version": "10.0.20348.2227"
+            "architecture": "amd64",
+            "os": "windows",
+            "os.version": "10.0.17763.5329"
+
+The docker buildx command makes it easy to create multi-architecture images. It offer two ways:
+
+Emulation
+Build Cloud
+
+build AMD and ARM versions of the nigelpoulton/tu-demo image using Docker Build Cloud.
+
+$ docker buildx build \
+  --builder=cloud-nigelpoulton-ddd-cloud \
+  --platform=linux/amd64,linux/arm64 \
+  -t nigelpoulton/tu-demo:latest --push .
+
+  - scan docker image, docker scout cves command to get more detailed information, including remediation advice.
+
+$ docker scout cves nigelpoulton/tu-demo:latest several things are clear:
+
+It has detected one vulnerable package containing two vulnerabilities
+The affected package is called expat and the vulnerable version we’re running is 2.5.0-r2
+It lists the vulnerability as CVE-2023-52425
+It includes a link to a Scout report containing more info
+It suggests we update to version 2.6.0-r0 which contains the fix
+
+- delete images using the docker rmi command. rmi is short for remove image.
+
+Docker won’t delete layers shared by multiple images until you delete all images that reference them. delete images by name, short ID, or SHA
+
+$ docker rmi redis:latest af111729d35a sha256:c5b1261d...f8e1ad6b
+
+    + delete all images on linux/windows powershell 
+
+$ docker rmi $(docker images -q) -f
+
+- summary 
+
+Images – The commands
+docker pull is the command to download images from remote registries. It defaults to Docker Hub but works with other registries. The following command will pull the image tagged as latest from the alpine repository on Docker Hub: docker pull alpine:latest.
+docker images lists all the images in your Docker host’s local repository (image cache). You can add the --digests flag to see the SHA256 hashes.
+docker inspect gives you a wealth of image-related metadata in a nicely formatted view.
+docker manifest inspect lets you inspect the manifest list of images stored in registries. The following command will show the manifest list for the regctl image on GitHub Container Registry (GHCR): docker manifest inspect ghcr.io/regclient/regctl.
+docker buildx is a Docker CLI plugin that works with Docker’s latest build engine features. You saw how to use the imagetools sub-command to query manifest-related data from images.
+docker scout is a Docker CLI plugin that integrates with the Docker Scout backend to perform image vulnerability scanning. It scans images, provides reports on vulnerabilities, and even suggests remediation actions.
+docker rmi is the command to delete images. It deletes all layer data stored in the local filesystem, and you cannot delete images that are in use by containers.
+
+
+# Working with containers 
+- following sections:
+
+Container – The TLDR
+Containers vs VMs
+Images and containers
+Check Docker is running
+Starting a container
+How containers start apps
+Connecting to a running container
+Inspecting container processes
+The docker inspect command
+Writing data to a container
+Stopping, restarting, and deleting a container
+Killing a container’s main process
+Debugging slim images and containers with Docker Debug
+Self-healing containers with restart policies
+The commands
+
+- containers the TLDR, shows multiple containers started from a single image
+
+- virtualize are very different:
+
+VMs virtualize hardware
+Containers virtualize operating systems
+
+- Run one of the following commands to check the status of the daemon.
+
+Linux systems not using Systemd.
+
+$ service docker status
+docker start/running, process 29393
+Linux systems using Systemd.
+
+$ systemctl is-active docker
+active
+
+- Starting a container
+The docker run command is the simplest and most common way to start a new container.
+
+$ docker run -d --name webserver -p 5005:8080 nigelpoulton/ddd-book:web0.1
+Unable to find image 'nigelpoulton/ddd-book:web0.1' locally
+web0.1: Pulling from nigelpoulton/ddd-book
+4f4fb700ef54: Already exists
+cf2a607f33f7: Download complete
+0a1f0c111e9a: Download complete
+c1af4b5db242: Download complete
+Digest: sha256:3f5b281b914b1e39df8a1fbc189270a5672ff9e98bfac03193b42d1c02c43ef0
+Status: Downloaded newer image for nigelpoulton/ddd-book:web0.1
+b5594b3b8b3fdce544d2ca048e4340d176bce9f5dc430812a20f1852c395e96b
+
+- verify Docker pulled the image and started the webserver container.
+
+- Docker how to start an app in a container:
+
+Entrypoint instructions cannot be overridden on the CLI, and anything you pass in via the CLI will be appended to the Entrypoint instruction as an argument.
+
+    +  three ways you can tell Docker how to start an app in a container
+
+An Entrypoint instruction in the image
+A Cmd instruction in the image
+A CLI argument
+
+$ docker inspect nigelpoulton/ddd-book:web0.1 | grep Entrypoint -A 3
+
+- docker run command is:
+
+$ docker run <arguments> <image> <command>
+
+$ docker run --rm -d alpine sleep 60
+
+The --rm argument automatically cleans up the exited container.
+
+    + two modes:
+
+Interactive
+Remote execution
+
+-  start an interactive exec session by creating a new shell process (sh) inside the webserver container sh is a minimal shell program installed in the container.
+
+$ docker exec -it webserver sh
+
+- Inspecting container processes
+Most containers only run a single process. 
+
+Type exit to quit the exec session and return to your local terminal. 
+
+- docker exec command without specifying the -it flags. This will remotely execute the command without creating an interactive session
+
+$ docker exec webserver ps
+
+- docker inspect command  detailed information about images and containers.
+
+$ docker inspect webserver
+<Snip>
+"State": {
+    "Status": "running"
+},
+"Name": "/webserver", 
+    "PortBindings": { 
+        "8080/tcp": [ 
+            {
+                "HostIp": "",          
+                "HostPort": "5005"      
+            }
+        ]
+    },
+    "RestartPolicy": {
+        "Name": "no",
+        "MaximumRetryCount": 0
+    "Image": "nigelpoulton/ddd-book:web0.1",
+    "WorkingDir": "/src",
+    "Entrypoint": [
+        "node",
+        "./app.js"
+    ],
+        }
+<Snip>
+
+- a new interactive exec session to the webserver container with the following command.
+
+$ docker exec -it webserver sh
+
+- stop, docker stop command. It will take up to 10 seconds to gracefully stop.
+
+$ docker stop webserver
+
+$ docker ps -a
+CONTAINER ID   IMAGE         COMMAND           STATUS                           NAMES
+b5594b3b8b3f   nigelpou...   "node ./app.js"   Exited (137) About a minute ago  webserver
+
+- restarting and deleting 
+
+$ docker restart webserver
+webserver
+
+You can also run the following command to return the contents of the file directly from the container’s filesystem.
+
+$ docker exec webserver cat views/home.pug
+
+Be careful forcing operations like this, as Docker doesn’t ask you to confirm.
+
+    + delete the container.
+$ docker rm webserver -f
+webserver
+
+- killing a container's main process 
+
+Run the following command to start a new interactive container called ddd-ctr based on the Ubuntu image and tell it to run a Bash shell as its main process.
+
+$ docker run --name ddd-ctr -it ubuntu:24.04 bash
+
+- following two commands to restart it and attach your shell to its main process.
+
+$ docker restart ddd-ctr
+
+- Type Ctrl PQ to exit the container and run another docker ps command to verify the container 
+
+- Docker Debug 
+
+Docker Debug works by attaching a shell to a container and mounting a toolbox loaded with debugging tools. This toolbox is mounted as a directory called /nix and is available during your debugging session but is never visible to the container.
+
+ running container called ddd-ctr. If you don’t, you can start one by running 
+ $ docker run --name ddd-ctr -it ubuntu:24.04 bash.
+
+ docker attach command is similar to the docker exec commands you learned earlier but automatically connects to a container’s main process. don’t need to run the docker attach command if you’re already connected to the container.
+
+ $ docker attach ddd-ctr
+root@d3c892ad0eb3:/#
+
+Type Ctrl PQ to gracefully disconnect from the container without killing the Bash process.
+
+- log in to Docker to use Docker Debug, and it only works if you have a Pro, Team, or Business license.
+
+$ docker login
+
+Once you’re logged in and have the plugin installed
+
+Debug session to the running container called ddd-ctr. 
+
+docker debug <image>|<container>
+
+$ docker debug ddd-ctr
+
+You can use Docker Debug’s built-in install command to add any package listed on search.nixos.org.
+
+install the bind package (which includes the nslookup tool), and then run the nslookup command again.
+
+Docker will automatically pull the image from Docker Hub if you don’t have a local copy.
+
+$ docker debug nigelpoulton/ddd-book:web0.1
+
+    + Run the following entrypoint command to reveal the default command
+
+docker > entrypoint --print
+node ./app.js
+
+Type exit to quit the debug session.
+
+- self healing containers with restart policies 
+
+restart policies per container, and Docker supports the following four policies:
+
+no (default)
+on-failure
+always
+unless-stopped
+
+start an interactive container called neversaydie with the always restart policy.
+$ docker run --name neversaydie -it --restart always alpine sh
+
+on Windows using PowerShell.
+
+$ docker inspect neversaydie | grep RestartCount
+
+- clean up 
+You can also delete all containers and all images with the following two commands. 
+
+$ docker rm $(docker ps -aq) -f
+ac165419214f
+5bd3741185fa
+
+$ docker rmi $(docker images -q)
+
+- summary Containers – The commands
+docker run is the command to start new containers. You give it the name of an image and it starts a container from it. This example starts an interactive container from the Ubuntu image and tells it to run the Bash shell: docker run -it ubuntu bash.
+Ctrl-PQ is how you detach from a container without killing the process you’re attached to. You’ll use it frequently to detach from running containers without killing them.
+docker ps lists all running containers, and you can add the -a flag to also see containers in the stopped (Exited) state.
+docker exec allows you to run commands inside containers. The following command will start a new Bash shell inside a running container and connect your terminal to it: docker exec -it <container-name> bash. This next command runs a ps command inside a running container without opening an interactive shell session: docker exec <container-name> ps. For these to work, the container must include the Bash shell.
+docker stop stops a running container and puts it in the Exited (137) state. It issues a SIGTERM to the container’s PID 1 process and allows the container 10 seconds to gracefully quit. If the process hasn’t cleaned up and stopped within 10 seconds, it sends a SIGKILL to force the container to terminate immediately.
+docker restart restarts a stopped container.
+docker rm deletes a stopped container. You can add the -f flag to delete the container without having to stop it first.
+docker inspect shows you detailed configuration and run-time information about a container.
+docker debug attaches a debug shell to a container or image and lets you run commands that aren’t available inside the container or image. It requires a Pro, Team, or Business Docker subscription.
+
+
+# Containerizing an app 
+- sections 
+Containerizing an app – The TLDR
+Containerize a single-container app
+Moving to production with multi-stage-builds
+Buildx, BuildKit, drivers, and Build Cloud
+Multi-architecture builds
+A few good practices
+
+- basic flow 
+
+build image -> push image -> ship / registry image -> run as container 
+
+- containerize a simple Node.js app:
+
+Get the application code from GitHub
+Create the Dockerfile
+Containerize the app
+Run the app
+Test the app
+Look a bit closer
+
+- create a new directory called ddd-book.
+
+$ git clone https://github.com/nigelpoulton/ddd-book.git
+
+    + ddd-book/node-app directory and list its contents.
+
+$ cd ddd-book/node-app
+
+    + create Dockerfiles manually. Fortunately, newer versions of Docker support the docker init command that reads your build context, analyzes your application, and automatically creates a Dockerfile implementing good practices.
+
+$ docker init
+Welcome to the Docker Init CLI!
+<Snip>
+? What application platform does your project use? Node
+? What version of Node do you want to use? 23.3.0    <<---- Newer versions are OK
+? Which package manager do you want to use? npm
+? What command do you want to use to start the app? node app.js
+? What port does your server listen on? 8080
+
+CREATED: .dockerignore
+CREATED: Dockerfile
+CREATED: compose.yaml
+CREATED: README.Docker.md
+
+✔ Your Docker files are ready!
+
+    + content 
+```
+1. ARG NODE_VERSION=20.8.0
+2. FROM node:${NODE_VERSION}-alpine
+3. ENV NODE_ENV production
+4. WORKDIR /usr/src/app
+5. RUN --mount=type=bind,source=package.json,target=package.json \
+    --mount=type=bind,source=package-lock.json,target=package-lock.json \
+    --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev
+6. USER node
+7. COPY . .
+8. EXPOSE 8080
+9. CMD node app.js
+```
+
+IF YOU don't have init plugin then we need to manual add the docker file 
+    + build context is the directory where your app files live.
+
+$ docker build -t ddd-book:ch8.node .
+
+    + Check the image exists in your Docker host’s local repository.
+
+$ docker images
+
+    + Run a docker inspect ddd-book:ch8.node command to verify the image and see the settings from the Dockerfile.
+
+    + Push the image to Docker Hub
+This is an optional section, and you’ll need a Docker Hub account to follow along. Go to hub.docker.com
+
+Login to Docker Hub
+Re-tag the image
+Push the image
+
+$ docker login
+USING WEB-BASED LOGIN
+
+    + The format of the command is docker tag <current-tag> <new-tag>, and it creates an additional tag for the same image.
+
+    + run the app 
+
+$ docker run -d --name c1 \
+  -p 5005:8080 \
+  nigelpoulton/ddd-book:ch8.node
+
+The -d flag runs the container in the background, and the --name flag calls it c1. The -p 5005:8080 maps port 5005 on your Docker host to port 8080 inside the container
+
+verify the port mapping.
+
+$ docker ps
+
+Run a docker ps command to ensure the c1 container is running
+Check port mapping is correct — 0.0.0.0:5005->8080/tcp
+
+- instructions create new layers, Examples of instructions that create new layers are FROM, RUN, COPY and WORKDIR. Examples that create metadata include EXPOSE, ENV, CMD, and ENTRYPOINT. The premise is this:
+
+You can run a docker history command against any image to see the instructions that created it.
+
+$ docker history ddd-book:ch8.node
+
+IMAGE         CREATED BY                                    SIZE      COMMENT
+24dd...a06b   CMD ["/bin/sh" "-c" "node app.js"]            0B        buildkit.dockerfile.v0
+<missing>     EXPOSE map[8080/tcp:{}]                       0B        buildkit.dockerfile.v0
+<missing>     COPY . . # buildkit                           98kB      buildkit.dockerfile.v0
+<missing>     USER node                                     0B        buildkit.dockerfile.v0
+<missing>     RUN /bin/sh -c npm ci --omit=dev # buildkit   13.6MB    buildkit.dockerfile.v0
+<missing>     WORKDIR /usr/src/app                          16.4kB    buildkit.dockerfile.v0
+<missing>     ENV NODE_ENV=production                       0B        buildkit.dockerfile.v0
+<Snip>
+<missing>     ADD alpine-minirootfs-3.21.0-aarch64.tar.gz   8.84MB    8.35MB
+
+- Moving to production with multi-stage builds
+When it comes to container images… big is bad! For example:
+
+Big means slow
+Big means more potential vulnerabilities
+Big means a larger attack surface
+
+    + Dockerfile:
+```
+FROM golang:1.23.4-alpine AS base             <<---- Stage 0
+WORKDIR /src
+COPY go.mod go.sum .
+RUN go mod download
+COPY . .
+
+FROM base AS build-client                     <<---- Stage 1
+RUN go build -o /bin/client ./cmd/client
+
+FROM base AS build-server                     <<---- Stage 2
+RUN go build -o /bin/server ./cmd/server
+
+FROM scratch AS prod                          <<---- Stage 3
+COPY --from=build-client /bin/client /bin/
+COPY --from=build-server /bin/server /bin/
+ENTRYPOINT [ "/bin/server" ]
+```
+Stage 0 is called base and builds an image with compilation tools, etc
+Stage 1 is called build-client and compiles the client executable
+Stage 2 is called build-server and compiles the server executable
+Stage 3 is called prod and copies the client and server executables into a slim image. The prod stage pulls the minimal scratch image. It
+
+builders will always try run stage by parallel 
+
+    + build stages are included in the final production image.
+
+$ docker history multi:full
+
+    + build multiple images from a single Dockerfile.
+
+separate image for each by splitting the final prod stage into two stages as follows:
+
+```
+FROM golang:1.20-alpine AS base
+WORKDIR /src
+COPY go.mod go.sum .
+RUN go mod download
+COPY . .
+
+FROM base AS build-client
+RUN go build -o /bin/client ./cmd/client
+
+FROM base AS build-server
+RUN go build -o /bin/server ./cmd/server
+
+FROM scratch AS prod-client                 <<---- New stage
+COPY --from=build-client /bin/client /bin/
+ENTRYPOINT [ "/bin/client" ]
+
+FROM scratch AS prod-server                 <<---- New stage
+COPY --from=build-server /bin/server /bin/
+ENTRYPOINT [ "/bin/server" ]
+```
+
+Run the following two commands to create two different images from the same Dockerfile-final file
+
+$ docker build -t multi:client --target prod-client -f Dockerfile-final .
+<Snip>
+
+$ docker build -t multi:server --target prod-server -f Dockerfile-final .
+<Snip>
+
+- major build components Docker’s build system has a client and server, Buildx, BuildKit, drivers, and Build Cloud
+
+Client: Buildx
+Server: BuildKit
+
+
+$ docker buildx ls
+NAME/NODE                  DRIVER/ENDPOINT         PLATFORMS
+builder *                  docker-container
+
+Run a docker buildx inspect command against one of your builders.
+
+$ docker buildx inspect cloud-nigelpoulton-ddd
+
+Name:          cloud-nigelpoulton-ddd
+Driver:        cloud
+Nodes:
+Name:      linux-arm64
+Endpoint:  cloud://nigelpoulton/ddd_linux-arm64
+Status:    running
+Buildkit:  v0.16.0
+
+- Multi-architecture builds
+You can use the docker build command to build images for multiple platforms and CPU architectures
+
+
+a builder is an instance of BuildKit that will perform builds.
+
+$ docker buildx ls
+NAME/NODE                  DRIVER/ENDPOINT         PLATFORMS
+builder *                  docker-container
+  builder0                 desktop-linux           linux/arm64, linux/amd64, linux/amd64/v2, 
+                                                   linux/riscv64, linux/ppc64le, linux/s390x, 
+                                                   linux/386, linux/mips64le, linux/mips64,
+                                                   linux/arm/v7, linux/arm/v6
+cloud-nigelpoulton-ddd     cloud
+
+    + create new builder 
+
+$ docker buildx create --driver=docker-container --name=container
+
+Make it the default builder.
+
+$ docker buildx use container
+
+- Docker Hub account or don’t want to push the images, you can replace the --push with --load.
+
+$ docker buildx build --builder=container \
+  --platform=linux/amd64,linux/arm64 \
+  -t nigelpoulton/ddd-book:ch8.1 --push .
+
+
+ two important things:
+
+Each Dockerfile instruction executed twice — once for AMD and once for ARM
+The last few lines show the image layers being pushed directly to Docker Hub
+
+    + cloud builder, Docker subscription that grants you access to Build Cloud, you can go to build.docker.com and configure your first cloud builder
+
+$ docker buildx create --driver cloud nigelpoulton/ddd
+
+$ docker buildx build \
+  --builder=cloud-nigelpoulton-ddd \
+  --platform=linux/amd64,linux/arm64 \
+  -t nigelpoulton/ddd-book:ch8.1 --push .
+
+
+BuildKit uses a cache to speed up builds.
+
+to understand that COPY and ADD instructions include logic to ensure the content you’re copying into the image hasn’t changed since the last build.
+
+    + delete the container.
+
+$ docker rm c1 -f
+
+$ docker rmi \
+  multi:full multi:client multi:server ddd-book:ch8.node nigelpoulton/ddd-book:ch8.node
+
+- the commands to containerizing an app 
+
+Containerizing an app – The commands
+docker build containerizes applications. It reads a Dockerfile and follows the instructions to create an OCI image. The -t flag tags the image, and the -f flag lets you specify the name and location of the Dockerfile. The build context is where your application files exist and can be a directory on your local Docker host or a remote Git repo.
+The Dockerfile FROM instruction specifies the base image. It’s usually the first instruction in a Dockerfile, and it’s considered a good practice to build from Docker Official Images or images from Verified Publishers. FROM is also used to identify new build stages in multi-stage builds.
+The Dockerfile RUN instruction lets you run commands during a build. It’s commonly used to update packages and install dependencies. Every RUN instruction creates a new image layer.
+The Dockerfile COPY instruction adds files to images, and you’ll regularly use it to copy your application code into a new image. Every COPY instruction creates an image layer.
+The Dockerfile EXPOSE instruction documents an application’s network port.
+The Dockerfile ENTRYPOINT and CMD instructions tell Docker how to run the app when starting a new container.
+Some other Dockerfile instructions include LABEL, ENV, ONBUILD, HEALTHCHECK and more.
+
+
+# Multi-container apps with compose 
