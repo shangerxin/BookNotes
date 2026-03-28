@@ -1090,3 +1090,1148 @@ Some other Dockerfile instructions include LABEL, ENV, ONBUILD, HEALTHCHECK and 
 
 
 # Multi-container apps with compose 
+- a microservices app with the following services
+
+Web front-end
+Ordering
+Catalog
+Back-end datastore
+Logging
+Authentication
+Authorization
+
+Compose lets you describe the application in a simple YAML file called a Compose file. You then use the Compose file with the docker compose command to deploy and manage the entire app.
+
+- installing docker compose 
+
+$ docker compose version
+Docker Compose version v2.35.1
+
+- example 
+
+$ git clone https://github.com/nigelpoulton/ddd-book.git
+
+The app folder contains the application code, views, and templates
+The Dockerfile describes how to build the image for the web-fe service
+The requirements.txt file lists the application dependencies for the web-fe service
+The compose.yaml file tells Docker how to deploy the app
+
+- compose files 
+
+compose.yaml or compose.yml. However, you can specify a different filename with the -f flag
+
+    + example 
+
+```
+services:                  <<--- Microservices are defined in the "services" block
+  web-fe:                  ----┐
+    deploy:                    |
+      replicas: 1              |
+    build: .                   | This block
+    command: python app.py     | defines the
+    ports:                     | *web-fe*
+      - target: 8080           | microservice
+        published: 5001        |
+    networks:                  |
+      - counter-net        ----┘
+  redis:                   ----┐
+    deploy:                    | 
+      replicas: 1              | 
+    image: "redis:alpine"      | 
+    networks:                  | The *redis*
+      counter-net              | service
+    volumes:                   |
+      - type: volume           |
+        source: counter-vol    |
+        target: /app       ----┘
+networks:                  <<--- Networks are defined in this block
+  counter-net:                
+volumes:                   <<--- Volumes are defined in this block
+  counter-vol:
+```
+
+    + the service section 
+
+```
+services:                     
+  web-fe:                     <<--- Service name. Containers will inherit this name
+    deploy:                   
+      replicas: 1             <<--- Deploy a single container for this service
+    build: .                  <<--- Build from the Dockerfile in the current directory
+    command: python app/app.py <<-- Execute this command when starting containers
+    ports:                    
+      - target: 8080          ----┐ Map port 8080 in the container
+        published: 5001       ----┘ to port 5001 on the Docker host
+    networks:
+      - counter-net           <<--- Attach the service's containers to the "counter-net" network
+```
+
+run the python app/app.py command. It will attach to the counter-net network, expose the web service on the host’s port 5001.
+
+    + redis service section 
+```
+services:
+  ..
+  redis:                      <<--- Service name. Containers will inherit this name
+    image: "redis:alpine"     <<--- Pull the "redis:alpine" image for this service
+    deploy:                  
+      replicas: 1             <<--- Deploy a single container for this service
+    networks:
+      counter-net:            <<--- Attach containers to the "counter-net" network
+    volumes:
+      - type: volume
+        source: counter-vol   ----┐ Mount the "counter-vol" volume
+        target: /app          ----┘ to "/app" in the containers for this service
+```
+
+code extract from the app.py file shows the web app communicating with the redis service by name.
+```
+import time
+import redis
+from flask import Flask, render_template
+app = Flask(__name__)
+cache = redis.Redis(host='redis', port=6379)   <<---- "redis" is the name of the service
+<Snip>
+```
+
+    + network and volumes blocks are extremely simple and define a network called counter-net and a volume called counter-vol
+
+```
+networks:                 <<---- This block defines a new network called "counter-net"
+  counter-net:                
+volumes:                  <<---- This block defines a new volume called "counter-vol"
+  counter-vol:
+```
+
+    + deploying apps with compose 
+
+run all commands from the multi-container folder.
+
+$ docker compose up --detach
+
+the following command will deploy the application defined in a Compose file called sample-app.yml in the apps/ddd-book directory.
+
+$ docker compose -f apps/ddd-book/sample-app.yml up --detach
+
+$ docker images
+REPOSITORY                TAG        IMAGE ID        CREATED           SIZE
+redis                     alpine     f773b35a95e1    8 days ago        61.4MB
+multi-container-web-fe    latest     811f22c9edb7    2 minutes ago     99.7MB
+
+    +  the resources for our sample app.
+
+Resource type	Resource	Name
+Service	web-fe	multi-container-web-fe-1
+Service	redis	multi-container-redis-1
+Network	counter-net	multi-container_counter-net
+Volume	counter-vol	multi-container_counter-vol
+
+see the counter-net network and counter-vol volume.
+$ docker network ls
+$ docker volume ls
+
+- managing apps with compose 
+
+shut the app down.
+$ docker compose down
+
+docker volumes ls command to see if the volume still exists.
+$ docker volumes ls
+
+redeploy the app. it started much faster this time. This is because the images and volume already exist.
+$ docker compose up --detach
+
+check the current state of the app with a docker compose ps command.
+$ docker compose ps 
+
+Run a docker compose top to list the processes inside each container.
+$ docker compose top 
+
+stop the app and recheck its status.
+$ docker compose stop
+
+Restart the app with
+$ docker compose restart 
+
+Check the status of the app.
+$ docker compose ls
+
+- clean up 
+Run the following command to stop and delete the app. The --volumes flag will delete all of the app’s volumes. --rmi all will delete all of its images
+
+$ docker-compose down --volumes --rmi all
+
+
+# Docker and AI 
+- Docker Model Runner Architecture
+DMR executes models directly on host hardware, exposes them via OpenAI-compatible endpoints, and integrates with the wider Docker toolchain
+
+
+Docker Hub {model ...}   Containerized apps         Network/local apps      Local apps 
+A                                   |                           |               |
+|                       http://model-runner.docker.internal/    V http:*/       |/var/run/docker.sock 
+push/pull                           -----------> OpenAPI compatible endpoints  <-
+|                                           /engines/v1/models (get)
+V                                           /engines/v1/chat/completions (post) ...
+Docker CLI -model mgt-> Docker Model Runner {Runtime Pluggable}   <-- local model store {model...}
+
+- installing docker model runner 
+
+    + clone the book’s GitHub repo:
+
+$ git clone https://github.com/nigelpoulton/ddd-book.git
+$ cd ddd-book/dmr
+
+    + Open Docker Desktop’s Settings page, click the Features in development tab, and check the Enable Docker Model Runner and Enable host-side TCP support checkboxes.
+
+    + enabled DMR switch to the command line and verify it's working 
+    $ docker model status
+
+    + Explore Docker Model Runner
+    In this section, you’ll learn how to:
+
+    Pull models from Docker Hub
+    List and inspect models
+    Test models
+    Inspect the DMR APIs
+
+    + download a newer quantized version if available.
+
+$ docker model pull ai/gemma3:4B-Q4_K_M
+
+    + list your local models to see the one you downloaded.
+
+$ docker model ls
+
+- inspecting models 
+
+a new type of OCI artifact called a model. This model-spec is currently in draft and may change slightly.
+
+- connects to Docker Hub and inspects the manifest from Docker Hub and not the local copy you pulled.
+
+$ docker manifest inspect ai/gemma3:4B-Q4_K_M | jq
+
+layer files are in your local filesystem below ~/.docker/models/blobs/sha256 and you can inspect them with your favorite tools.
+
+$ ls -lh ~/.docker/models/blobs/sha256
+SHA and filename may different on your side 
+$ cat ~/.docker/models/blobs/sha256/22273fdf4e6dbaf...af0e6569be41539 | jq
+
+    + see the same information with the docker model inspect command
+
+$ docker model inspect 
+
+- store all of the following:
+
+Container images
+Signatures
+SBOMs
+OPA Policies
+Helm charts
+Wasm modules
+MCP tools
+
+- DMR offers two easy ways to test your models:
+
+The CLI
+Docker Desktop UI
+    + opens an interactive REPL (Read, Evaluate, Print, Loop)
+
+he responses as they can be quite long.
+
+$ docker model run ai/gemma3:4B-Q4_K_M
+
+- Docker Model Runner exposes a set of native endpoints for model management and a set of OpenAI-compatible endpoints
+
+DMR endpoints
+
+/models                       <<---- GET
+/models/create                <<---- POST
+/models/{namespace}/{name}    <<---- GET and DELETE
+
+OpenAI-compatible endpoints
+
+/engines/llama.cpp/v1/models             <<---- GET
+/engines/llama.cpp/v1/chat/completions   <<---- POST
+/engines/llama.cpp/v1/completions        <<---- POST
+/engines/llama.cpp/v1/embeddings         <<---- POST
+
+use the following path to explicitly call the llama.cpp runtime:
+
+/engines/llama.cpp/v1/chat/completions
+
+$ docker model pull ai/qwen3:0.6B-Q4_K_M
+$ docker model ls
+
+
+# Docker and wasm 
+- Wasm (WebAssembly) is driving the third wave of cloud computing
+- divided the chapter as follows:
+
+Pre-reqs
+Intro to Wasm
+Write a Wasm app
+Containerize a Wasm app
+Deploy a Wasm app
+
+- Configure Docker Desktop for Wasm
+
+Use containerd for pulling and storing images is selected on the General tab. Next, click the Features in development tab, select the Enable Wasm option and click the blue Apply & restart button.
+
+- Install Rust and configure for Wasm
+
+install the wasm32-wasip1 target so that Rust can compile to Wasm.
+
+$ rustup target add wasm32-wasip1
+
+- Spin is a Wasm framework and runtime that makes building and running Wasm apps easy.
+
+Search the web for how to install Fermyon spin
+
+$ spin --version
+
+Wasm is evolving fast and may become better at other workloads in the future.
+
+- list wasm runtimes 
+$ docker run --rm -i --privileged --pid=host jorgeprendes420/docker-desktop-shim-manager:latest
+
+My installation has seven Wasm runtimes, including the io.containerd.spin.v2
+
+    + example create a wasm app 
+
+Wasm app called hello-world. Respond to the prompts as shown in the example.
+
+$ spin new hello-world -t http-rust
+
+tree command
+
+$ cd hello-world
+
+$ tree
+.
+├── Cargo.toml
+├── spin.toml
+└── src
+    └── lib.rs
+
+This configures the app to display Docker loves Wasm.
+```
+use spin_sdk::http::{IntoResponse, Request, Response};
+<Snip>
+    Ok(http::Response::builder()
+        .status(200)
+        .header("content-type", "text/plain")
+        .body("Docker loves Wasm")?)             <<---- Change text inside quotes
+        .build())
+}
+```
+
+$ spin build
+
+running a more complex cargo build command that compiles the app as a Wasm binary.
+
+tree command to see the Wasm binary.
+
+$ tree
+<Snip>
+└── target
+    └── wasm32-wasip1
+        └── release
+            └── hello_world.wasm
+
+Run a spin up command to start the app using the local spin runtime
+$ spin up
+
+- Containerize a Wasm app
+
+Create a new file called Dockerfile in your current directory and populate it with the following three lines.
+
+```
+FROM scratch
+COPY /target/wasm32-wasip1/release/hello_world.wasm .
+COPY spin.tom
+```
+
+tag the image with your own Docker Hub username instead of mine.
+
+$ docker build \
+  --platform wasi/wasm \
+  --provenance=false \
+  -t nigelpoulton/ddd-book:wasm .
+
+$ docker run -d --name wasm-ctr \
+  --runtime=io.containerd.spin.v2 \
+  --platform=wasi/wasm \
+  -p 5556:80 \
+  nigelpoulton/ddd-book:wasm /
+
+deleting the image.
+
+$ docker rm wasm-ctr -f
+
+# Docker swarm 
+- how to deploy a multi-node Swarm cluster 
+
+Swarm primer
+Build a swarm
+Deploy a Swarm app
+
+- Docker Swarm is two things:
+
+A secure cluster of Docker nodes (swarm with a little “s”)
+An intelligent application orchestrator (Swarm with a big “S”)
+
+- build two or more Docker nodes into a highly available swarm.
+
+go to http://https://labs.play-with-docker.com/ and spin up a few Docker nodes to follow along
+
+steps to build your swarm:
+
+Initialize the first swarm manager
+Add workers (optional)
+Add additional managers
+
+- initialize your swarm 
+
+prompted to use the --advertise-addr flag. If this happens, use the node’s primary IP address.
+$ docker swarm init
+
+- Adding worker nodes is optional, as your managers will also run user apps
+
+$ docker swarm join --token SWMTKN-1-2hl6...-...3lqg 172.31.40.192:2377
+This node joined a swarm as a worker.
+
+$ docker swarm join --token SWMTKN-1-2hl6...-...3lqg 172.31.40.192:2377
+This node joined a swarm as a worker.
+
+$ docker node ls
+
+got one manager and two workers. Managers have either Leader or Reachable in the MANAGER STATUS column,
+
+adding more managers.
+$ docker swarm join-token manager
+
+The asterisk (*) indicates the manager you executed the command from.
+
+    + use the previous book services as example 
+
+swarm manager and clone the book’s GitHub repo.
+
+$ git clone https://github.com/nigelpoulton/ddd-book.git
+
+$ cd ddd-book/swarm-new
+
+```
+networks:               ----┐
+  counter-net:              | 
+    driver: overlay         | Deploy an encrypted overlay network called *counter-net*
+    driver_opts:            |
+      encrypted: 'yes'  ----┘
+volumes:                
+  counter-vol:          <<--- Create a volume called *counter-vol*
+services:
+  web-fe:                               ----┐
+    image: nigelpoulton/ddd-book:swarm-app  |
+    command: python app.py                  w 
+    deploy:                                 e
+      replicas: 4                           b  <<---- Deploy four replicas
+      update_config:                        -  <<---- Next 3 lines define how to update the app
+        parallelism: 2                      f  <<---- Update two replicas at a time
+        delay: 10s                          e  <<---- Wait 10 seconds after each pair
+        failure_action: rollback               <<---- Rollback if there's a failure
+      restart_policy:                       s   
+        condition: on-failure               e  <<---- Restart replicas if they fail
+        delay: 5s                           r  <<---- Wait five seconds between restart attempts
+        max_attempts: 3                     v  <<---- Only try three restarts
+        window: 120s                        i  <<---- Give up after trying for two minutes
+    networks:                               c 
+      - counter-net                         e  <<---- Attach to the *counter-net* network
+    ports:                                  |
+      - "5001:8080"                     ----┘  <<---- Map the app to 5001 on the host
+  redis:                                ----┐  <<---- Redis service
+    image: "redis:alpine"                   | 
+    networks:                               | 
+      counter-net:                          |  <<---- Join the *counter-net* network
+    volumes:                                |
+      - type: volume                        | 
+        source: counter-vol                 |  <<---- Mount the *counter-vol* volume to
+        target: /app                    ----┘  <<---- /data in the container
+```
+
+The networks key defines an encrypted overlay network called counter-net, the volumes key defines a volume called counter-vol
+
+deploy the app and call it ddd.
+
+$ docker stack deploy -c compose.yaml ddd
+ confirm this.
+
+$ docker stack ps ddd
+
+Swarm has evenly balanced the four web-fe replicas across your nodes. You can also see the web-fe service is publishing port 5001.
+
+manage Swarm apps in two ways:
+
+Imperatively
+Declaratively
+
+- Swarm will roll out a new version of the web-fe service with all 10 replicas running the new image.
+
+$ docker stack deploy -c compose.yaml ddd
+
+- clean up 
+$ docker stack rm ddd
+
+Run the following command on the node that hosted the redis replica. It will delete the volume.
+
+$ docker volume rm ddd_counter-vol
+
+- Docker Swarm – The Commands
+docker swarm init initializes a new Swarm and makes the node the first manager of the Swarm.
+docker stack deploy is the command you’ll run to deploy and update Swarm apps. You need to specify the Compose file and the name of the app.
+docker stack ls lists all Swarm apps and shows the number of services in each.
+docker stack ps gives you detailed information about a Swarm app. It tells you which node each replica is running on, which images they’re based on, and shows the desired state and current state of each replica.
+docker stack services gives you a line of information for each application service and includes useful information such as replication mode, how many replicas, and port mappings.
+docker stack rm deletes a Swarm app and doesn’t ask for confirmation.
+
+
+# Docker networking 
+- following sections:
+
+Docker networking – the TLDR
+Docker networking theory
+Single-host bridge networks
+External access via port mappings
+Connecting to existing networks and VLANs
+Service Discovery
+Ingress load balancing
+
+-Docker networking is based on libnetwork, which is the reference implementation of open-source architecture called the Container Network Model (CNM).
+
+- docker networking theory 
+
+three components:
+
+The Container Network Model (CNM), design specification and outlines the fundamental building blocks
+Libnetwork, Libnetwork is a real-world implementation of the CNM. 
+Drivers, extend the model by implementing specific network topologies such as VXLAN overlay networks
+
+    + specification document 
+
+https://github.com/moby/moby/blob/master/libnetwork/docs/design.md
+
+specification document, but at a high level, it defines three building blocks:
+
+Sandboxes, an isolated network stack inside a container. It includes Ethernet interfaces, ports, routing tables, DNS configuration
+Endpoints, virtual network interfaces that look, smell, and feel like regular network interfaces. They connect sandboxes to networks.
+Networks, virtual switches (usually software implementations of an 802.1d bridge). As such, they group together and isolate one or more endpoints
+    +  CNM terminology, endpoints connect sandboxes to networks. Every container you create will have a sandbox with at least one endpoint connecting it to a network.
+
+The Container Network Model (CNM) example
+
+Sandbox Isolated network stack 
+|
+V
+EndPoint virtual ethernet interface 
+|
+V
+Netowrk Virtual switch(802.1d bridge)
+
+each container gets its own sandbox which hosts the container’s entire network stack, including one or more endpoints that act as Ethernet interfaces and can be connected to networks.
+
+Container A {               Container B {
+    {Sandbox                {Sandbox 
+    Endpoint}               Endpoint  Endpoint}
+                                |       |
+}                           }   |       |
+|                               |       |
+V                               V       V 
+[Network A                        ]  [Network B ]
+
+Endpoints can only connect them to a single network. This is why Container B needs two endpoints
+Containers network stacks are completely isolated and can only communicate via a network.
+
+- Libnetwork is the reference implementation of the CNM. It’s open-source, cross-platform (Linux and Windows), maintained by the Moby project
+
+- Drivers  relies on drivers to implement the data plane. For example, drivers are responsible for creating networks and ensuring isolation and connectivity.  include bridge, overlay, and macvlan, and they build the most common network topologies
+                         Libnetwork 
+                         {Sandboxes }
+Docker Engine <-{API} -> {Endpoints }                                       Drivers 
+                         {Networks }                                       {Bridge driver, such as single host}
+                         -----------            {Pluggable interface} <----{Overlay driver, such as mutli host}
+                         {Service discovery }                              {MACVLAN driver, such as existing VLANs}
+                         {Load balancing}
+                         -----------
+                         Control plane 
+
+Create an overlay network called prod-fe-cuda, Docker will invoke the overlay driver to create the network and its resources.
+
+- Single-host bridge networks
+The simplest type of Docker network is the single-host bridge network.
+
+Single-host tells us the network only spans a single Docker host
+Bridge tells us that it’s an implementation of an 802.1d bridge (layer 2 switch)
+                        
+you run Windows containers you’ll need to use the nat driver, but for all intents and purposes they work the same.                        
+
+- on swarm two Docker hosts with identical local bridge networks, both called mynet. Even though the networks are identical, they are independent and isolated, meaning the containers in the picture cannot communicate
+
+new Docker host gets a default single-host bridge network called bridge that Docker connects new containers to unless you override it with the --network flag.
+
+output of a docker network ls command on Docker installation.
+$ docker network ls
+can run docker inspect commands to get more information.
+$ docker network inspect bridge
+
+All bridge networks are based on the battle-hardened Linux bridge technology that has existed in the Linux kernel for over 20 years. 
+The default bridge network on all Linux-based Docker hosts is called bridge and maps to an underlying Linux bridge in the host’s kernel called docker0
+You can run a docker network inspect command to confirm that the bridge network is based on the docker0 bridge in the host’s kernel.
+on Windows using PowerShell, you’ll need to replace grep with SelectString.
+$ docker network inspect bridge | grep bridge.name
+
+inspect the docker 0 bridge from the Linux manually install the brctl utility.
+$ brctl show
+$ ip link show docker0
+
+Docker {Containers, Docker network}
+Linux {Linux bridge, port mapping}
+Host {Host interface}
+
+- create a new single-host bridge network called localnet.
+
+$ docker network create -d bridge localnet
+
+ creates a new Linux bridge in the host’s kernel.
+
+Run another brctl show command to see it.
+$ brctl show
+bridge name        bridge id             STP enabled	   interfaces
+br-f918f1bb0602    8000.0242372a886b     no
+docker0            8000.024258ee84bc     no
+
+
+ create a new container called c1 and attach it to the new localnet bridge network.
+
+$ docker run -d --name c1 \
+  --network localnet \
+  alpine sleep 1d
+
+need the jq utility installed for the command to work. Leave off the "| jq" if it doesn’t work.
+
+$ docker network inspect localnet --format '{{json .Containers}}' | jq
+
+$ docker run -it --name c2 \
+  --network localnet \
+  alpine sh
+
+Docker’s internal DNS server that holds name-to-IP mappings for all containers started with the --name or --net-alias flag.
+
+- external access via port mapping 
+
+The web container on the right is running a web server on port 80 that is mapped to port 5005 on the Docker host. The client container on the left is sending requests to the Docker host on port 5005 and the external client at the bottom is doing the same. 
+
+Host Node {
+
+    client docker {                 
+        send to host *:5005
+    }
+
+    server web docker {
+        send to *:80 
+    } mapping to host *:5005
+} send to *:5005 
+
+Create a new container called web running NGINX on port 80 and map it to port 5005 on the Docker host.
+
+$ docker run -d --name web \
+  --network localnet \
+  --publish 5005:80 \
+  nginx
+
+Verify the port mapping.
+
+$ docker port web
+80/tcp -> 0.0.0.0:5005
+80/tcp -> [::]:5005
+
+You can test external access by pointing a web browser to the Docker host on port 5005. You’ll need to know the IP or DNS name of your Docker host 
+
+create a new container called client on the bridge network.
+$ docker run -it --name client --network bridge alpine sh
+
+Install curl 
+```
+# apk add curl
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.19/main/aarch64/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.19/community/aarch64/APKINDEX.tar.gz
+(1/8) Installing ca-certificates (20240226-r0)
+<Snip>
+```
+
+$ curl 192.168.64.69:5005
+
+A common example is partially containerized apps where the parts running in containers need to be able to communicate with the parts not running in containers.
+
+- create a new Docker network with the macvlan driver and configure it with all of the following:
+
+Subnet info
+Gateway
+Range of IPs it can assign to containers
+Which of the host’s interfaces or sub-interfaces to use
+
+$ docker network create -d macvlan \
+  --subnet=10.0.0.0/24 \
+  --ip-range=10.0.0.0/25 \
+  --gateway=10.0.0.1 \
+  -o parent=eth0.100 \        <<---- Make sure this matches your system
+  macvlan100
+
+we’re connecting to VLAN 100, so we tag the sub-interface with .100 (-o parent=eth0.100). used the --ip-range flag to tell the new network which sub-set of IP addresses it can assign to containers
+
+$ docker network inspect macvlan100
+
+creates a new container called mactainer1 and connects it to the macvlan100 network.
+
+$ docker run -d --name mactainer1 \
+  --network macvlan100 \
+  alpine sleep 1d
+
+- troubleshooting connectivity problems 
+
+can view them with the journalctl -u docker.service command. If you’re using a different init system
+
+Ubuntu systems running upstart: /var/log/upstart/docker.log
+RHEL-based systems: /var/log/messages
+Debian: /var/log/daemon.log
+
+- tell docker verbose daemon logging, daemon config file at /etc/docker/daemon.json and set "debug" to "true" and "log-level"
+
+debug – the most verbose option
+info – the default value and second-most verbose option
+warn – third most verbose option
+error – fourth most verbose option
+fatal – least verbose option
+
+{
+  <Snip>
+  "debug":true,
+  "log-level":"debug",
+  <Snip>
+}
+
+json-file and journald are probably the easiest to configure and they both work with the docker logs and docker service logs. a daemon.json shows a Docker host configured to use journald.
+
+{
+  "log-driver": "journald"
+}
+
+$ docker logs vantage-db
+
+libnetwork also provides service discovery that allows all containers and Swarm services to locate each other by name.
+
+use the --dns flag to start containers and services with a customized list of DNS servers, and you can use the --dns-search flag to add custom search
+
+$ docker run -it --name custom-dns \
+  --dns=8.8.8.8 \
+  --dns-search=nigelpoulton.com \
+  alpine sh
+
+- ingress load balancing 
+
+Swarm supports two ways of publishing services to external clients:
+
+Ingress mode (default)
+Host mode
+
+$ docker service create -d --name svc1 \
+  --publish published=5005,target=80,mode=host \
+  nginx
+
+looks like -p 5005:80 and you’ve seen it a few times already. However, you cannot publish a service in host mode using the short form.
+
+as follows:
+
+published=5005 makes the service available to external clients via port 5005
+target=80 makes sure requests hitting the published port get mapped back to port 80 on service replicas
+mode=host makes sure requests will only reach the service if they arrive on nodes running a service replica
+
+- command to delete the services you created.
+
+$ docker service rm svc1
+
+delete the standalone containers you created.
+
+$ docker rm c1 c2 client web mactainer1 
+
+delete the networks you created.
+
+$ docker network rm localnet macvlan100
+
+- docker network command summary 
+
+docker network ls lists all the Docker networks available to the host.
+docker network create is how you create a new Docker network. You have to give the network a name and you can use the -d flag to specify which driver creates it.
+docker network inspect provides detailed configuration information about Docker networks.
+docker network prune deletes all unused networks on a Docker host.
+docker network rm Deletes specific networks on a Docker host or swarm.
+
+native Linux commands.
+
+brctl show prints a list of all kernel bridges on the Docker host and shows if any containers are connected.
+ip link show prints bridge configuration data. You ran an ip link show docker0 to see the configuration of the docker0 bridge on your Docker host.
+
+
+# Docker overlay networking 
+- sections 
+Docker overlay networking – The TLDR
+Docker overlay networking history
+Building and testing overlay networks
+Overlay networks explained
+
+- docker overlay networking the TLDR a container networking startup called Socket Plane with two goals 
+
+Bring overlay networking to Docker
+Make container networking simple for developers
+
+- build a swarm 
+
+//node 1
+$ docker swarm init
+
+//node 2
+$ docker swarm join \
+  --token SWMTKN-1-0hz2ec...2vye \
+  172.31.1.5:2377
+This node joined a swarm as a worker.
+
+have a two-node Swarm with node1 as a manager and node2 as a worker.
+
+- create a network overlay 
+
+create a new encrypted overlay network called uber-net.
+
+$ docker network create -d overlay -o encrypted uber-net
+vdu1yly429jvt04hgdm0mjqc6
+
+ don’t specify the -o encrypted flag, Docker will still encrypt the control plane (management traffic) but won’t encrypt the data plane 
+
+ $ docker network ls
+NETWORK ID     NAME              DRIVER    SCOPE
+65585dda7500   bridge            bridge    local
+7e368a1105c7   docker_gwbridge   bridge    local
+a38083cdab1c   host              host      local
+4dsqo7jc36ip   ingress           overlay   swarm
+d97e92a23945   none              null      local
+vdu1yly429jv   uber-net          overlay   swarm   <<---- New overlay network
+
+- Attach a container to the overlay network
+
+deployed to node1 and the other to node2, causing Docker to extend the overlay network to node2.
+
+$ docker service create --name test \
+   --network uber-net \
+   --replicas 2 \
+   ubuntu sleep infinity
+
+$ docker service ps test
+ID          NAME    IMAGE           NODE      DESIRED STATE   CURRENT STATE
+sm1...1nw   test.1  ubuntu:latest   node1     Running         Running
+tro...kgk   test.2  ubuntu:latest   node2     Running         Running
+
+Switch over to node2 and run a docker network ls to verify it can now see the uber-net network.
+
+$ docker network inspect uber-net
+
+the IP of the first replica called test.1.tro...kgk. If you run the same command on node2, you’ll see the name and IP of the other replica.
+
+$ docker ps
+CONTAINER ID   IMAGE           COMMAND           CREATED    STATUS     NAME
+d7766923a5a7   ubuntu:latest   "sleep infinity"  2 hrs ago  Up 2 hrs   test.1.tro...kgk
+
+$ docker inspect \
+  --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' d7766923a5a7
+10.0.0.3
+
+containers and install the ping utility.
+
+$ docker exec -it d7766923a5a7 bash
+
+You’ll need to install traceroute in the container for this to work
+
+- Docker uses VXLAN tunnels to create virtual layer 2 overlay networks. So, let’s do a quick VXLAN primer.
+
+- clean up command to delete the test service.
+
+$ docker service rm test
+$ docker network rm uber-net
+
+- Docker overlay networking – The commands
+docker network create tells Docker to create a new network. You use the -d overlay flag to use the overlay driver to create an overlay network. You can also pass the -o encrypted flag to tell Docker to encrypt network traffic. However, performance may drop in the region of 10%.
+docker network ls lists all the container networks visible to a Docker host. Docker hosts running in swarm mode only see overlay networks if they run containers attached to the network. This keeps network-related management traffic to a minimum.
+docker network inspect shows detailed information about a particular container network. You can find out the scope, driver, IPv4 and IPv6 info, subnet configuration, IP addresses of connected containers, VXLAN network ID, encryption state, and more.
+docker network rm deletes a network.
+
+
+# Volumns and persisitent data 
+- sections 
+Volumes and persistent data – The TLDR
+Containers without volumes
+Containers with volumes
+The commands
+
+- Persistent data is the stuff you care about and need to keep. It includes things like customer records, financial data, research results, audit data, and even some types of logs
+
+- Volumes are separate objects that you mount into containers, and they have their own lifecycles
+
+- Docker creates containers by stacking read-only image layers and placing a thin layer of local storage on top.
+
+if an application needs to update existing files or add new files, it makes the changes in the local storage layer, and Docker merges them into the view of the container.
+
+docker keeps local storage layer on host:
+Linux containers: /var/lib/docker/<storage-driver>/...
+Windows containers: C:\ProgramData\Docker\windowsfilter\...
+
+- Containers with volumes 
+
+Volumes are independent objects that are not tied to the lifecycle of a container
+You can map volumes to specialized external storage systems
+Multiple containers on different Docker hosts can use volumes to access and share the same data
+
+    + you can map the volume to an external storage system or a directory on the Docker host.
+
+    + example create a new volume called myvol, You can use the -d flag to specify a different driver
+
+$ docker volume create myvol
+
+    + third party drivers, https://docs.docker.com/engine/extend/legacy_plugins/#volume-plugins
+
+     Docker host connected to an external storage system via a plugin (driver).
+
+    + check the volumes list 
+
+$ docker volume ls 
+
+$ docker volume inspect myvol
+[
+    {
+        "CreatedAt": "2024-05-15T12:23:14Z",
+        "Driver": "local",
+        "Labels": null,
+        "Mountpoint": "/var/lib/docker/volumes/myvol/_data",
+        "Name": "myvol",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+
+scope local means local driver. mount point where the volume exists int the host's file system.
+
+- create volumes 
+
+$ docker volume create myvol
+
+-  two ways to delete Docker volumes:
+
+docker volume prune
+docker volume rm
+
+The docker volume prune --all command deletes all volumes not mounted into a container or service replica
+The docker volume rm command is more precise and lets you specify which volumes to delete.
+$ docker volume prune --all
+
+- by default Docker gives every volume created with the local driver its own directory on the host under /var/lib/docker/volumes.
+
+use the -d flag to specify a different driver, but you’ll need to install the driver first.
+
+- Using volumes with containers
+
+the --mount flag, telling Docker to mount a volume called bizvol into the container at /vol. 
+
+$ docker run -it --name voltainer \
+    --mount source=bizvol,target=/vol \
+    alpine
+
+specify a volume Docker will use it or created.
+
+$ docker volume ls
+$ docker volume rm bizvol
+
+- deploy volumes via Dockerfiles by using the VOLUME instruction. The format is VOLUME <container-mount-point>. Interestingly, you cannot specify a host directory when you define volumes in a Dockerfile.
+
+- use exec to run command in container to write on volumes 
+```
+$ docker exec -it voltainer sh
+
+# echo "I promise to write a book review on Amazon" > /vol/file1
+
+# ls -l /vol
+total 4
+-rw-r--r-- 1 root  root   50 May 23 08:49 file1
+
+# cat /vol/file1
+I promise to write a book review on Amazon
+
+# exit
+
+$ docker rm voltainer -f
+voltainer
+
+deleted the container but kept the volume.
+
+$ docker ps -a
+
+$ docker volume ls
+DRIVER              VOLUME NAME
+local               bizvol
+
+# Check the file on host 
+$ ls -l /var/lib/docker/volumes/bizvol/_data/
+total 4
+-rw-r--r-- 1 root root 50 Jan 12 14:25 file1
+
+$ cat /var/lib/docker/volumes/bizvol/_data/file1
+I promise to write a book review on Amazon
+
+create a new container called newctr that mounts bizvol at /vol.
+
+$ docker run -it \
+  --name newctr \
+  --mount source=bizvol,target=/vol \
+  alpine sh
+
+# cat /vol/file1
+I promise to write a book review on Amazon
+```
+
+- you need to design applications that share data to coordinate updates to shared volumes. it will avoid shadow writting/reading on shared volumes.
+
+- following command to delete the container.
+
+$ docker rm 
+
+- Volumes and persistent data – The Commands
+docker volume create creates new volumes. By default, it creates them with the local driver, but you can use the -d flag to specify a different driver.
+docker volume ls lists all volumes on your Docker host.
+docker volume inspect shows you detailed volume information. You can use this command to see where a volume exists in the Docker host’s filesystem.
+docker volume prune deletes all volumes not in use by a container or service replica. Use with caution!
+docker volume rm deletes specific volumes that are not in use.
+
+
+# Docker security 
+- Docker security – The TLDR
+Linux security technologies
+Kernel namespaces
+Control Groups
+Capabilities
+Mandatory Access Control
+seccomp
+Docker security technologies
+Swarm security
+Docker Scout and vulnerability scanning
+Docker Content Trust
+Docker secrets
+
+- security layers 
+
+Docker security {secrets}
+                {docker content trust}
+                {vulnerability scanning}
+                {swarm mode}
+Linux security  {seccomp}
+                {mandatory access control, MAC}
+                {capbilities}
+                {contorl groups, cgroups}
+                {kernel nampespace}
+- own security technologies, including Docker Scout and Docker Content Trust.                
+- Docker Content Trust (DCT) lets you cryptographically sign and verify images.
+- namespaces, The host OS has its own collection of namespaces we call the root namespaces, and each container has its own collection of equivalent isolated namespaces.
+
+Process ID (pid)
+Network (net), every container gets its own eth0 interface with its own unique IP and range of ports.
+Filesystem/mount (mnt)
+Inter-process Communication (ipc), Docker uses the ipc namespace for shared memory access within a container.
+User (user)
+UTS (uts)
+
+-  Linux root user is a combination of a long list of capabilities.
+
+CAP_CHOWN: lets you change file ownership
+CAP_NET_BIND_SERVICE: lets you bind a socket to low-numbered network ports
+CAP_SETUID: lets you elevate the privilege level of a process
+CAP_SYS_BOOT: lets you reboot the system.
+
+- Docker uses seccomp to limit which syscalls a container can make to the host’s kernel.
+- Docker Swarm lets you cluster multiple Docker hosts and manage applications declaratively
+
+ include:
+
+Cryptographic node IDs
+TLS for mutual authentication
+Secure join tokens
+CA configuration with automatic certificate rotation
+Encrypted cluster store
+Encrypted networks
+
+  + configure a secure swarm 
+
+$ docker swarm init
+
+  + Joining new managers is a two-step process:
+
+Extract the secure join token
+Execute a docker swarm join command with the join token on the node you’re adding
+
+  + swarm maintains two distinct join tokens:
+
+Manager token
+Worker token
+
+  + inspect a node’s client certificate on Linux with the following command.
+
+$ sudo openssl x509 \
+  -in /var/lib/docker/swarm/certificates/swarm-node.crt \
+  -text
+
+- Docker Scout is Docker’s native scanning platform and works with Docker Hub
+
+- command signs a local image called nigelpoulton/ddd-trust:signed and pushes it to Docker Hub.
+
+$ docker trust sign nigelpoulton/ddd-trust:signed
+Signing and pushing trust data for local image nigelpoulton/ddd-trust:signed may...
+The push refers to repository [docker.io/nigelpoulton/ddd-trust]
+...
+
+$ docker trust inspect nigelpoulton/ddd-trust:signed --pretty
+
+export the DOCKER_CONTENT_TRUST variable with a value of 1 to force a Docker host to sign and verify all images.
+
+$ export DOCKER_CONTENT_TRUST=1
+
+pull an unsigned image.
+
+$ docker pull nigelpoulton/ddd-book:web0.2
+
+Delete the local copy of the image you just signed and pushed so that you can try pulling it from Docker Hub. Your image name will be different.
+
+$ docker rmi nigelpoulton/ddd-trust:signed
+
+pulling the image.
+
+$ docker pull nigelpoulton/ddd-trust:signed
+
+-  Secrets only work in swarm mode as they leverage the cluster store.
+
+can create and manage secrets with the docker secret command and attach them to services by passing the --secret flag to the docker service create
+
+$ docker secret
+
+- clean up disable docker content trust 
+
+$ unset DOCKER_CONTENT_TRUST
+
+Remove the signer from the repository you created. Your signer and repository will have different names.
+
+$ docker trust signer remove nigel nigelpoulton/ddd-trust
+
+ run it on the swarm managers last.
+
+$ docker swarm leave -f
