@@ -1,0 +1,335 @@
+API Design Patterns=John J;Note=Erxin
+
+# Introduction to APIs
+- API stands for application programming interface
+- “remote procedure call” (RPC) because we’re effectively calling a library function (or procedure) to be executed on another computer that is somewhere potentially far away (or remote). 
+- Summary of standard methods and their meanings
+
+RPC
+
+Description
+
+Create<Resource>()
+
+Creates a new <Resource>
+
+Get<Resource>()
+
+Shows information about a specific <Resource>
+
+List<Resources>()
+
+Shows a list of all existing <Resources>
+
+Delete<Resource>()
+
+Deletes an existing <Resource>
+
+Update<Resource>()
+
+Updates an existing <Resource> in placez
+
+- API, example clearly dictate exactly what they want (e.g., translate text) and even how they want it done (e.g., “within 150 milliseconds, with 95% accuracy”).
+
+
+# Introduction to API design patterns
+- there are many different ways to model many-to-many relationships in an API, each with its different benefits and drawbacks; however, it’s important that an API choose one option and apply it consistently. 
+
+- example 
+
+abstract class Twapi {
+  static version = "v1";
+  static title = "Twapi API";
+  @get("/{parent=users/*}/messages")
+  ListMessages(req: ListMessagesRequest): ListMessagesResponse;   ❶
+}
+ 
+interface ListMessagesRequest {
+  parent: string;
+  pageToken: string;                                              ❷
+  maxPageSize?: number;                                           ❸
+}
+ 
+interface ListMessagesResponse {
+  results: Message[];
+  nextPageToken: string;                                          ❹
+}
+
+
+- Simple API to export messages
+
+abstract class Twapi {
+  static version = "v1";
+  static title = "Twapi API";
+ 
+  @post("/{parent=users/*}/messages:export")   ❶
+  ExportMessages(req: ExportMessagesRequest):
+      ExportMessagesResponse;                  ❷
+}
+ 
+interface ExportMessagesRequest {
+  // The parent user of the messages to be exported.
+  parent: string;                              ❸
+}
+ 
+interface ExportMessagesResponse {
+  // The location of a compressed file
+  // containing the messages requested.
+  exportDownloadUri: string;                   ❹
+}
+
+- API to export messages using a design pattern
+
+abstract class Twapi {
+  static version = "v1";
+  static title = "Twapi API";
+ 
+  @post("/{parent=users/*}/messages:export")
+  ExportMessages(req: ExportMessagesRequest):
+      Operation<ExportMessagesResponse,
+                ExportMessagesMetadata>;           ❶
+}
+ 
+interface ExportMessagesRequest {
+  // The parent user of the messages to be exported.
+  parent: string;
+  outputConfig: MessageOutputConfig;               ❷
+}
+ 
+interface MessageOutputConfig {
+  destination: Destination;                        ❸
+  compressionConfig?: CompressionConfig;           ❹
+  encryptionConfig?: EncryptionConfig;
+}
+ 
+interface ExportMessagesResponse {
+  outputConfig: MessageOutputConfig;               ❺
+}
+ 
+interface ExportMessagesMetadata {
+  // An integer between 0 and 100
+  // representing the progress of the operation.
+  progressPercent: number;                         ❻
+}
+
+-  Interfaces for configuring the destinations and configurations
+
+interface Destination {
+  typeId: string;
+}
+ 
+interface FileDestination extends Destination {        ❶
+  // The uploaded file will be hosted on our servers.
+  fileName: string;
+}
+ 
+interface AmazonS3Destination extends Destination {    ❷
+  // This requires write access to the bucket
+  // and object prefix granted to
+  // AWS Account ID 1234-5678-1234.
+  uriPrefix: string;
+}
+ 
+interface CompressionConfig {
+  typeId: string;
+}
+ 
+interface GzipCompressionConfig {                      ❸
+  // An integer value between 1 and 9.
+  compressionLevel: number;
+}
+ 
+interface EncryptionConfig {                           ❹
+  // All sorts of encryption configuration here
+  // can go here, or this can be
+  // extended as CompressionConfig is.
+}
+
+- Definition of common error and long-running operation interfaces
+
+interface OperationError {                  ❶
+  code: string;
+  message: string;
+  details?: any;
+}
+ 
+interface Operation<ResultT, MetadataT> {   ❷
+  id: string;
+  done: boolean;
+  result?: ResultT | OperationError;
+  metadata?: MetadataT;
+}
+
+- find yourself needing the functionality provided (different export destinations, separate configurations, etc.) then starting in a non-pattern-driven approach will result in breaking changes for consumers. By starting with a pattern-driven approach for this problem, the API will evolve gracefully as new functionality is needed.
+
+- API design patterns are sort of like adaptable blueprints for designing and structuring APIs.
+
+
+# Design pattern principles 
+# Naming 
+- UserSpecifiedPreferences
+
+Expressive, but not simple enough
+
+UserPreferences， Simple enough and expressive enough
+
+Preferences， Too simple
+
+- gramma 
+
+our API deals with people and therefore has a Person resource. Is the collection persons? Or people? In other words, should Person(id=1234) be retrieved by visiting a URL that looks like /persons/1234 or /people/1234? Luckily our guidelines about using American-style English prescribes an answer: use people.
+
+- Good names, like good APIs, are simple, expressive, and predictable.
+
+When it comes to language, grammar, and syntax (and other arbitrary choices), often the right answer is to pick something and stick to it.
+
+- context in which a name is used both imparts information and can be potentially misleading. Be aware of the context in place when choosing a name.
+
+
+# Resource scope and hierarchy 
+- Reference relationships
+
+The simplest way for two resources to relate to one another is by a simple reference
+
+- In this scenario, ChatRoom resources have a many-to-many relationship with users. A ChatRoom points at lots of User resources as the members of the room and a user are able to point at multiple chat rooms of which they might be members.
+
+The mechanics of how this relationship works is left for future exploration
+
+- Self-reference relationships
+
+At this point, we can discuss what might sound strange but is in fact just another special version of a reference: self-references. 
+
+- UML (Unified Modeling Language; https://en.wikipedia.org/wiki/ Unified_Modeling_Language), we can at least look at some of these arrows and explain how they work.
+
+- hierarchical relationships are a very special type of reference relationship between a parent resource and a child resource rather than two generally related resources. The biggest differences with this type of relationship are the cascading effect of actions and the inheritance of behaviors and properties from parent to child. 
+
+- Avoid overly deep hierarchical relationships as they can be difficult to comprehend and manage
+
+
+# Data types and defaults 
+- we have to think in terms of the data types offered by our chosen serialization format (most commonly JSON) 
+
+- missing vs null 
+
+Should it pretend that null is mathematically equivalent to 0? What about trying to add null and "value"? In this scenario should null be interpreted as the empty string ("") and try to concatenate it?
+
+example JSON objects and the value an API might discern for the resource’s color value:
+
+fruit1 = { name: "Apple", color: "red" };
+fruit2 = { name: "Apple", color: "" };
+fruit3 = { name: "Apple", color: null };
+fruit4 = { name: "Apple" };
+
+Google’s Protocol Buffers [https:// opensource.google/projects/protobuf] has some confusing behavior in this area), and they present scenarios that every API must address or risk being wildly inconsistent and confusing for those using the API. In other words, you can’t simply assume that the serialization library will do the right thing because it’s almost a certainty that everyone will be using different serialization libraries!
+
+- boolean values
+
+representing one of two values: true or false. Due to this limited value set, we tend to rely on Boolean values for storing flags or simple yes or no questions. 
+
+- number, data type: numeric identifiers. This might be surprising as many database systems (and almost all relational database systems) use automatically incrementing integer values as primary key identifiers for their rows.  
+
+it’s important to consider the upper bound or maximum value, the lower bound or minimum value, and the zero value. 
+
+- serialization 
+
+If we intend to rely on serialization libraries without digging any deeper, then it’s likely we’ll be pretty disappointed.
+
+function compareJsonNumbers(): boolean {
+  const a = JSON.parse('{"value": 
+➥    9999999999999999999999999}');   ❶
+  const b = JSON.parse('{"value": 
+➥    9999999999999999999999998}');
+  return a['value'] == b['value'];    ❷
+}
+❶ These two number values are clearly not the same (they differ by 1).
+
+❷ However, if we parse a JSON document with them and compare, Node.JS will say they are the same!
+
+function jsonAddition(): number {
+  const a = JSON.parse('{"value": 0.1}');
+  const b = JSON.parse('{"value": 0.2}');
+  return a['value'] + b['value'];            ❶
+}
+❶ Unfortunately, this returns 0.30000000000000004 rather than 0.3.
+
+Adding numbers correctly to avoid any floating point issues
+
+const Decimal = require('decimal.js');
+ 
+function jsonDecimalAddition(): number {
+  const a = JSON.parse('{"value": "0.1"}');               ❶
+  const b = JSON.parse('{"value": "0.2"}');
+  return Decimal(a['value']).add(Decimal(b['value']);     ❷
+}
+
+- Strings are also probably the most versatile data type available when building an API. They can handle simple fields like names, addresses, and summaries; they can be responsible for long blocks of text; and, in cases where a serialization format doesn’t support sending raw bytes over the wire
+
+    + bounds 
+    
+f you’ve ever defined a schema for a relational database and ended up with VARCHAR(128), where the 128 was a completely arbitrary choice
+
+    + default values, Similarly to number and Boolean fields, many serialization formats don’t necessarily permit a distinct null value (null) from a zero value (""). As a result, it can be difficult to determine the difference between a user specifying that a string should be the empty string rather than a user specifically asking the API to “do what’s best” 
+    
+    allow a choice of "default" to act as a flag indicating that a default value should be stored instead.
+    
+    + serialization, encoding formats (e.g., ASCII, UTF-8 [https://tools.ietf .org/html/rfc3629], UTF-16 [https://tools.ietf.org/html/rfc2781], etc.), the world has gravitated toward UTF-8
+    
+    + Most string-oriented serialization formats (e.g., JSON and XML; https://www.w3.org/TR/xml/) have settled on UTF-8, while others (e.g., YAML) don’t explicitly note which encoding must be used. 
+    
+- Enumerations, sort of like drop-down selectors for programmers, are a staple in the world of strongly typed programming languages
+
+In short, enumerations should generally be avoided when another type (such as a string) can work instead. This is particularly true when new values are expected to be added, and even more so when there’s some sort of standard out there for the value in question.
+
+- Lists, Now that we have a grasp on the various primitive data types, we can start digging into collections of those data types.
+
+lists are great for simple primitive collections that represent something inherent to an API resource. 
+
+allowing multiple methods of updating the content in a list field is something worth avoiding.
+
+    + Atomicity
+Hidden in this example is something pretty important to remember: list fields, despite containing multiple items, are best used when the items are considered an atomic piece of data to be modified and replaced entirely rather than piecemeal
+
+    + a list should permit different data types in the same list. In other words, is it a good idea to mix and match string values with number values in the same list? While it certainly isn’t a total disaster to do so
+    
+    + bounds, there’s a good reason to suspect it may grow without a hard boundary, it’s probably a good idea to rely on a subcollection of actual resources rather than an in-line list on the resource.
+    
+    pagination pattern 
+    
+    + default values, Lists are similar to strings in that in some serialization formats and libraries there is no easy way to distinguish between the zero value (for lists, []) and a null value. Unlike strings, however, it’s almost always reasonable to have an empty list as a value
+    
+- Maps, maps are arbitrary collections of key-value pairs, whereas custom data types or sub-resources might be represented in the same way; however, they have a predefined set of keys as well as specific types for the corresponding values
+
+As a result, strings are almost certainly the best choice for the data type of the keys in a map. map keys are technically unique identifiers, it’s also important that these string values be encoded in the UTF-8 format
+
+    + bounds 
+    
+    general this works out to specifying that a key might be up to 100 or so characters and values might be up to 500 or so characters.
+    
+    
+    + default vaules 
+    
+    an empty map value or zero value ({}) and a null value (null). In that case, it’s pretty safe to let the null value indicate that the API should do whatever it thinks is best for the field given the rest of the API request. An empty map, on the other hand, is a user’s way of specifying that the map should contain no data at all, which is itself a meaningful statement.
+    
+- summary 
+
+For every value, we also need to consider both a null value and an undefined or missing value, which may or may not have the same meaning.
+
+Booleans are best used for flags and should be named such that a true value means the positive aspect (e.g., enableFeature rather than disableFeature).
+
+Numeric values should have a true numeric meaning rather than just being made up of numeric digits.
+
+To avoid issues with large numbers (above 32 or 64 bits) or floating point arithmetic issues, numeric values should be serialized as strings in languages that don’t have appropriate native representations.
+
+Strings should be UTF-8 encoded, and for any string used as an identifier of any sort, normalized to Normalization Form C.
+
+Enumerations should generally be avoided, relying on string values instead, with validation done on the server side rather than the client side.
+
+Lists should be treated as atomic collections items that are individually addressable on the client side only.
+
+Both lists and maps should be bounded by the total number of items allowed in the collection; however, maps should further bound the sizes of both keys and values.
+
+     
+     
+# Fundamentals 
+# Resource identification 
+- users of an API to perform some type of lookup operation. In other words, these identifiers are used to address a single resource among some larger collection

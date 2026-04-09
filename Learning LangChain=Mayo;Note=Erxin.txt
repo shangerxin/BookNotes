@@ -1,0 +1,308 @@
+Learning LangChain=Mayo;Note=Erxin
+
+
+# Preface 
+- OpenAI’s GPT-3.5 family of large language models (LLMs)
+
+https://oreil.ly/DwU7R
+
+- LangChain is that you can follow along with all of these examples using either OpenAI or alternative commercial or open source LLM providers.
+
+- say we instruct an LLM to complete the following sentence:
+
+The capital of England is _______.
+
+- intruction tuned llms 
+
+Reinforcement learning from human feedback (RLHF)
+
+- Fine-tuned LLMs are created by taking base LLMs and further training them on a proprietary dataset for a specific task. 
+
+- open source LLMs (Llama, Gemma
+
+OpenAI API at http://platform.openai.com, which will let you use OpenAI LLMs programmatically, that is, using the API from your Python or JavaScript code. 
+
+https://llama.meta.com/llama2/
+
+https://blog.google/innovation-and-ai/technology/developers-tools/gemma-open-models/
+ 
+- Chain-of-Thought
+
+giving your chatbot access to your own documents, which takes it from a generic assistant to one that’s knowledgeable about any area of human knowledge
+
+-  following commands in your terminal:
+
+pip install langchain langchain-openai langchain-community 
+pip install langchain-text-splitters langchain-postgres
+
+You can do this by running the following:
+
+export OPENAI_API_KEY=your-key
+
+```
+from langchain_openai.llms import OpenAI
+
+model = OpenAI(model="gpt-3.5-turbo")
+
+model.invoke("The sky is")
+```
+
+- using LCEL:
+
+Python
+```
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+# the building blocks
+
+template = ChatPromptTemplate.from_messages([
+    ('system', 'You are a helpful assistant.'),
+    ('human', '{question}'),
+])
+
+model = ChatOpenAI()
+
+# combine them with the | operator
+
+chatbot = template | model
+
+# use it
+
+chatbot.invoke({"question": "Which model providers offer LLMs?"})
+```
+
+
+# RAG part I, indexing your data 
+- key steps 
+
+Extract the text from the document.
+
+Split the text into manageable chunks.
+
+Convert the text into numbers that computers can understand.
+
+Store these number representations of your text somewhere that makes it easy and fast to retrieve
+
+- convert document into text 
+```
+from langchain_community.document_loaders import TextLoader
+
+loader = TextLoader("./test.txt")
+loader.load()
+
+
+from langchain_community.document_loaders import WebBaseLoader
+
+loader = WebBaseLoader("https://www.langchain.com/")
+loader.load()
+
+
+// install cheerio: npm install cheerio
+import { 
+  CheerioWebBaseLoader 
+} from "@langchain/community/document_loaders/web/cheerio";
+
+const loader = new CheerioWebBaseLoader("https://www.langchain.com/");
+
+const docs = await loader.load();
+```
+
+[Document(page_content='text content \n', metadata={'line_number': 0, 'source': 
+    './test.txt'})]
+    
+- splitting your text into chunks 
+
+```
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+loader = TextLoader("./test.txt") # or any other loader
+docs = loader.load()
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=200,
+)
+splitted_docs = splitter.split_documents(docs)
+```
+
+- embedding document 
+from langchain_openai import OpenAIEmbeddings
+
+model = OpenAIEmbeddings()
+
+embeddings = model.embed_documents([
+    "Hi there!",
+    "Oh, hello!",
+    "What's your name?",
+    "My friends call me World",
+    "Hello World!"
+])
+
+
+...
+
+- index optimization 
+
+
+
+# Chatting with your data 
+- indexing stage of this process
+
+```
+from langchain_community.document_loaders import TextLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_postgres.vectorstores import PGVector
+
+# Load the document, split it into chunks
+raw_documents = TextLoader('./test.txt').load()
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, 
+    chunk_overlap=200)
+documents = text_splitter.split_documents(raw_documents)
+
+# embed each chunk and insert it into the vector store
+model = OpenAIEmbeddings()
+connection = 'postgresql+psycopg://langchain:langchain@localhost:6024/langchain'
+db = PGVector.from_documents(documents, model, connection=connection)
+
+
+
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+retriever = db.as_retriever()
+
+prompt = ChatPromptTemplate.from_template("""Answer the question based only on 
+    the following context:
+{context}
+
+Question: {question}
+""")
+
+llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+
+chain = prompt | llm
+
+# fetch relevant documents 
+docs = retriever.get_relevant_documents("""Who are the key figures in the 
+    ancient greek history of philosophy?""")
+
+# run
+chain.invoke({"context": docs,"question": """Who are the key figures in the 
+    ancient greek history of philosophy?"""})
+```
+
+
+# Using langgraph to add memory to your chatbot 
+- langgraph 
+
+pip install langgraph
+
+```
+from typing import Annotated, TypedDict
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
+
+class State(TypedDict):
+    # Messages have the type "list". The `add_messages` 
+    # function in the annotation defines how this state should 
+    # be updated (in this case, it appends new messages to the 
+    # list, rather than replacing the previous messages)
+	messages: Annotated[list, add_messages]
+
+builder = StateGraph(State)
+```
+
+
+# Agent architecture 
+- lang graph agent 
+
+using DuckDuckGo. To install it for Python:
+
+Python
+
+pip install duckduckgo-search
+
+
+
+# Agents II 
+- reflection 
+
+```
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_openai import ChatOpenAI
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+
+model = ChatOpenAI()
+
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+
+generate_prompt = SystemMessage(
+    """You are an essay assistant tasked with writing excellent 3-paragraph 
+        essays."""
+    "Generate the best essay possible for the user's request."
+    """If the user provides critique, respond with a revised version of your 
+        previous attempts."""
+)
+
+def generate(state: State) -> State:
+    answer = model.invoke([generate_prompt] + state["messages"])
+    return {"messages": [answer]}
+
+reflection_prompt = SystemMessage(
+    """You are a teacher grading an essay submission. Generate critique and 
+        recommendations for the user's submission."""
+    """Provide detailed recommendations, including requests for length, depth, 
+        style, etc."""
+)
+
+def reflect(state: State) -> State:
+    # Invert the messages to get the LLM to reflect on its own output
+    cls_map = {AIMessage: HumanMessage, HumanMessage: AIMessage}
+    # First message is the original user request. 
+    # We hold it the same for all nodes
+    translated = [reflection_prompt, state["messages"][0]] + [
+        cls_map[msg.__class__](content=msg.content) 
+            for msg in state["messages"][1:]
+    ]
+    answer = model.invoke(translated)
+    # We treat the output of this as human feedback for the generator
+    return {"messages": [HumanMessage(content=answer.content)]}
+
+def should_continue(state: State):
+    if len(state["messages"]) > 6:
+        # End after 3 iterations, each with 2 messages
+        return END
+    else:
+        return "reflect"
+
+builder = StateGraph(State)
+builder.add_node("generate", generate)
+builder.add_node("reflect", reflect)
+builder.add_edge(START, "generate")
+builder.add_conditional_edges("generate", should_continue)
+builder.add_edge("reflect", "generate")
+
+graph = builder.compile()
+```
+
+- structured output 
+from pydantic import BaseModel, Field
+
+
+class Joke(BaseModel):
+    setup: str = Field(description="The setup of the joke")
+    punchline: str = Field(description="The punchline to the joke")
