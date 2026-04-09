@@ -161,7 +161,7 @@ project(<name> <OPTIONS>): This is used to name the project
 - CMakeCache.txt, Cache variables will be generated from listfiles and stored in CMakeCache.txt
 
 - ignore file for cmake .gitignore
-
+```
 # If you put build tree in the source tree add it like so:
 
 build_debug/
@@ -183,7 +183,7 @@ build_release/
 **/install_manifest.txt
 
 **/compile_commands.json
-
+```
 - CMake projects can use external modules to enhance their functionality.
 
 https://github.com/onqtam/awesome-cmake
@@ -1210,9 +1210,19 @@ file(GENERATE OUTPUT nesting CONTENT
 
 
 # Compiling C++ sources with cmake 
+- use recommended commands:
+
+cmake -B <build tree> -S <source tree>
+
+cmake --build <build tree>
+
+
+- To run the program, the OS will use a tool called loader to map its machine code and all required dynamic libraries to the virtual memory.
+
 - On Linux, the most popular format is the Executable and Linkable Format (ELF). Windows uses a PE/COFF format specification. On macOS, we'll find Mach objects (the Mach-O format).
 
-- Preprocessing (despite being automatically invoked by most compilers) is thought of as a preliminary step to actual compilation
+- create an object file:
+Preprocessing (despite being automatically invoked by most compilers) is thought of as a preliminary step to actual compilation
 
 Assembly is nothing more than a translation of these tokens to CPU-specific instructions based on an instruction set available for the platform
 
@@ -1220,7 +1230,8 @@ Optimization happens throughout the whole compilation, little by little, at ever
 
 Code emission consists of writing the optimized machine code into an object file according to the format specified by the target platform.
 
-initial configuration 
+
+- initial configuration 
 ```
 target_compile_features(): Require a compiler with specific features to compile this target.
 target_sources(): Add sources to an already defined target.
@@ -1252,6 +1263,22 @@ target_include_directories(<target> [SYSTEM] [AFTER|BEFORE]
 
 
 - preprocessor definitions 
+```
+#include <path-spec>: Angle-bracket form, angle-bracket form will check standard include directories, including the directories where standard C++ library and standard C library headers are stored in the system.
+#include "path-spec": Quoted form, will start searching for the included file in the directory of the current file and then check directories for the angle-bracket form.
+```
+
+CMake provides a command to manipulate paths being searched
+
+```
+target_include_directories(<target> [SYSTEM] [AFTER|BEFORE]
+
+  <INTERFACE|PUBLIC|PRIVATE> [item1...]
+
+  [<INTERFACE|PUBLIC|PRIVATE> [item2...] ...])
+```
+
+The SYSTEM keyword informs the compiler that the provided directories are meant as standard system directories
 
 definitions.cpp
 ```
@@ -1274,6 +1301,11 @@ int main() {
 
 }
 ```
+
+definitions are traditionally passed to the compiler with the -D flag – -DFOO=1 – and some programmers still use that flag in this command:
+
+target_compile_definitions(hello PRIVATE -DFOO)
+target_compile_definitions(hello PRIVATE -D FOO)
 
 CMakeLists.txt 
 ```
@@ -1318,16 +1350,260 @@ target_include_directories(configure PRIVATE
                                                      ${CMAKE_CURRENT_BINARY_DIR})
 ```
 
+- utilize the file() command in GLOB mode – it can collect all the files from subdirectories and store them in a variable
+
+```
+file(GLOB helloworld_SRC "*.h" "*.cpp")
+
+add_executable(helloworld ${helloworld_SRC})
+```
+
+- when UNIT_TEST is defined:
+```
+class X {
+
+#ifndef UNIT_TEST
+
+private:
+
+#endif
+
+  int x_;
+
+}
+```
+
+- using git commit to track a compiled version 
+```
+add_executable(print_commit print_commit.cpp)
+
+execute_process(COMMAND git log -1 --pretty=format:%h
+
+                OUTPUT_VARIABLE SHA)
+
+target_compile_definitions(print_commit PRIVATE
+
+  "SHA=${SHA}")
+``` 
+  
+use the definition in code 
+
+```
+#include <iostream>
+
+// special macros to convert definitions into c-strings:
+
+#define str(s) #s
+
+#define xstr(s) str(s)
+
+int main()
+
+{
+
+#if defined(SHA)
+
+    std::cout << "GIT commit: " << xstr(SHA) << std::endl;
+
+#endif
+
+}
+```
+
+- With the configure_file(<input> <output>) command, we can generate new files from templates
+
+```
+#cmakedefine FOO_ENABLE
+
+#cmakedefine FOO_STRING1 "@FOO_STRING1@"
+
+#cmakedefine FOO_STRING2 "${FOO_STRING2}"
+
+#cmakedefine FOO_UNDEFINED "@FOO_UNDEFINED@"
+```
+
+CMake build an output file, like this:
+
+chapter05/04-configure/<build_tree>/configure.h
+```
+#define FOO_ENABLE
+
+#define FOO_STRING1 "abc"
+
+#define FOO_STRING2 "def"
+```
+
+- Configuring the optimizer
+
+target_compile_options() command and specify exactly what we want from the compiler.
+
+```
+target_compile_options(<target> [BEFORE]
+
+  <INTERFACE|PUBLIC|PRIVATE> [items1...]
+
+  [<INTERFACE|PUBLIC|PRIVATE> [items2...] ...])
+```
+
+Most compilers offer four basic levels of optimization, from 0 to 3. We specify them with the -O<level> option. -O0 means no optimization
+
+    + variables for used language (CXX for C++) and build configuration (DEBUG or RELEASE):
+
+CMAKE_CXX_FLAGS_DEBUG equals -g.
+CMAKE_CXX_FLAGS_RELEASE equals -O3 -DNDEBUG.
+
+Variables such as CMAKE_<LANG>_FLAGS_<CONFIG> are global – they apply to all targets. It is recommended to configure your targets through properties and commands
+
+fine-tune the optimization by appending the flags like 
+Enable them with an -f option: -finline-functions.
+Disable them with an -fno option: -fno-inline-functions.
+
+- inline keyword, explicitly using the inline keyword up to the compiler to decide whether a function will be inlined. 
+
+specifying  -O0 level for the target or going straight after the flags responsible:
+
+-finline-functions-called-once: GCC only
+-finline-functions: Clang and GCC
+-finline-hint-functions: Clang only
+
+- Loop unrolling is an optimization technique that is also known as loop unwinding. The general approach is to transform loops into a set of statements
+
+void func() {
+
+  for(int i = 0; i < 3; i++)
+
+    cout << "hello\n";
+
+}
+
+The previous code will be transformed into something like this:
+
+void func() {
+
+    cout << "hello\n";
+
+    cout << "hello\n";
+
+    cout << "hello\n";
+
+}
+
+offers a slightly different version of this flag:
+
+-floop-unroll: GCC
+-funroll-loops: Clang
+
+- loop vectorization, Single Instruction Multiple Data (SIMD) is one of the mechanisms developed in the early 1960s to achieve parallelism.
+
+```
+int a[128];
+
+int b[128];
+
+// initialize b
+
+for (i = 0; i<128; i++)
+  a[i] = b[i] + 5;
+```
+
+to 
+```
+for (i = 0; i<32; i+=4) {
+
+  a[ i ] = b[ i ] + 5;
+
+  a[i+1] = b[i+1] + 5;
+
+  a[i+2] = b[i+2] + 5;
+
+  a[i+3] = b[i+3] + 5;
+
+}
+```
+-ftree-vectorize -ftree-slp-vectorize to enable in GCC
+-fno-vectorize -fno-slp-vectorize to disable in Clang (if things break)
+
+- managing the process of compilation 
+
+CMake offers a command to enable header precompilation. This allows a compiler to process headers separately from the implementation file 
+
+```
+target_precompile_headers(<target>
+
+  <INTERFACE|PUBLIC|PRIVATE> [header1...]
+
+  [<INTERFACE|PUBLIC|PRIVATE> [header2...] ...])
+```
+
+CMake will put all headers' names in a cmake_pch.h|xx file, which will then be precompiled to a compiler-specific binary file with a .pch, .gch, or .pchi extension.
+
+    + CMake creates a unified build file:
+```
+#include "source_a.cpp"
+
+#include "source_b.cpp"
+````
+
+unity builds, we have two options:
+
+Set the CMAKE_UNITY_BUILD variable to true – it will initialize the UNITY_BUILD property on every target defined thereafter.
+Manually define UNITY_BUILD as true on every target that should use unity builds.
+
+    + c++ 20 features 
+
+create a single file with module declaration:
+```
+export module hello_world;
+
+import <iostream>;
+
+export void hello() {
+
+    std::cout << "Hello world!\n";
+
+}
+```
+
+then  you can use it in your code by simply importing it:
+```
+import hello_world;
+
+int main() {
+
+    hello();
+
+}
+```
+
+- configure error and warning 
+
+If you feel an internal need to be pedantic, use the -Wpedantic flag. This is an interesting one – it enables all the warnings demanded by strict ISO C and ISO C++. 
+
+down-to-earth coders will be satisfied with -Wall and optionally with -Wextra for that extra-fancy feel.
+
+- debuging individual stages 
+
+There is a -save-temps flag we can pass to the compilers (both GCC and Clang have it) that will force the output of each stage
+
+add_executable(debug hello.cpp)
+
+target_compile_options(debug PRIVATE -save-temps=obj)
+
+//Debugging issues with header file inclusion
+target_compile_options(debug PRIVATE -H)
 
 
+- Make will provide some flags to the compiler by default to manage this process, storing them first in global variables:
 
+CMAKE_CXX_FLAGS_DEBUG contains -g.
+CMAKE_CXX_FLAGS_RELEASE contains -DNDEBUG.
 
+change the defaults that are provided by CMake (remove NDEBUG from CMAKE_CXX_FLAGS_RELEASE) or implement a hardcoded override by undefining the macro before the header inclusion:
 
-
-
-
-
-
+```
+#undef NDEBUG
+#include <assert.h>
+```
 
 
 # Cmake official document 
@@ -1344,3 +1620,182 @@ Typical values include Debug, Release, RelWithDebInfo and MinSizeRel
 The ccmake executable is the CMake curses interface. Project configuration settings may be specified interactively through this GUI. 
 
 
+# Linking with cmake 
+- a compiler structures an object file in the popular ELF format used by Unix-like systems and many others
+
+{
+*.o 
+ELF header 
+.text 
+.data 
+.rodata 
+...
+section headers
+}
+
+.bss section: All values of the uninitialized global and static objects (variables), which will be initialized to zero on program start
+.rodata section: All values of the constants (read-only data)
+.strtab section: A string table containing all constant strings such as Hello World that we put in our basic hello.cpp example
+.shstrtab section: A string table containing the names of all the sections
+
+- executable file 
+
+{
+executable file 
+elf header 
+program header 
+.text 
+.data 
+.rodata 
+...
+section headers 
+}
+
+- library 
+
+A static library has a .a extension on Unix-like systems and .lib on Windows.
+Shared libraries have a .so extension on Unix-like systems and .dll on Windows.
+
+add_library(<name> [<source>...])
+add_library(<name> STATIC [<source>...])
+
+    + shared library 
+    
+add_library(<name> SHARED [<source>...])
+
+all subsequently started programs will be provided with the same address (thanks to the complex mechanisms of virtual memory). Only the .data and .bss segments will be created separately for every process consuming the library
+
+- shared modules 
+
+build shared modules, we need to use the MODULE keyword:
+
+add_library(<name> MODULE [<source>...])
+
+it is not loaded automatically. Need a system call such as LoadLibrary (Windows) or dlopen()/dlsym() (Linux/macOS).
+
+- CMake checks the POSITION_INDEPENDENT_CODE PIC property of targets and appropriately adds compiler-specific compilation flags such as -fPIC for gcc or clang.
+
+a CPU uses a memory management unit (MMU) to translate a virtual address (starting from 0 for every process) to a physical address that was available at the time of allocation
+
+PIC will add a new section to our output – the Global Offset Table (GOT). Eventually, this section will become a segment containing runtime addresses for all the symbols needed by shared libraries. 
+
+- RESOLVE multiple definition 
+
+we'll use the static keyword
+
+- dynamic link duplicated symbols 
+
+The second implementation file is almost an exact copy of the first
+
+```
+extern void a();
+
+extern void b();
+
+extern void duplicated();
+
+int main() {
+
+  a();
+
+  b();
+
+  duplicated();
+
+}
+```
+
+Always take great care when exporting names from libraries
+
+- using namespaces, don't count on a linker 
+
+- control the order of linking and unsresolved symbols with 
+
+target_link_libraries(main-lib outer-lib nested-lib)
+
+- seperate main for testing 
+```
+extern int start_program(int, const char**);
+
+int main(int argc, const char** argv) {
+
+  return start_program(argc, argv);
+
+}
+```
+
+
+```
+#include <iostream>
+
+int start_program(int argc, const char** argv) {
+
+  if (argc <= 1) {
+
+    std::cout << "Not enough arguments" << std::endl;
+
+    return 1;
+
+  }
+
+  return 0;
+
+}
+```
+
+make file 
+```
+CMakeLists.cpp
+
+cmake_minimum_required(VERSION 3.20.0)
+
+project(Testing CXX)
+
+add_library(program program.cpp)
+
+add_executable(main main.cpp)
+
+target_link_libraries(main program)
+```
+
+It's the program target that contains all the logic. We can now test it by creating another executable with its own main() containing the test logic
+
+```
+#include <iostream>
+
+extern int start_program(int, const char**);
+
+using namespace std;
+
+int main() {
+
+  auto exit_code = start_program(0, nullptr);
+
+  if (exit_code == 0)
+
+    cout << "Non-zero exit code expected" << endl;
+
+  const char* arguments[2] = {"hello", "world"};
+
+  exit_code = start_program(2, arguments);
+
+  if (exit_code != 0)
+
+    cout << "Zero exit code expected" << endl;
+
+}
+```
+
+The important thing is that we have now defined main() twice:
+
+In main.cpp for production use
+In test.cpp for test purposes
+
+CMakeLists.txt now:
+```
+add_executable(test test.cpp)
+target_link_libraries(test program)
+```
+
+
+# Managingg dependencies with CMake 
