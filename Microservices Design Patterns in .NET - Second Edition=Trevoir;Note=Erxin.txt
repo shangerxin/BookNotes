@@ -1,0 +1,439 @@
+Microservices Design Patterns in .NET - Second Edition=Trevoir;Note=Erxin
+
+
+# Introducing microservices 
+- Microservices are typically developed as APIs via HTTP (REST APIs) or a remote procedure call (gRPC) that may or may not interact with each other.
+- typical layers 
+
+presentation layer 
+
+business logic layer 
+
+data access layer 
+
+database 
+
+- modular monolith development pattern 
+
+separation of concerns 
+
+independent development and testing 
+
+
+- why 
+
+
+indepdence 
+
+decentralized 
+
+technology diversity 
+
+- microservices and .net core 
+
+cross platform 
+
+high performance 
+
+modular and lightweight 
+
+coprehensive tooling and support 
+
+
+
+# Applying domain driven design principles 
+- practical applications of these concepts, starting with Domain-Driven Design (DDD)
+
+entity 
+models 
+ubiquitous language 
+bounded context 
+
+- using the aggregate pattern 
+
+Aggregate root: Patient entity identified by a unique patient ID
+Entities: Medical Record, Appointment, and Prescription entities associated with the patient
+Value objects: Address, contact information, and insurance details value objects
+
+
+aggregates are clusters of related objects, we need to fully understand how those objects relate to one another. 
+
+
+# Synchronous communicaton between microservices 
+- Key characteristics include the following:
+
+Immediate response: The requesting service expects an instant reply, leading to a tightly coupled interaction
+Blocking behavior: The caller is halted until the response is received, which can impact performance if the callee is slow or unresponsive
+Simplified error handling: Errors can be detected and managed promptly, as the caller is immediately aware of the outcome
+
+- using gPRC, which allows us to call a REST API with higher throughput and less latency.
+
+- Resilience: We must ensure that our service calls are done via durable channels. Remember that hardware can fail, or there can be a network outage when the service call is executed.
+
+- Tracing and monitoring: We have established that a single operation can span multiple services.
+
+- The categories of status codes are the following:
+
+1xx (Informational): Communicates protocol-level information
+2xx (Success): Indicates that the request was accepted and no errors occurred during processing
+3xx (Redirection): Indicates that an alternative route needs to be taken to complete the original request
+4xx (Client Error): General range for errors that arise from the request, such as poorly formed data (400) or a wrong address (404)
+5xx (Server Error): These errors indicate that the server failed to complete the task for some unforeseen reason
+
+- SOAP for API development
+The concept of Application Programming Interfaces (APIs) has been integral to software development since the early days of computing. 
+
+- SOAP request:
+
+<soap:Envelope>: The root element that defines the XML document as a SOAP message
+<soap:Header>: An optional element for header information; it is empty in this example
+<soap:Body>: Contains the request details
+<app:GetAppointmentDetails>: The specific operation being invoked, defined in the "http://www.example.com/appointment" namespace
+<app:AppointmentId>: The parameter for the operation specifying the appointment identifier
+
+- rest api 
+flexibility in data formats 
+
+performance scalability 
+
+lower bandwidth consumption 
+
+better support for web clients 
+
+- implementing a resultful microservice 
+
+URL or endpoint: The request URL is the address of the API or resource you are trying to interact with.
+Verb or method: The most used verbs are GET (to retrieve data), POST (to create a record), PUT (to update data), and DELETE (to delete data).
+Data: Data accompanies a call when necessary to complete a request. For instance, a POST request to the booking microservice would need to include the booking details that need to be created.
+
+- test rest client, add rest client extension in vs code 
+
+- using HttpClient, provides methods that map to each HTTP verb, allowing us to bootstrap our calls and pass in the data we require for the operation
+
+```
+namespace AppointmentsApi.Services;
+public record Doctor(
+    Guid DoctorId,
+    string FirstName,
+    string LastName,
+    string Specialty
+);
+public class DoctorsApiClient
+{
+    private readonly HttpClient _httpClient;
+    public DoctorsApiClient(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
+    // Example method to retrieve doctor details
+    public async Task<Doctor> GetDoctorAsync(Guid doctorId)
+    {
+        var response = await
+            _httpClient.GetAsync($"/api/doctors/{doctorId}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<Doctor>();
+    }
+}
+
+- grpc api communication
+
+In the 1960s and 1970s, Remote Procedure Call (RPC) emerged, enabling a program to execute a procedure on a remote server as if it were local.
+
+RPC implementations often led to tight coupling between the client and server
+
+gRPC include the following:
+
+Compactness: Produces smaller payloads, reducing network bandwidth usage
+Faster serialization and deserialization: Protocol Buffers (Protobuf)’s binary format allows quicker processing than REST’s text-based JSON
+Server streaming: The server can send multiple responses to a single client request, which is beneficial for delivering continuous data streams
+Client streaming: The client sends requests to the server, which processes them and returns a single response
+Bidirectional streaming: Both the client and server exchange messages simultaneously, enabling real-time communication
+
+RESTful APIs to gRPC, we are introduced to HTTP/2
+
+Multiplexing: Allows multiple requests and responses to be sent concurrently over a single TCP connection
+Binary framing and compression: This method utilizes a compact binary format for data transmission
+
+```
+public class DocumentServiceImpl : DocumentService.DocumentServiceBase
+{
+    // Simulating a data store
+    private static readonly List<Document> Documents = new List<Document>
+    {
+        new Document { Id = "1", PatientId = "123", Name = "Document1" },
+        new Document { Id = "2", PatientId = "456", Name = "Document2" }
+    };
+    public override Task<DocumentList> GetAll(PatientId request,
+        ServerCallContext context)
+    {
+        var documentList = new DocumentList();
+        documentList.Documents.AddRange(Documents.Where(
+            q => q.Id == request.Id));
+        return Task.FromResult(documentList);
+    }
+    public override Task<Document> Get(DocumentId request,
+        ServerCallContext context)
+    {
+        var document = Documents.Find(doc => doc.Id == request.Id);
+        if (document == null)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound,
+                "Document not found"));
+        }
+        return Task.FromResult(document);
+    }
+}
+```
+    + gRPC web service, we must first add the following support package:
+
+dotnet add package Grpc.Net.Client
+dotnet add package Google.Protobuf
+dotnet add package Grpc.Tools
+
+
+# Asynchronous communication between microservices 
+- RabbitMQ to cloud-native solutions such as Azure Service Bus, we will demonstrate how to select and leverage the right tools
+
+message queue 
+
+publish subscribe model 
+
+event streaming 
+
+- message bus 
+
+Apache Kafka: A distributed streaming platform for high-throughput and low-latency message processing:
+    Pros: Handles large volumes of data efficiently; suitable for real-time analytics and event streaming
+    Cons: More complex to set up and manage; may be overkill for simple messaging needs
+Azure Service Bus: A fully managed enterprise message broker with rich features:
+    Pros: Seamless integration with Azure services; supports advanced messaging scenarios
+    Cons: Tied to the Azure ecosystem; potential cost considerations
+Amazon SQS: AWS’s fully managed message queuing service:
+    Pros: Scalable and easy to use; integrates well with other AWS services
+    Cons: Limited to queue-based messaging; lacks some advanced features of other brokers
+NATS: A lightweight, high-performance messaging system:
+    Pros: Simple design; low latency; suitable for cloud-native applications
+    Cons: Limited persistence options; fewer features than more comprehensive brokers
+ActiveMQ: An open source message broker that supports multiple protocols:
+    Pros: Supports a wide range of protocols; flexible and mature
+    Cons: Can be resource-intensive; may require more maintenance
+RabbitMQ: An open source message broker that facilitates asynchronous communication between distributed systems by implementing several protocols:
+    Pros: RabbitMQ supports multiple protocols and is highly interoperable
+    Cons: Not as performant for higher workloads and does not support event streaming
+    
+    
+    
+# Working with the aggregator pattern 
+- Backend for Frontend (BFF) patterns, which seek to condense data from multiple microservices and package
+
+- What is agregator pattern ? ggregate pattern is a powerful tool in microservices architecture that facilitates data consolidation from multiple services into a single response.
+
+Patient service: Manages personal and demographic information.
+Medical history service: Stores past medical records and treatment history.
+Appointment service: Handles scheduling and appointment details.
+Billing service: Invoices and payment information.
+
+
+dotnet new webapi -o AggregatorService
+cd AggregatorService
+dotnet add package Microsoft.Extensions.Http
+dotnet add package Newtonsoft.Json
+
+{
+  /* Other configs */
+  "ApiEndpoints": {
+    "AppointmentsApi": "https://appointments.api/",
+    "PatientsApi": "https://patients.api/",
+    "MedicalHistoryApi": "https://medicalhistory.api/",
+    "BillingApi": "https://billingdetails.api/"
+  }
+}
+
+public class AppointmentsServiceClient(HttpClient httpClient)
+{
+    private readonly HttpClient _httpClient = httpClient;
+public async Task<List<AppointmentDto>?>
+    GetAppointmentsAsync(int patientId)
+    {
+        var appointments = await
+            _httpClient.GetFromJsonAsync<List<AppointmentDto>?>
+                ($"api/appointmentsforpatient/{patientId}");
+        return appointments;
+    }
+}
+
+The first change we can make is to the appsettings.json file, where we will only need the address of the aggregator service:
+
+  "ApiEndpoints": {
+    "AggregatorServiceApi": "https://AggregatorService.api/"
+  }
+
+- a Blazor WebAssembly (Blazor WASM) application to demonstrate how a UI must interact with several services. 
+
+- caching, patient dashboard information:
+
+[HttpGet("patient-dashboard/{patientId}")]
+public async Task<ActionResult<PatientDashboard>>
+    GetPatientDashboard(int patientId)
+{
+    // Define the cache key
+    var cacheKey = $"PatientDashboard_{patientId}";
+    // Check if the data exists in the cache
+    if (_cache.TryGetValue(cacheKey, out PatientDashboard
+        cachedDashboard))
+    {
+        // Return cached data
+        return Ok(cachedDashboard);
+    }
+    // If not in cache, fetch data from microservices
+    // Store the data in the cache with an expiration time
+    _cache.Set(cacheKey, dashboard, TimeSpan.FromMinutes(5));
+    return Ok(dashboard);
+}
+
+- error handling HTTP calls can be managed with native try-catch logic. With API calls, we can expect one of three kinds of errors:
+
+Transient errors: Temporary issues such as network timeouts or rate limiting. These can often be resolved by retrying.
+Permanent errors: Issues such as 404 Not Found or 401 Unauthorized. Retrying is usually unnecessary.
+Unexpected errors: Unexpected conditions, such as deserialization errors or null references.
+
+- logging and monitoring 
+
+The logging service can be injected into any class using the following template, where ClassName is the name of the class the logger is being injected into:
+
+ILogger<ClassName> logger
+Log messages can then be written at different points in code in like this:
+
+logger.LogInformation("I am a log message");
+
+
+# Working with the CQRS pattern 
+- the Command Query Responsibility Segregation (CQRS) pattern, which is an extension of the CQS pattern.
+
+- CQRS is not ideal for applications that will perform simple CRUD operations.
+
+- A query is expected to search for data and return a result. This search might be complicated or straightforward
+
+- good naming convention 
+
+- organizing files and classes 
+
+separate command and query folders 
+
+group by feature 
+
+adhere to SRP, A method should have a single task, and a class should implement one thing. 
+
+
+# Applying event sourcing patterns 
+- what are events? operations such as the following:
+
+AppointmentCreated: A patient books an appointment
+DoctorAdded: A new doctor has been added to the system
+PaymentProcessed: A payment is completed
+DiagnosisAdded: A new record has been added to a patient’s medical history
+
+- events bring 
+
+auditability 
+
+decoupling 
+
+scalability 
+
+reproducibility 
+
+real time processing 
+
+flexibility in data model 
+
+-  event typically contains the following attributes:
+
+Event name: A descriptive name indicating the type of event
+Timestamp: The exact time when the event occurred
+Event ID: A unique identifier for the event
+Aggregate ID: An identifier that ties the event to a specific entity or process
+Payload: Additional data capturing the event’s details (e.g., appointment ID, patient details, etc.)
+Metadata: Optional data providing context, such as the event’s source (such as the model or data type name) or the schema’s version
+
+- database 
+
+PostgreSQL offers JSON (text-based) and JSONB (binary-optimized JSON) column types. This is ideal when you need frequent reads and writes on JSON fields with complex queries such as filtering or partial updates.
+MySQL provides a native JSON column type. It suits systems requiring moderate querying and more straightforward JSON manipulation.
+Microsoft SQL Server supports JSON storage in standard NVARCHAR columns while offering robust functions for querying and manipulation. It supports JSON query and update operations with JSON_QUERY, JSON_VALUE, and FOR JSON clauses.
+Oracle Database supports a native JSON type, version 21c, which is effective for enterprise systems requiring robust indexing.
+
+- Domain events in our appointment booking microservice represent significant actions or decisions in the domain, such as scheduling, rescheduling, or canceling an appointment
+
+
+# Database and storage design patterns 
+- such as SQL Server, PostgreSQL, and SQLite, and NoSQL technologies such as MongoDB and Cosmos DB
+
+- one box outage would not take down all the hosted services. This is called database per service.
+
+- the two popular flavors of this approach are tables per service and schema per service.
+
+- ORM is an essential part of the design process. This lays a foundation for how our application will communicate with our database. The abbreviation ORM is short for Object Relational Mapping. 
+
+- MongoDB and Cassandra automatically distribute data across shards based on a shard key. At the same time, Couchbase and Amazon DynamoDB use partitioning and consistent hashing to distribute data and ensure even load balancing.
+
+    + types of nosql database 
+    
+Document database: Stores data as JavaScript Object Notation (JSON) objects. MongoDB, Cosmos DB, and CouchDB.
+
+Key-value database: This type stores data in simple key-value pairs. Values are usually stored as string values and do not natively support storing complex data objects.  A popular example of this is Redis.
+
+Graph database: This type stores data in nodes and edges. A node stores information on an object, such as a person or place. example of this is Neo4j.
+
+- how to choosing a database 
+
+maintainability 
+
+extensibility 
+
+supporting technologies 
+
+comfort level 
+
+maturity, mature technologies that have been tried and proven, with strong enterprise or community support
+
+appropriateness, ensure that our chosen technology can adequately address the project’s needs as much as possible.
+
+- choosing an ORM Object Relational Mapping is an essential parto fo the desiggn 
+
+- choosing a databsae developmment techinique 
+
+code first, create models with program languages 
+development speed without basebase upfront 
+control over code 
+version control and migrations 
+flexibility in complex relationships 
+
+schema first, database first 
+
+    + example 
+    
+
+dotnet ef migrations remove
+
+dotnet ef migrations list
+
+dotnet ef database update <MigrationName>
+
+dotnet ef migrations script --idempotent --output "path/to/your/script.sql"
+
+    + multiple services to individual databases.
+
+
+
+# implmenting trfansactions across microservices using saga pattern 
+- Traditional monolithic applications rely on Atomicity, Consistency, Isolation, and Durability (ACID) transactions
+
+- microservices application is best implemented using the Database-Per-Service pattern. 
+
+- spans multiple services as a saga.
+
+Reversible: These are transactions that another transaction with the opposite effect can reverse.
+Retriable: These transactions are guaranteed to succeed and are implemented after pivot transactions.
+Pivot: As the name suggests, the success or failure of these transactions is pivotal to the continuation of the saga.
+

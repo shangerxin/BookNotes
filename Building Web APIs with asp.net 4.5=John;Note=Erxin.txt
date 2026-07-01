@@ -1,0 +1,671 @@
+Building Web APIs with asp.net 4.5=John;Note=Erxin 
+
+
+# Necessary tools and source code 
+- tools 
+vs2015 
+postman for test api from chrome 
+git 
+aspnetwebstack.codeplex.com 
+
+- create web api and choose netframework 4.6 
+
+- navigate to the controller 
+
+mvc controller 
+
+naming convention 
+
+//access from url home/index 
+public class HomeController: Controller 
+{
+    [HttpGet]
+    public ActionResult Index(){
+    }
+}
+
+
+- api controller 
+
+//access from url api/values
+public class ValuesController: ApiControler 
+{
+    // GET api/Values 
+    public IEnumerable<string> Get(){
+        return new string[] { "", ...}
+    }
+}
+
+
+- OWIN 
+a new specification for asp.net 
+better code modularity through middleware 
+no hard dependency on system.web 
+decouples app, server and host 
+paves the way for cross-platform web apps 
+only use what you need 
+
+- OWIN middleware 
+
+IDictionary<string, object> environment dictionary 
+
+some required entries 
+not statically typed 
+
+Func<IDctionary<string, object>, Task> app delegate 
+Asynchronous and modular 
+
+Creates sequential HTTP request chain 
+
+Hooks into IIS integrated pipeline through stage markers 
+
+
+- OWIN request flow example 
+public async override Task Invoke(IOwinContext context){
+    Console.WriteLine($"{nameof(MyMiddleware)});
+    await Next.Invoke(content);
+}
+
+- OWIN middleware componment rules 
+
+every owin middleware componnet OMC can execute code twice 
+first during initial call 
+finally after the next compomnent has been awaited 
+
+Any OMC can stop the request pipeline by not calling the next component 
+OMCs that were registeredc earlier can still fire 
+
+- asp.net owin conventions 
+Startup.cs is your entry point 
+Middleware statically extends IAppBuilder 
+Every component must be added in the proper sequencde 
+```
+app.UseMvc()
+app.UseWebApi()
+app.UseSignalR()
+app.UseErrorPage()
+```
+
+- solution file structures follow the mvc standard 
+
+- architectural roles 
+Internal Solution structure 
+contorllers group cation methods into classes and folders 
+
+External Routing structure(REST)
+controllers and action methods define the routable endpoints of your API 
+
+- REST, repressentational state transer 
+HTTP can define state trhrough the combination of these components 
+HTTP route 
+HTTP verb 
+HTTP request body 
+
+each HTTP request should stand alone 
+    + examples 
+    
+GET http://...//store/cart 
+get the shopping cart for the current user 
+
+PUT .../store/cart 
+puting something into the shopping cart 
+
+controller defines the primary route, store/cart 
+action methods handle the different HTTP verbs 
+
+DELETE http://.../orders/68/lineitems/2 
+delete the line item #2 for order #68 
+
+- common http verbs 
+GET only retrieve data, no request body 
+
+POST, posts data commonly a form submissiojn 
+
+- verbs 
+pub, create ore replace a resource 
+delete a resource 
+patch, update part of a resource 
+
+- put vs post 
+put, sending a complete resource to the server to be saved; replacing a compleete resource on the server 
+
+post, submit a web form; send some structured data to the server and get some back 
+
+- action method components 
+[Authrozie] 
+[Route("api/sample/{id}")]
+[AcceptVerbs("GET", "POST")]
+public IEnumerable<string> Get(string id)
+{
+    ...
+}
+
+    + action filters 
+    
+the attribute ahead of the action method name is action Filters 
+
+[Authrozie], authorization filter 
+[Routing], set the routing how to response 
+
+- HttpContext contains session, session, server, request, response 
+
+access ownContext
+
+IOwinContext = HttpContext.GetOwinContext();
+
+- owin.org specifiction 
+
+- http request object 
+Request.Params 
+Request.Form
+Rquest.Headers 
+Request.Cookies 
+Request.Files 
+Request.QueryString 
+
+- http response 
+Response.StatusCode 
+Response.StatusDescription 
+Response.Cache 
+Response.ContentType 
+Response.Headers 
+Response.Cookies 
+
+- Use model binding to action methods 
+[AllowAnonymous]
+[HttpGet]
+[Route("api/VehicleLocator/{year:int}/{make:alpha}/{model}")]
+public class ValuesController: ApiController 
+{
+    public IHttpActionResult UriInput(int year, string make, string mode, bool preOwned = true){
+        Debugger.Break();
+        return OK();
+    }
+}
+
+post man url 
+{{host}}/api/VehicleLocator/2012/Cadillac/SRX?preOwned=false
+
+
+routing string document not avaliabe
+http://www.asp.net/web-api/overview/web-api-routing-and-ations
+
+we can also directly use customized class to send receive parameter, map input, complex objects needs to get from the request body instead of get method url string 
+
+
+public class Vehicle 
+{
+    public int Year {get;set; }
+    public String Make {get;set;}
+    ...
+}
+
+[AllowAnonymous]
+[HttpPut]   //changed to put 
+[Route("api/VehicleLocator/")]
+public class ValuesController: ApiController 
+{
+    public IHttpActionResult BodyInput(Vehicle vehicle){
+        Debugger.Break();
+        return OK();
+    }
+}
+
+
+- customizing the model binding process with attributes 
+SimpleProduct product;
+SimpleProduct.TryParse((string)value, out product);
+
+create a customize type converter 
+
+puiblic class SimpleProductConverter:TypeConverter
+{
+    public override bool CanConvertFrom(ITypeDescriptorContext context, Type sourceType){
+        if(sourceType == typeof(string)){
+            return true;
+        }
+        
+        return base.CanConvertFrom(content, sourceType);
+    }
+    
+    
+    public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value){
+        if(value is string){
+            SimpleProduct product;
+            if(SimpleProduct.TryParse((string)value, output product)){
+                return product;
+            }
+        }
+        return base.ConvertFrom(context, culture, value);
+    }
+}
+
+
+public SimplePruct{
+
+...
+    public static bool TryParse(string s, outf SimpleProduct result){
+        result = null;
+        var parts = s.Split(',');
+        double.TryParse(parts[1], out price){
+            result = new SimpleProduct {Name = parst[0], Price = price};
+            return true;
+        }
+        return false;
+    }
+}
+
+
+//use the model definition in the actoin method, the model will be automatic converted. 
+public IHttpActionResult BindSimpleProductFromUri(SimpleProduct product)....
+
+    + Use a model binder for a more complex type 
+    
+public IHttpActionResult ModelBindProductFromUri([ModelBinder(typeof(ProductModelBinder))] Product product){
+    Debugger.Break();
+    
+    return Ok();
+}
+
+public class ProductModelBinder: IModelBinder{
+    public bool BindModel(HttpActionContext actionContext, ModelBindingContext bindingContext){
+
+        if(bindingContext.ModelType != typeof(Product)){
+            return false;
+        }
+        
+        VAlueProviderREsult val = bindingContext.ValueProvider.GetValue(bindingContext.ModelName);
+        if(val == null){
+            return false;
+        
+        
+        ...
+    }
+}
+
+//we can set the global model binder at the WebApiConfig.cs global configuration file 
+
+    + Value provider is similar to the model binder can be added as attribute of the parameter 
+    
+public IHttpActionResult BindValueFromHeader([ValueProvider(typeof(HeadersvalueProviderFactory))]string favoriteColor){
+    Debugger.Break();
+    
+    return Ok();
+}
+
+
+public class HeadersValueProvider: IValueProvider 
+{
+    private HttpRequestHeaders _headers;
+    
+    public HeadersValueProvider(HttpActionContext actionContext){
+        if(actionContext == null){
+            throw new ARgumentNullException("actionContent");
+        }
+        _headers = actionContext.Request.Headers;
+    }
+    
+    public bool ContainsPrefix(string prefix){
+        return _headers.Contains(prefix);
+    }
+    
+    public ValueProviderResult GetValue(string key){
+        IEnumerable<string> value;
+        
+        if(_headers.TryGetValues(key, out value))
+        {
+            string concatenatedValue = "";
+            value.ToList().ForEach((s) -> concatenatedValue +=s);
+            return New ValueProviderResult(value, concatenatedValue, CultureInfo.InvariantCulture);
+        }
+        return null;
+    }
+}
+
+public class HeadersVAlueProviderFactory: ValueProviderdFacotry 
+{
+    public override IValueProvider GetValueProvider(HttpActionContext actionContext)
+    {
+        return new HeadersValueProvider(actionContext);
+    }
+}
+
+//we can set the global value provider at the WebApiConfig.cs global configuration file, first matched wins 
+
+    + HttpParameterBinding, model value binder is also implemented by HttpParameterBinding
+    
+public class ProductParameterBinder : HttpParameterBinding 
+{
+    public ProductParameterBinder(HttpParameterDescriptor descriptor) :base(descriptor)
+    {
+    }
+    
+    public override Task ExecuteBindingAsync(ModelMetadataProvider metadataProvider, HttpActionContext action CancellationToken cancelllationToken)
+    {
+        var productRawString = actionContent.Reuqests.Headers.GetValues(...)
+        
+        if(Product.TryParse(productRawString, out product)){
+            actionContext.ActionArguments[Descritor.ParameterName] = products;
+        }
+        
+        return TaskFromResult(0);
+    }
+}
+
+
+public IHttpActionResult ModelBindProductFromUri([ProductModelBinder] Product product){
+...
+}
+
+//we can set the parameter bindingat the WebApiConfig.cs 
+
+- binding a file upload to a asp.net api action method 
+
+public async Task<IHttpActionResult> ReceiveFileInput(){
+    if(!Request.Content.IsMimeMultipartContent("form-data")){
+        throw new HttpResponseException(qReqeust.CreateResponse(HttpStatusCode.UnsupportedMediaType));
+    }
+    
+    MultipartFormDataStreamProvider streamProvider = new MultipartFormDataStreamProvider(Path.GetTempPath());
+    
+    var provider = await Request.Content.ReadAsMutlipartAsync(streamProvider);
+    
+    var fileData = provider.FileData.First();
+    fileData.Headers.ContentType;
+    fileDAta.Headers.ContentDisposition;
+    File.ReadAllText(fileData.LocalFileName);
+}
+
+- Generate Action Results and use http response codes 
+
+public HelloWordController: ApiController {
+
+    public IHttpActionResult BuildInIHtrtpActionResult(){
+        var response = Ok(new Customer);
+        var response = new new CustomizeHttpActionResult<Customer>(Request, new Customer());
+        return response;
+    }
+}
+
+public HttpResponseMessage CustomHttpStatusCode(){
+    var response = Request.CreateResponse(HttpStatusCode)475, new Customer());
+    return response;
+}
+
+    + exception 
+    
+    throw new HttpREsponseException(HttpStatusCode.MethodNotAllowed);
+    
+- file results and content negotiation 
+
+[HttpGet]
+public IHttpActionResult FileResult(){
+    
+}
+
+asp.net can send the response base on the request header, if multple type provided then the first implemented will be send  
+
+Accept applicaiton/json, application/xml etc. 
+- entity framework  to persist your models 
+
+add controller with actions support entity framework 
+
+public class ModelsController: ApiController 
+{
+    private HelloWorldApiContext db = new HelloWorldApiContext();
+    
+    public IQueryable<Model> GetModels(){
+        return db.Models;
+    }
+    
+    public IHttpActionResult PostModel(Model mode){
+        if(!ModelState.IsValid){
+            return BadRequest(ModelState);
+        }
+        
+        db.Models.Add(model);
+        db.SaveChanges();
+        return CreateAtRoute("DefaultApi", new {id = model.ModelId}, model);
+    }
+}
+
+- Action filters 
+
+change the actionmethod name with attribute 
+
+[ActionName("Name")]
+[HttpGet]
+public IHttpActionResult ActionName(){
+}
+
+authorize attribute
+
+we can decorate with [AllowAnonymous]
+
+
+route attribute can customize how our actoin method be routed 
+[Route("api/v2/HelloWOrld/Route")]
+[HttpGet]
+public IHttpActionResult Route()
+{
+    return Ok();
+}
+
+we can also use the RoutPrefix attribute on the controller to save typing 
+
+- custom action filters 
+
+global > control > action level filters 
+
+public class CustomActionFilterAttribute: ActionFilterAttribute
+{
+    Trace.WriteLine(string format("customactionFilter attribute actionName {0} {1}", actionContext.Action));
+}
+
+[CustomActionFilter]
+
+
+- authorization attributes to secure your routes 
+
+web api create account control 
+
+[AllowAynonymous]
+public async Task<IHttpActionResult> Register(RegisterBindingModel model)
+{
+    if(!ModelState.IsValid){
+        return BadRequest(ModelState);
+    }
+    
+    var user = new ApplicationUser() {UserName = model.Email, Email = model.Email};
+    IdentityReuslt result = await UserManagerf.CreateAsync(user, model.Password);
+    if(!result.Succeeded){
+        return GetErrorResult(result);
+    }
+    return Ok();
+}
+
+    + use Auth class, OAuth to get a authentication token 
+    
+    + authorize with roles 
+
+- create your own authorization attribute 
+
+public class CustomAuthorizeAttribute:AuthorizeAttribute{
+
+    protected override bool IsAuthroized(HttpActionContext actionContext){
+    }
+}
+
+
+public class CustomInterfacedAuthorizationFilterAttribute: Attribute, IAuthorizationFilter
+{
+
+    public Task<HttpResponseMessage> ExecuteAuthroizeAsync(HttpActionContext actionContext){
+    
+        return Task.FromResult(actonContext.Request.CreateErrorResponse(HtrtpStackCode.Unauthorized, "Authorized"))
+    }
+}
+
+- Create your own OData endpoint to enable custom search 
+Install OData from nuget packages 
+
+- how to write unit test web api controllers 
+
+reponse type is correct 
+
+reponse exception 
+
+response dependencies 
+
+    + add mocks 
+    
+public class HellWorlderController: ApiController {
+
+    [HttpGet]
+    public void Void{
+    }
+    
+    [HttpGet]
+    public IHttpActionResult IHttpActionResult(int id){
+        reutrn Ok(new Resource());
+    }
+}
+
+private HelloWorldController = _helloWorldController;
+public void TestIInitializer()
+{
+    _helloWorldController = new HelloWordController();
+}
+
+[TestClass]
+public void Should_failed_void(){
+    _helloWorldController.Void(1);
+}
+
+- Exception Management and Error Codes 
+
+[CustomExceptionFilter]
+
+public class CustomExceptionFilter: ExceptionFilterAttribute 
+{
+    public override void OnException(...)
+    {
+    
+        Trace.WriteLine("...")
+    }
+}
+
+try catch ...
+
+register exception handling 
+
+//WebApiConfig.cs 
+config.Services.Replace(typeof(IexceptionHandler), new CustomExceptionHandler());
+config.Services.Replace(typeof(IExceptionLogger), new CustomExceptionLogger());
+
+
+
+- OWIN pipline
+
+middle ware is a class/function to manipulate the request, response. a self-contained component within the OWIN (Open Web Interface for .NET) pipeline that intercepts, inspects, and modifies incoming HTTP requests and outgoing HTTP responses.  web application from the underlying web server (such as IIS), allowing you to write cross-cutting concerns like logging, routing, and authentication in a modular, host-independent fashion
+
+// Startup.cs 
+
+OwinMiddleware.cs 
+
+using Microsoft.Owin;
+using System.Threading.Tasks;
+
+public class RequestLoggingMiddleware : OwinMiddleware
+{
+    // The constructor receives a reference to the next middleware in line
+    public RequestLoggingMiddleware(OwinMiddleware next) : base(next)
+    {
+    }
+
+    // Invoke runs automatically on every HTTP request
+    public override async Task Invoke(IOwinContext context)
+    {
+        // 1. Logic executed on the incoming request
+        System.Diagnostics.Debug.WriteLine($"Inbound Request: {context.Request.Path}");
+
+        // 2. Pass control to the next middleware component in the pipeline
+        await Next.Invoke(context);
+
+        // 3. Logic executed on the outgoing response (unwinding)
+        System.Diagnostics.Debug.WriteLine($"Outbound Response Status: {context.Response.StatusCode}");
+    }
+}
+
+    + example AuthenticationMiddleware provided by Microsoft 
+    
+public abstract class AuthenticationMiddleware<TOptions> : OwinMiddleware where IOptions...
+{
+}
+
+- create your own middle ware OWin components 
+
+protected OwinMiddleware Next {get;set;}
+protected OwinMiddleware(OwinMiddleware next)
+{
+    this.Next = next;
+}
+
+Must be registered in the startup class 
+
+[assembly: OwinStartup(typeof(HelloApi.Startup))]
+
+public partial class Startup {
+    public void Cojnfiguration(IAppBuilder app)
+    {
+        ConfigureAuth(app);
+        app.UseLogging();
+        app.UsePrizeDrawing();
+    }
+}
+
+
+public partial class LoggingMiddlewareExtensions 
+{
+    public static IAppBuildder UseLogging(this IAppBuilder app)
+    {
+        app.Use<loggingMiddleware>();
+        app.UseStageMarker(PipelineStage.PreHandlerExcute);
+        return app;
+    }
+}
+
+out mode -> inner mode -> inner mode - > out mode 
+
+iis will be reshuffled 
+
+- tour of standard app start midlle ware 
+
+- basics of open id for authentication 
+
+OpenId.net specification 
+
+website will request to the openid server to get user info 
+
+- introduction to asp.net identity system 
+
+Application save the user data 
+
+ApplicationUserManager save the user store. 
+
+manager.UserValidator = new UserValidator<ApplicationUser>(manager)
+
+manager.PasswordValidator
+
+Katana a flex of set of components for building and hosting owin based web application 
+
+- tour of the available authorization middleware 
+Twitter 
+FaceBook 
+Google 
+MicrosoftAccount 
+OAuthAuthorization 
+
+- Host on Azure 
+
+- Consuming Web API 

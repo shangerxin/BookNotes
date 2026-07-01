@@ -30,7 +30,7 @@ $ mongod
 
 - shell
 
-mongo executable:
+mongo executable, start the server 
 
 $ mongo
 
@@ -38,7 +38,10 @@ shell is a full-featured JavaScript interpreter, capable of running arbitrary Ja
 
 - To see the database to which db is currently assigned
 
+db is the current assigned 
 > db 
+
+operations is selecting which database to use
 > use <db name>
 
 You may access collections from the db variable
@@ -54,6 +57,16 @@ You may access collections from the db variable
     {
         "acknowledged" : true,
         "insertedId" : ObjectId("5721794b349c32b32a012b11")
+    }
+    
+    + read 
+    
+    > db.movies.findOne()
+    {
+        "_id" : ObjectId("5721794b349c32b32a012b11"),
+        "title" : "Star Wars: Episode IV - A New Hope",
+        "director" : "George Lucas",
+        "year" : 1977
     }
     
     + search calling find on the collection, find and findOne can be used to query a collection
@@ -74,13 +87,15 @@ You may access collections from the db variable
     
     + delete, deleteOne and deleteMany permanently delete documents 
     
+    db.movies.deleteOne({title : "Star Wars: Episode IV - A New Hope"})
+    
 - basic datatypes, MongoDB can be thought of as “JSON-like” in that they are conceptually similar to objects
 
 null 
 boolean 
 number 
 string 
-date                {"x" : new Date()}
+date                {"x" : new Date()}, the Date class is used for MongoDB’s date type. When creating a new Date object, always call new Date()
 array 
 object id           ObjectId()
 binary              string of arbitrary bytes, such as save non utf-8 string to db 
@@ -101,4 +116,2239 @@ document stored in MongoDB must have an "_id" key. The "_id" key’s value can b
 
 ObjectId is the default type for "_id". The ObjectId class is designed to be lightweight, while still being easy to generate in a globally unique way across different machines.
 
- if there is no "_id" key present when a document is inserted, one will be automatically added to the inserted document.
+if there is no "_id" key present when a document is inserted, one will be automatically added to the inserted document.
+
+- using the mongodb shell 
+
+$ mongo some-host:30000/myDB
+MongoDB shell version: 4.2.0
+connecting to: some-host:30000/myDB
+>
+
+$ mongo --nodb
+MongoDB shell version: 4.2.0
+>
+
+run script with the shell 
+$ mongo script1.js script2.js script3.js
+
+
+// .mongorc.js
+```
+var compliment = ["attractive", "intelligent", "like Batman"];
+var index = Math.floor(Math.random()*3);
+
+print("Hello, you're looking particularly "+compliment[index]+" today!");
+```
+
+- customizing your prompt 
+
+The default shell prompt can be overridden by setting the prompt variable to either a string or a function. 
+
+prompt = function() {
+    return (new Date())+"> ";
+};
+
+prompt = function() {
+    if (typeof db == 'undefined') {
+        return '(nodb)> ';
+    }
+
+    // Check the last db operation
+    try {
+        db.runCommand({getLastError:1});
+    }
+    catch (e) {
+        print(e);
+    }
+
+    return db+"> ";
+};
+
+- Fetching a collection with the db.collectionName syntax almost always works, unless the collection name is a reserved word or is an invalid 
+
+inconvenient collections names 
+
+> db.getCollection("version");
+test.version
+
+
+# Creating updating and deleting documents 
+- insert 
+
+> db.movies.insertOne({"title" : "Stand by Me"})
+
+> db.movies.drop()
+true
+> db.movies.insertMany([{"title" : "Ghostbusters"},
+...                        {"title" : "E.T."},
+...                        {"title" : "Blade Runner"}]);
+{
+
+- delete 
+
+> db.movies.deleteOne({"_id" : 4})
+> db.movies.deleteMany({"year" : 1984})
+
+- clear collection 
+
+> db.movies.drop()
+> db.movies.deleteMany({})
+
+- replace 
+
+replaceOne fully replaces a matching document with a new one. 
+
+> var joe = db.users.findOne({"name" : "joe"});
+> joe.relationships = {"friends" : joe.friends, "enemies" : joe.enemies};
+{
+    "friends" : 32,
+    "enemies" : 2
+}
+> joe.username = joe.name;
+"joe"
+> delete joe.friends;
+true
+> delete joe.enemies;
+true
+> delete joe.name;
+true
+> db.users.replaceOne({"name" : "joe"}, joe);
+
+- use update one operator 
+
+> db.analytics.updateOne({"url" : "www.example.com"},
+... {"$inc" : {"pageviews" : 1}})
+{ "acknowledged" : true, "matchedCount" : 1, "modifiedCount" : 1 }
+
+- $set modifier 
+
+"$set" sets the value of a field. If the field does not yet exist, it will be created.
+
+> db.users.updateOne({"name" : "joe"},
+... {"$set" : {"favorite book" : "Green Eggs and Ham"}})
+
+
+remove the key altogether with "$unset":
+
+> db.users.updateOne({"name" : "joe"},
+... {"$unset" : {"favorite book" : 1}})
+
+
+> db.blog.posts.findOne()
+{
+    "_id" : ObjectId("4b253b067525f35f94b60a31"),
+    "title" : "A Blog Post",
+    "content" : "...",
+    "author" : {
+        "name" : "joe",
+        "email" : "joe@example.com"
+    }
+}
+> db.blog.posts.updateOne({"author.name" : "joe"},
+... {"$set" : {"author.name" : "joe schmoe"}})
+
+> db.blog.posts.findOne()
+{
+    "_id" : ObjectId("4b253b067525f35f94b60a31"),
+    "title" : "A Blog Post",
+    "content" : "...",
+    "author" : {
+        "name" : "joe schmoe",
+        "email" : "joe@example.com"
+    }
+}
+
+- incrementing and decrementing 
+
+The "$inc" operator can be used to change the value for an existing key or to create a new key
+
+> db.games.updateOne({"game" : "pinball", "user" : "joe"},
+... {"$inc" : {"score" : 10000}})
+
+the value of the "$inc" key must be a number.
+
+- "$push" adds elements to the end of an array if the array exists
+
+> db.blog.posts.findOne()
+{
+    "_id" : ObjectId("4b2d75476cc613d5ee930164"),
+    "title" : "A blog post",
+    "content" : "..."
+}
+> db.blog.posts.updateOne({"title" : "A blog post"},
+... {"$push" : {"comments" :
+...     {"name" : "joe", "email" : "joe@example.com",
+...     "content" : "nice post."}}})
+
+
+- treat an array as a set, only adding values if they are not present. This can be done using "$ne" in the query document.
+
+push an author onto a list of citations, but only if they aren’t already there, use the following:
+> db.papers.updateOne({"authors cited" : {"$ne" : "Richie"}},
+... {$push : {"authors cited" : "Richie"}})
+
+> joe = db.people.findOne({"name" : "joe", "age" : 20});
+{
+    "_id" : ObjectId("4b2b9f67a1f631733d917a7c"),
+    "name" : "joe",
+    "age" : 20
+}
+> joe.age++;
+> db.people.replaceOne({"name" : "joe"}, joe);
+
+- Update Operators
+
+> db.analytics.updateOne({"url" : "www.example.com"},
+... {"$inc" : {"pageviews" : 1}})
+{ "acknowledged" : true, "matchedCount" : 1, "modifiedCount" : 1 }
+
+- $set the value of a field 
+
+> db.users.findOne()
+{
+    "_id" : ObjectId("4b253b067525f35f94b60a31"),
+    "name" : "joe",
+    "age" : 30,
+    "sex" : "male",
+    "location" : "Wisconsin"
+}
+
+> db.users.updateOne({"_id" : ObjectId("4b253b067525f35f94b60a31")},
+... {"$set" : {"favorite book" : "War and Peace"}})
+
+- positional array modifications 
+
+
+> db.blog.posts.findOne()
+{
+    "_id" : ObjectId("4b329a216cc613d5ee930192"),
+    "content" : "...",
+    "comments" : [
+        {
+            "comment" : "good post",
+            "author" : "John",
+            "votes" : 0
+        },
+        {
+            "comment" : "i thought it was too short",
+            "author" : "Claire",
+            "votes" : 3
+        },
+        {
+            "comment" : "free watches",
+            "author" : "Alice",
+            "votes" : -5
+        },
+        {
+            "comment" : "vacation getaways",
+            "author" : "Lynn",
+            "votes" : -7
+        }
+    ]
+}
+
+John who updates his name to Jim, we can replace it in the comments by using the positional operator:
+
+> db.blog.updateOne({"comments.author" : "John"},
+... {"$set" : {"comments.$.author" : "Jim"}})
+
+    + using array filter 
+    
+    hide all comments with five or more down votes, we can do something like the following, votes value for the comment identified by elem is less than or equal to -5, we will add a field called "hidden"
+
+> db.blog.updateOne(
+   {"post" : post_id },
+   { $set: { "comments.$[elem].hidden" : true } },
+   {
+     arrayFilters: [ { "elem.votes": { $lte: -5 } } ]
+   }
+)
+
+- upserts, If no document is found that matches the filter, a new document will be created by combining the criteria and updated documents. If a matching document is found, it will be updated normally. This will also reduce the race condition
+
+> db.analytics.updateOne({"url" : "/blog"}, {"$inc" : {"pageviews" : 1}}, 
+... {"upsert" : true})
+
+- Sometimes a field needs to be set when a document is created, but not changed on subsequent updates. This is what "$setOnInsert" is for. "$setOnInsert" is an operator that only sets the value of a field when the document is being inserted.
+
+> db.users.updateOne({}, {"$setOnInsert" : {"createdAt" : new Date()}},
+... {"upsert" : true})
+{
+    "acknowledged" : true,
+    "matchedCount" : 0,
+    "modifiedCount" : 0,
+    "upsertedId" : ObjectId("5727b4ac223502483c7f3ace")
+}
+> db.users.findOne()
+{
+    "_id" : ObjectId("5727b4ac223502483c7f3ace"),
+    "createdAt" : ISODate("2016-05-02T20:12:28.640Z")
+}
+
+- updateMany follows the same semantics as updateOne and takes the same parameters. 
+
+
+> db.users.insertMany([
+... {birthday: "10/13/1978"},
+... {birthday: "10/13/1978"},
+... {birthday: "10/13/1978"}])
+{
+    "acknowledged" : true,
+    "insertedIds" : [
+        ObjectId("5727d6fc6855a935cb57a65b"),
+        ObjectId("5727d6fc6855a935cb57a65c"),
+        ObjectId("5727d6fc6855a935cb57a65d")
+    ]
+}
+> db.users.updateMany({"birthday" : "10/13/1978"},
+... {"$set" : {"gift" : "Happy Birthday!"}})
+{ "acknowledged" : true, "matchedCount" : 3, "modifiedCount" : 3 }
+
+- findOneAndDelete, findOneAndReplace, and findOneAndUpdate. The primary difference between these methods and, for example, updateOne is that they enable you to atomically get the value of a modified document.
+
+> db.processes.findOneAndUpdate({"status" : "READY"},
+... {"$set" : {"status" : "RUNNING"}},
+... {"sort" : {"priority" : -1},
+...  "returnNewDocument": true})
+{
+    "_id" : ObjectId("4b3e7a18005cab32be6291f7"),
+    "priority" : 1,
+    "status" : "RUNNING"
+}
+
+
+# Querying 
+- The find method is used to perform queries in MongoDB. Querying returns a subset of documents in a collection
+> db.users.find({"username" : "joe"})
+
+can pass a second argument to find (or findOne) specifying the keys you want.
+> db.users.find({}, {"username" : 1, "email" : 1})
+{
+    "_id" : ObjectId("4ba0f0dfd22aa494fd523620"),
+    "username" : "joe",
+    "email" : "joe@example.com"
+}
+
+- query criteria 
+
+    + conditions 
+    
+    "$lt", "$lte", "$gt", and "$gte" are all comparison operators
+    
+    
+> db.users.find({"age" : {"$gte" : 18, "$lte" : 30}})
+
+    + "$in" can be used to query for a variety of values for a single key. "$or" is more general; it can be used to query for any of the given values across multiple keys.
+    
+> db.raffle.find({"ticket_no" : {"$in" : [725, 542, 390]}})
+> db.raffle.find({"ticket_no" : {"$nin" : [725, 542, 390]}})
+
+> db.raffle.find({"$or" : [{"ticket_no" : 725}, {"winner" : true}]})
+
+    + "$not" is a metaconditional: it can be applied on top of any other criteria
+    
+    modulus operator, "$mod". "$mod" queries for keys whose values, when divided by the first value given,
+    
+> db.users.find({"id_num" : {"$not" : {"$mod" : [5, 1]}}})
+
+- type specific queries 
+
+null behaves a bit strangely. It does match itself, However, null also matches “does not exist.”
+
+> db.c.find()
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523621"), "y" : null }
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523622"), "y" : 1 }
+{ "_id" : ObjectId("4ba0f148d22aa494fd523623"), "y" : 2 }
+
+> db.c.find({"y" : null})
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523621"), "y" : null }
+
+> db.c.find({"z" : null})
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523621"), "y" : null }
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523622"), "y" : 1 }
+{ "_id" : ObjectId("4ba0f148d22aa494fd523623"), "y" : 2 }
+
+find keys whose value is null, we can check that the key is null and exists using the "$exists" conditional:
+> db.c.find({"z" : {"$eq" : null, "$exists" : true}}
+{ "_id" : ObjectId("4ba0f0dfd22aa494fd523621"), "y" : null }
+
+- regular expression 
+
+> db.users.find( {"name" : {"$regex" : /joe/i } })
+
+- query array 
+
+> db.food.find({fruit : {$all : ["apple", "banana"]}})
+
+    + "$size", which allows you to query for arrays of a given size
+    
+> db.food.find({"fruit" : {"$size" : 3}})
+
+> db.food.update(criteria,
+... {"$push" : {"fruit" : "strawberry"}, "$inc" : {"size" : 1}})
+
+    + "$slice" operator can be used to return a subset of elements for an array key.
+    
+> db.blog.posts.findOne(criteria, {"comments" : {"$slice" : [23, 10]}})
+    
+"$slice" to get the last commen
+> db.blog.posts.findOne(criteria, {"comments" : {"$slice" : -1}})
+{
+    "_id" : ObjectId("4b2d75476cc613d5ee930164"),
+    "title" : "A blog post",
+    "content" : "...",
+    "comments" : [
+        {
+            "name" : "bob",
+            "email" : "bob@example.com",
+            "content" : "good post."
+        }
+    ]
+}
+
+    + returning a matching array element 
+    
+return the matching element with the $ operator. Given the previous blog example
+> db.blog.posts.find({"comments.name" : "bob"}, {"comments.$" : 1})
+{
+    "_id" : ObjectId("4b2d75476cc613d5ee930164"),
+    "comments" : [
+        {
+            "name" : "bob",
+            "email" : "bob@example.com",
+            "content" : "good post."
+        }
+    ]
+}
+
+    + array and rane query 
+    
+{"x" : 5}
+{"x" : 15}
+{"x" : 25}
+{"x" : [5, 25]}
+    
+can use "$elemMatch" to force MongoDB to compare both clauses with a single array element. However, the catch is that "$elemMatch" won’t match nonarray elements
+
+> db.test.find({"x" : {"$gt" : 10, "$lt" : 20}})
+{"x" : 15}
+{"x" : [5, 25]}
+
+> db.test.find({"x" : {"$elemMatch" : {"$gt" : 10, "$lt" : 20}}})
+> // no results
+
+use min and max to limit the index range traversed by the query to your "$gt" and "$lt" values
+> db.test.find({"x" : {"$gt" : 10, "$lt" : 20}}).min({"x" : 10}).max({"x" : 20})
+{"x" : 15}
+
+- query embedded document, to avoid Embedded document matches have to match the whole document
+
+> db.blog.find()
+{
+    "content" : "...",
+    "comments" : [
+        {
+            "author" : "joe",
+            "score" : 3,
+            "comment" : "nice post"
+        },
+        {
+            "author" : "mary",
+            "score" : 6,
+            "comment" : "terrible post"
+        }
+    ]
+}
+
+> db.blog.find({"comments" : {"$elemMatch" : 
+... {"author" : "joe", "score" : {"$gte" : 5}}}})
+
+- where query, function returns true, the document will be part of the result set; if it returns false, it won’t be. 
+
+> db.foo.find({"$where" : function () {
+... for (var current in this) {
+...     for (var other in this) {
+...         if (current != other && this[current] == this[other]) {
+...             return true;
+...         }
+...     }
+... }
+... return false;
+... }});
+
+- cursors 
+
+The database returns results from find using a cursor.
+
+> for(i=0; i<100; i++) {
+...     db.collection.insertOne({x : i});
+... }
+> var cursor = db.collection.find();
+
+> while (cursor.hasNext()) {
+...     obj = cursor.next();
+...     // do stuff
+... }
+
+> var cursor = db.foo.find().sort({"x" : 1}).limit(1).skip(10);
+
+getMore requests basically contain an identifier for the cursor and ask the database if there are any more results
+
+sort takes an object: a set of key/value pairs where the keys are key names and the values are the sort directions. The sort direction can be 1 (ascending) or −1 (descending). 
+
+- comparison order 
+
+ordering is as follows:
+
+Minimum value
+
+Null
+
+Numbers (integers, longs, doubles, decimals)
+
+Strings
+
+Object/document
+
+Array
+
+Binary data
+
+Object ID
+
+Boolean
+
+Date
+
+Timestamp
+
+Regular expression
+
+Maximum value
+
+- paginating results, avoid use skip 
+
+pagination is to return the first page of results using limit and then return each subsequent page as an offset from the beginning
+
+```
+var latest = null;
+
+// display first page
+while (page1.hasNext()) {
+   latest = page1.next();
+   display(latest);
+}
+
+// get next page
+var page2 = db.foo.find({"date" : {"$lt" : latest.date}});
+```
+bettern than 
+
+```
+> // do not use: slow for large skips
+> var page1 = db.foo.find(criteria).limit(100)
+> var page2 = db.foo.find(criteria).skip(100).limit(100)
+> var page3 = db.foo.find(criteria).skip(200).limit(100)
+...
+```
+
+- finding random document 
+
+> // do not use
+> var total = db.foo.count()
+> var random = Math.floor(Math.random()*total)
+> db.foo.find().skip(random).limit(1)
+
+> var random = Math.random()
+> result = db.people.findOne({"random" : {"$gt" : random}})
+> if (result == null) {
+...     result = db.people.findOne({"random" : {"$lte" : random}})
+... }
+
+
+# Indexes 
+- A query that does not use an index is called a collection scan, which means that the server has to “look through the whole book” to find a query’s results
+
+- explain cursor method provides information on the execution of a variety of CRUD operations.
+
+> db.users.find({"username": "user101"}).explain("executionStats")
+
+- create index 
+
+To create an index, we’ll use the createIndex collection method:
+
+> db.users.createIndex({"username" : 1})
+{
+    "createdCollectionAutomatically" : false,
+    "numIndexesBefore" : 1,
+    "numIndexesAfter" : 2,
+    "ok" : 1
+}
+
+> db.users.createIndex({"age" : 1, "username" : 1})
+
+- compound indexes 
+
+{
+    "_id" : ObjectId("585d817db4743f74e2da067c"),
+    "student_id" : 0,
+    "scores" : [
+    {
+        "type" : "exam",
+        "score" : 38.05000060199827
+    },
+    {
+        "type" : "quiz",
+        "score" : 79.45079445008987
+    },
+    {
+        "type" : "homework",
+        "score" : 74.50150548699534
+    },
+    {
+        "type" : "homework",
+        "score" : 74.68381684615845
+    }
+    ],
+    "class_id" : 127
+}
+We will two indexes are created as follows:
+
+> db.students.createIndex({"class_id": 1})
+> db.students.createIndex({student_id: 1, class_id: 1})
+
+> db.students.find({student_id:{$gt:500000}, class_id:54})
+...          .sort({student_id:1})
+...          .hint({class_id:1})
+...          .explain("executionStats")
+
+when designing a compound index:
+
+Keys for equality filters should appear first.
+
+Keys used for sorting should appear before multivalue fields.
+
+Keys for multivalue filters should appear last.
+
+    + key directions, by default indexes is in ascending 
+    
+inverse indexes (multiplying each direction by −1) are equivalent: {"age" : 1, "username" : -1}
+
+- Inefficient operators
+In general, negation is inefficient. "$ne" queries can use an index, but not very well. They must look at all the index entries other than the one specified by "$ne"
+
+ranges last (e.g., "y": {"$gt" : 3, "$lt" : 5}). This allows the query to find an exact value for the first index key and then search within that for a second index range.
+
+> db.users.find({"age" : 47, "username" : 
+... {"$gt" : "user5", "$lt" : "user8"}})
+
+- "$or" performs two queries and then merges the results
+
+db.foo.find({"$or" : [{"x" : 123}, {"y" : 456}]})
+
+- indexing embedded docs 
+{
+    "username" : "sid",
+    "loc" : {
+        "ip" : "1.2.3.4",
+        "city" : "Springfield",
+        "state" : "NY"
+    }
+}
+
+> db.users.createIndex({"loc.city" : 1})
+
+- indexing array 
+create an index on the "date" key in the array of embedded "comments" documents of our blog post collection:
+
+> db.blog.createIndex({"comments.date" : 1})
+
+- multikey index implications 
+
+returned from the explain method, the "isMultikey" field will be true. Once an index has been flagged as multikey, it can never be un-multikeyed, even if all of the documents containing arrays in that field are removed.
+
+"gender" or "newsletter opt-out", might only have two possible values, which is considered a very low cardinality. 
+
+create indexes on high-cardinality keys or at least put high-cardinality keys first in compound indexes (before low-cardinality keys).
+
+- explain gives you lots of information about your queries.
+
+- type of indexes 
+
+    + unique 
+    
+    > db.users.createIndex({"firstname" : 1}, 
+    
+    compound unique index on {"username" : 1, "age" : 1}
+    
+    > db.users.createIndex({"age" : 1}, {"unique" : true})
+    
+    As mentioned in the previous section, unique indexes count null as a value, so you cannot have a unique index with more than one document missing the key.
+    
+    + partial indexes, allow empty index value of the key.
+    
+    > db.users.ensureIndex({"email" : 1}, {"unique" : true, "partialFilterExpression" : 
+... { email: { $exists: true } }})
+
+- use hint to force it to do a table scan if you need documents with missing fields.
+
+- indexes administration 
+
+hrough the createIndex, createIndexes, and dropIndexes
+
+You can also run db.collectionName.getIndexes() to see information
+ 
+> db.soup.createIndex({"a" : 1, "b" : 1, "c" : 1, ..., "z" : 1}, 
+... {"name" : "alphabet"})
+
+> db.people.dropIndex("x_1_y_1")
+
+- use the "background" option when building an index.
+
+
+
+# Special index and collection types 
+- Geospatial indexes 
+
+> db.openStreetMap.createIndex({"loc" : "2dsphere"})
+
+GeoJSON object that looks like {"$geometry" : geoJsonDesc}.
+
+> var eastVillage = {
+... "type" : "Polygon",
+... "coordinates" : [
+...  [
+...    [ -73.9732566, 40.7187272 ],
+...    [ -73.9724573, 40.7217745 ],
+...    [ -73.9717144, 40.7250025 ],
+...    [ -73.9714435, 40.7266002 ],
+...    [ -73.975735, 40.7284702 ],
+...    [ -73.9803565, 40.7304255 ],
+...    [ -73.9825505, 40.7313605 ],
+...    [ -73.9887732, 40.7339641 ],
+...    [ -73.9907554, 40.7348137 ],
+...    [ -73.9914581, 40.7317345 ],
+...    [ -73.9919248, 40.7311674 ],
+...    [ -73.9904979, 40.7305556 ],
+...    [ -73.9907017, 40.7298849 ],
+...    [ -73.9908171, 40.7297751 ],
+...    [ -73.9911416, 40.7286592 ],
+...    [ -73.9911943, 40.728492 ],
+...    [ -73.9914313, 40.7277405 ],
+...    [ -73.9914635, 40.7275759 ],
+...    [ -73.9916003, 40.7271124 ],
+...    [ -73.9915386, 40.727088 ],
+...    [ -73.991788, 40.7263908 ],
+...    [ -73.9920616, 40.7256489 ],
+...    [ -73.9923298, 40.7248907 ],
+...    [ -73.9925954, 40.7241427 ],
+...    [ -73.9863029, 40.7222237 ],
+...    [ -73.9787659, 40.719947 ],
+...    [ -73.9772317, 40.7193229 ],
+...    [ -73.9750886, 40.7188838 ],
+...    [ -73.9732566, 40.7187272 ]
+...  ]
+... ]}
+> db.openStreetMap.find(
+... {"loc" : {"$geoIntersects" : {"$geometry" : eastVillage}}})
+
+- using geospatial indexes 
+
+geospatial indexes and then demonstrate their use with "$geoWithin", "$geoIntersects", and "$geoNear"
+
+Query type	Geometry type
+$near (GeoJSON point, 2dsphere index)	Spherical
+$near (legacy coordinates, 2d index)	Flat
+$geoNear (GeoJSON point, 2dsphere index)	Spherical
+$geoNear (legacy coordinates, 2d index)	Flat
+$nearSphere (GeoJSON point, 2dsphere index)	Spherical
+$nearSphere (legacy coordinates, 2d index)a	Spherical
+$geoWithin : { $geometry: ... }	Spherical
+$geoWithin: { $box: ... }	Flat
+$geoWithin: { $polygon: ... }	Flat
+$geoWithin : { $center: ... }	Flat
+$geoWithin : { $centerSphere: ... }	Spherical
+$geoIntersects	Spherical
+
+> db.neighborhoods.findOne({geometry:{$geoIntersects:{$geometry:{type:"Point",
+... coordinates:[-73.93414657,40.82302903]}}}})
+
+- compound geospatial index 
+
+> db.openStreetMap.createIndex({"tags" : 1, "location" : "2dsphere"})
+
+- indexes for full text search 
+
+> db.articles.createIndex({"title": "text",
+                           "body" : "text"})
+                           
+each field is given equal consideration in a text index. You can control the relative importance MongoDB attaches to each field by specifying weights                           
+> db.articles.createIndex({"title": "text", 
+"body": "text"},
+{"weights" : {
+   "title" : 3, 
+   "body" : 2}})
+   
+   
+> db.articles.find({"$text": {"$search": "impact crater lunar"}}, 
+                   {title: 1}
+                  ).limit(10)
+                  
+    + optimizing full text search 
+    
+> db.blog.createIndex({"date" : 1, "post" : "text"})
+
+- searching in other languages 
+
+> db.users.createIndex({"profil" : "text", 
+                        "intérêts" : "text"}, 
+                       {"default_language" : "french"})
+                       
+> db.users.insert({"username" : "swedishChef", 
+... "profile" : "Bork de bork", language : "swedish"})
+
+- capped collections 
+
+capped collections behave like circular queues: if we’re out of space, the oldest document will be deleted, and the new one will take its place
+
+> db.createCollection("my_collection", {"capped" : true, "size" : 100000});
+
+
+convert an existing regular collection into a capped collection.
+> db.runCommand({"convertToCapped" : "test", "size" : 10000});
+{ "ok" : true }
+
+- tailable cursors 
+
+cursor that are not closed when their results are exhausted. They were inspired by the tail -f command and, similar to that command, will continue fetching output for as long as possible. Because the cursors do not die when they run out of results, they can continue to fetch new results as documents are added to the collection. Tailable cursors can be used only on capped collections
+
+mongo shell doesn't allow use tailable cursors, php example 
+```
+$cursor = $collection->find([], [
+    'cursorType' => MongoDB\Operation\Find::TAILABLE_AWAIT,
+    'maxAwaitTimeMS' => 100,
+]);
+
+
+while (true) {
+   if ($iterator->valid()) {
+      $document = $iterator->current();
+      printf("Consumed document created at: %s\n", $document->createdAt);
+   }
+
+   $iterator->next();
+}
+```
+
+- Time-To-Live Indexes, allow you to set a timeout for each document. When a document reaches a preconfigured age, it will be deleted. 
+
+> // 24-hour timeout
+> db.sessions.createIndex({"lastUpdated" : 1}, {"expireAfterSeconds" : 60*60*24})
+
+change the "expireAfterSeconds" using the collMod command:
+
+> db.runCommand( {"collMod" : "someapp.cache" , "index" : { "keyPattern" : 
+... {"lastUpdated" : 1} , "expireAfterSeconds" : 3600 } } 
+
+- storing files with GridFS 
+
+GridFS is a mechanism for storing large binary files in MongoDB
+
+performance is slower 
+
+You can only modify documents by deleting them and resaving the whole thing. MongoDB stores files as multiple documents, so it cannot lock all of the chunks in a file at the same time
+
+    + getting started with gridfs mongofiles 
+
+$ mongofiles --help
+
+    + from drivers 
+    
+```
+>>> import pymongo
+>>> import gridfs
+>>> client = pymongo.MongoClient()
+>>> db = client.test
+>>> fs = gridfs.GridFS(db)
+>>> file_id = fs.put(b"Hello, world", filename="foo.txt")
+>>> fs.list()
+['foo.txt']
+>>> fs.get(file_id).read()
+b'Hello, world'
+```
+
+all the required keys, perhaps the most interesting (or least self-explanatory) is "md5". The value for "md5" is generated by the MongoDB server using the filemd5 command
+
+use the distinct command to get a list of unique filenames stored in GridFS:
+
+> db.fs.files.distinct("filename")
+
+
+
+# Introduction to the aggregation framework 
+- pipelines stages and tunables 
+
+db.companies.aggregate([
+  {$match: {founded_year: 2004}},
+  {$project: {
+    _id: 0,
+    name: 1,
+    founded_year: 1
+  }}
+])
+
+{"name": "Digg", "founded_year": 2004 }
+{"name": "Facebook", "founded_year": 2004 }
+{"name": "AddThis", "founded_year": 2004 }
+
+an aggregation pipeline. A pipeline is an array with documents as elements. Each of the documents must stipulate a particular stage operator. 
+
+- expressions 
+
+boolean 
+set 
+comparison 
+arithmetic 
+string 
+array 
+variable 
+accumulators 
+
+- the project stage and reshaping documents, exploring the types of reshaping operations
+
+db.companies.aggregate([
+  {$match: {"funding_rounds.investments.financial_org.permalink": "greylock" }},
+  {$project: {
+    _id: 0, 
+    name: 1,
+    ipo: "$ipo.pub_year",
+    valuation: "$ipo.valuation_amount",
+    funders: "$funding_rounds.investments.financial_org.permalink"
+  }}
+]).pretty()
+
+- allows us to produce output such that there is one output document for each element in a specified array
+
+$unwind 
+
+produce output such that there is one output document for each element in a specified array
+
+    + example, a specific funder and promoting values from embedded funding_rounds documents 
+    
+data model for documents in this collection:
+
+{
+  "_id" : "52cdef7c4bab8bd675297d8e",
+  "name" : "Facebook",
+  "category_code" : "social",
+  "founded_year" : 2004,
+  "description" : "Social network",
+  "funding_rounds" : [{
+      "id" : 4,
+      "round_code" : "b",
+      "raised_amount" : 27500000,
+      "raised_currency_code" : "USD",
+      "funded_year" : 2006,
+      "investments" : [
+        {
+          "company" : null,
+          "financial_org" : {
+            "name" : "Greylock Partners",
+            "permalink" : "greylock"
+          },
+          "person" : null
+        },
+        {
+          "company" : null,
+          "financial_org" : {
+            "name" : "Meritech Capital Partners",
+            "permalink" : "meritech-capital-partners"
+          },
+          "person" : null
+        },
+        {
+          "company" : null,
+          "financial_org" : {
+            "name" : "Founders Fund",
+            "permalink" : "founders-fund"
+          },
+          "person" : null
+        },
+        {
+          "company" : null,
+          "financial_org" : {
+            "name" : "SV Angel",
+            "permalink" : "sv-angel"
+          },
+          "person" : null
+        }
+      ]
+    },
+    {
+      "id" : 2197,
+      "round_code" : "c",
+      "raised_amount" : 15000000,
+      "raised_currency_code" : "USD",
+      "funded_year" : 2008,
+      "investments" : [
+        {
+          "company" : null,
+          "financial_org" : {
+            "name" : "European Founders Fund",
+            "permalink" : "european-founders-fund"
+          },
+          "person" : null
+        }
+      ]
+    }],
+  "ipo" : {
+    "valuation_amount" : NumberLong("104000000000"),
+    "valuation_currency_code" : "USD",
+    "pub_year" : 2012,
+    "pub_month" : 5,
+    "pub_day" : 18,
+    "stock_symbol" : "NASDAQ:FB"
+  }
+}
+    
+db.companies.aggregate([
+  {$match: {"funding_rounds.investments.financial_org.permalink": "greylock"} },
+  {$project: {
+    _id: 0,
+    name: 1,
+    amount: "$funding_rounds.raised_amount",
+    year: "$funding_rounds.funded_year"
+  }}
+])
+
+results such as the following:
+{
+  "name" : "Digg",
+  "amount" : [
+    8500000,
+    2800000,
+    28700000,
+    5000000
+  ],
+  "year" : [
+    2006,
+    2005,
+    2008,
+    2011
+  ]
+}
+{
+  "name" : "Facebook",
+  "amount" : [
+    500000,
+    12700000,
+    27500000,
+    ...
+    
+unwind stage will produce an output document for each element of the "funding_rounds" array. 
+
+db.companies.aggregate([
+  { $match: {"funding_rounds.investments.financial_org.permalink": "greylock"} },
+  { $unwind: "$funding_rounds" },
+  { $project: {
+    _id: 0,
+    name: 1,
+    amount: "$funding_rounds.raised_amount",
+    year: "$funding_rounds.funded_year"
+  } }
+])
+
+{"name": "Digg", "amount": 8500000, "year": 2006 }
+{"name": "Digg", "amount": 2800000, "year": 2005 }
+{"name": "Digg", "amount": 28700000, "year": 2008 }
+{"name": "Digg", "amount": 5000000, "year": 2011 }
+{"name": "Facebook", "amount": 500000, "year": 2004 }
+{"name": "Facebook", "amount": 12700000, "year": 2005 }
+{"name": "Facebook", "amount": 27500000, "year": 2006 }
+
+- array expressions. As part of our deep dive, we’ll take a look at using array expressions in project stages.
+
+db.companies.aggregate([
+  { $match: {"funding_rounds.investments.financial_org.permalink": "greylock"} },
+  { $project: {
+    _id: 0,
+    name: 1,
+    founded_year: 1,
+    rounds: { $filter: {
+      input: "$funding_rounds",
+      as: "round",
+      cond: { $gte: ["$$round.raised_amount", 100000000] } } }
+  } },
+  { $match: {"rounds.investments.financial_org.permalink": "greylock" } },
+]).pretty()
+
+The $filter operator is designed to work with array fields and specifies the options we must supply. 
+made use of $$. We use $$ to reference a variable defined within the expression we’re working in
+
+The $arrayElemAt operator enables us to select an element at a particular slot within an array.
+db.companies.aggregate([
+  { $match: { "founded_year": 2010 } },
+  { $project: {
+    _id: 0,
+    name: 1,
+    founded_year: 1,
+    first_round: { $arrayElemAt: [ "$funding_rounds", 0 ] },
+    last_round: { $arrayElemAt: [ "$funding_rounds", -1 ] }
+  } }
+]).pretty()
+
+$size expression will simply provide a value that is the number of elements in the array.
+https://oreil.ly/ZtUES
+
+- accumulators 
+a particular field ($sum), calculating an average ($avg), etc. We also consider $first and $last to be accumulators
+
+db.companies.aggregate([
+  { $match: { "funding_rounds": { $exists: true, $ne: [ ]} } },
+  { $project: {
+    _id: 0,
+    name: 1,
+    largest_round: { $max: "$funding_rounds.raised_amount" }
+  } }
+])
+
+mongoDB aggregation framework. The group stage performs a function that is similar to the SQL GROUP BY command.
+
+db.companies.aggregate( [
+  { $match: { "relationships.person": { $ne: null } } },
+  { $project: { relationships: 1, _id: 0 } },
+  { $unwind: "$relationships" },
+  { $group: {
+    _id: "$relationships.person",
+    count: { $sum: 1 }
+  } },
+  { $sort: { count: -1 } }
+]).pretty()
+
+_id field and look at some best practices for constructing values for this field in group aggregation stages
+
+db.companies.aggregate([
+  { $match: { funding_rounds: { $ne: [ ] } } },
+  { $unwind: "$funding_rounds" },
+  { $sort: { "funding_rounds.funded_year": 1,
+    "funding_rounds.funded_month": 1,
+    "funding_rounds.funded_day": 1 } },
+  { $group: {
+    _id: { company: "$name" },
+    funding: {
+      $push: {
+        amount: "$funding_rounds.raised_amount",
+        year: "$funding_rounds.funded_year"
+      } }
+  } },
+] ).pretty()
+
+- writing aggregation pipeline results to a collection 
+
+wo specific stages, $out and $merge, that can write documents resulting from the aggregation pipeline to a collection
+
+$out has some limitations: it can only write to the same database
+
+$merge can write to any database and collection, sharded or not
+
+
+# Transactions 
+- ACID is the accepted set of properties a transaction must meet to be a “true” transaction. ACID is an acronym for Atomicity, Consistency, Isolation, and Durability.
+
+- two APIs to use transactions. The first is a similar syntax to relational databases (e.g., start_transaction and commit_transaction) called the core API
+
+    + CORE API  
+    
+    Requires explicit call to start the transaction and commit the transaction.
+    
+    orders.insert_one({"sku": "abc123", "qty": 100}, session=session)
+    inventory.update_one({"sku": "abc123", "qty": {"$gte": 100}},
+                         {"$inc": {"qty": -100}}, session=session)
+    
+    + callback api 
+    
+    Starts a transaction, executes the specified operations, and commits (or aborts on error).
+    
+    + python example 
+    
+```
+# Define the uriString using the DNS Seedlist Connection Format 
+# for the connection
+uri = 'mongodb+srv://server.example.com/'
+client = MongoClient(uriString)
+
+my_wc_majority = WriteConcern('majority', wtimeout=1000)
+
+# Prerequisite / Step 0: Create collections, if they don't already exist. 
+# CRUD operations in transactions must be on existing collections.
+
+client.get_database( "webshop",
+                     write_concern=my_wc_majority).orders.insert_one({"sku":
+                     "abc123", "qty":0})
+client.get_database( "webshop",
+                     write_concern=my_wc_majority).inventory.insert_one(
+                     {"sku": "abc123", "qty": 1000})
+
+# Step 1: Define the operations and their sequence within the transaction
+def update_orders_and_inventory(my_session):
+    orders = session.client.webshop.orders
+    inventory = session.client.webshop.inventory
+
+
+    with session.start_transaction(
+            read_concern=ReadConcern("snapshot"),
+            write_concern=WriteConcern(w="majority"),
+            read_preference=ReadPreference.PRIMARY):
+
+        orders.insert_one({"sku": "abc123", "qty": 100}, session=my_session)
+        inventory.update_one({"sku": "abc123", "qty": {"$gte": 100}},
+                             {"$inc": {"qty": -100}}, session=my_session)
+        commit_with_retry(my_session)
+
+# Step 2: Attempt to run and commit transaction with retry logic
+def commit_with_retry(session):
+    while True:
+        try:
+            # Commit uses write concern set at transaction start.
+            session.commit_transaction()
+            print("Transaction committed.")
+            break
+        except (ConnectionFailure, OperationFailure) as exc:
+            # Can retry commit
+            if exc.has_error_label("UnknownTransactionCommitResult"):
+                print("UnknownTransactionCommitResult, retrying "
+                      "commit operation ...")
+                continue
+            else:
+                print("Error during commit ...")
+                raise
+
+# Step 3: Attempt with retry logic to run the transaction function txn_func
+def run_transaction_with_retry(txn_func, session):
+    while True:
+        try:
+            txn_func(session)  # performs transaction
+            break
+        except (ConnectionFailure, OperationFailure) as exc:
+            # If transient error, retry the whole transaction
+            if exc.has_error_label("TransientTransactionError"):
+                print("TransientTransactionError, retrying transaction ...")
+                continue
+            else:
+                raise
+
+# Step 4: Start a session.
+with client.start_session() as my_session:
+
+# Step 5: Call the function 'run_transaction_with_retry' passing it the function
+# to call 'update_orders_and_inventory' and the session 'my_session' to associate
+# with this transaction.
+
+    try:
+        run_transaction_with_retry(update_orders_and_inventory, my_session)
+    except Exception as exc:
+        # Do something with error. The error handling code is not
+        # implemented for you with the Core API.
+        raise
+```
+- Create, drop, or index operations are not permitted in a transaction.
+
+- The default maximum runtime of a transaction is one minute or less. oplog entry must be within the BSON document size limit of 16MB.
+
+
+# Application design 
+- schema design consideration 
+
+constraints 
+access patterns of your queries 
+relation types 
+cardinality,  cardinality of these relationships. Specifically, is it one-to-one, one-to-many, many-to-many, one-to-millions, or many-to-billions
+
+- design patterns 
+polymorphic pattern, all documents in a collection have a similar, but not identical, structure.
+
+a subset of fields in a document that share common features on which you want to sort or query
+
+bucket pattern, suitable for time series data where the data is captured as a stream over a period of time
+
+outlier pattern,  social networks with major influencers, book sales, movie reviews, etc. It uses a flag to indicate the document is an outlier
+
+computed pattern, data needs to be computed frequently, and it can also be used when the data access pattern is read-intensive.
+
+subset pattern have a working set that exceeds the available RAM of the machine. 
+
+extended reference pattern scenarios where you have many different logical entities or “things,” each with their own collection
+
+approximation pattern  situations where resource-expensive (time, memory, CPU cycles) calculations are needed
+
+MVC 
+
+- managing schemas, $jsonSchema operator, which is now the recommended method for all schema validation in MongoDB. 
+
+
+
+# Replication
+- run three mongo db process 
+
+> mongod --replSet mdbDefGuide --dbpath c:\data\rs1 --port 27017 \
+    --smallfiles --oplogSize 200
+> mongod --replSet mdbDefGuide --dbpath c:\data\rs2 --port 27018 \
+    --smallfiles --oplogSize 200
+> mongod --replSet mdbDefGuide --dbpath c:\data\rs3 --port 27019 \
+    --smallfiles --oplogSize 200
+    
+$ mongod --bind_ip localhost,192.51.100.1 --replSet mdbDefGuide \
+    --dbpath ~/data/rs1 --port 27017 --smallfiles --oplogSize 200
+    
+- setting up replica set 
+
+we’ll connect to the mongod running on port 27017:
+
+$ mongo --port 27017
+
+create a configuration document and pass this to the rs.initiate() helper to initiate a replica set.
+
+> rsconf = {
+    _id: "mdbDefGuide",
+    members: [
+      {_id: 0, host: "localhost:27017"},
+      {_id: 1, host: "localhost:27018"},
+      {_id: 2, host: "localhost:27019"} 
+    ]
+  }
+> rs.initiate(rsconf)
+{ "ok" : 1, "operationTime" : Timestamp(1501186502, 1) }
+
+Go ahead and run isMaster on the secondary to see who has become the new primary:
+
+If your replica set elected a different node primary, quit the shell and connect to the primary by specifying the correct port number in the command line
+
+> secondaryConn = new Mongo("localhost:27019")
+connection to localhost:27019
+>
+> secondaryDB = secondaryConn.getDB("test")
+test
+
+> secondaryConn.setSlaveOk()
+Note that slaveOk is set on the connection (secondaryConn), not the database (secondaryDB).
+
+> secondaryDB.coll.insert({"count" : 1001})
+WriteResult({ "writeError" : { "code" : 10107, "errmsg" : "not master" } })
+> secondaryDB.coll.count()
+1000
+> db.adminCommand({"shutdown" : 1})
+
+> secondaryDB.isMaster()
+
+- concepts to remember 
+
+Clients can send a primary all the same operations they could send a standalone server (reads, writes, commands, index builds, etc.).
+
+Clients cannot write to secondaries.
+
+Clients, by default, cannot read from secondaries. You can enable this by explicitly setting an “I know I’m reading from a secondary” setting on the connection.
+
+- Design a set, common configurations 
+
+A majority of the set in one data center
+
+An equal number of servers in each data center, plus a tie-breaking server in a third location.
+
+- Election arbiters 
+
+MongoDB supports a special type of member called an arbiter, whose only purpose is to participate in elections
+
+If you have a choice between a data node and an arbiter, choose a data node. Using an arbiter instead of a data node in a small set can make some operational tasks more difficult. 
+
+- building indexes
+
+If you are using a secondary only for backup data or offline batch jobs, you might want to specify "buildIndexes" : false in the member’s configuration. 
+
+
+# Components of a replica setg 
+- syncing 
+
+MongoDB performs an initial sync to copy all the data from one member of the replica set to another member. 
+
+Performing an initial sync forces the member to page all of its data into memory, evicting the frequently used data. This can slow down a member dramatically
+
+- heartbeats 
+
+set every two seconds. A heartbeat request is a short message that checks everyone’s state.
+
+Replication across data centers can be slower than within a single data center
+
+rolled back to the current primary, first use mongorestore to load them into a temporary collection:
+
+$ mongorestore --db stage --collection stuff \
+    /data/db/rollback/important.stuff.2018-12-19T18-27-14.0.bson
+    
+    
+
+# Connecting a replica set from your application 
+- connection string 
+
+"mongodb://server-1:27017,server-2:27017,server-3:27017"
+
+https://oreil.ly/ZsS8p
+
+As of MongoDB 3.6, the server and all MongoDB drivers support a retryable writes option.
+
+- MongoDB 2.6, writeConcern is integrated with write operations. For example, in JavaScript, we can use writeConcern as follows
+
+try {
+   db.products.insertOne(
+       { "_id": 10, "item": "envelopes", "qty": 100, type: "Self-Sealing" },
+       { writeConcern: { "w" : "majority", "wtimeout" : 100 } }
+   );
+} catch (e) {
+   print (e);
+}
+
+write does not succeed within the timeout we’ve specified, the server will respond with an error message:
+
+WriteConcernError({
+   "code" : 64,
+   "errInfo" : {
+      "wtimeout" : true
+   },
+   "errmsg" : "waiting for replication timed out"
+})
+
+-  specify nearest as your read preference to route requests to the lowest-latency member based on average ping time from the driver to the replica set member.
+
+
+# Administration 
+- To start up a member in standalone mode, first look at the command-line options instead of replica 
+
+> db.serverCmdLineOpts()
+{
+    "argv" : [ "mongod", "-f", "/var/lib/mongod.conf" ],
+    "parsed" : {
+        "replSet": "mySet",
+        "port": "27017",
+        "dbpath": "/var/lib/db"
+    },
+    "ok" : 1
+}
+
+> db.shutdownServer()
+
+restart mongod on another port and without the replSet parameter:
+
+$ mongod --port 30000 --dbpath /var/lib/db
+
+- creating a replica set 
+
+one of them a configuration through rs.initiate():
+
+> var config = {
+... "_id" : <setName>,
+... "members" : [
+...     {"_id" : 0, "host" : <host1>},
+...     {"_id" : 1, "host" : <host2>},
+...     {"_id" : 2, "host" : <host3>}
+... ]}
+> rs.initiate(config)
+
+- changing set members 
+Connect to the primary and add a new member as follows:
+
+> rs.add("spock:27017")
+
+remove members by their "host" field:
+
+> rs.remove("spock:27017")
+
+- change a hostname 
+
+> var config = rs.config()
+> config.members[0].host = "spock:27017"
+spock:27017
+> rs.reconfig(config)
+
+> rs.reconfig(config, {"force" : true})
+
+- turning primaries to secondaries 
+
+demote a primary to a secondary using the stepDown function:
+
+> rs.stepDown()
+
+force them to stay secondaries by running freeze on each of them:
+
+> rs.freeze(10000)
+
+unfreeze the other members, simply run the command again on each of them, giving a timeout of 0 seconds:
+
+> rs.freeze(0)
+
+- get replica status 
+
+> rs.status()
+
+- Replication Loops
+A replication loop is when members end up replicating from one another—for example
+
+- Chaining is when a secondary syncs from another secondary
+
+disable chaining 
+
+> var config = rs.config()
+> // create the settings subobject, if it does not already exist
+> config.settings = config.settings || {}
+> config.settings.chainingAllowed = false
+> rs.reconfig(config)
+
+- calculate lag 
+
+> rs.printReplicationInfo();
+
+- generally want to have an oplog that can hold a couple days’ to a week’s worth of data
+
+increase the size of your oplog, perform the following steps:
+
+Connect to the replica set member. If authentication is enabled, be sure to use a user with privileges that can modify the local database.
+
+Verify the current size of the oplog:
+
+> use local
+> db.oplog.rs.stats(1024*1024).maxSize
+
+> db.adminCommand({replSetResizeOplog: 1, size: 16000})
+megabytes 
+
+-  build an index on one member at a time to minimize the impact on your application. To accomplish this, do the following:
+
+Shut down a secondary.
+
+Restart it as a standalone server.
+
+Build the index on the standalone server.
+
+When the index build is complete, restart the server as a member of the replica set. When restarting this member, you need to remove the disableLogicalSessionCacheRefresh parameter if it is present in your command-line options or configuration file.
+
+Repeat steps 1 through 4 for each secondary in the replica set.
+
+- replication on a budget options to set for the cheaper box, getting a secondary server that is strictly for disaster recovery
+
+"priority" : 0
+You do not want this server to ever become primary.
+
+"hidden" : true
+You do not want clients ever sending reads to this secondary.
+
+"buildIndexes" : false
+This is optional, but it can decrease the load this server has to handle considerably. If you ever need to restore from this server, you’ll need to rebuild the indexes.
+
+"votes" : 0
+If you only have two machines, set "votes" on this secondary to 0 so that the primary can stay primary
+
+
+# Sharding 
+- Sharding refers to the process of splitting data up across machines; the term partitioning is also sometimes used to describe this concept.
+
+- MongoDB supports autosharding
+
+MongoDB’s sharding allows you to create a cluster of many machines (shards)
+
+- a sinle machine cluster 
+
+a mongo shell with the --nodb and --norc options:
+
+$ mongo --nodb --norc
+
+st = ShardingTest({
+  name:"one-min-shards",
+  chunkSize:1,
+  shards:2,
+  rs:{
+    nodes:3,
+    oplogSize:10
+  },
+  other:{
+    enableBalancer:true
+  }
+});
+
+connect to your cluster’s mongos. Again, your mongos should be running on port 20009:
+
+> for (var i=0; i<100000; i++) {
+...     db.users.insert({"username" : "user"+i, "created_at" : new Date()});
+... }
+> db.users.count()
+100000
+
+> db = (new Mongo("localhost:20009")).getDB("accounts")
+
+running sh.status(). It will give you a summary of your shards, databases, and collections:
+
+> sh.status()
+
+enable sharding on the collection’s database. To do so, run the enableSharding command:
+
+> sh.enableSharding("accounts")
+
+- create an index on the key you want to shard by:
+
+> db.users.createIndex({"username" : 1})
+Now you can shard the collection by "username":
+
+> sh.shardCollection("accounts.users", {"username" : 1})
+
+
+# Configuring sharding 
+- sharding is used to:
+
+Increase available RAM
+
+Increase available disk space
+
+Reduce load on a server
+
+Read or write data with greater throughput than a single mongod can handle
+
+- config servers 
+
+$ mongod --configsvr --replSet configRS --bind_ip localhost,198.51.100.51 mongod 
+  --dbpath /var/lib/mongodb
+ 
+$ mongod --configsvr --replSet configRS --bind_ip localhost,198.51.100.52 mongod 
+  --dbpath /var/lib/mongodb
+ 
+$ mongod --configsvr --replSet configRS --bind_ip localhost,198.51.100.53 mongod 
+  --dbpath /var/lib/mongodb
+  
+  config servers as a replica set. To do this, connect a mongo shell to one of the replica set members:
+
+$ mongo --host <hostname> --port <port>
+
+rs.initiate() helper:
+
+> rs.initiate(
+  {
+    _id: "configRS",
+    configsvr: true,
+    members: [
+      { _id : 0, host : "cfg1.example.net:27019" },
+      { _id : 1, host : "cfg2.example.net:27019" },
+      { _id : 2, host : "cfg3.example.net:27019" }
+    ]
+  }
+)
+
+- start mongos with the --configdb option:
+
+$ mongos --configdb \
+  configRS/cfg1.example.net:27019, \
+  cfg2.example.net:27019,cfg3.example.net:27019 \
+--bind_ip localhost,198.51.100.100 --logpath /var/log/mongos.log
+
+
+- can shard a collection by running sh.shardCollection():
+
+> sh.shardCollection("music.artists", {"name" : 1})
+
+- enable sharding for the database:
+
+> db.enableSharding("music")
+
+- MongoDB groups documents into chunks, which are documents in a given range of the shard key. A chunk always lives on a single shard, so MongoDB can keep a small table of chunks mapped to shards
+
+- MongoDB groups documents into chunks, which are documents in a given range of the shard key. A chunk always lives on a single shard, so MongoDB can keep a small table of chunks mapped to shards
+
+
+- chunk ranges 
+
+Each chunk is described by the range it contains. A newly sharded collection starts off with a single chunk, and every document lives in this chunk. This chunk’s bounds are negative infinity to infinity
+
+Chunk information is stored in the config.chunks collection.
+
+> db.chunks.find(criteria, {"min" : 1, "max" : 1})
+{
+    "_id" : "test.users-age_-100.0",
+    "min" : {"age" : -100},
+    "max" : {"age" : 23}
+}
+{
+    "_id" : "test.users-age_23.0",
+    "min" : {"age" : 23},
+    "max" : {"age" : 100}
+}
+
+- Each shard primary mongod tracks their current chunks and, once they reach a certain threshold, checks if the chunk needs to be split
+
+- balancer, The balancer is responsible for migrating data. It regularly checks for imbalances between shards and, if it finds an imbalance
+
+The balancer is a background process on the primary of the config server replica set, which monitors the number of chunks on each shard
+
+- Collations in MongoDB allow for the specification of language-specific rules for string comparison. 
+
+- Change Streams allow applications to track real-time changes to the data in the database. 
+
+
+# Choosing a shard key 
+- This key (or keys) is called a shard key. Once you shard a collection you cannot change your shard key, so it is important to choose correctly
+
+-  shard keys are generally something like a "date" field or ObjectId—anything that steadily increases over time. 
+
+- At the other end of the spectrum are randomly distributed shard keys.
+
+- Location-based shard keys may be things like a user’s IP, latitude and longitude, or address
+
+- Hashed Shard Key
+
+> db.users.createIndex({"username" : "hashed"})
+
+> sh.shardCollection("app.users", {"username" : "hashed"})
+{ "collectionsharded" : "app.users", "ok" : 1 }
+
+- Standalone mongod servers are most efficient when doing ascending writes. 
+
+- controling data collection 
+
+Using a Cluster for Multiple Databases and Collections
+
+se the sh.addShardToZone() helper in the shell:
+
+> sh.addShardToZone("shard0000", "high")
+> // shard0001 - no zone
+> // shard0002 - no zone
+> // shard0003 - no zone
+> sh.addShardToZone("shard0004", "low")
+> sh.addShardToZone("shard0005", "low")
+
+    + zone all of the non-high-performance shards to create a new grouping. Shards can have as many zones as you need:
+
+> sh.addShardToZone("shard0001", "whatever")
+> sh.addShardToZone("shard0002", "whatever")
+> sh.addShardToZone("shard0003", "whatever")
+> sh.addShardToZone("shard0004", "whatever")
+> sh.addShardToZone("shard0005", "whatever")
+
+    + remove a key range from a zone, use sh.removeRangeFromZone(). The following is an example. 
+
+> sh.removeRangeFromZone("some.logs", {"<shardKey>" : MinKey}, 
+... {"<shardKey>" : MaxKey})
+
+- disable the balancer using the shell helper sh.stopBalancer():
+
+> sh.stopBalancer()
+
+- use the moveChunk command to migrate chunks to other shards
+
+> sh.moveChunk(
+... "test.manual.stuff", 
+... {user_id: NumberLong("-1844674407370955160")}, 
+... "test-rs1")
+
+
+# Sharding administration 
+- All of the configuration information about your cluster is kept in collections in the config database on the config servers.
+
+use the config database to see its data, as you would for any other database:
+
+> use config
+
+> db.shards.find()
+{ "_id" : "shard01", 
+  "host" : "shard01/localhost:27018,localhost:27019,localhost:27020", 
+  "state" : 1 }
+{ "_id" : "shard02", 
+  "host" : "shard02/localhost:27021,localhost:27022,localhost:27023", 
+  "state" : 1 }
+{ "_id" : "shard03", 
+  "host" : "shard03/localhost:27024,localhost:27025,localhost:27026", 
+  "state" : 1 }
+
+The databases collection keeps track of all of the databases, sharded and not
+
+> db.databases.find()
+{ "_id" : "video", "primary" : "shard02", "partitioned" : true, 
+  "version" : { "uuid" : UUID("3d83d8b8-9260-4a6f-8d28-c3732d40d961"), 
+  "lastMod" : 1 } }
+  
+> db.collections.find().pretty()
+  
+- config.settings, This collection contains documents representing the current balancer settings
+
+- default a mongos will accept up to 65,536 connections
+- maximum number of connections a shard can handle from a single mongos:
+
+maxConns = maxConnsPrimary − (numMembersPerReplicaSet × 3) −
+(other x 3) / numMongosProcesses
+
+
+- adding servers, can add new mongos processes at any time. Make sure their --configdb option specifies the correct set of config servers and they should be immediately available for clients to connect to.
+
+- removing shard, run the removeShard command. removeShard takes the shard’s name and drains all the chunks on that shard to the other shards
+
+> db.adminCommand({"removeShard" : "shard02"})
+
+- balancer 
+
+> sh.setBalancerState( true )
+{
+    "ok" : 1,
+    "operationTime" : Timestamp(1541451846, 4),
+    "$clusterTime" : {
+        "clusterTime" : Timestamp(1541451846, 4),
+        "signature" : {
+            "hash" : BinData(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+            "keyId" : NumberLong(0)
+        }
+    }
+}
+> db.settings.update(
+   { _id: "balancer" },
+   { $set: { activeWindow : { start : "13:00", stop : "16:00" } } },
+   { upsert: true }
+)
+WriteResult({ "nMatched" : 1, "nUpserted" : 0, "nModified" : 1 })
+
+-  use the dataSize command to check chunk sizes. First, use the config.chunks collection to find the chunk ranges:
+
+> use config
+> var chunks = db.chunks.find({"ns" : "acme.analytics"}).to
+
+- refresh configuration 
+
+use the flushRouterConfig command to manually clear all caches:
+
+> db.adminCommand({"flushRouterConfig" : 1})
+
+
+
+# Application administration 
+- ee the operations that are running, use the db.currentOp() function:
+
+> db.currentOp()
+
+- can kill it by passing db.killOp() its "opid":
+
+> db.killOp(123)
+
+- use system profiler 
+db.setProfilingLevel() in the shell:
+
+> db.setProfilingLevel(2)
+
+- calculate document size 
+
+Object.bsonsize() function. Pass in any document to get the size it would be when stored in MongoDB.
+
+Object.bsonsize(db.users.findOne())
+ 
+- seeing information about a whole collection, there is a stats function:
+
+>db.movies.stats()
+
+- a stats function that’s similar to collections’:
+
+> db.stats()
+
+-  default, mongostat prints out a list of statistics once per second
+
+top Unix utility: it gives you an overview of which collections are busiest. You can also run mongotop --locks to give you locking statistics
+
+
+# An Introduction to MongoDB Security
+- MongoDB provides a number of built-in roles that grant commonly needed permissions for database users.
+
+read 
+readwrite 
+adAdmin  
+dbOwner 
+
+- Generate a root CA
+To generate our CA, we will use OpenSSL. To follow along, please make sure you have access to OpenSSL on your local machine.
+
+hold our OpenSSL settings that we will use to generate the certificates:
+
+# For the CA policy
+[ policy_match ]
+countryName = match
+stateOrProvinceName = match
+organizationName = match
+organizationalUnitName = optional
+commonName = supplied
+emailAddress = optional
+
+- Create an intermediate CA for signing
+Now that we’ve created our root CA, we will create an intermediate CA for signing member and client certificates.
+
+- Generate and Sign Member Certificates
+Member certificates are typically referred to as x.509 server certificates. 
+
+- Restart the Replica Set with Authentication and Authorization Enabled
+
+openssl x509 -in client1.pem -inform PEM -subject -nameopt RFC2253 | grep subject
+
+kill $(ps -ef | grep mongod | grep set509 | awk '{print $2}')
+
+mport=$mongodb_port
+for host in "${mongodb_server_hosts[@]}"; do
+    echo "Starting server $host"
+    mongod --replSet set509 --port $mport --dbpath ./db/$host \
+        --tlsMode requireTLS --clusterAuthMode x509 --tlsCAFile root-ca.pem \
+        --tlsAllowInvalidHostnames --fork --logpath ./db/${host}.log \
+        --tlsCertificateKeyFile ${host}.pem --tlsClusterFile ${host}.pem \
+        --bind_ip 127.0.0.1
+    let "mport++"
+done
+
+mongo --norc --tls --tlsCertificateKeyFile client2.pem --tlsCAFile root-ca.pem \
+--tlsAllowInvalidHostnames --authenticationDatabase "\$external" \
+--authenticationMechanism MONGODB-X509
+
+
+
+# Durabiliity 
+- Durability is a property of database systems that guarantees that write operations that have been committed
+
+- The MongoDB query language supports specifying a write concern for all insert and update methods.
+
+- In MongoDB, operations on individual documents are atomic.
+
+- using a write concern 
+
+The following provides an example:
+
+function updateEmployeeInfo(session) {
+    employeesCollection = session.getDatabase("hr").employees;
+    eventsCollection = session.getDatabase("reporting").events;
+
+    session.startTransaction( {writeConcern: { w: "majority" } } );
+
+    try{
+        employeesCollection.updateOne( { employee: 3 }, 
+                                       { $set: { status: "Inactive" } } );
+        eventsCollection.insertOne( { employee: 3, status: { new: "Inactive", 
+                                      old: "Active" } } );
+    } catch (error) {
+        print("Caught exception during transaction, aborting.");
+        session.abortTransaction();
+        throw error;
+    }
+
+    commitWithRetry(session);
+}
+
+- checking corruption 
+
+The validate command can be used to check a collection for corruption. To run validate on the movies collection, do:
+
+db.movies.validate({full: true})
+{
+	"ns" : "sample_mflix.movies",
+	"nInvalidDocuments" : NumberLong(0),
+	"nrecords" : 45993,
+	"nIndexes" : 5,
+	"keysPerIndex" : {
+		"_id_" : 45993,
+		"$**_text" : 3671341,
+		"genres_1_imdb.rating_1_metacritic_1" : 94880,
+		"tomatoes_rating" : 45993,
+		"getMovies" : 45993
+	},
+	"indexDetails" : {
+		"$**_text" : {
+			"valid" : true
+		},
+		"_id_" : {
+			"valid" : true
+		},
+		"genres_1_imdb.rating_1_metacritic_1" : {
+			"valid" : true
+		},
+		"getMovies" : {
+			"valid" : true
+		},
+		"tomatoes_rating" : {
+			"valid" : true
+		}
+	},
+	"valid" : true,
+	"warnings" : [ ],
+	"errors" : [ ],
+	"extraIndexEntries" : [ ],
+	"missingIndexEntries" : [ ],
+	"ok" : 1
+}
+
+"valid", which will hopefully be true.
+
+
+# Server administration 
+- topics 
+Commonly used options
+
+Starting up and shutting down MongoDB
+
+Security-related options
+
+Logging considerations
+
+- mongod executable. mongod has many configurable startup options; to view all of them, run mongod --help
+
+```
+--dbpath
+Specify an alternate directory to use as the data directory;
+
+--fork
+On Unix-based systems, fork the server process, running MongoDB as a daemon.
+
+--port 
+
+--logpath 
+
+--directoryperdb, each database in its own directory. This allows you to mount different databases on different disks
+
+--config, Use a configuration file for additional options not specified
+
+```
+
+-  start the database, MongoDB will write a document to the local.startup_log collection that describes the version of MongoDB
+> use local 
+switched to db local
+> db.startup_log.find().sort({startTime: -1}).limit(1).pretty()
+{
+    "_id" : "server1-1544192927184",
+    "hostname" : "server1.example.net",
+    "startTime" : ISODate("2019-09-06T22:50:47Z"),
+    "startTimeLocal" : "Fri Sep  6 22:57:47.184",
+    "cmdLine" : {
+        "net" : {
+            "port" : 5586
+        },
+        "processManagement" : {
+            "fork" : true
+        },
+        "storage" : {
+            "dbPath" : "data/db"
+        },
+        "systemLog" : {
+            "destination" : "file",
+            "logAppend" : true,
+            "path" : "mongodb.log"
+        }
+    },
+
+- shut down a running server is to use the shutdown command, {"shutdown" : 1}. This is an admin command
+
+- PID, the command would be kill -2 10014 (SIGINT) or kill 10014 (SIGTERM). 
+- a few options you can add to your config file to make it more secure
+
+```
+--bind_ip, Specify the interfaces that you want MongoDB to listen on.
+--nounixsocket, Disable listening on the UNIX domain socket. 
+--noscripting, Disable server-side JavaScript execution.
+```
+
+- data encryption process includes the following steps:
+
+Generate a master key.
+
+Generate keys for each database.
+
+Encrypt data with the database keys.
+
+Encrypt the database keys with the master key.
+
+- ssl connections 
+
+MongoDB uses native TSL/SSL libraries available on your operating system. Use the option --tlsMode and related options to configure TLS/SSL
+
+- change log level 
+
+> db.adminCommand({"setParameter" : 1, "logLevel" : 3})
+> db.adminCommand({"setParameter" : 1, logComponentVerbosity:
+        { verbosity: 1, query: { verbosity: 2 }}})
+        
+        
+        
+# Monitoring mongodb 
+- tracking page faults
+
+MongoDB is using memory, not just how much of each type it has. One useful stat is the number of page faults, which tells you how often the data MongoDB is looking for is not in RAM.
+
+"page_faults" field of serverStatus’s output:
+
+> db.adminCommand({"serverStatus": 1})["extra_info"]
+{ "note" : "fields vary by platform", "page_faults" : 50 }
+
+- CPU is idling waiting for the disk, called I/O wait. Some I/O wait is normal; 
+
+Suppose that you have a 40 GB working set. A total of 90% of requests hit the working set, and 10% hit other data. If you have 500 GB of data and 50 GB of RAM, your working set fits entirely in RAM.
+
+- tracking performance 
+
+CPU can be I/O bound with MongoDB (indicated by a high I/O wait). The WiredTiger storage engine is multithreaded and can take advantage of additional CPU cores
+
+
+
+# Making backups 
+- backup methods 
+- The best backup solution for the majority of scenarios is continuous backups.
+
+- Filesystem snapshots use system-level tools to create copies of the device that holds MongoDB’s data files. 
+
+lush all writes to disk and lock the database to prevent writes during the backup process. 
+
+db.fsyncLock() method in the mongo shell:
+
+> db.fsyncLock();
+> db.fsyncUnlock();
+
+- make a copy of everything in the data directory. 
+
+done with a command such as:
+> db.fsyncLock();
+$ cp -R /data/db/* /mnt/external-drive/backup
+> db.fsyncUnlock();
+
+The fsyncLock setting does not persist between restarts; mongod will always start up unlocked.
+
+-  restore the files backed up with the command shown earlier:
+
+$ cp -R /mnt/external-drive/backup/* /data/db/
+$ mongod -f mongod.conf
+
+To back up an individual database (called, say, myDB), which is only available if you are using the --directoryperdb option, copy the entire myDB directory. Partial data directory copies are only possible with the --directoryperdb option.
+ 
+- mongodump 
+
+mongodump has a variety of options that you can see by running mongodump --help. 
+
+- To restore a .bson file into a specific database and collection, specify the targets on the command line:
+
+$ mongorestore --db newDb --collection someOtherColl dump/oldDB/oldColl.bson
+
+run mongorestore on that server to restore the backups:
+$ ssh eoin@proxy.server.com mongodump --host source.server.com\ --archive 
+        | ssh eoin@target.server.com mongorestore --archive
+        
+using both the archive and compression features of these tools:
+$ ssh eoin@proxy.server.com mongodump --host source.server.com\ --archive 
+        --gzip | ssh eoin@target.server.com mongorestore --archive --gzip
+        
+
+- restore a replica set member from a mongodump backup, start the target replica set member as a standalone server with an empty data directory and run mongorestore on it with --oplogReplay option 
+
+> use local
+> db.createCollection("oplog.rs", {"capped" : true, "size" : 10000000})
+Specify the size of the collection in bytes. 
+
+ restore the oplog.bson backup file from the dump into the local.oplog.rs collection:
+
+$ mongorestore -d local -c oplog.rs dump/oplog.bson
+
+
+
+# Deploying MongoDB 
+- Designing the system 
+
+ store and retrieve data from:
+
+RAM
+
+SSD
+
+Spinning disk
+
+- A set of disks using RAID is referred to as a RAID array (somewhat redundantly, as RAID stands for redundant array of inexpensive disks).
+
+RAID0, NO COPYS 
+RAID1, Mirroring for improved reliability. An identical copy of the data is written to each member of the array. This has lower performance than RAID0, as a single member with a slow disk can slow down all writes
+RAID5, Striping disks, plus keeping an extra piece of data about the other data that’s been stored to prevent data loss on server failure. Basically, RAID5 can handle one disk going down and hide that failure from the user. VERY SLOW
+RAID10, A combination of RAID0 and RAID1: data is striped for speed and mirrored for reliability.
+
+
+- MongoDB will use swap for operations that require ordering data: either building indexes or sorting. It attempts not to use too much memory for these types of operations,
+
+- swap in case memory limits are reached to prevent the kernel from killing MongoDB
+
+- linux virtualization memory overcomming 
+
+This operating system kernel setting does not work well with MongoDB.
+
+The possible values for vm.overcommit_memory are 0 
+
+$ echo 2 > /proc/sys/vm/overcommit_memory
+
+- handling network disk i/o issues 
+
+I/O Operations Per Second (IOPS). See http://docs.mongodb.org for up-to-date recommendations on hosted offerings.
+
+- Nonuniform memory architecture: certain memory is attached to a CPU, giving the CPU faster access to that memory; CPUs can still access other CPUs’ memory, but it is more expensive than accessing their own
+
+each CPU has its own “local” memory, is called nonuniform memory architecture (NUMA).
+
+- MongoDB on Linux, you should disable zone reclaim in the sysctl settings using one of the following commands:
+
+running MongoDB on Linux
+
+echo 0 | sudo tee /proc/sys/vm/zone_reclaim_mode
+sudo sysctl -w vm.zone_reclaim_mode=0
+
+start a MongoDB instance using numactl:
+
+numactl --interleave=all <path> <options>
+
+- setting Readahead is an optimization where the operating system reads more data from disk than was actually requested.
+
+- Disabling Transparent Huge Pages (THP)
+
+unless:
+
+All of your data fits into memory.
+
+You have no plans for it to ever grow beyond memory.
+
+- choosing a disk scheduling alogrithm 
+
+Similarly, on SSDs, the noop scheduler is generally the best choice. SSDs don’t have the same locality issues that spinning disks do.
+
+- disabling access time tracking, the system tracks when files were last accessed. As the data files used by MongoDB are very high-traffic, you can get a performance boost by disabling this tracking.
+
+    + linux 
+    
+/dev/sda7 /data xfsf rw,noatime 1  2
+
+    + on Windows you should set the disablelastaccess option. To turn off last access time recording, run:
+
+C:\> fsutil behavior set disablelastaccess 1
+
+- modifying limits 
+
+two limits that MongoDB tends to blow by: the number of threads a process is allowed to spawn and the number of file descriptors a process is allowed to open.
+
+- configuring your network 
+
+mongos in particular tends to create connections to many shards. 
+
+must open 100 connections: one connection to each shard. This can quickly lead to an explosion in the number of connections, as you can imagine from the previous example
+
+configure mongos processes to only allow a certain number of incoming connections by using the maxConns option. '
+
+- limit the connectivity of MongoDB servers. Note that multiserver MongoDB deployments should handle networks being partitioned or down
+
+mongos processes and shards talk to config servers, but config servers don’t make connections to anyone, even one another
+
+- system house keeping 
+
+Synchronizing Clocks
+
+Very occasionally, MongoDB will allocate enough memory that it will be targeted by the out-of-memory (OOM) killer.
+
+check the kernel log mongodb killed due to memory over usage:
+````
+kernel: Killed process 2771 (mongod)
+kernel: init invoked oom-killer: gfp_mask=0x201d2, order=0, oomkilladj=0
+````
+
+- Documents in MongoDB are an abstract concept—the concrete representation of a document varies depending on the driver/languag
+
+
+mongodb://localhost:27017/
