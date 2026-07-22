@@ -1,0 +1,496 @@
+Clean Architecture with .net=Casey Crouse;Note=Erxin
+
+# who this book for 
+developers who are already comfortable building applications and are ready to think more deeply about how those applications are structured.
+ 
+GitHub at https://github.com/PacktPublishing/Clean-Architecture-with-.NET.
+
+
+# Understand the limnitations of tightly coupled architectures 
+- example 
+
+public class ShoppingCartController : Controller
+{
+    // locals omitted for now
+    public ShoppingCartController(ApplicationDbContext context, ILogger logger)
+    {
+        _context = context;
+        _logger = logger;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(LOG_FILE_PATH) ?? @"C:\Logs\WebShop");
+        Directory.CreateDirectory(Path.GetDirectoryName(INVENTORY_FILE_PATH) ?? @"C:\Data");
+        Directory.CreateDirectory(Path.GetDirectoryName(CONFIG_FILE_PATH) ?? @"C:\Config");
+    
+        // Create initial config file if not exists
+        if (!System.IO.File.Exists(CONFIG_FILE_PATH))
+        {
+            System.IO.File.WriteAllText(CONFIG_FILE_PATH, "max_cart_items=10\nmax_price_per_item=1000\nwarehouse_email=warehouse@company.com");
+        }
+    }
+}
+
+- Business Logic in the Wrong Layer
+
+
+# Clean architecture 
+- dependency rule states that dependencies must flow from more concrete and low-level concerns toward less concrete high-level concerns. In a typical onion-style circle diagram
+
+- the single responsibility principle (SRP). This falls naturally from the application of the separation of concerns noted earlier, and by combining SRP with the dependency rule
+
+-  main components of clean architecture are as follows:
+
+Entities and aggregates
+Use cases
+Interfaces
+Controllers, pages, and endpoints, Controllers, pages, and endpoints represent typical ASP.NET Core UI elements. These should be kept in the UI (Web) project, or in some cases, shared base classes or reusable components
+Gateways
+Presenters
+
+- project structures 
+
+organizing the application's code base:
+
+The Entities folder will contain all the application's domain models
+The Interfaces folder will contain the interfaces used to interact with other parts of the application
+The UseCases folder will contain the core business logic of the application
+
+    + The Application layer serves as a bridge between the UI and the Domain layer. Its primary responsibilities include the following:
+
+Defining the application's use cases and high-level business logic
+Orchestrating the flow of data and interactions between the UI, Domain layer, and external services
+Handling input validation, authentication, authorization, and other application-specific concerns
+Implementing application-specific business rules and workflows
+
+    + Domain layer represents the heart of your app, encapsulating the core business logic and domain-specific rules. Its primary responsibilities include the following:
+
+Defining entities that represent the key business concepts and their behavior
+Implementing domain-specific rules and invariants that govern the behavior of entities
+Ensuring the integrity, consistency, and validity of domain data and business operations
+Providing domain-specific operations and services required by the application
+
+     +how to make the split:
+
+Create two new class libraries in your solution: Application.csproj and Domain.csproj.
+Target the latest .NET version, just as you did with the original Core project.
+Place both projects inside the CleanCart.NET/src directory, alongside your other projects.
+Move the contents of Core into the appropriate new projects:
+Use cases and interfaces go into Application
+Entities go into Domain
+Once the migration is complete, you can safely remove the original Core.csproj class library from the solution.
+
+    + Cross-cutting layer examples
+Let's start with some common cross-cutting concerns you'll encounter in most real-world applications:
+
+Logging and instrumentation: Capturing and tracking important application events, errors, and metrics for monitoring, troubleshooting, and performance analysis purposes
+Caching and performance optimization: Implementing caching mechanisms to improve application performance by storing frequently accessed data in memory, reducing expensive database or API calls
+Security and authentication: Enforcing security measures, such as authentication and authorization, to protect sensitive data and ensure only authorized users can access specific resources
+Exception handling and error management: Implementing consistent error-handling strategies to gracefully handle exceptions, log error details, and provide meaningful feedback to users when errors occur
+Configuration management: Managing application configuration settings, including environment-specific configurations, external service credentials, or feature toggles, in a centralized and accessible manner
+Cross-cutting utilities: Creating reusable utilities, such as extension methods or helper classes, that provide commonly used functionality across multiple layers, promoting code reuse and maintainability
+
+- In the Infrastructure layer, we can log important database operations or errors that occur during data access. For example, when retrieving product information from the database, we can log the executed SQL query, erros etc. 
+
+- clear architectural boundaries or inversion of control (IoC) patterns.
+
+    + common examples of abstractions:
+
+Interfaces: Interfaces define a contract that specifies a set of members a class must implement. By programming to interfaces, we can create interchangeable components and achieve loose coupling between different parts of our code base.
+Abstract classes: Abstract classes provide a common base for derived classes and can contain both abstract and concrete members. They are used to define common behavior and characteristics that derived classes must implement.
+Delegates: Delegates in C# allow us to represent a method as an object and pass it around as a parameter or store it in a variable. They provide a way to abstract behavior and enable decoupling between components.
+
+    + Depending upon abstractions
+When it comes to good design, ILogger is a classic example of using abstraction effectively.
+
+    + AutoMapper is a popular .NET library that simplifies copying data between objects with similar structures. Instead of writing manual code to assign each property
+    
+    AutoMapper pricing and installation guidance https://automapper.io for full details.
+    
+    
+```
+public void ConfigureServices(IServiceCollection services)
+{
+    // Other configurations
+
+    services.AddAutoMapper(typeof(PaymentMappingProfile));
+
+    // Register your IPaymentService implementation and other dependencies
+    services.AddScoped<IPaymentService, PaymentService>();
+
+    // Other service registrations
+}
+```
+    + alternative mapping libraries include the following:
+
+Mapster: Mapster is a lightweight and fast object-to-object mapper for .NET. It offers a simple and fluent API for configuring mappings and supports convention-based mapping as well as explicit mappings. Mapster is known for its performance and ease of use.
+TinyMapper: TinyMapper is another lightweight mapper that focuses on simplicity and performance. It offers a minimalistic API and supports automatic mapping based on naming conventions. TinyMapper is designed to be easy to set up and use without any complex configuration.
+EmitMapper: EmitMapper is a high-performance mapping library that utilizes IL code generation at runtime. It offers fast object-to-object mapping and supports custom conversions, nested objects, and complex mappings. EmitMapper is suitable for scenarios where performance is a critical factor.
+Manual mapping: In some cases, you may opt for manual mapping using custom code without relying on a dedicated mapping library. Manual mapping gives you full control over the mapping process, but it requires more effort and maintenance. This approach can be useful for simple mappings or cases where you have specific requirements that may not be easily handled by a mapping library.
+
+
+# Design clean architecture application 
+- Domain-Driven Design (DDD) concepts to mapping use cases across layers, you'll learn how to create clear, structured designs.
+
+-  benefits of this approach include the following:
+
+Independent presentation layers: Update or replace a UI without affecting business rules
+Reusable business logic: The same use cases drive multiple delivery channels
+Simplified maintenance: Bug fixes in the core logic propagate across all interfaces automatically
+
+- Adapting DDD in a Clean Architecture application
+DDD pairs well with Clean Architecture because they both emphasize boundaries and separation of concerns. 
+
+- Creating the use case interface
+Within the Application layer, create a new folder in the interfaces folder called UseCases. These folders will help keep your use case interfaces organized as they start to increase in number.
+
+
+# Implementing the core layer 
+- implement the business 
+
+# Impleemntting the infrastructure layer 
+- turn our attention to dependency injection (DI) in .NET and how it applies within the Infrastructure layer. You'll see how services, HTTP clients, and supporting components are registered and wired together to support a flexible and composable architecture.
+
+-  gateway API, such as Stripe:
+
+public class PaymentGateway(IPaymentGatewayApi paymentGatewayApi) : IPaymentGateway
+{
+    // Excluded for brevity
+}
+
+- payment provider specifics, this chapter uses the jsonplaceholder API (https://jsonplaceholder.typicode.com) as a stand-in for a real external payment gateway.
+
+-  .NET, there are three main types:
+
+Transient: Transient services are like disposable kitchen items, such as paper towels or gloves. Each time they're needed, a fresh one is used, and then it's thrown away.
+Scoped: Scoped services are like a cutting board or prep station assigned to a single order. It's reused while that order is being prepared, but once the order is complete, it's cleaned up and put away.
+Singleton: Singleton services are like shared kitchen equipment—an oven or an espresso machine. They're set up once and reused by everyone in the kitchen for the lifetime of the restaurant.
+
+- The options pattern in .NET
+The options pattern in .NET is a design pattern used to manage and access configuration settings in a structured and consistent manner
+
+Configuration storage: Configuration settings are typically stored in files (such as appsettings.json), environment variables, or other configuration sources. 
+
+    + strongly typed options classes:
+
+Microsoft.Extensions.Configuration: Provides the core configuration abstractions
+Microsoft.Extensions.Configuration.Binder: Supports binding configuration values to .NET classes
+Microsoft.Extensions.Configuration.EnvironmentVariables: Enables config-uration via environment variables
+Microsoft.Extensions.Configuration.Json: Adds support for JSON-based configuration files
+Microsoft.Extensions.Options.ConfigurationExtensions: Integrates configuration binding with the options pattern
+
+- Using User Secrets for local development
+While environment-specific configuration files help separate settings by deployment target,
+
+-  FluentAssertions, a library that enhances the readability and expressiveness of assertion statements in tests. By providing a more intuitive syntax,
+
+- Another critical dependency we've incorporated into the TestCommon project is AutoFixture, a library designed to reduce the amount of setup code required when initializing objects in tests
+
+
+# Implement the persistence layer 
+- installed and available:
+
+Docker Desktop (Linux containers):
+https://www.docker.com/products/docker-desktop
+https://learn.microsoft.com/virtualization/windowscontainers/deploy-containers/set-up-linux-containers
+Azure account and Azure portal access:
+https://azure.microsoft.com/free
+https://portal.azure.com
+
+- open as a reference as you work through this material:https://learn.microsoft.com/en-us/ef/core/.
+
+- data carriers, or more commonly, data transfer objects (DTOs). They contain only fields required to represent stored data without exposing business logic
+
+- most SQL-based applications have been built using a database-first approach. In this model, the database is designed and managed directly using SQL and database-specific tooling.
+
+- Navigation properties describe how entities are related to one another in the database. In EF Core, they allow you to move between related entities and define relationships 
+
+- DbSet properties
+Each DbSet<T> property represents a collection of entities that EF Core maps to a database table.
+
+- OrderRepository class illustrates several important patterns used throughout the application:
+
+Each operation creates its own DbContext instance
+Persistence entities are never exposed outside the repository
+AutoMapper is used to translate across boundaries, not to hide them
+Repositories remain thin and focused on coordination, not behavior
+
+- selectively registering profiles, the tests reuse the same DI setup used by the application itself:
+
+services.AddCoreLayerServices(configuration);
+
+
+# Implementing the presentation layer with identity 
+-  Presentation layer as a composition boundary
+In earlier chapters, we established a clear convention for registering infrastructure dependencies through a single call
+
+-  service composition, we make it clear that
+
+Infrastructure services are registered as a unit
+Presentation services are layered on intentionally
+Ordering is explicit rather than accidental
+Program.cs remains an entry point, not a dumping ground for architectural decisions
+
+-  service composition is invoked with a single, explicit call:
+
+var compositionRoot = new ServiceCompositionRoot(builder.Configuration);
+compositionRoot.ConfigureServices(builder.Services);
+
+
+- Authentication versus application identity
+It is useful to distinguish between authentication and application identity, because they serve different purposes.
+
+The Application and Domain layers should not depend on identity providers, authentication protocols, or claim formats.
+
+- Implementing user authentication with Microsoft Entra External ID
+
+You can read more about their pricing here: https://www.microsoft.com/security/pricing/microsoft-entra-external-id
+
+Create and store a client secret
+The client secret allows the application to authenticate itself with Entra External ID and securely participate in the sign-in flow. 
+
+- Base configuration (appsettings.json)
+The base configuration file defines the shape and intent of the identity configuration
+
+
+# Building secure, testable ui components for user cases 
+- Blazor applications often require multiple components to react to changes in shared state—for example, adding an item to the cart should update both the Shopping Cart page
+
+- securing the ui 
+
+[Authorize] attributes placed on components will not be honored during navigation.
+
+
+# clean architecture in .net with structured service composition 
+- A single application might eventually support:
+
+A Web API
+A Blazor application
+A console utility
+Background workers
+Azure Functions
+
+- we will use ServiceComposition.NET, a lightweight library that separates:
+
+The definition of service registrations
+The execution of those registrations at startup
+
+- composition from convention to structure, we introduce two core abstractions from ServiceComposition.NET
+(available at https://github.com/cbcrouse/ServiceComposition.NET):
+
+ServiceRegistrationPipeline
+ServiceCompositionRoot<TPipeline>
+
+Blazor Server App, Console App, Web API are all implemented ServiceCompositionRoot<TPipeline>
+
+- Refactoring the Infrastructure layer
+Let's start by installing the ServiceComposition.NET library
+
+https://github.com/cbcrouse/ServiceComposition.NET
+
+
+# Securing a clean architecture application 
+- topics are covered:
+
+Enforcing multi-factor authentication with Entra ID
+Securing secrets with Azure Key Vault
+Structured logging and obfuscation with Serilog
+
+- MFA, multi-factor authentication 
+
+Something the user knows – a password or PIN
+Something the user has – a mobile device or authentication token
+Something the user is – biometric verification, such as fingerprint or facial recognition
+
+- identity using methods such as the following:
+
+Authenticator app verification
+SMS codes
+Email verification
+One-time passcodes
+
+- official Microsoft documentation:
+
+Overview: https://learn.microsoft.com/entra/external-id/customers/concept-multifactor-authentication-customers
+Setup Guide: https://learn.microsoft.com/entra/external-id/customers/how-to-multifactor-authentication-customers
+Conditional Access Policy Templates: https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-policy-common
+Security Defaults Overview: https://learn.microsoft.com/entra/fundamentals/security-defaults
+
+- Azure Key Vault into your application
+To fully leverage the security benefits of Azure Key Vault, it's essential to integrate it into your .NET application. This allows your application to securely retrieve secrets such as connection strings and API keys at runtime
+
+Then, in appsettings.core.Development.json, we define the actual Key Vault URL for the development environment:
+
+{
+  "KeyVault": {
+    "Url": "https://your-key-vault-name.vault.azure.net/"
+  }
+}
+
+    + in presentation layer allowing Key Vault to be enabled or disabled based on application needs.
+
+public static IConfigurationBuilder AddPresentationLayerConfiguration(this IConfigurationBuilder configurationBuilder, bool useAzureKeyVault = true)
+{
+    // Excluded for brevity
+    configurationBuilder.AddEnvironmentVariables();
+
+    if (useAzureKeyVault)
+    {
+        AddAzureKeyVault(configurationBuilder, environment);
+    }
+    // Excluded for brevity
+    return configurationBuilder;
+}
+
+    +  Azure Key Vault for your SQL Server connection string:
+
+Name: SqlServer--ConnectionString
+Secret value: Server=localhost,4000; Database=CleanCart.NET; User Id=sa; Password=SqlSecret!; TrustServerCertificate=True
+
+    + add a test-specific secret that we'll use later for integration testing:
+
+Name: IntegrationTest--KeyVaultOverride
+Value: keyvault-value
+
+    + Key Vault should be used instead of hardcoded values:
+
+{
+  "AzureAd": {
+    "ClientId": "Use Key Vault"
+  }
+}
+
+      Azure CLI, you can add secrets using the following commands:
+
+$ az keyvault secret set --vault-name your-keyvault-name --name "AzureAd--ClientId" --value "your-client-id"
+$ az keyvault secret set --vault-name your-keyvault-name --name "SqlSer
+
+$ az account show
+If needed, switch subscriptions using this:
+
+$ az account set --subscription "your-subscription-id"
+
+
+# Reducing boilerplate in clean architecture applications 
+- input validation using FluentValidation, ensuring that each command and query is well-formed before it reaches the business logic.
+
+- CQRS (Command Query Responsibility Segregation) by renaming inputs and handlers to explicitly communicate intent. 
+
+-  repository directly seems harmless:
+
+_order = await OrderRepository.GetOrderByIdAsync(OrderId);
+
+MediatR (https://github.com/jbogard/MediatR), a simple, powerful library that implements the Mediator pattern for .NET applications.
+
+public class ProcessPaymentInputValidator : AbstractValidator<ProcessPaymentInput>
+{
+    public ProcessPaymentInputValidator()
+    {
+        RuleFor(x => x.UserId).NotEmpty();
+        RuleFor(x => x.Items).NotEmpty();
+        RuleForEach(x => x.Items).SetValidator(new ShoppingCartItemValidator());
+
+        RuleFor(x => x.CardNumber)
+            .NotEmpty()
+            .CreditCard()
+            .WithMessage("Invalid card number.");
+
+        RuleFor(x => x.CardHolderName)
+            .NotEmpty();
+
+        RuleFor(x => x.ExpirationMonthYear)
+            .Matches(@"^(0[1-9]|1[0-2])\/\d{2}$")
+            .WithMessage("Expiration must be in MM/YY format.");
+
+        RuleFor(x => x.CVV)
+            .Matches(@"^\d{3,4}$")
+            .WithMessage("CVV must be 3 or 4 digits.");
+
+        RuleFor(x => x.PostalCode)
+            .NotEmpty();
+    }
+}
+
+- Replacing the existing use case registration
+
+// Add MediatR
+AddRegistration(services => services.AddMediatR(config => config.RegisterServicesFromAssembly(typeof(ProcessPaymentInput).Assembly)));
+
+// Add FluentValidation validators
+AddRegistration(services => services.AddValidatorsFromAssemblyContaining<ProcessPaymentInputValidator>(ServiceLifetime.Scoped, filter: null, includeInternalTypes: false));
+
+// Add validation pipeline behavior
+AddRegistration(services => services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>)));
+
+- MediatR folder within the Infrastructure project and add a new file named ValidationBehavior.cs.
+
+namespace Infrastructure.MediatR;
+
+public class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TRequest>> validators)
+    : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : notnull
+{
+    public async Task<TResponse> Handle(
+        TRequest request,
+        RequestHandlerDelegate<TResponse> next,
+        CancellationToken cancellationToken)
+    {
+        var context = new ValidationContext<TRequest>(request);
+
+        var failures = await Task.WhenAll(validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+        var errors = failures.SelectMany(f => f.Errors).Where(f => f != null).ToList();
+
+        if (errors.Count != 0)
+            throw new ValidationException(errors);
+
+        return await next(cancellationToken);
+    }
+}
+
+- we're introducing Command-Query Responsibility Segregation (CQRS). By clearly dividing commands (which modify data) from queries
+
+- AppServiceRegistrationPipeline, we'll register both the command and query repositories explicitly:
+
+services.AddScoped<IOrderCommandRepository, OrderCommandRepository>();
+services.AddScoped<IOrderQueryRepository, OrderQueryRepository>();
+services.AddScoped<IShoppingCartCommandRepository, ShoppingCartCommandRepository>();
+services.AddScoped<IShoppingCartQueryRepository, ShoppingCartQueryRepository>();
+
+- setting environment variables correct configuration.
+
+
+- quick reference to guide your next steps
+
+Create separate Azure resources for production (Key Vault, SQL DB, Web App)
+Use a dedicated External ID tenant for live users
+Upgrade to standard or premium tiers for Web App and SQL
+Enable Application Insights or observability tools
+Use CI/CD pipelines for automated, consistent deployments
+Adopt Docker/Aspire for local reproducibility
+Apply Clean Architecture to the UI layer for long-term maintainability
+Learn performance best practices for your UI framework (e.g., Blazor)
+
+
+# Managing and evolving a clean architecture application 
+- checks and local telemetry powered by OpenTelemetry (OTEL) and Microsoft's Aspire. 
+- NuGet package to your Infrastructure.csproj:
+
+dotnet add package Microsoft.Extensions.Diagnostics.HealthChecks
+
+- OpenTelemetry (OTEL), complementing the structured logging we configured earlier with Serilog. OTEL has become the industry standard for collecting and exporting telemetry
+
+Common project:
+
+OpenTelemetry.Extensions.Hosting: This gives us access to the AddOpenTelemetry extension method, which serves as the central entry point for configuring telemetry services.
+OpenTelemetry.Exporter.OpenTelemetryProtocol: Enables support for the OTLP (OpenTelemetry Protocol) exporter. This exporter is used when running locally to forward telemetry to the Aspire dashboard.
+OpenTelemetry.Instrumentation.Http: Adds automatic instrumentation for HttpClient, capturing outgoing request timing and other useful details
+
+-  Presentation layers—like logging, OTEL setup, and service registration.
+
+Presentation.Common will reference Infrastructure.
+Presentation.BSA, Presentation.Console, and Presentation.Functions will all reference Presentation.Common.
+
+- last 10 orders for a user. Later, you need to:
+
+Add role-based filtering for specific views.
+Apply a caching policy to reduce load.
+Log access for auditing
+Flag suspicious order patterns for fraud detection.

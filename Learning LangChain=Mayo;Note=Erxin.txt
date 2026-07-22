@@ -306,3 +306,452 @@ from pydantic import BaseModel, Field
 class Joke(BaseModel):
     setup: str = Field(description="The setup of the joke")
     punchline: str = Field(description="The punchline to the joke")
+    
+```
+input = {
+    "messages": [
+        HumanMessage("""How old was the 30th president of the United States 
+            when he died?""")
+    ]
+}
+for c in graph.stream(input, stream_mode='updates'):
+    print(c)
+```
+
+- streaming llm output token by token 
+LangGraph as well:
+
+Python
+
+input = {
+    "messages": [
+        HumanMessage("""How old was the 30th president of the United States 
+            when he died?""")
+    ]
+}
+output = app.astream_events(input, version="v2")
+
+async for event in output:
+    if event["event"] == "on_chat_model_stream":
+        content = event["data"]["chunk"].content
+        if content:
+            print(content)
+            
+     details on this:
+
+Python
+
+from langgraph.checkpoint.memory import MemorySaver
+
+graph = builder.compile(checkpointer=MemorySaver())
+
+    +  LangGraph, Python
+
+import asyncio
+
+event = asyncio.Event()
+
+input = {
+    "messages": [
+        HumanMessage("""How old was the 30th president of the United States 
+            when he died?""")
+    ]
+}
+
+config = {"configurable": {"thread_id": "1"}}
+
+async with aclosing(graph.astream(input, config)) as stream:
+    async for chunk in stream:
+        if event.is_set():
+            break
+        else:
+            ... # do something with the output
+
+# Somewhere else in your application
+
+event.set()
+
+- Resume
+To proceed from an interrupted graph—such as when using one of the previous two patterns—you just need to re-invoke the graph with null input 
+
+```
+config = {"configurable": {"thread_id": "1"}}
+
+history = [
+    state for state in
+    graph.get_state_history(config)
+]
+
+# replay a past state
+graph.invoke(None, history[2].config)
+```
+
+- Multitasking LLMs
+
+
+# Deployment, launching your ai application into production 
+- incorporate the following services:
+
+Vector store
+Supabase
+
+Monitoring and debugging
+LangSmith
+
+Backend API
+LangGraph Platform
+
+- install dependencies,  .env file and store the following variables:
+
+OPENAI_API_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# for tracing
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
+LANGCHAIN_API_KEY=
+
+- vector store, we’ll use Supabase—a PostgreSQL database—as the vector store. Supabase utilizes the pgvector extension to store embeddings and query vectors for similarity search.
+
+```
+## Create a table to store your documents
+
+create table documents (
+  id bigserial primary key,
+  content text, -- corresponds to Document.pageContent
+  metadata jsonb, -- corresponds to Document.metadata
+  embedding vector(1536) -- 1536 works for OpenAI embeddings, change if needed
+);
+```
+
+search query 
+
+import os
+
+from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_openai import OpenAIEmbeddings
+from supabase.client import Client, create_client
+
+supabase_url = os.environ.get("SUPABASE_URL")
+supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
+
+embeddings = OpenAIEmbeddings()
+
+
+## Assuming you've already generated embeddings of your data
+
+vector_store = SupabaseVectorStore(
+    embedding=embeddings,
+    client=supabase,
+    table_name="documents",
+    query_name="match_documents",
+)
+
+## Test that similarity search is working
+
+query = "What is this document about?"
+matched_docs = vector_store.similarity_search(query)
+
+print(matched_docs[0].page_content)
+
+- LangGraph is a low-level open source framework used to build complex agentic systems powered by LLMs. LangGraph enables fine-grained control over the flow and state of your application
+
+- langGraph platform API, Data Models
+The LangGraph Platform API consists of a few core data models:
+
+Assistants
+
+Threads
+
+Runs
+
+Cron jobs
+
+- Create a LangGraph API Config
+Prior to deployment, you need to configure your application with a LangGraph API configuration file called langgraph.json. 
+
+Test Your LangGraph App Locally
+Testing your application locally ensures that there are no errors or dependency conflicts prior to deployment. To do this, we will utilize the LangGraph CLI
+
+$ pip install -U "langgraph-cli[inmem]"
+
+ CLI is installed, run the following command to start the API:
+
+langgraph dev
+
+    + initializing the SDK client and invoking the graph:
+
+Python
+
+from langgraph_sdk import get_client
+
+# only pass the url argument to get_client() if you changed the default port 
+# when calling langgraph up
+client = get_client()
+# Using the graph deployed with the name "agent"
+assistant_id = "agent"
+thread = await client.threads.create()
+
+
+input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+async for chunk in client.runs.stream(
+    thread["thread_id"],
+    assistant_id,
+    input=input,
+    stream_mode="updates",
+):
+    print(f"Receiving new event of type: {chunk.event}...")
+    print(chunk.data)
+    print("\n\n")
+    
+    
+# Testing evaluation monitoring and continuous improvement 
+- Self-Corrective RAG
+As discussed previously, your application can incorporate error handling at runtime that feeds errors to the LLM for self-correction. Let’s explore a RAG use case using LangGraph as the framework
+
+- Defining Your Evaluation Criteria
+After creating your dataset, you need to define evaluation metrics to assess your application’s outputs before deploying into production
+
+main evaluators to score your LLM app performance:
+
+Human evaluators
+
+Heuristic evaluators These are hardcoded functions and assertions that perform computations to determine a score.
+
+LLM-as-a-judge evaluators This evaluator integrates human grading rules into an LLM prompt to evaluate whether the output is correct relative
+
+- Pairwise evaluation
+Ranking LLM outputs by preference can be less cognitively demanding for human or LLM-as-a-judge evaluators.
+
+- agents should be tested at three different levels of granularity:
+
+Response
+The agent’s final response to focus on the end-to-end performance. The inputs are a prompt and an optional list of tools, whereas the output is the final agent response.
+
+Single step
+Any single, important step of the agent to drill into specific tool calls or decisions. In this case, the output is a tool call.
+
+Trajectory
+The full trajectory of the agent. In this case, the output is the list of tool calls.
+
+-  the agent’s final response typically involves the following:
+
+Inputs
+User input and (optionally) predefined tools
+
+Output
+Agent’s final response
+
+Evaluator
+LLM-as-a-judge
+
+    + expected answers from the agent: Python
+
+```
+from langsmith import Client
+
+client = Client()
+
+# Create a dataset
+examples = [
+    ("Which country's customers spent the most? And how much did they spend?",
+        """The country whose customers spent the most is the USA, with a total 
+        expenditure of $523.06"""),
+    ("What was the most purchased track of 2013?", 
+        "The most purchased track of 2013 was Hot Girl."),
+    ("How many albums does the artist Led Zeppelin have?",
+        "Led Zeppelin has 14 albums"),
+    ("What is the total price for the album “Big Ones”?",
+        "The total price for the album 'Big Ones' is 14.85"),
+    ("Which sales agent made the most in sales in 2009?", 
+        "Steve Johnson made the most sales in 2009"),
+]
+
+dataset_name = "SQL Agent Response"
+if not client.has_dataset(dataset_name=dataset_name):
+    dataset = client.create_dataset(dataset_name=dataset_name)
+    inputs, outputs = zip(
+        *[({"input": text}, {"output": label}) for text, label in examples]
+    )
+    client.create_examples(inputs=inputs, outputs=outputs, dataset_id=dataset.id)
+
+## chain
+def predict_sql_agent_answer(example: dict):
+    """Use this for answer evaluation"""
+    msg = {"messages": ("user", example["input"])}
+    messages = graph.invoke(msg, config)
+    return {"response": messages['messages'][-1].content}
+```
+
+-  trajectory
+It’s important to look back on the steps an agent took in order to assess whether or not the trajectory lined up with expectations of the agent
+
+```
+rajectory of tool calls using custom evaluators:
+
+Python
+
+def predict_sql_agent_messages(example: dict):
+    """Use this for answer evaluation"""
+    msg = {"messages": ("user", example["input"])}
+    messages = graph.invoke(msg, config)
+    return {"response": messages}
+
+def find_tool_calls(messages):
+    """
+    Find all tool calls in the messages returned
+    """
+    tool_calls = [
+        tc['name']
+        for m in messages['messages'] for tc in getattr(m, 'tool_calls', [])
+    ]
+    return tool_calls
+
+def contains_all_tool_calls_any_order(
+    root_run: Run, example: Example
+) -> dict:
+    """
+    Check if all expected tools are called in any order.
+    """
+    expected = [
+        'sql_db_list_tables',
+        'sql_db_schema',
+        'sql_db_query_checker',
+        'sql_db_query',
+        'check_result'
+    ]
+    messages = root_run.outputs["response"]
+    tool_calls = find_tool_calls(messages)
+    # Optionally, log the tool calls -
+    #print("Here are my tool calls:")
+    #print(tool_calls)
+    if set(expected) <= set(tool_calls):
+        score = 1
+    else:
+        score = 0
+    return {"score": int(score), "key": "multi_tool_call_any_order"}
+
+def contains_all_tool_calls_in_order(root_run: Run, example: Example) -> dict:
+    """
+    Check if all expected tools are called in exact order.
+    """
+    messages = root_run.outputs["response"]
+    tool_calls = find_tool_calls(messages)
+    # Optionally, log the tool calls -
+    #print("Here are my tool calls:")
+    #print(tool_calls)
+    it = iter(tool_calls)
+    expected = [
+        'sql_db_list_tables', 
+        'sql_db_schema', 
+        'sql_db_query_checker',
+        'sql_db_query', 
+        'check_result'
+    ]
+    if all(elem in it for elem in expected):
+        score = 1
+    else:
+        score = 0
+    return {"score": int(score), "key": "multi_tool_call_in_order"}
+
+def contains_all_tool_calls_in_order_exact_match(
+    root_run: Run, example: Example
+) -> dict:
+    """
+    Check if all expected tools are called in exact order and without any 
+        additional tool calls.
+    """
+    expected = [
+        'sql_db_list_tables',
+        'sql_db_schema',
+        'sql_db_query_checker',
+        'sql_db_query',
+        'check_result'
+    ]
+    messages = root_run.outputs["response"]
+    tool_calls = find_tool_calls(messages)
+    # Optionally, log the tool calls -
+    #print("Here are my tool calls:")
+    #print(tool_calls)
+    if tool_calls == expected:
+        score = 1
+    else:
+        score = 0
+
+    return {"score": int(score), "key": "multi_tool_call_in_exact_order"}
+
+experiment_results = evaluate(
+    predict_sql_agent_messages,
+    data=dataset_name,
+    evaluators=[
+        contains_all_tool_calls_any_order,
+        contains_all_tool_calls_in_order,
+        contains_all_tool_calls_in_order_exact_match
+    ],
+    num_repetitions=3,
+)
+```
+
+- A trace is a series of steps that your application takes to go from input to output. LangSmith makes it easy to visualize
+
+
+# Building with llms 
+- Interactive Chatbots
+This is arguably the easiest lift to add to an existing software application.
+
+- background software that pipes up when something “interesting” has happened that deserves your attention
+
+
+- spec driven development 
+
+https://github.com/Fission-AI/OpenSpec
+
+OpenSpec
+OpenSpec is the lightweight, brownfield-first alternative in the SDD space
+
+```
+You: /opsx:explore
+AI:  What would you like to explore?
+You: I want dark mode but I'm not sure how to do it cleanly.
+AI:  Let me look at your styling setup...
+     Cleanest path here: CSS variables + a small theme context,
+     with system-preference detection. No new dependencies. Scope it?
+You: Yes, let's do it.
+
+You: /opsx:propose add-dark-mode
+AI:  Created openspec/changes/add-dark-mode/
+     ✓ proposal.md — why we're doing this, what's changing
+     ✓ specs/       — requirements and scenarios
+     ✓ design.md    — technical approach
+     ✓ tasks.md     — implementation checklist
+     Ready for implementation!
+
+You: /opsx:apply
+AI:  Implementing tasks...
+     ✓ 1.1 Add theme context provider
+     ✓ 1.2 Create toggle component
+     ✓ 2.1 Add CSS variables
+     ✓ 2.2 Wire up localStorage
+     All tasks complete!
+
+You: /opsx:archive
+AI:  Archived to openspec/changes/archive/2025-01-23-add-dark-mode/
+     Specs updated. Ready for the next feature.
+```
+
+- Addy Osmani, an engineering leader at Google, maintains agent-skills, which is not strictly an SDD framework.
+
+https://github.com/bmad-code-org/bmad-method
+
+https://docs.bmad-method.org/explanation/why-solutioning-matters/
+
+- Agent Skills
+Production-grade engineering skills for AI coding agents.
+
+https://github.com/addyosmani/agent-skills
+
+
+examples: 
+https://github.com/addyosmani/agent-skills/tree/main/skills/spec-driven-development
