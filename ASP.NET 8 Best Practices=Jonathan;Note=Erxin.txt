@@ -1,0 +1,586 @@
+ASP.NET 8 Best Practices=Jonathan;Note=Erxin
+
+
+# Source control
+- git flow 
+
+    + branches
+main 
+develop
+features
+release 
+hotfixes
+
+
+with naming convention feature/*, hotfix/*, etc.
+
+- gitlab flow 
+main
+features 
+pre-production
+production 
+
+- avoid committing binaries 
+
+
+# CI/CD 
+- Continuous Integration/Continuous Deployment (CI/CD) means and how to prepare your code for a pipeline
+
+- create a container 
+
+- deploying the software 
+
+- falling backward, If various bugs were introduced into the product and the previous version doesn’t appear to have these errors, it makes sense to revert the software
+
+- falling forward 
+
+- backup before deploying 
+
+- three types of build providers 
+
+On-premises (meaning on-site or on-premises) relates to the software you own, which you can use to build your product at your company’s location
+
+Off-premises (or cloud) providers are the more common services
+
+- microsoft azure pipelines 
+
+https://azure.microsoft.com/en-us/products/devops/pipelines/.
+
+- github actions 
+
+GitHub Actions here: https://github.com/features/actions.
+
+- amazon code pipeline 
+
+- google ci 
+
+
+
+# best approaches for middleware 
+- Middleware Pipeline
+When your web application starts, Middleware is called and constructed once per application lifetime. 
+
+- standard mimddleware pipeline 
+
+Request     Response
+\           /
+exceptionHandler 
+\           /
+HSTS 
+\           /
+HttpsRedirection 
+\           /
+Static Files 
+\           /
+Routing 
+\           /
+CORS 
+\           /
+Authentication 
+\           /
+Authorization 
+\           /
+Middlewares 
+\           /
+Endpoint 
+
+- Using request delegates run, use, and map 
+
+The Run() request delegate is strictly terminal middleware
+app.Run(async context =>
+{
+    await context.Response.WriteAsync("This will terminate the web         app.");
+});
+
+The Use() request delegate is used to chain multiple request delegates together in the pipeline.
+app.Use(async (context, next) =>
+{
+    await context.Response.WriteAsync("In the first middleware call.\        r\n");
+    await context.Response.WriteAsync("Executing the next         Middleware...\r\n");
+    await next();
+    await context.Response.WriteAsync("In the first middleware call…on the return trip.\r\n");
+});
+
+anything before the next.invoke() line of code is executed and then the execution moves on to the next Middleware in the order.
+
+- The Map() request delegate is meant for branching the pipeline based on a certain request path or route. While this is for specific Middleware conditions, creating a new map is highly unlikely
+
+- defer to asynchronous 
+
+- examing the component's pipeline 
+
+In Middleware, there are two ways to process a request and response: by using either streams or pipelines. While pipelines are the better option for high performance
+
+public class EmojiMiddleware
+{
+    private readonly RequestDelegate _next;
+    public EmojiMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
+    public async Task InvokeAsync(HttpContext context)
+    {
+        using var buffer = new MemoryStream();
+        // Replace the context response with our buffer
+        var stream = context.Response.Body;
+        context.Response.Body = buffer;
+        // Invoke the rest of the pipeline
+        // if there are any other middleware components
+        await _next(context);
+        // Reset and read out the contents
+        buffer.Seek(0, SeekOrigin.Begin);
+        // Adjust the response stream to include our images.
+        var emojiStream = new EmojiStream(stream);
+        // Reset the stream again
+        buffer.Seek(0, SeekOrigin.Begin);
+        // Copy our content to the original stream and put it back
+        await buffer.CopyToAsync(emojiStream);
+        context.Response.Body = emojiStream;
+    }
+}
+
+
+# Applying security from the start 
+- SSL is absolutely required.
+
+The necessity to have an SSL-enabled website protects you for the following reasons
+
+- Common security practices 
+
+    + logging 
+    
+    IIS Logs are a type of audit trail. Every user accessing your system, including anonymous users, is logged through IIS. audit trail would contain the following:
+    Date/time
+    IP address/port
+    URL
+    Action taken
+    The user who executed the action
+    An entity state before and after the action was executed (optional)
+    
+    
+    application level as opposed to a system level. Most general logging includes data such as this:
+    Date/time
+    URL
+    Log type (informational, warning, or error)
+    A comment about the action
+    Method/action/section name performing the action
+    The duration of the process (optional)
+    
+    + keep updating the framework and libraries 
+    
+    + always force ssl, HTTP Strict Transport Security Protocol. HSTS must establish one HTTPS connection to establish an HSTS policy
+    
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Services.AddRazorPages();
+    var app = builder.Build();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error");
+        app.UseHsts();
+    }
+    app.UseHttpsRedirection();
+    app.UseStaticFiles();
+    app.UseRouting();
+    app.UseAuthorization();
+    app.MapRazorPages();
+    app.Run();
+    
+    + Never trust the client 
+    
+    + always encode user input, automatically by adding a [FromServices] attribute. Once we have our encoder, we can encode the string that’s been passed in 
+    
+     public async Task<IActionResult> OnGet(
+        [FromServices] HtmlEncoder htmlEncoder,
+        string q = "")
+    {
+        PageResults = await PerformTheSearch(htmlEncoder.Encode(q));
+        return Page();
+    }
+
+    + Securing your headers 
+    
+    + No sniffing allowed 
+    
+    When you include X-Content-Type-Options in a header, this tells the browser to adhere to the MIME types registered in the Content-Type headers. These shouldn’t be changed or followed:
+
+    context.Response.Headers.Add("X-Content-Type-Options", new StringValues("nosniff"));
+    
+    + No Framing Either
+    
+    When the browser sees an X-Frame-Options header response, it indicates whether or not the browser should render the web page in <frame>, <iframe>, <embed>, or <object>:
+    
+    context.Response.Headers.Add("X-Frame-Options", new StringValues("DENY"));
+    
+- Creating a security middleware
+
+public class RemoveInsecureHeadersMiddleware
+{
+    private readonly RequestDelegate _next;
+    public RemoveInsecureHeadersMiddleware(RequestDelegate next)
+    {
+        _next = next;
+    }
+    public async Task Invoke(HttpContext httpContext)
+    {
+        httpContext.Response.OnStarting((state) =>
+        {
+            httpContext.Response.Headers.Remove("Server");
+            httpContext.Response.Headers.Remove("X-Powered-By");
+            httpContext.Response.Headers.Remove("X-Aspnet-version");
+            httpContext.Response.Headers.Remove("X-AspnetMvc-                version");
+            httpContext.Response.Headers.Add("X-Content-Type-Options",
+                new StringValues("nosniff"));
+            httpContext.Response.Headers.Add("X-Frame-Options",
+                new StringValues("DENY"));
+            return Task.CompletedTask;
+        }, null!);
+        await _next(httpContext);
+    }
+}
+
+public static class RemoveInsecureHeadersMiddlewareExtensions
+{
+    public static IApplicationBuilder RemoveInsecureHeaders(
+        this IApplicationBuilder builder)
+    {
+        return builder.UseMiddleware<RemoveInsecureHeadersMiddleware>();
+    }
+}
+
+- securing entity framework core 
+
+    + encrypt your data 
+    
+    SQL Server encrypts specific columns by using the Encrypt Columns… option in SQL Server Management Studio (SSMS)
+    
+    latest .NET 8, Microsoft Entra introduces API-based calls for every aspect of security for web applications for Single-Page Applications (SPAs). When creating a new application, the following code adds an Entra-enabled REST-based API to an application.
+    
+    Protecting Your Pages with Anti-Forgery
+    Cross-site request forgery, or XSRF, is where an attack occurs, tricking a user to execute unwanted actions in a web application in which they’re currently authenticated. 
+
+- keep a list called the OWASP Top 10
+
+Broken Access Control
+Cryptographic Failures
+Injection
+Insecure Design
+Security Misconfiguration
+Vulnerable and Outdated Components
+Identification and Authentication Failures
+Software and Data Integrity Failures
+Security Logging and Monitoring Failures
+Server-Side Request Forgery (SSRF)
+
+- Invalid/Expired SSL Certificates
+Once your code gets to a server, its primary job is to deliver the data as fast and as securely as possible.
+
+- Final Notes on Cryptographic Failures
+
+Avoid weak algorithms such as MD5, SHA1, or PKCS number 1 v1.5, which are easy algorithms to break.
+Avoid sending sensitive data to the client. If this is necessary, mask the data.
+Use proper access key management, storing keys in safe locations such as Microsoft’s Key Vault, Google’s Cloud Key Management, or Amazon’s Key Management Service.
+
+-  a simple extension method that searches for and destroys malicious tags from HTML using regex:
+
+public static class StringExtensions
+{
+    public static string Sanitize(this string content)
+    {
+        // Replace the malicious tags with nothing.
+        var maliciousTagsPattern =
+            @"<(applet|embed|frameset|head|noframes|noscript|object|            form|select|option|script|style|title)(.*?)>"+
+            "((.|\n)*?)"+
+            "</(applet|embed|frameset|head|noframes|noscript|object|            select|form|option|script|style|title)>";
+        var options = RegexOptions.IgnoreCase | RegexOptions.            Multiline;
+        var regex = new Regex(maliciousTagsPattern, options);
+        content = regex.Replace(content, @"");
+        // Remove the Javascript function on the tags (i.e.            OnChange="Javascript:<blah blah blah>")
+        var inlinePattern = @"<[^>]*=""javascript:[^""]*""[^>]*>";
+        options = RegexOptions.IgnoreCase;
+        var regex2 = new Regex(inlinePattern, options);
+        return regex2.Replace(content, @"");
+    }
+}
+
+
+# Entity framework core implements 
+- async/await 
+- log your queries 
+
+   protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.LogTo(Console.WriteLine);
+        }
+    }
+
+- Avoiding the Manual Property Mapping
+When sending entities to render on the client, it’s best to create Data Transfer Objects (DTOs). You only want to send the minimal amount of data relevant to the currently displayed web page.
+
+- Creating database 
+
+local version of the database, type the following into the Package Manager Console (navigate to this via View | Other Windows | Package Manager Console):
+
+Update-Database
+
+- Adding an Asynchronous Read-Only Mode
+Our first matter at hand is to apply async/await to the correct services so that we can scale the application later.
+
+
+# Best practices with web user interfaces 
+- a process known as search engine optimization (SEO).
+
+- Task Runner relies heavily on Node.js for running scripts. B
+
+Structure of a gulpfile
+When creating a gulpfile, it should be named gulpfile.js
+
+Before Build—Execute a task before compiling the solution
+After Build—Execute a task after the solution compiled
+Clean Build—Execute a task on a “Clean Solution” or “Clean <Project>” action
+Project Open—Execute a task after the project opens
+
+- tasks can include the following:
+
+SCSS/LESS precompiling
+Image optimization
+Release notes
+Copying dist folders from node_modules to a lib folder on build
+
+- using view components 
+
+TagHelper classes allow us to build our own tag elements through code and HTMLHelper classes are directly called as methods in the HTML.
+
+- creating seo friendly urls 
+
+examine the following two URLs:
+
+https://www.mysite.com/Blog/my-first-blog-post
+https://www.mysite.com/?blogpost=E1FCFB35-87C7-442F-9516-7C8585E8CD49
+
+
+# Testing your code 
+- Software Development Life Cycle (SDLC). Each has its purpose and is equally important to provide stability and confidence
+
+- regression testing 
+- load testing 
+- system testing 
+- ui testing 
+
+avoid large unit tests 
+
+avoid unnecessary mocks, fakes, stubs 
+
+using tesst as document 
+
+identifying slow integration tests 
+
+find a bug write a test 
+
+avoid testing .net, database etc. 
+
+alwways create abstraction layer
+
+
+# Catching exceptions with exception handling 
+- apply a unit testing metodology 
+
+// Arrange
+var number = "2";
+int result;
+try
+{
+    // Act
+    result = int.Parse(number);
+}
+// Assert
+catch
+{
+    // gives us "OnGetAsync:invalid number - hi"
+    _logger.LogInformation($"{MethodBase.GetCurrentMethod()}:invalid number - {number}");
+    result = 0;
+}
+// use result
+
+- avoid empty catch 
+
+- use exception filtering 
+
+- use finally blocks for cleanup 
+
+
+# Creating better web apis 
+- minimal APIs should be an appealing feature in four ways:
+
+Self-contained: Simple API functionality inside one file is easy to follow for other developers
+Performance: Since we aren’t using controllers, the MVC overhead isn’t necessary when using these APIs
+Cross-platform: With .NET, APIs can now be deployed on any platform
+Self-documenting: While we can add Swashbuckle to other APIs, it also builds the documentation for minimal APIs
+
+- Relating HTTP verbs to resources
+
+default operation based on its context:
+
+GET: Returns a resource
+POST: Creates a new resource
+PUT: Replaces an entire resource based on an identifier
+PATCH: Updates specific items in a resource based on an identifier
+DELETE: Deletes a resource
+
+GET /api/products: View a list of products
+GET /api/product/{id}: View a product
+POST /api/cart/{cartId}: Add a product to the cart with POST data (that is, new { ProductId = {productId}, Qty = 1 })
+PATCH /api/cart/{cartId}: Remove a product from the cart with POST data (that is, new { ProductId = {productId} })
+GET /api/cart/{cartId}: Retrieve a cart with all the products in the cart
+POST /api/cart/{cartId}/checkout: Check out
+
+- http status codes 
+
+categories:
+
+1xx: Information codes
+2xx: Success codes
+3xx: Redirection codes
+4xx: Client-side codes
+5xx: Server errors
+
+ Specific status codes can be found at https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.http.results.statuscode.
+ 
+- testing web apis 
+
+visual studio end point explorer 
+View | Over Windows | Endpoints Explorer 
+
+
+HTTP Editor uses the following commands to issue HTTP requests:
+
+@: Creates a variable for the file (for example, @variable = value)
+//: This specifies comments
+###: This specifies the end of an HTTP request
+<HTTP Verb>: Creates a REST-based request, including DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, and TRACE requests
+<Headers>: Adds headers directly after defining the URL so that they’re included in the request
+
+- standard web api techniques 
+
+/users/{userId}/projects/{projectId}/tasks.
+
+pagination in api results JSON result could contain the following:
+
+{
+    "total": 7,
+    "pageSize": 7,
+    "currentPage": 1,
+    "next": false,
+    "previous": false,
+    "results": [
+        {
+            "id": 1,
+            "name": "Twirly Ride",
+            "locationId": 2,
+            "locationName": "Fantasy"
+        },
+        {
+            "id": 2,
+            "name": "Mine car Coaster",
+            "locationId": 5,
+.
+.
+
+- versioning api, four types of versioning:
+
+No versioning: When we create our first API
+URI versioning: Placing another segment into the URL is extremely common and recommended (/v1/users)
+Query string: This involves appending a query string to the end of the URL (/users/?version=1)
+Header versioning: This involves using custom-header to place the version into the header:
+GET /users
+Custom-Header: api-version=1
+
+- Avoid new instances of HttpClient. various ways to consume a web API, such as using WebRequest or WebClient, but for most purposes, the use of the HttpClient class is recommended because of its flexibility and modernization. The WebRequest and WebClient classes were included for the transition of legacy applications. 
+
+
+
+# Push your application with performance 
+- insights into the performance
+
+Google PageSpeed Insights (https://pagespeed.web.dev): Google uses its search engine to rank your site and provides an exceptional tool to help with website problems.
+
+Lighthouse (https://developer.chrome.com/docs/lighthouse/): If your site isn’t publicly accessible to analyze from one of these tools, you can use the Lighthouse extension to run tests on the site in-house. Lighthouse produces a full report of recommendations on how to make your site perform better.
+
+GTMetrix (https://gtmetrix.com): GTMetrix is a tool I’ve been using over the years and it continues to impress and improve each year. It provides a performance summary, speed visualization, and recommendations.
+
+Google Search Console (https://search.google.com/search-console): Google created this for administrators of websites to identify performance issues along with other general maintenance tools, such as what people are typing into Google to find your website.
+
+DevTools: DevTools is a panel of web developer tools located inside of Google Chrome, Mozilla Firefox, Apple Safari, and Microsoft Edge to help web developers analyze web pages, and it’s becoming the IDE of the internet. Pressing F12 in the browser will open the panel.
+
+- benchmark.net micro-benchmarking is Benchmark.net (https://benchmarkdotnet.org/).
+
+- Application Insights can collect data about the following:
+
+Requests – web pages and API calls
+Dependencies – what is your application loading behind the scenes?
+Exceptions – every exception your application throws
+Performance counters – automatically identifying slowdowns
+Heartbeats – is the application still up and running?
+Logs – a centralized location for collecting all types of logs for your application
+
+- creating baselines and identifying bottlenecks include the following:
+
+JetBrains dotTrace/dotMemory – dotTrace is a performance profiler tool
+
+RedGate ANTS Performance Profiler/Memory Profiler – With the ability to profile .NET code and memory allocations
+
+NDepend – The first time you run NDepend against your code, you immediately create a baseline of your code. The next time you run NDepend, it compares your baseline to the new code you wrote
+
+Build-it-yourself metrics – Back in Chapter 7, we explained how to “identify slow integration tests.” Using the diagnostic Stopwatch on your unit, integration, and APIs
+
+- databases 
+
+One of the latest features of SQL Server 2016 is the Query Store. The Query Store provides you with insight into how to improve performance on SQL Server.
+
+Microsoft’s Query Store, navigate to https://learn.microsoft.com/en-us/sql/relational-databases/performance/manage-the-query-store. For performance tuning using Query Store, navigate to https://learn.microsoft.com/en-us/sql/relational-databases/performance/tune-performance-with-the-query-store.
+
+- optimizing client-side performance 
+
+In this section, we’ll learn about image optimizations, identifying Google’s Core Web Vitals metrics, using a CDN when applicable
+
+image optimization is one of the worst problems on the web
+
+using CDNs, a large number of static files, using a content delivery network (CDN) provides a much-needed service of delivering content based on location.
+
+- identifying slow queries 
+
+- understanding caching 
+
+- caching static files 
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Cached for 24 hours.
+        var response = ctx.Context.Response;
+        var duration = 60 * 60 * 24; // 24h duration.
+        response.Headers[HeaderNames.CacheControl] =
+        "public,max-age="+duration;
+    }
+});
+
+
+# Appendix 
+- DRY
+- YAGNI, you aren’t gonna need it.
+- KISS, keep it simple, stupid 
+- seperation of concerns 
+- refactoring as a process 
+- SOLID principles 
+SRP, single response principle 
+open/close, open for extension, closed for modification 
+Liskov substitution, derived type can be replaced with its base types base on inherited types. 
+
+interface segregation, clients shouldn't be forced to implement unnecessary methods they won't use. 
+dependency inversion, depend on abstraction not on concrete implementations. 
+
+- project structure, mvc 
+
+Feature folders are usually contained in a folder called /Features off the root with folders underneath to identify the feature implemented.

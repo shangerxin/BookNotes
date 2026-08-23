@@ -1,0 +1,1424 @@
+An Illustrated Guide to AI Agents=Grootendorst;Note=Erxin
+
+# Introduction
+- components 
+
+Environment
+The world the agent interacts with
+
+Sensors
+Components of the agent used to observe the environment
+
+Actuators
+Tools the agent uses to interact with the environment
+
+Agent program
+The “brain” or rules the agent uses to decide how to go from observations to actions
+
+- Large Language Models
+To understand what AI agents are, we first need to explore the basic capabilities of an LLM
+
+- Tools
+With memory, LLMs remember the conversations they previously had, but they’re not yet capable of interacting with their environment.
+
+- Planning and reflection
+The final ingredient to go from a “regular” LLM to an AI agent is its ability to plan and reflect. 
+
+creating a plan is not sufficient. The LLM might discover halfway through its plan that some of its steps might not be appropriate.
+
+An Agentic System
+With all these components, a reasoning LLM augmented with memory, tools, and planning
+
+update the plan automatically? 
+
+- values of agents 
+
+coding automatically verified 
+
+deep research
+
+automation 
+
+- specialiations 
+
+multi agent collaboration 
+
+multimodal understanding 
+
+coding agents 
+
+- Specifically, you’ll build up a TinyAgent one step at a time. Using the foundations learned in this book
+
+fundamental principles.
+
+class TinyAgent:
+    """A minimal, modular, and educational agent framework."""
+ 
+    def __init__(self, llm: LLM):
+        self.llm = llm
+        self.memory = None  # Chapter 4: Add Memory
+        self.tools = None  # Chapter 5: Add Tools
+        self.planner = None  # Chapter 6: Add Planning
+ 
+        self.trajectory = Trajectory()
+ 
+    def run(self, task: str) -> str:
+        """Run the agent on a task."""
+        self.trajectory.initialize(task)
+        return self._step(task)
+ 
+    def _step(self, task: str) -> str:
+        """Perform a single step."""
+        messages = [{"role": "user", "content": task}]
+        response = self.llm.generate(messages)
+        self.trajectory.add(response)
+        return response.content
+ 
+    def _execute_action(self, action: str) -> str | None:
+        """Execute a tool action."""
+        # Placeholder - will be implemented in later chapters
+        return f"Executed action: {action}"
+        
+        
+# large language models 
+- endpoint generally contains the following pieces of information:
+
+base_url
+The URL of your hosted LLM
+
+api_key
+The key for accessing your hosted LLM
+
+model
+The name of your LLM
+
+messages
+The query to send to your LLM
+
+- Tiny agent
+class TinyAgent:
+    """A minimal, modular, and educational agent framework."""
+ 
+    def __init__(self, llm: LLM):
+        self.llm = llm
+        self.memory = None  # Chapter 4: Add Memory
+        self.tools = None  # Chapter 5: Add Tools
+        self.planner = None  # Chapter 6: Add Planning
+ 
+        self.trajectory = Trajectory()
+ 
+    def run(self, task: str) -> str:
+        """Run the agent on a task."""
+        self.trajectory.initialize(task)
+        return self._step(task)
+ 
+    def _step(self, task: str) -> str:
+        """Perform a single step."""
+        messages = [{"role": "user", "content": task}]
+        response = self.llm.generate(messages)
+        self.trajectory.add(response)
+        return response.content
+ 
+    def _execute_action(self, action: str) -> str | None:
+        """Execute a tool action."""
+        # Placeholder - will be implemented in later chapters
+        return f"Executed action: {action}"
+
+- Training a Large Language Model
+LLMs go through two major phases of training: pre-training and post-training (Figure 2-7). Pre-training is where they get their name from, because they are trained on a language processing task called language modeling.
+
+untrained - language modeling -> base llm - supervised fine tuning (sft) -> ionstruction tuned llm - reinforcement leaning (RL) -> trained llm 
+
+- RL method widely used in post-training today’s leading LLMs is Reinforcement Learning with Verifiable Rewards (RLVR). Similar to RLHF, it updates the model based on a reward score.
+
+The Group Relative Policy Optimization (GRPO) algorithm has another key ingredient beyond reward assignment. 
+
+GRPO generates a group of responses for the same prompt using varied temperature settings to ensure diversity among them. Rewards are then computed relative to this group, reinforcing responses that score higher than the others. This comparative approach is what the word “group” 
+
+- The Transformer Architecture
+
+The tokenizer is the piece of software responsible for breaking the text input into tokens.
+
+The first Transformer block is presented with the embedding vectors associated with the tokens in the input text.
+
+actually happens inside a Transformer block?
+
+There are two major components inside a Transformer block: a self-attention layer and a feed-forward neural network layer
+
+- A Deeper Dive Into Large Language Models
+
+Self-attention does this by taking two steps: first, it scores the relevance of the previous tokens and then proceeds to a step of combining the relevant information into the token we’re processing
+
+- KV-Caching Revisited
+https://arxiv.org/abs/1706.03762
+
+What we’ve described so far are major components of self-attention as described in the Transformer paper, which is often called “vanilla attention.” 
+
+- Multi-head Latent Attention
+A major step in making the KV-cache more memory efficient is through MLA, first used in DeepSeek-V22 and popularized by DeepSeek-R1.3 MLA is a variant of Multi-head Attention
+
+- DeepSeek Sparse Attention
+The next step in making MLA more efficient was first introduced in DeepSeek-V3.2. This new attention mechanism, called DeepSeek Sparse Attention (DSA), is instantiated under MLA and is an additional module
+
+
+MQA, multi query attention 
+
+ Top-K Selector reduce the number of tokens to attend to K. In the paper referenced, the authors selected 2048 tokens to attend to, which drastically reduces the computation
+ 
+ MQA was used. The authors mentioned optimizing for computational efficiency, which is true for MQA, considering it uses fewer keys and values than MHA.
+
+- MOE, mixture of experts, two main components of an MoE:
+
+Experts
+Each feed-forward neural network in an LLM is replaced by a set of “experts.”
+
+Router or gate network
+Determines which tokens are sent to which experts.
+
+ “expert” because, during training, each “expert” learns different information and may specialize in the processing of certain tokens 
+ 
+ feed-forward neural network (FFNN) is a single network applied to every token. 
+ 
+- Open-weight LLMs and their MoE
+Model	Sparse parameters (billion)	Active parameters (billion)	Number of experts	Experts activated	Shared experts
+Mistral 8x7B	46.7	12.8	12.8	4	0
+DeepSeek-R1	671	37	37	8	0
+Llama 4 Maverick	400	17	17	8	0
+Qwen 3 235B-A22B	235	22	22	8	0
+Kimi-K2	1000	32	32	4	2
+GPT-OSS 120B	120	5.1	5.1	4	0
+GPT-OSS 20B	20	3.6	3.6	8	0
+GLM 4.5	335	12	12	10	0
+Qwen 3 Next	80	3	3	4	0
+Mistral 3 Large	671	41	41	6	2
+Nemotron-3-Nano-30B-A3B	31.6	3.6
+
+
+# Reasoning large language models 
+- LLMs such as DeepSeek-R1, OpenAI GPT-5, and Google Gemini are prime examples of how LLMs can be scaled to new heights through reasoning frameworks
+
+- The Paradigm Shift from Train-Time Compute to Test-Time Compute
+three main factors (see Figure 3-4):
+
+Increasing the model size (number of parameters)
+
+Increasing the dataset size (number of tokens)
+
+Increasing compute (number of floating point operations per second [FLOPs])
+
+- examples for enabling and improving reasoning behavior for the section “Search Against Verifiers”
+
+    +  distribution of train-time compute when training non-reasoning LLMs
+    non-reasoning llms -> { pre-training -> finetuneing } -> inference
+                                train time compute 
+- Scaling Laws
+The relationship between a model’s scale (e.g., compute, dataset size, and parameter counts) and its performance is described by scaling laws.
+
+ore reinforcement learning (RL), and the test-time compute as more time spent thinking.
+
+- Categories of Test-Time Compute
+
+reward model (RM; or verifier), a model that scores the quality of the given answer and/or reasoning trace.
+
+Training -> Search against verifiers (RMs provide scores)
+Sampling generations and selecting the best answer
+
+Modifying proposal distribution
+Trained “thinking” process
+
+- Reward models are used to score the LLM-generated reasoning traces and answers. They can be many things but are generally (fine-tuned) LLMs or rule-based systems.
+
+Outcome Reward Model (ORM)
+
+Process Reward Model (PRM)
+
+- Prompt Engineering
+In some of our previous examples, non-reasoning LLMs were assumed to be able to output reasoning traces (thoughts)
+
+Prompt engineering plays a vital role in this process, with a technique called Chain-of-Thought (CoT).
+
+
+```
+messages = [{"role": "user", "content": query + " Let's think step by step."}]
+ 
+# Generate response
+response = llm.generate(messages)
+print(response)
+```'
+
+-  Self-consistency can then easily be scaled by generating more answers, each with reasoning steps.
+
+```
+from collections import Counter
+ 
+answers = []
+for _ in range(10):
+    query = """Six friends (Maarten, Ilse, Sarah, Jor, Irene, and Chris) are sitting in a row.
+ 
+- Sarah is in seat 3.
+- Chris is sitting at one of the ends of the row.
+- Jor is sitting immediately to the right of Chris.
+- Ilse is sitting exactly in the middle of Sarah and Maarten.
+- Irene is not sitting next to Sarah.
+- Maarten is sitting somewhere to the left of Irene.
+ 
+In which seat is Maarten sitting?
+Let's think step by step and give back your answer only after 'Answer:'.
+"""
+ 
+    # Generate response
+    messages = [{"role": "user", "content": query},]
+    response = llm.generate(messages)
+    answer = response.content.split("Answer:")[-1].replace("\n", "").strip()
+    answers.append(answer)
+ 
+Counter(answers)
+```
+
+- two main forms of Best-of-N samples, using:
+
+Outcome Reward Models (ORM)
+Only the answers are scored using a verifier (e.g., LLM, unit tests, compiler) and the highest scoring answer is chosen.
+
+Process Reward Models (PRM)
+Only the processes (thoughts) are scored using verifiers.
+
+- Supervised Fine-Tuning
+The most straightforward method for enabling reasoning behavior in LLMs is to apply supervised fine-tuning. 
+
+- Flan-PaLM
+An early example of using supervised fine-tuning on Chain-of-Thought-like data was the Flan-PaLM paper
+
+
+- Reinforcement Learning
+In Chapter 2, we saw how RLVR uses verifiable rewards to update model weights and met GRPO 
+
+- DeepSeek-R1
+Using the lessons learned from DeepSeek-R1-Zero, the authors come up with the following five training steps
+
+
+- native reasoning 
+
+following special tokens:
+
+<bos>
+Signals the beginning of the sequence.
+
+<|turn>system
+The start of a system prompt.
+
+<|turn>user
+The start of the user turn.
+
+<|turn>model
+The start of the model’s turn.
+
+<turn|>
+Signals the end of a turn.
+
+<|think|>
+Adding this token in the system turn enables reasoning. Removing this token in the system turn disables reasoning.
+
+- Reasoning in LLMs has started to advance beyond text-only reasoning, now using new modalities, improved architectures
+
+Reason-RFT focuses on three types of rewards (Figure 3-44):
+
+Mathematical
+Scores numerical answers and gives larger scores for exact matches and lower scores for small errors
+
+Function-based
+Compares predicted and target transformation steps, rewarding exact, partial, and function-only matches with different weights, e.g., rotate(cube, 90°) versus rotate(cube, 45°)
+
+Discrete-valued
+Uses binary scoring for categorical or integer answers, giving credit only for exact matches
+
+- Chain-of-Thought-like prompting techniques emphasize verbose, step-by-step reasoning
+
+Compared to Chain-of-Thought, Chain-of-Draft generates shorter reasoning traces with less verbosity while having similar performance
+
+
+# Memory 
+- Memory for LLMs tends to follow human memory types, as the agents that we attempt to create are often modeled after human behavior.
+
+- long-term memory, there are three forms described:
+
+Episodic memory
+Involves remembering specific events and experiences from one’s past (e.g., your last birthday party). For agents, this typically involves specific actions the agent has taken thus far and their outcomes.
+
+Semantic memory
+Involves remembering knowledge about the world (e.g., the capital of France). For agents, this may involve querying an external database like Wikipedia or the codebase that you’re working on.
+
+Procedural memory
+Involves remembering patterns of how to do things (e.g., writing code in Python). For agents, this can be information hidden in its parameters (also called parametric memory) or the system prompt, which persists across calls.
+
+- example 
+```
+from illustrated_agents.chapters.ch2 import LLM, TinyAgent
+ 
+# Gemma 3 12B (no native thinking or tool calling)
+llm = LLM(model="gemma3:12b")
+ 
+# Run a query
+ch_2_agent = TinyAgent(llm=llm)
+response = ch_2_agent.run("Hi! We are Maarten and Jay, authors of 'An Illustrated Guide to AI Agents'.")
+```
+
+LLM, we use.get_messages to get the entire conversation history.
+
+```
+from illustrated_agents.chapters.ch2 import Trajectory
+ 
+class TinyAgent:
+    """A minimal, modular, and educational agent framework."""
+ 
+    def __init__(self, llm: LLM, memory: Memory):
+        self.llm = llm
+        self.memory = memory
+        self.tools = None  # Chapter 5: Add Tools
+        self.planner = None  # Chapter 6: Add Planning
+ 
+        self.trajectory = Trajectory()
+ 
+    def run(self, task: str) -> str:
+        """Run the agent on a task."""
+        self.memory.add("user", task)
+        self.trajectory.initialize(task)
+ 
+        return self._step()
+ 
+    def _step(self) -> str:
+        """Perform a single step."""
+        # Generate response and add to memory
+        response = self.llm.generate(self.memory.get_messages())
+        self.memory.add("assistant", response.content)
+        self.trajectory.add(response)
+        return response.content
+ 
+    def _execute_action(self, action: str) -> str | None:
+        """Execute a tool action."""
+        # Placeholder - will be implemented in later chapters
+        return f"Executed action: {action}"
+```
+
+- Memory but update the add function so that only the last two turns (each a pair of user/assistant messages) are kept:
+
+class TrimmingMemory(Memory):
+    """Memory that keeps only the last two user/assistant turns."""
+ 
+    def add(self, role: str, content: str, **kwargs) -> None:
+        # Add the new message first using the parent class (Memory)
+        super().add(role, content, **kwargs)
+ 
+        # Then, keep system message plus the most recent two turns (4 messages)
+        system = [
+            message for message in self.messages if message["role"] == "system"
+        ]
+        turns = [
+            message for message in self.messages if message["role"] != "system"
+        ]
+        self.messages = system + turns[-4:]
+        
+-  Long-term memory typically involves maintaining one or more external databases that can be queried to extract additional information. 
+
+query -> embedding model -> retrieve vector database -> augment prompt, query context -> llm answer 
+
+    + Google DeepMind. We create the EmbeddingModel class that allows us to easily embed documents:
+
+```
+import json
+import urllib.request
+ 
+ 
+class EmbeddingModel:
+    """Generate embeddings."""
+ 
+    def __init__(
+        self,
+        model: str,
+        base_url: str = "http://localhost:11434/v1",
+    ):
+        """Initialize the embedding model with the given model."""
+        self.model = model
+        self.base_url = base_url
+ 
+    def embed(self, text: str) -> list[float]:
+        """Convert text into a numerical vector."""
+        # POST to the OpenAI-compatible /embeddings endpoint
+        request = urllib.request.Request(
+            f"{self.base_url}/embeddings",
+            data=json.dumps({"model": self.model, "input": text}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request) as resp:
+            response = json.loads(resp.read())
+ 
+        # Extract and return the embedding
+        return response["data"][0]["embedding"]
+```
+
+```
+# Create embeddings
+embedding_a = embedding_model.embed("I love flamingos.")
+embedding_b = embedding_model.embed("Dolphins use echolocation.")
+embedding_c = embedding_model.embed("Flamingos are pink birds.")
+ 
+# Calculate cosine similarity between A and B
+dot_ab = sum(x * y for x, y in zip(embedding_a, embedding_b))
+norm_a = sum(x * x for x in embedding_a) ** 0.5
+norm_b = sum(x * x for x in embedding_b) ** 0.5
+similarity_ab = dot_ab / (norm_a * norm_b)
+ 
+# Calculate cosine similarity between A and C
+dot_ac = sum(x * y for x, y in zip(embedding_a, embedding_c))
+norm_c = sum(x * x for x in embedding_c) ** 0.5
+similarity_ac = dot_ac / (norm_a * norm_c)
+ 
+print(f"Similarity between A and B: {similarity_ab}")
+print(f"Similarity between A and C: {similarity_ac}")
+```
+
+    + gives us the following class:
+
+```
+from illustrated_agents.chapters.ch4 import Memory
+ 
+class RAGMemory(Memory):
+    """Long-term Memory with RAG."""
+ 
+    def __init__(self, embedding_model: EmbeddingModel, documents: list[str]):
+        super().__init__()
+        self.embedding_model = embedding_model
+        self.documents = documents
+        self.embeddings = [embedding_model.embed(doc) for doc in documents]
+ 
+    def add(self, role: str, content: str, **kwargs) -> None:
+        # Augment user queries with retrieved context before storing
+        if role == "user":
+            context = "\n".join(self.search(content))
+            content = f"""Context:
+{context}
+ 
+Question: {content}"""
+        super().add(role, content, **kwargs)
+ 
+    def search(self, query: str) -> list[str]:
+        """Return the top-k documents most similar to the query."""
+        query_embed = self.embedding_model.embed(query)
+        scores = [self._cosine(query_embed, embed) for embed in self.embeddings]
+        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        return [self.documents[index] for index in ranked[:3]]
+ 
+    def _cosine(self, a: list[float], b: list[float]) -> float:
+        """Calculate cosine similarity between two embeddings.."""
+        dot = sum(x * y for x, y in zip(a, b))
+        norm = (sum(x * x for x in a) ** 0.5) * (sum(x * x for x in b) ** 0.5)
+        return dot / norm
+        
+from illustrated_agents.chapters.ch4 import TinyAgent
+ 
+# RAGMemory with external documents
+documents = [
+    "Sarah works as a marine biologist studying coral reefs.",
+    "Sarah lives in Lisbon, Portugal.",
+    "Sarah's favorite hobby is rock climbing.",
+    "Sarah favorite animal is flamingos.",
+    "Sarah speaks fluent Spanish and Portuguese.",
+    "Ilse is a software engineer at a renewable energy startup.",
+    "Ilse lives in Amsterdam, the Netherlands.",
+    "Ilse plays the cello in a local string quartet.",
+    "Ilse's favorite author is Brandon Sanderson.",
+    "Ilse's favorite animal is dolphins.",
+]
+memory = RAGMemory(documents=documents, embedding_model=embedding_model)
+ 
+# Create the Agent and run a query
+agent = TinyAgent(llm=llm, memory=memory)
+response = agent.run("What is Sarah's favorite animal?")
+print(response)
+```
+
+- MemoryBank to forget and reinforce memory inspired by the Ebbinghaus Forgetting Curve theory, which is a curve demonstrating the pace at which we tend to forget. The curve is often shown as being exponential, resulting in a loss of half of what we learn each day.
+
+- An interesting approach to agentic RAG is A-MEM, an agentic memory system derived from the notetaking method known as Zettelkasten
+
+considered a piece of memory:
+
+The original interaction with the environment (i.e., one turn)
+
+The timestamp of the interaction
+
+LLM-generated keywords that capture key concepts
+
+LLM-generated tags to categorize the interaction
+
+LLM-generated contextual description
+
+A-mem -> search retrieve update add 
+
+- RAG is Search-o1, a method that attempts to retrieve relevant context and put it throughout the reasoning traces to enhance the reasoning LLM’s capabilities further
+
+- Context Engineering for Multi-Agent Systems
+
+Context tracking and storage
+Before you give the agent a possible relevant context, it first needs to be tracked and stored somewhere. 
+
+
+    + Agent behavior
+Tool usage by the agent (and any subagents)
+
+Tool outputs and intermediate results
+
+Interactions between (sub)agents
+
+Internal reasoning steps
+
+Conversation history
+
+Failures/successes
+
+    + User behavior
+User intent (explicit requests and goals)
+
+User feedback (edits, approvals, rejections)
+
+Knowledge sources
+Snapshots of your proprietary database(s) for reproducibility and auditing
+
+External documents (RAG, APIs, etc.)
+
+Structured artifacts like PLAN.md, REQUIREMENTS.md, etc.
+
+System-level
+Configuration (LLM hyperparameters, available tools, etc.)
+
+Policies (guardrails, constraints, etc.)
+
+     Context ordering
+The order of the context is vital to the performance of your agent. 
+
+An annotated figure of the “lost-in-the-middle” phenomenon from the “Lost in the Middle: How Language Models Use Long Contexts” paper.
+
+
+# Tool usage, learning and protocols 
+- arXiv and Google to extract results, which are subsequently summarized.
+
+concrete implementations and executions of tools:
+
+Tool creation
+
+Tool definition
+
+Tool selection
+
+Tool calling
+
+Output processing
+
+```
+from typing import Callable
+ 
+class Tools:
+    """Tool registry for the Agent."""
+ 
+    def __init__(self, requires_approval: list[str] = []):
+        """Initialize and select tools that require approval before execution.
+        """
+        self.registry = {}
+        self.requires_approval = requires_approval
+ 
+   def add_tool(self, name: str, func: Callable, description: str = "") -> None:
+        """Register a tool that the Agent can use.
+ 
+        Arguments:
+            name: The name of the tool.
+            func: The function implementing the tool.
+            description: A description of the tool.
+        """
+        self.registry[name] = {"function": func, "description": description}
+ 
+    @property
+    def schemas(self) -> None:
+        """Used only for native tool-calling."""
+        return None
+        
+    class Tools(Tools):
+    """Tool registry for the Agent."""
+ 
+   @property
+    def descriptions(self) -> str:
+        """Get descriptions of all registered tools."""
+        return "\n".join(
+            f"`{tool}`: {self.registry[tool]['description']}"
+            for tool in self.registry
+        )
+ 
+    @property
+    def prompt(self) -> str:
+        return f"""
+# Tools
+ 
+If needed, you can only use the following tools to assist you in completing tasks:
+ 
+{self.descriptions}
+ 
+To use a tool, respond with JSON: {{"tool": "name", "kwargs": {{"param": "value"}}}}
+"""
+
+    def parse(self, response: Response) -> Response:
+        """Parse a JSON tool call from text."""
+        text = response.content
+ 
+        if '"tool":' in text or '"tool:"' in text:
+            start, end = text.find("{"), text.rfind("}") + 1
+            tool_call = json.loads(text[start:end])
+ 
+            # Add the parsed tool call to the response
+            return Response(
+                content=response.content,
+                reasoning=response.reasoning,
+                tool_call=tool_call,
+            )
+ 
+        return response
+ 
+    def execute(self, response: Response) -> Any:
+        """Run a registered tool.
+ 
+        Arguments:
+            tool_call: A parsed tool call dict with "tool" and "kwargs" keys.
+        """
+        tool_call = response.tool_call
+        name, kwargs = tool_call["tool"], tool_call.get("kwargs", {})
+ 
+        # Human-in-the-loop: ask before running dangerous tools
+        if name in self.registry and name in self.requires_approval:
+            response = input(f"Allow {name}? [y/N] ").strip().lower()
+            if response not in ("y", "yes"):
+                return f"Tool '{name}' was denied by the user."
+ 
+        # Handle registered tools
+        if name in self.registry:
+            tool_func = self.registry[name]["function"]
+            return tool_func(**kwargs)
+ 
+        return f"Tool '{name}' not found."
+```
+
+- communicate this to the LLM:
+
+Learning
+(Specific) tool definition and usage are learned during training.
+
+Prompting
+The tool definition is shared with the LLM through structured prompts.
+
+- structured function calling An example of such a schema for our multiply tool is the following:
+// https://developers.openai.com/api/docs/guides/function-calling
+
+tool_schema = {
+  "type": "function",
+  "function": {
+    "name": "multiply",
+    "description": "Multiply two numbers",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "type": "number",
+          "description": "First number"
+        },
+        "b": {
+          "type": "number",
+          "description": "Second number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ]
+    }
+  }
+}
+
+- LLM ends its thinking process, it can start creating the tool call. It will output a string, and if the LLM is capable enough, correctly format the tool call with the given arguments.
+
+- updated Tools class now has two additional functions:
+
+parse
+Parses the string into JSON
+
+execute
+Executes the tool call. Note that we also add a human-in-the-loop that allows you to approve certain tools before execution.
+
+- tool output process 
+
+use the messages structure that we explored in Chapter 4.
+
+Specifically, we can add messages with two roles:
+
+assistant
+The assistant calls the multiply tool.
+
+tool
+The output of the tool is returned.
+
+    + Tools class to add this behavior:
+
+class Tools(Tools):
+    """Tool registry for the Agent."""
+ 
+   def observation(self, result: str) -> tuple[str, str]:
+        """Return the observation as a user."""
+        return "user", f"OBSERVATION: {result}"
+ 
+    def is_done(self, response: Response) -> bool:
+        """The `TinyAgent`'s stopping mechanism."""
+        if not response.tool_call:
+            return True
+        if response.tool_call["tool"] == "final_answer":
+            response.content = response.tool_call.get("kwargs", "")
+            return True
+        return False
+        
+- TinyAgent with Tools
+Now that we have all the components for calling tools, it’s finally time to update your TinyAgent to make use of them        
+
+```
+from illustrated_agents.chapters.ch2 import LLM, Trajectory
+from illustrated_agents.chapters.ch4 import Memory
+ 
+ 
+class TinyAgent:
+    """A minimal, modular, and educational agent framework."""
+ 
+    def __init__(self, llm: LLM, memory: Memory, tools: Tools):
+        self.llm = llm
+        self.memory = memory
+        self.tools = tools
+        self.planner = None  # Chapter 6: Add Planning
+ 
+        self.trajectory = Trajectory()
+ 
+        # Build system prompt with all components
+        system_prompt = "You are a helpful assistant.\n\n"
+        system_prompt += self.tools.prompt
+        self.memory.add("system", system_prompt)
+ 
+    def run(self, task: str) -> str:
+        """Run the agent on a task."""
+        self.memory.add("user", task)
+        self.trajectory.initialize(task)
+ 
+        return self._step()
+ 
+    def _step(self) -> str:
+        """Perform a single step."""
+        # THOUGHT: Generate response and add to memory
+        response = self.llm.generate(
+            self.memory.get_messages(), tools=self.tools.schemas
+        )
+        self.memory.add(
+            "assistant", response.content, tool_call=response.tool_call
+        )
+ 
+        # Tool parsing
+        response = self.tools.parse(response)
+ 
+        # ANSWER: Stopping mechanism
+        if self.tools.is_done(response):
+            self.trajectory.add(response)
+            return response.content
+ 
+        return self._execute_action(response)
+ 
+    def _execute_action(self, response: Response) -> str:
+        """Execute a tool action."""
+ 
+        # ACTION: execute tools
+        result = self.tools.execute(response)
+ 
+        # OBSERVATION: add tool results to memory and display
+        role, observation = self.tools.observation(result)
+        self.memory.add(role, observation)
+        self.trajectory.add(response, observation)
+ 
+        return observation
+```
+
+- Running your TinyAgent with tool calling capabilities
+
+```
+from illustrated_agents.chapters.ch2 import LLM
+ 
+# Gemma 3 12B (no native thinking or tool calling)
+llm = LLM(model="gemma3:12b")
+ 
+# Register tool
+tools = Tools()
+tools.add_tool(
+    name="multiply", 
+    func=multiply, 
+    description="Multiplies two numbers: multiply(a: str, b: str)"
+)
+ 
+# Memory
+memory = Memory()
+ 
+# Initialize Agent
+agent = TinyAgent(llm=llm, memory=memory, tools=tools)
+```
+
+- Instilling tool-calling capabilities into LLMs can be a difficult task, especially when an LLM has not been trained to do so. Learning tools can be achieved through various methodologies. 
+
+- Supervised Fine-tuning
+Although prompting is a straightforward method for enabling tool usage, it does require filling up the context window with additional instructions
+
+Finally, the LLM (GPT-J, a variant of GPT-3) was fine-tuned using this updated data using SFT. At the time, this technique showed significant improvements over zero-shot performance and competed with larger models
+
+Reinforcement Learning
+As we explored in Chapters 2 and 3, RL is an excellent method of training or fine-tuning to align your model to certain rewardable tasks. 
+
+- toolrl, RL can be used to enable TIR is ToolRL.9 This framework uses GRPO, which we briefly covered in DeepSeek-R1’s training procedure in Chapters 2 and 3. To differentiate between stages of thinking, tool calling, and answering the query
+
+- Search-R1
+To further explore what RL is capable of, let’s take a closer look at Search-R1, an efficient RL framework for integrating search as a tool into an LLM’s reasoning process.
+
+- native tools
+
+from illustrated_agents.chapters.ch5 import Tools
+ 
+ 
+class NativeTools(Tools):
+    """Tool registry using native function calling."""
+ 
+    @property
+    def schemas(self) -> list[dict]:
+        """Return tool functions for native function calling."""
+        return [
+            tool_to_schema(tool["function"]) for tool in self.registry.values()
+        ]
+ 
+    @property
+    def prompt(self) -> str:
+        """Empty because we don't need a prompt for native tool calling"""
+        return ""
+ 
+    def parse(self, response: Response) -> Response:
+        """Parse a tool call."""
+        # If there's no tool call, return the response as is
+        if not response.tool_call:
+            return response
+ 
+        # Extract the tool name and arguments from the tool call
+        args = response.tool_call["function"]["arguments"]
+        if isinstance(args, str):
+            args = json.loads(args)
+        tool_call = {
+            "tool": response.tool_call["function"]["name"],
+            "kwargs": args,
+        }
+ 
+        # Add the parsed tool call to the response
+        return Response(
+            content=response.content,
+            reasoning=response.reasoning,
+            tool_call=tool_call,
+        )
+ 
+    def observation(self, result: str) -> tuple[str, str]:
+        """Native tool results use the 'tool' role."""
+        return "tool", str(result)
+ 
+    def is_done(self, response: Response) -> bool:
+        """No tool call means the `TinyAgent` is done."""
+        return not response.tool_call
+        
+- Model Context Protocol (MCP) solves this problem by standardizing how you would connect tools and APIs with different structures to your LLM.
+
+
+- Core Components
+To achieve all these useful capabilities, MCP consists of three components:
+
+MCP host
+LLM application (such as Cursor) that manages connections, interprets tool schema, and manages routing
+
+MCP client
+Maintains one-to-one connections with MCP servers
+
+MCP server
+Provides context, tools, and capabilities to the LLMs
+
+Servers expose three kinds of primitives to clients: tools (actions the LLM can invoke, like /list_commits), resources (data the host can load as context, like files, documents, and datasets), and prompts (reusable templates).
+
+query is about commits, the LLM decides that it wants the MCP server to use the /list_commits tool (5). The MCP client communicates this action to the MCP server (6)
+
+- With modules like tools and MCP, we can give an agent access to various actions it can take. a SKILL.md file. The start of this file contains the skill’s metadata, namely the name and a short description. For instance, the name of your skill could be “meeting_notes” and its description “Use this skill when you want to turn meeting transcripts and notes into structured decisions and action items.”
+
+- The Bundled Resources
+Skills can get quite large and unwieldy quickly. In our example of “meeting_notes”, there can be instructions about different types of meetings. A 1:1 with your manager requires a different structure than a 1:1 with one of your colleagues or a 1:1 with your employee. 
+
+
+# Planning and reflection 
+- , typical steps the agent takes include:
+
+Clarify requirements
+
+Analyze the existing codebase
+
+Design the feature
+
+Implement the feature
+
+Test the feature
+
+Update documentation
+
+- LLM creating this plan, where each task may also have a set of subtasks to complete.
+
+- Chain-of-Thought
+A major component of task decomposition, aside from having a reasoning LLM, is prompt engineering. 
+
+```
+User: Add a new feature to my existing codebase. Let's think step-by-step.
+ 
+LLM (CoT): 
+First, I need to clarify the requirements. What kind of feature is needed?
+Second, I should analyze the existing codebase to understand the architecture.
+Third, I need to design the feature and make sure nothing is left out.
+Fourth, I should implement the feature in the existing codebase but without changing its original functionality.
+Fifth, I must test the feature thoroughly through unit and integration tests.
+Finally, I need to update the documentation to explain how the new feature works.
+ 
+LLM (Plan):
+The plan will be as follows:
+ 
+[ ] Clarify requirements
+[ ] Analyze the existing codebase
+[ ] Design the feature
+[ ] Implement the feature
+[ ] Test the feature
+[ ] Update documentation
+```
+
+- CoT prompting, the problem to be solved is decomposed into a set of subproblems that build upon each other. In a second step, these subproblems are solved one by one. Contrary to CoT, the solution of previous subproblems
+
+- three components:
+
+Thought
+A reasoning step about the current situation
+
+Action
+A set of actions to execute (e.g., tools)
+
+Observation
+A reasoning step about the result of the action
+
+    + let’s create the ReAct class as the first planner class to use in your TinyAgent:
+```
+import re
+from illustrated_agents.chapters.ch2 import Response
+ 
+class ReAct:
+    """ReAct module."""
+ 
+    def __init__(self, max_steps: int = 10):
+        """Initialize ReAct module.
+ 
+        Arguments:
+            max_steps: Maximum number of ReAct steps to perform.
+        """
+        self.max_steps = max_steps
+ 
+    @property
+    def prompt(self) -> str:
+        return """
+# ReAct (Reason and Act)
+ 
+You are a ReAct agent that performs exactly ONE step per turn.
+ 
+## ReAct Format
+ 
+You use the following format for each step:
+ 
+THOUGHT: [Your reasoning about what to do next]
+ACTION:
+{
+    "tool": "a_tool_name",
+    "kwargs": {"param": "value"},
+}
+ 
+An observation will be provided after each action. You do not generate the observation yourself.
+ 
+## ReAct Completion
+ 
+To provide the final answer to the task, use an action blob with "tool": "final_answer" tool. 
+It is the only way to complete the task, else you will be stuck on a loop. 
+So your final output should look like this:
+ 
+ACTION:
+{
+    "tool": "final_answer",
+    "kwargs": "insert your final answer here"
+}
+ 
+Use the `final_answer` tool when you are completely done with all subtasks and have the final answer ready.
+You can also use `final_answer` to directly reply to a user's question without using any other tools.
+ 
+"""
+ 
+    def parse(self, response: Response) -> Response:
+        """Parse a ReAct formatted response into THOUGHT and ACTION."""
+        text = response.content
+ 
+        # The patterns for each section
+        patterns = {
+            "THOUGHT": r"THOUGHT:\s*(.+?)(?=ACTION:|OBSERVATION:|$)",
+            "ACTION": r"ACTION:\s*(.+?)(?=THOUGHT:|OBSERVATION:|$)",
+        }
+ 
+        # Extract each section using regex
+        result = {}
+        for key, pattern in patterns.items():
+            match = re.search(pattern, text, re.DOTALL)
+            result[key] = match.group(1).strip() if match else ""
+ 
+        # Update Response and extract only the action
+        response.content = result["ACTION"]
+        response.reasoning = result["THOUGHT"]
+        return response
+        
+```
+
+-  TinyAgent is as follows, where we highlighted the code that was added:
+```
+from illustrated_agents.chapters.ch2 import Response, Trajectory
+from illustrated_agents.chapters.ch4 import Memory
+from illustrated_agents.chapters.ch5 import Tools
+ 
+ 
+class TinyAgent:
+    """A minimal, modular, and educational agent framework."""
+ 
+    def __init__(self, llm: LLM, memory: Memory, tools: Tools, planner: ReAct):
+        self.llm = llm
+        self.memory = memory
+        self.tools = tools
+        self.planner = planner
+ 
+        self.trajectory = Trajectory()
+ 
+        # Build system prompt with all components
+        system_prompt = "You are a helpful assistant.\n\n"
+        system_prompt += self.planner.prompt
+        system_prompt += self.tools.prompt
+        self.memory.add("system", system_prompt)
+ 
+    def run(self, task: str) -> str:
+        """Run the agent on a task."""
+        self.memory.add("user", task)
+        self.trajectory.initialize(task)
+ 
+        # *Autonomy* loop
+        for step in range(self.planner.max_steps):
+            result = self._step()
+            if result is not None:
+                return result
+ 
+       return "Max steps reached without completion."
+ 
+    def _step(self) -> str | None:
+        """Perform a single step."""
+        # THOUGHT: Generate response and add to memory
+        response = self.llm.generate(
+            self.memory.get_messages(), tools=self.tools.schemas
+        )
+        self.memory.add(
+            "assistant", response.content, tool_call=response.tool_call
+        )
+ 
+        # Tool parsing
+        response = self.planner.parse(response)
+        response = self.tools.parse(response)
+ 
+        # ANSWER: Stopping mechanism
+        if self.tools.is_done(response):
+            self.trajectory.add(response)
+            return response.content
+ 
+        return self._execute_action(response)
+ 
+    def _execute_action(self, response: Response) -> None:
+        """Execute a tool action."""
+ 
+        # ACTION: execute tools
+        result = self.tools.execute(response)
+ 
+        # OBSERVATION: add tool results to memory and display
+        role, observation = self.tools.observation(result)
+        self.memory.add(role, observation)
+        self.trajectory.add(response, observation)
+ 
+        return None
+```
+
+    + simple and give it the add, multiply, and subtract tools.
+```
+from illustrated_agents.chapters.ch2 import LLM
+from illustrated_agents.toolbox import add, multiply, subtract
+ 
+# Gemma 3 12B (no native thinking or tool calling)
+llm = LLM(model="gemma3:12b")
+ 
+# Tools
+tools = Tools()
+tools.add_tool("add", add, "add(a: str, b: str)")
+tools.add_tool("subtract", subtract, "subtract(a: str, b: str)")
+tools.add_tool("multiply", multiply, "multiply(a: str, b: str)")
+ 
+# Memory
+memory = Memory()
+ 
+# ReAct
+react = ReAct(max_steps=10)
+ 
+# Create agent
+agent = TinyAgent(llm=llm, tools=tools, memory=memory, planner=react)
+ 
+# Multi-step task with reasoning
+agent.run("What is (4.6 + 6.685) x 4, and then subtract 3.14 from the resu..
+```
+
+- R-Zero,  The authors experimented with models from the Qwen3 family19 and the Llama-3.1 family.20
+The idea of self-evolving reasoning LLMs without labeled data was further explored in R-Zero.18 This technique uses two independent models with distinct roles to coevolve and challenge each other’s outputs.
+
+RL (GRPO) based on the rewards it receives from the Solver.
+
+There are several rewards/signals created during this process:
+
+Uncertainty reward (a value between 0 and 1)
+This indicates how certain the Solver is that it has created the correct answer frequently from all of its sampled answers. It is essentially the fraction of the Solver’s responses that match the most common answer. This reward aims to guide the Challenger to create difficult but solvable queries.
+
+Repetition penalty (a value between 0 and 1)
+This penalty makes sure that the Challenger generates diverse queries. Otherwise, it would be stuck continuously optimizing the same difficult queries.
+
+Format reward (either 0 or 1)
+A reward given based on whether the Challenger generates queries between <question> and </question> tags.
+
+Composite reward (a value between 0 and 1)
+A reward given to the Challenger by subtracting the repetition penalty from the uncertainty reward and making sure it does not go below 0.
+
+
+# Evaluating agents 
+- reasoning and knowledge, difficult exam-style questions. MMLU (Massive Multitask Language Understanding) is one of the earliest and most widely cited examples
+
+
+- Building a simple agent evaluator
+Before going into specific methods, let’s first create a simple framework that we can use to perform automated evaluation on your TinyAgent
+
+```
+from dataclasses import dataclass
+from typing import Callable
+ 
+# Type hint for the scorers
+##  (prediction: str, example: dict) -> bool | float
+Scorer = Callable[[str, dict], bool | float]
+ 
+@dataclass
+class Benchmark:
+    name: str
+    examples: list[dict]
+    scorer: Callable
+    
+    
+from illustrated_agents.chapters.ch2 import LLM
+from illustrated_agents.chapters.ch4 import Memory
+from illustrated_agents.chapters.ch5 import NativeTools
+from illustrated_agents.chapters.ch6 import NativeReAct, TinyAgent
+ 
+# Gemma 4 E4B (with native thinking and tool calling)
+llm = LLM(model="gemma4:e4b", think=True)
+ 
+ 
+class Evaluator:
+    """Run a TinyAgent over a Benchmark and aggregate the results."""
+ 
+    def __init__(self, create_agent: Callable):
+        """Initialize with a function that creates a new agent instance."""
+        self.create_agent = create_agent
+ 
+    def run(self, benchmark: Benchmark) -> dict:
+        """Run the agent on examples in the benchmark and score the results."""
+ 
+        # Run each example and collect results
+        results = []
+        for example in benchmark.examples:
+            agent = self.create_agent()
+            prediction = agent.run(example["task"]) or ""
+            passed = benchmark.scorer(prediction, example)
+            results.append(
+                {
+                    "prediction": prediction,
+                    "passed": passed,
+                }
+            )
+ 
+        # Aggregate pass rate
+        if results:
+            pass_rate = sum(result["passed"] for result in results) / len(results)
+        else:
+            pass_rate = 0.0
+ 
+        # Return detailed results and overall pass rate
+        return {
+            "name": benchmark.name,
+            "pass_rate": pass_rate,
+            "results": results,
+        }
+ 
+ 
+def create_agent():
+    """Create a new instance of TinyAgent"""
+    return TinyAgent(
+        llm=llm,
+        memory=Memory(),
+        tools=NativeTools(),
+        planner=NativeReAct(),
+    )
+```
+- Programmatic checks extend exact matches into the broader category of automated verifiers. Rather than checking for a single string, you write code that verifies structural properties of the output. 
+
+ LLM-as-a-judge pattern. LLM-as-a-judge is typically used to produce a single score or to choose a preferred output from two agents.
+ 
+    +  generate an API Key from the website. We then create the judge like so:
+```
+# Judge
+judge = LLM(
+    model="gemini-3.1-flash-lite", 
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai", 
+    api_key="MY_API_KEY"
+)
+
+
+def judge_scorer(prediction: str, example: dict) -> bool:
+    """The LLM-as-a-judge scorer."""
+    prompt = f"""
+Score the response from 0.0 to 1.0.
+ 
+Expected: {example["expected"]}
+Response: {prediction}
+ 
+Reply with only a single number.
+"""
+    response = judge.generate([{"role": "user", "content": prompt}])
+    score = float(response.content.strip().split()[0])
+    return score
+```
+
+- building your own evals 
+
+harbor6 is a recent open source harness designed specifically for agents, with infrastructure for running trials in containerized environments
+
+
+
+# Multi agent systems 
+- Although these agents work toward a common goal, each may have specific goals they need to achieve. The search agent and summarization agent have different roles 
+    + homogeneous 
+     
+    similar agents with similar capabilities 
+    
+     heterogeneous 
+     agents with different predefined roles 
+      emergent 
+      
+      evolving specializations 
+      
+- orchestrating agents 
+
+patterns
+
+centralized 
+
+decentralized 
+herarchical 
+
+federated, distributed among parallel environments 
+
+```
+from illustrated_agents.chapters.ch2 import LLM
+from illustrated_agents.chapters.ch4 import Memory
+from illustrated_agents.chapters.ch5 import NativeTools
+from illustrated_agents.chapters.ch6 import NativeReAct, TinyAgent
+from illustrated_agents.toolbox import add, subtract, multiply
+ 
+# Gemma 4 E4B (with native thinking and tool calling)
+llm = LLM(model="gemma4:e4b", think=True)
+ 
+# Math specialist
+math_tools = NativeTools()
+math_tools.add_tool("add", add)
+math_tools.add_tool("subtract", subtract)
+math_tools.add_tool("multiply", multiply)
+ 
+# Math Agent
+math_agent = TinyAgent(
+    llm=llm, 
+    tools=math_tools, 
+    memory=Memory(),
+    planner=NativeReAct()
+)
+```
+
+- Communicative Agents for “Mind” Exploration of Large Language Model Society (CAMEL). CAMEL is an agentic framework that revolves around having agents roleplay
+
+- MetaGPT
+This idea of role-playing has found its way to many such general-purpose frameworks, as LLMs are quite adaptable to different situations that require specialized perspectives and capabilities. MetaGPT takes it one step further and attempts to mimic entire organizational structures with specialized roles
+
+- Production-grade frameworks
+Although the previous methodologies were open sourced, the following frameworks were created from a developer’s perspective
+
+- Communication Protocols
+Setting up communication between agents can be challenging, as the way they exchange information greatly affects performance.
+- like MCP, A2A is an open standard that enables communication, but for collaboration between agents instead. 
+
+ three core actors in A2A interactions:
+
+User
+The user, generally a human but can be an automated process, that initiates a request and/or defines a goal.
+
+A2A client (client agent)
+The client is the agent that initiates communications to other agents on behalf of the user. This is the entity that uses the A2A protocol.
+
+A2A server (remote agent)
+These are the agents that are being called upon by the client agent to execute a given task. It can be a single agent or an entire MAS.
+
+- Deep Research Agents
+A great use case for systems that leverage multiple agents is Deep Research. Deep Research is a system where agents work together to research topics and provide comprehensive reports using various resources.
+
+
+# Multi modal understanding 
+- Whisper
+A popular model for encoding audio in LLMs is Whisper. Whisper is used for automatic speech recognition (ASR)
+
+- CLAP
+With the performance of CLIP for images, it’s not surprising that other modalities would follow. Contrastive Language-Audio Pre-training (CLAP) is based on CLIP
+
+- ViT-like models for video, is called the Video Vision Transformer (ViViT).8 This method uses different combinations of Transformer models for both the spatial information
+
+-  a single Transformer model, namely TimeSformer.9 Like ViViT, frames are sampled and split up into patches. These patches are not processed at first like tubelets but instead flattened and passed directly to a Transformer
+
+
+# Code agents and code llms 
+- Code Agents to Serve Non-Coders
+Code agents open the door for non-coders to wield powerful code tools 
+
+- Code interpreter sandbox environment
+arguably the most common ones are:
+
+File manipulation tools
+This lets the agent read, list, and write files.
+
+Code interpreter
+This lets the agent execute code it writes.
+
+- Reinforcement learning
+Now a major component of the training flow. Where in the past Reinforcement Learning from Human Feedback (RLHF) had been useful to polish the behavior of a model

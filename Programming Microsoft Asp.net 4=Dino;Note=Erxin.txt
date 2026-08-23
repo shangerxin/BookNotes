@@ -1,0 +1,1065 @@
+Programming Microsoft Asp.net 4=Dino;Note=Erxin
+
+# Events in request life cycle 
+-  global.asax. Events are fired in the following sequence:
+
+BeginRequest The ASP.NET HTTP pipeline begins to work on the request. For the first request ever in the lifetime of the application instance, this event reaches the application after Application_Start.
+
+AuthenticateRequest The request is being authenticated. ASP.NET and IIS integrated authentication modules subscribe to this event and attempt to produce an identity. If no authentication module produced an authenticated user, an internal default authentication module is invoked to produce an identity for the unauthenticated user. This is done for the sake of consistency so that code doesn’t need to worry about null identities.
+
+PostAuthenticateRequest The request has been authenticated. All the information available is stored in the HttpContext’s User property at this time.
+
+AuthorizeRequest The request authorization is about to occur. This event is commonly handled by application code to perform custom authorization based on business logic or other application requirements.
+
+PostAuthorizeRequest The request has been authorized.
+
+ResolveRequestCache The runtime environment verifies whether returning a previously cached page can resolve the request. If a valid cached representation is found, the request is served from the cache and the request is short-circuited, calling only any registered EndRequest handlers. ASP.NET Output Cache and the new IIS 7.0 Output Cache both feature “execute now” capabilities.
+
+PostResolveRequestCache The request can’t be served from the cache, and the procedure continues. An HTTP handler corresponding to the requested URL is created at this point. If the requested resource is an .aspx page, an instance of a page class is created.
+
+MapRequestHandler The event is fired to determine the request handler.
+
+PostMapRequestHandler The event fires when the HTTP handler corresponding to the requested URL has been successfully created.
+
+AcquireRequestState The module that hooks up this event is willing to retrieve any state information for the request. A number of factors are relevant here: the handler must support session state in some form, and there must be a valid session ID.
+
+PostAcquireRequestState The state information (such as Application or Session) has been acquired. The state information is stored in the HttpContext’s related properties at this time.
+
+PreRequestHandlerExecute This event is fired immediately prior to executing the handler for a given request.
+
+ExecuteRequestHandler At this point, the handler does its job and generates the output for the client.
+
+PostRequestHandlerExecute When this event fires, the selected HTTP handler has completed and generated the response text.
+
+ReleaseRequestState This event is raised when the handler releases its state information and prepares to shut down. This event is used by the session state module to update the dirty session state if necessary.
+
+PostReleaseRequestState The state, as modified by the page execution, has been persisted.
+
+UpdateRequestCache The runtime environment determines whether the generated output, now also properly filtered by registered modules, should be cached to be reused with upcoming identical requests.
+
+PostUpdateRequestCache The page has been saved to the output cache if it was configured to do so.
+
+LogRequest The event indicates that the runtime is ready to log the results of the request. Logging is guaranteed to execute even if errors occur.
+
+PostLogRequest The request has been logged.
+
+EndRequest This event fires as the final step of the pipeline. At this point, the response is known and made available to other modules that might add compression or encryption, or perform any other manipulation.
+
+- ASP.NET request is mapped to a special component known as the HTTP handler. The ASP.NET runtime uses a built-in algorithm to figure out the HTTP handler in charge of a given ASP.NET request.
+
+
+- Adding Your Own Code to the Pipeline
+As mentioned, you can write your own handlers for many of the request life-cycle events listed earlier in the chapter. You can do that by writing a managed HTTP module or by adding code to the global.asax file of your ASP.NET application
+
+protected void Application_PostAuthenticateRequest()
+{
+    // Your code here
+}
+
+- An IIS Web project is a project that relies on the local IIS Web server instead of the ASP.NET Development Server that comes with Visual Studio. 
+
+a manual process. You open the development version of the web.config in Visual Studio and then proceed with any required changes.
+
+
+
+# Asp.net configuration file 
+- Configuration in ASP.NET is hierarchical by nature and is based on a unique, machine-specific file known as the machine.config file plus a number of web.config files. 
+
+- configuration sections 
+
+<appSettings>
+
+Contains custom application settings.
+
+<configSections>
+
+Describes the configuration sections for custom settings. If this element is present, it must be the first child of the <configuration> node.
+
+<connectionStrings>
+
+Lists predefined connection strings that are useful to the application.
+
+<configProtectedData>
+
+Contains ciphered data for sections that have been encrypted.
+
+<runtime>
+
+Run-time settings schema; describes the elements that configure assembly binding and run-time behavior such as probing and assembly redirect.
+
+<startup>
+
+Startup settings schema; contains the elements that specify which version of the common language runtime (CLR) must be used.
+
+<system.diagnostics>
+
+Describes the elements that specify trace switches and listeners that collect, store, and route messages.
+
+<system.net>
+
+Network schema; specifies elements to indicate how the .NET Framework connects to the Internet, including the default proxy, authentication modules, and connection parameters.
+
+<system.runtime.remoting>
+
+Settings schema; configures the client and server applications that exploit the .NET Remoting.
+
+<system.serviceModel>
+
+Contains configuration settings for Windows Communication Foundation (WCF) services being used by the ASP.NET application.
+
+<system.web>
+
+The ASP.NET-specific configuration section; it contains the elements that control all aspects of the behavior of an ASP.NET application.
+
+<system.web.extensions>
+
+Contains elements that configure ASP.NET AJAX capabilities and services and control their behavior.
+
+<system.webServer>
+
+Specifies settings for the IIS 7 Web server (and newer versions) that configure the host environment for the ASP.NET application.
+
+- example 
+```
+var name = @"system.web/httpHandlers";
+var path = "/myapp";
+
+var config = WebConfigurationManager.OpenWebConfiguration(path);
+var section = (HttpHandlersSection) config.GetSection(name);
+
+var newHandler = new HttpHandlerAction("*.xyz", "System.Web.HttpForbiddenHandler", "*");
+section.Handlers.Add(newHandler);
+config.Save();
+``` 
+
+
+# Http handlers, modules and routing 
+- example 
+
+class PictureViewerInfo
+{
+    public PictureViewerInfo() {
+        DisplayWidth = 200;
+        ColumnCount = 3;
+    }
+    public int DisplayWidth;
+    public int ColumnCount;
+    public string FolderName;
+}
+
+public class PictureViewerHandler : IHttpHandler
+{
+    // Override the ProcessRequest method
+    public void ProcessRequest(HttpContext context)
+    {
+        PictureViewerInfo info = GetFolderInfo(context);
+        string html = CreateOutput(info);
+
+        // Output the data
+        context.Response.Write("<html><head><title>");
+        context.Response.Write("Picture Web Viewer");
+        context.Response.Write("</title></head><body>");
+        context.Response.Write(html);
+        context.Response.Write("</body></html>");
+    }
+
+    // Override the IsReusable property
+    public bool IsReusable
+    {
+        get { return true; }
+    }
+    ...
+}
+
+-  IHttpModule Interface
+The IHttpModule interface defines only two methods: Init and Dispose. The Init method initializes a module and prepares it to handle requests. At this time, you subscribe to receive notifications for the events of interest. 
+
+
+# Anatomy of an asp.net page 
+- the .aspx page is converted into a class and then compiled into an assembly. 
+
+
+# Asp.net core server controls 
+- Server controls are components with a declarative and programming interface used to generate a specific piece of HTML markup based on the request and associated presentation logic.
+
+
+# Deal with errors 
+- Page-Level Error Handling
+To catch any unhandled exceptions wandering around a particular page, you define a handler for the Error event. Here’s an example:
+
+protected void Page_Error(Object sender, EventArgs e)
+{
+    // Capture the error
+    var exception = Server.GetLastError();
+
+    // Resolve the error page based on the exception that occurred
+    // and redirect to the appropriate page
+    if (exception is NotImplementedException)
+        Server.Transfer("/ErrorPages/NotImplErrorPage.aspx");
+    else
+        Server.Transfer("/ErrorPages/GenericErrorPage.aspx");
+
+    // Clear the error
+    Server.ClearError();
+}
+
+- global 
+
+ global.asax file:
+
+void Application_Error(Object sender, EventArgs e)
+{
+    ...
+}
+
+- log exception 
+
+void Application_Error(Object sender, EventArgs e)
+{
+    // Obtain the URL of the request
+    var url = Request.Path;
+
+    // Obtain the Exception object describing the error
+    var exception = Server.GetLastError();
+
+    // Build the message --> [Error occurred. XXX at url]
+    var text = new StringBuilder("Error occurred. ");
+    text.Append(error.Message);
+    text.Append(" at ");
+    text.Append(url);
+
+    // Write to the Event Log
+    var log = new EventLog();
+    log.Source = "Your Log";
+    log.WriteEntry(text.ToString(), EventLogEntryType.Error);
+}
+
+-  anonymousIdentification feature, which is disabled by default:
+
+<anonymousIdentification enabled="true" />
+
+- In ASP.NET, the profile API is composed of two distinct elements: the access layer and the storage layer.
+
+- Page Localization
+The whole theme of localization is nothing new in the .NET Framework, and ASP.NET is no exception.
+
+
+# Page composition and usability 
+- usability checklist 
+
+cross browser rendering 
+
+detect browser capabilities 
+
+browser definition file 
+    + ASP.NET 4, you find the following definition files—one for each recognized browser device:
+
+blackberry.browser
+
+chrome.browser
+
+Default.browser
+
+firefox.browser
+
+gateway.browser
+
+generic.browser
+
+ie.browser
+
+iemobile.browser
+
+iphone.browser
+
+opera.browser
+
+safari.browser
+
+    + search engine optimization 
+    
+    + site map information 
+    
+- tools for  Testing a Web Front End
+
+Tools
+
+More information
+
+ArtOfTest
+
+http://www.artoftest.com/home.aspx
+
+Selenium
+
+http://seleniumhq.org
+
+Visual Studio 2010 Coded UI Tests
+
+http://msdn.microsoft.com/en-us/library/dd286726.aspx
+
+WatiN
+
+http://watin.sourceforge.net
+
+- input form 
+
+form> tag can be the child of any other server container control, such as <table>, <div>, <body>, and any other HTML generic control. 
+
+The HtmlForm class provides programmatic access to the HTML <form> element on the server through the set of properties
+
+Method property is set to POST. The value of the property can be modified programmatically. If the form is posted through the GET method, all form data is passed on the URL’s query string. 
+
+- <form> elements in the body of the same Web form. Here’s an example:
+
+<table><tr><td>
+    <form id="form1" runat="server">
+    <h2>Ordinary contents for an ASP.NET page</h2>
+    </form>
+</td>
+<td>
+    <form method="post" action="search.aspx">
+        <table><tr>
+            <td>Keyword</td>
+            <td><input type="text" id="Keyword" name="Keyword" /></td>
+        </tr><tr>
+            <td><input type="submit" id="Go" value="Search" /></td>
+        </tr></table>
+    </form>
+</td>
+
+- <form runat=server> tags is allowed, but only one form can be actually rendered. By playing with the Visible property of the HtmlForm class, you can change the active server form during the page lifetime
+
+- Validation Controls
+The first rule for writing more secure applications is ensuring you get the data right
+
+- Wizard Control
+The Wizard control supports both linear and nonlinear navigation
+
+
+
+# Data binding 
+- ADO.NET Classes
+ADO.NET provides a bunch of data container classes that can be filled with any sort of data
+
+- Short for Language INtegrated Query, LINQ is a query language that applies a SQL-like syntax to enumerable collections of data.
+
+- The DataSource property lets you specify the data source object the control is linked to.
+
+- The CheckBoxList control is a single monolithic control that groups a collection of selectable list items with an associated check box
+
+- The GridView control provides a tabular, grid-like view of the contents of a data source. Each column represents a data source field, and each row represents a record. 
+
+
+# List view control 
+- example 
+<td>
+    <asp:Label runat="server" ID="lblCompany" Text='<%# Eval("CompanyName") %>' />
+</td>
+<td>
+    <asp:Label runat="server" ID="lblCountry" Text='<%# Eval("Country") %>' />
+</td>
+        
+layout template defined as in the following code snippet:
+
+<LayoutTemplate>
+    <div>
+        <h1 id="logo">Customer List</h1>
+    </div>
+    <div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Country</th>
+                </tr>
+                <tbody runat="server" id="ListViewContent">
+                </tbody>
+            </thead>
+        </table>
+    </div>
+</LayoutTemplate>
+
+- custom control 
+The data item class for the GaugeBar control is named GaugeBarDataItem (again, an arbitrary name) and is defined as follows:
+
+public class GaugeBarDataItem : IStateManager
+{
+    private string _text;
+    private float _value;
+    private bool _marked;
+
+    public GaugeBarDataItem()
+    {
+    }
+
+    public GaugeBarDataItem(float value, string text)
+    {
+        _text = text;
+        _value = value;
+    }
+
+    public string Text
+    {
+        get { return _text; }
+        set { _text = value; }
+    }
+
+    public float Value
+    {
+        get { return _value; }
+        set { _value = value; }
+    }
+
+    public bool IsTrackingViewState
+    {
+        get { return _marked; }
+    }
+
+    public void LoadViewState(object state)
+    {
+        if (state != null)
+        {
+            Pair p = (Pair)state;
+            _value = (float)p.First;
+            _text = (string)p.Second;
+        }
+    }
+
+    public object SaveViewState()
+    {
+        return new Pair(_value, _text);
+    }
+
+    public void TrackViewState()
+    {
+        _marked = true;
+    }
+}
+
+<x:BarChart runat="server" id="BarChart1"
+      Maximum="100" SubTitle="Subtitle" Title="Title"
+      OnBarChartDataBound="BarChart1_BarChartDataBound" >
+    ...
+</x:BarChart>
+
+void BarChart1_BarChartDataBound(object sender, BarChartItemEventArgs e)
+{
+    // Get the amount of sales for the current bar
+    var sales = (Decimal) DataBinder.GetPropertyValue(
+                     e.Item.DataItem, "sales");
+
+    // Add a ToolTip
+    var tip = sales.ToString();
+    e.Item.Attributes["title"] = tip;
+
+    // Highlight bar where sales > 50000
+    if (sales > 50000)
+       e.Item.Cells[1].BackColor = Color.LightGreen;
+}
+
+
+# Principles of software design 
+-  IoC Frameworks
+
+Framework
+
+URL
+
+Autofac
+
+http://code.google.com/p/autofac
+
+Castle Windsor
+
+http://www.castleproject.org/container/index.html
+
+Ninject
+
+http://www.ninject.org
+
+Spring.NET
+
+http://www.springframework.net
+
+StructureMap
+
+http://structuremap.sourceforge.net/Default.htm
+
+Unity
+
+http://codeplex.com/unity
+
+
+# Layers of applications 
+- multiutiered architecture 
+
+presentation layer 
+
+
+business layer 
+
+data access layer 
+
+- transaction script pattern 
+
+The Transaction Script (TS) pattern envisions the business logic as a series of logical transactions triggered by the presentation
+
+-  Active Record modeling is SubSonic. (See http://www.subsonicproject.com.)
+
+- hoc data transfer objects (DTO). A data transfer object is a plain container shaped by the needs of the view
+
+- Implementation of a DAL
+Until recently, the DAL was just fused to the BLL and limited to a superset of the ADO.NET library created for the purpose of making writing data access 
+
+- I like LINQ-to-SQL, period. When Microsoft released Entity Framework 1 in the fall of 2008, it promptly signaled the end of LINQ-to-SQL development
+
+- entity framework 
+
+- NHibernate is perhaps the most popular O/RM available today. It’s open-source software with a strong and active community to back it up. 
+
+- Microsoft Dynamics CRM 2011, customer relationship management 
+
+
+
+# The mvc pattern 
+- mvvm, model, view, view-model is built around the same concept 
+
+- PM differ from MVP?
+
+PM is a variation of MVP that is particularly suited to supporting a rich and complex user interface. 
+
+- The Application Controller Pattern
+To handle navigation within views, MVP goes hand in hand with another pattern—Application Controller.
+
+
+# Infrastructure of the application 
+- http request context 
+
+HttpApplication Class
+Although the HttpApplication provides a public constructor, user applications never need to create instances of the HttpApplication class directly. The ASP.NET runtime infrastructure always does the job for you
+
+-  ASP.NET Modules
+
+Module
+
+Description
+
+AnonymousIdentification
+
+Assigns anonymous users a fake identity.
+
+FileAuthorization
+
+Verifies that the remote user has Microsoft Windows NT permissions to access the requested resource.
+
+FormsAuthentication
+
+Enables applications to use forms authentication.
+
+OutputCache
+
+Provides page output caching services.
+
+PassportAuthentication
+
+Provides a wrapper around Passport authentication services.
+
+Profile
+
+Provides user profile services.
+
+RoleManager
+
+Provides session-state services for the application.
+
+ScriptModule
+
+Used to implement page methods in AJAX pages.
+
+SessionState
+
+Provides session-state services for the application.
+
+UrlAuthorization
+
+Provides URL-based authorization services to access specified resources.
+
+UrlRouting
+
+Provides support for URL routing
+
+WindowsAuthentication
+
+Enables ASP.NET applications to use Windows and Internet Information Services (IIS)-based authentication.
+
+-  application is started, global.asax, if present, is parsed into a source class and compiled. The resultant assembly is created in the temporary directory just as any other dynamically generated assembly would be
+
+- The RewritePath method lets you change the URL of the current request on the fly, thus performing a sort of internal redirect. As a result, the displayed page is the one you set through RewritePath
+
+- protected void Application_BeginRequest(Object sender, EventArgs e)
+{
+   var context = HttpContext.Current;
+   var o = context.Request["id"];
+   if (o != null)
+   {
+      var id = (Int32) o;
+      var url = GetPageUrlFromId(id);
+      context.RewritePath(url);
+   }
+}
+protected String GetPageUrlFromId(Int32 id)
+{
+   // Return a full URL based on the input ID value.
+   ...
+}
+
+
+- http server utility class, This property accepts integers and defaults to 90 seconds; however, it is set to a virtually infinite value if the page runs with the attribute debug=true, as shown here:
+
+this.Server.ScriptTimeout = 30000000;
+
+- Saving the Request to Disk
+The SaveAs method lets you create a file to store the entire content of the HTTP request.
+
+- Validating Client Input
+A golden rule of Web security claims that all user input is evil and should always be filtered and sanitized before use. 
+
+
+# State management 
+- HTTP module reads the settings in the <sessionState> section of the web.config file and determines what the expected state client manager is for the application. 
+
+- The session state is available only after the HttpApplication.AcquireRequestState event fires, and it gets irreversibly lost after the HttpApplication.ReleaseRequestState event. 
+
+begin request > acquire request state > postback code > release request state > end request 
+
+- The HttpSessionState class is a normal collection class because it implements the ICollection interface, but synchronization-wise it is a very special collection class.
+
+- Each active ASP.NET session is identified using a 120-bit string made only of URL-allowed characters. Session IDs are guaranteed to be unique and randomly generated to avoid data conflicts and prevent malicious attacks. 
+
+A session ID is 15 bytes long by design (15x8 = 120 bits). The session ID is generated using the Random Number Generator (RNG) cryptographic provider. The service provider returns a sequence of 15 randomly generated numbers.
+
+using a cookie or a modified URL. By default, the session-state module creates an HTTP cookie on the client, but a modified URL can be used—especially for cookieless browsers—with the SessionID string embedded. 
+
+```
+HttpCookie sessionCookie;
+sessionCookie = new HttpCookie("ASP.NET_SessionId", sessionID);
+sessionCookie.Path = "/";
+```
+
+- Cookieless sessions are also problematic from a Search-Engine Optimization (SEO) perspective. Pages based on cookieless sessions are poorly ranked by Web spiders such as Googlebot. The reason is that every time the spider attempts to crawl the page, ASP.NET generates a different session ID
+
+- ASP.NET session state. Here’s what it looks like:
+
+<sessionState
+    mode="[Off|InProc|StateServer|SQLServer|Custom]"
+    timeout="number of minutes"
+    cookieName="session identifier cookie name"
+    cookieless=
+         "[true|false|AutoDetect|UseCookies|UseUri|UseDeviceProfile]"
+    regenerateExpiredSessionId="[True|False]"
+    sessionIDManagerType="session manager type"
+    sqlConnectionString="sql connection string"
+    sqlCommandTimeout="number of seconds"
+    allowCustomSqlDatabase="[True|False]"
+    useHostingIdentity="[True|False]"
+    stateConnectionString="tcpip=server:port"
+    stateNetworkTimeout="number of seconds"
+    customProvider="custom provider name"
+    compressionEnabled="[True|False]"
+    sqlConnectionRetryInterval="number of seconds">
+    <providers>...</providers>
+</sessionState>
+
+- lifetime of a session, The life of a session state begins only when the first item is added to the in-memory dictionary.
+
+-  SQL Server as the state provider, enter the following changes in the <sessionState> section of the web.config file:
+
+<configuration>
+  <system.web>
+    <sessionState
+       mode="SQLServer"
+       sqlConnectionString="server=127.0.0.1;integrated security=SSPI;" />
+  </system.web>
+</configuration>
+
+- SessionStateStoreData is the class that represents the session item—that is, a data structure that contains all the data that is relevant to the session.
+
+
+- roll your own completely custom session ID generator, bear in mind the following points:
+
+The algorithm you choose for ID generation is a critical point. If you don’t implement strong cryptographic randomness, a malicious user can guess a valid session ID when the same session is still active
+
+You can choose to support cookieless sessions or not. If you do, you have to endow the component with the ability to extract the session ID from the HTTP request and redirect the browser.
+
+you derive a new class from SessionIDManager and override two methods: CreateSessionID and Validate. The former returns a string that contains the session ID. The latter validates a given session ID to ensure it conforms to the specification you set.
+
+State management is a necessary evil. By enabling it, you charge your application with an extra burden. To reduce the performance impact of session state on Web applications, the first guideline is to disable session state whenever possible. 
+
+- ASP.NET pages supply the ViewState property to let applications build a call context and retain values across two successive requests for the same page
+
+- How will the extra information contained in the view state affect the download time of the page?
+
+You can disable the view state for an entire page by using the EnableViewState attribute of the @Page directive. 
+
+<% @Page EnableViewState="false" %>
+
+# Web deploy
+
+rom http://www.iis.net/expand/WebDeploy. This site has a link that you can use to install the tool using the Web Platform Installer 
+
+
+# Asp.net cache 
+- Caching indicates the system’s, or the application’s, ability to save frequently used data to an intermediate storage medium.
+
+- properties of cache 
+key, string 
+value, non-null object 
+dependencies 
+absolute expiration date 
+sliding expiration, relative date relative to the added time 
+priority 
+update callback 
+removal callback 
+
+    + examples 
+var dependency = new CacheDependency(filename);
+Cache.Insert(key, value, dependency);
+
+- sql server cache dependencies, A database dependency is a special case of custom dependency that consists of the automatic invalidation of some cached data when the contents of the source database table changes. 
+
+- The ASP.NET Cache object has a number of powerful and relevant capabilities.
+
+The Cache object doesn’t span multiple machines like in a Web farm; its amount of memory affects only a single machine and can’t be scaled out horizontally. Enter distributed caching.
+
+- distributed cache 
+
+The topology of the distributed cache plays an important role in determining its success
+
+LINQ-based query language for cached items is a big plus.
+
+Windows Server AppFabric consists of a few extensions to Microsoft Windows Server to improve the application infrastructure
+
+AppFabric Caching Services (ACS) is an out-of-process cache that combines a simple programming interface with a clustered architecture
+ 
+ <configuration>
+   <configSections>
+       <section name="dataCacheClient"
+                type="Microsoft.ApplicationServer.Caching.DataCacheClientSection,
+                      Microsoft.ApplicationServer.Caching.Core"
+                 allowLocation="true"
+                 allowDefinition="Everywhere" />
+    </configSections>
+    ...
+</configuration>
+
+Memcached (http://memcached.org) is a popular, open-source distributed cache widely used by some popular social networks. 
+
+Written in C# and entirely based on .NET managed code, SharedCache (sharedcache.com) is another open-source distributed and replicated cache
+
+- Among other things, you use the @OutputCache directive to decide where the page output should be cached. 
+
+kernel caching is available only for pages requested through a GET verb. No kernel caching is possible on postbacks.
+
+- dealing with postback pages 
+
+ASP.NET pages do postbacks. Let’s consider the page in Figure 18-8. The page has cache duration of, say, 30 seconds, but its actual output depends on the selection the user makes every time the page is displayed
+
+- @OutputCache directive for pages supports the CacheProfile string attribute, which references an entry under the <outputCacheProfiles> section in the web.config file:
+
+<caching>
+   <outputCacheSettings>
+      <outputCacheProfiles>
+          <add name="..." enabled="true|false" duration="..."
+               location="..." sqlDependency="..."
+               varyByCustom="..." varyByControl="..."
+               varyByHeader="..." varyByParam="..."
+                              noStore=true|false"
+          />
+     </outputCacheProfiles>
+  </outputCacheSettings>
+</caching>
+
+
+# Asp.net security 
+- security context 
+
+iis level associates 
+
+worker process level asp.net 
+
+pipeline level
+
+- IIS Thread Security Context
+The thread that physically handles the request impersonates an identity according to the current IIS authentication setting
+
+    + Basic authentication is an HTTP standard supported by virtually any browser (and disabled by default in IIS 7). With this type of authentication, a request bounces back with a particular HTTP status code (HTTP 401) that the browser understands as a demand to display a standard dialog box to request the user’s credentials. 
+    
+    match it with any of the Web server’s accounts. Because credentials are sent out as Base64-encoded text, essentially in clear text, Basic authentication is recommended only for use over HTTPS secure channels.
+    
+    + Digest authentication. Digest authentication differs from Basic authentication mostly because it hashes credentials before sending.
+    
+    Digest authentication on IIS 7, you must install the appropriate Digest role service and disable anonymous authentication.
+    
+    + Integrated Windows authentication sets up a conversation between the browser and the Web server. The browser passes the credentials of the currently logged-on user, who is not required to type anything. 
+    
+    The technique has limited browser support and is impractical in the presence of firewalls. It is designed for intranet use.
+    
+    + You can use the Secure Sockets Layer (SSL) security features of IIS and use client certificates to authenticate users requesting information on your Web site. SSL checks the contents of the certificate submitted by the browser for the user during the logon. Users obtain client certificates from a trusted third-party organization. In an intranet scenario, users can also get their certificate from an authority managed by the company itself.
+    
+-  ASP.NET application, the request is queued to the application pool and picked up by the copy of the w3wp.exe IIS worker process that serves that application pool. 
+
+- Worker Process Security Context
+
+runs under the identity of the NETWORK SERVICE account or under a virtual account associated with the application pool. You can change it through the Advanced Settings dialog box of the application pool
+
+If impersonation is disabled in the ASP.NET application, this thread will inherit the identity of the worker process. This is what happens by default. If impersonation is enabled, the worker thread will inherit the security token passed by IIS.
+
+Impersonation is used only with the code executed within the page, not for all the preliminary steps that happen before the request is handed
+
+
+-  Authentication modules hook up requests for protected pages and manage to obtain the user’s credentials. The user is directed to the page only if the credentials are deemed valid and authorize access to the requested resource.
+
+-  change the default ASP.NET account to give it more privileges, how should you proceed? Is it preferable to create a custom account and use it for the worker process
+
+add a setting to the web.config file. The following snippet shows an example:
+
+<identity impersonate="true"
+    userName="MyAspNetAccnt" password="ILoveA$pnet*SinceVer1.0" />
+    
+you can require the worker process to impersonate a fixed identity through the <identity> section of the web.config file. Note that when fixed impersonation is used, every worker thread processing a request needs to impersonate the specified account. 
+
+
+- impersonating throught the anonymous account.
+
+ASP.NET application grants access to anonymous users, and the anonymous account is configured to be the desired account for the application.
+
+In this case, the application uses per-request impersonation and the ASP.NET code executes as the impersonated account. The process account remains set to NETWORK SERVICE or the virtual account, which means you don’t have to worry about replicating into the new account the minimum set of permissions on folders that allow ASP.NET to work.
+
+- ASPNET and NETWORK SERVICE are granted only the following five:
+
+Access this computer from the network
+
+Deny logon locally
+
+Deny logon through Terminal Services
+
+Log on as a batch job
+
+Log on as a service
+
+- NTFS permissions to oper ate on certain folders and create temporary files and assemblies. The folders involved are these:
+
+.NET Framework Root Folder This folder contains some .NET Framework system assemblies that ASP.NET must be able to access.
+
+Temporary ASP.NET Files This folder represents the file system subtree in which all temporary files are generated. 
+
+Global Assembly Cache ASP.NET needs to gain read permissions on the assemblies in the global assembly cache (GAC).
+
+Windows System Folder The ASP.NET process needs to access and read the System32 Windows folder to load any necessary Win32 DLLs.
+
+Application Root Folder The ASP.NET process needs to access and read the files that make up the Web application.
+
+Web Site Root ASP.NET might have the need to scan the root of the Web server—typically, Inetpub\wwwroot
+
+- ASP.NET (for example, it is an .aspx file), IIS hands the request over to ASP.NET along with the security token of the authenticated, or anonymous, user. 
+
+- Windows authentication mode, ASP.NET does not perform any further authentication steps and limits its use of the IIS token to authorizing access to the resources.
+
+- Using ACLs to Authorize Access
+In most cases, Windows authentication is used in conjunction with file authorization—via the FileAuthorizationModule HTTP module. User-specific pages in the Web application can be protected from unauthorized access by using access control lists (ACLs) on the file. 
+
+- ASP.NET application for Forms authentication by tweaking its root web.config file. You enter the following script:
+
+<system.web>
+    <authentication mode="Forms">
+        <forms loginUrl="login.aspx" />
+    </authentication>
+    <authorization>
+        <deny users="?" />
+    </authorization>
+</system.web>
+
+- Form-based authentication is governed by an HTTP module implemented in the FormsAuthenticationModule class. The behavior of the component is driven by the contents of the web.config file.
+
+The user types the URL of the page—say welcome.aspx—and goes. As a result, the HTTP module redirects to the login page any users for which an authentication ticket does not exist
+
+    + advance 
+    
+    Applications to Share Authentication Cookies
+HTTP cookies support a path attribute to let you define the application path the cookie is valid within
+
++ External Applications to Authenticate Users
+Forms authentication also supports having the login page specified in another application in the same Web site:
+
+<forms loginUrl="/anotherApp/login1.aspx" />
+
+- Cookie-Based Forms Authentication
+The default way of putting Forms authentication at work is through cookies. 
+follows the pattern shown here:
+http://YourApp/(F(XYZ...1234))/samples/default.aspx
+The ticket, properly encoded to a URL-compliant alphabet, is inserted in the URL right after the server name.
+
+- Firesheep (http://en.wikipedia.org/wiki/Firesheep) that can sniff unencrypted cookies.
+
+- Creating a Custom Principal
+The User property on the HttpContext object is of type IPrincipal—the public contract that all principal objects must fulfill. Most of the time, the real type behind the User property is GenericPrincipal. 
+
+- Roles in ASP.NET simplify the implementation of applications that require authorization. A role is just a logical attribute assigned to a user. An ASP.NET role is a plain string that refers to the logical role the user plays in the context of the application.
+
+The Role Management API
+The role management API lets you define roles as well as specify programmatically which users are in which roles
+
+RoleManager 
+
+Admin and Guest roles and populate them with user names:
+
+Roles.CreateRole("Admin");
+Roles.AddUsersToRole("DinoE", "Admin");
+Roles.CreateRole("Guest");
+var guests = new String[2];
+guests[0] = "JoeUsers";
+guests[1] = "Godzilla";
+Roles.AddUsersToRole(guests, "Guest")
+
+- Claims-Based Identity
+Unlike many other aspects of programming, authentication has always been devoid of any level of indirection. This means that developers have always taken care of any details of the authentication API at quite a low level of abstraction and with deep knowledge of the technical aspects.
+
+Classic authentication is based on two steps: getting the user credentials and validating them against some known values. If the provided information matches the stored information, the user is recognized and authenticated 
+
+The key idea behind claims-based identity is that an application (and not just an ASP.NET application) uses a third-party provider that assumes responsibility for returning a few true statements about a user.
+
+WIF is the Microsoft infrastructure for working with claims-based identity. You can download the WIF runtime from http://www.microsoft.com/downloads/en/details.aspx?FamilyID=EB9C345F-E830-40B8-A5FE-AE7A864C4D76. The WIF SDK, instead, is available here: http://www.microsoft.com/downloads/en/details.aspx?FamilyID=c148b2df-c7af-46bb-9162-2c9422208504.
+
+STS. To start, you can use SelfSTS—a utility that emulates the minimal behavior of a realistic STS. You can get the STS from http://code.msdn.microsoft.com/SelfSTS.
+
+Configuring the ASP.NET Application
+With STS configured and WIF modules in place, the type behind the HttpContext.User property is IClaimsPrincipal:
+
+var claimsPrincipal = HttpContext.Current.User as IClaimsPrincipal;
+var claimsIdentity = (IClaimsIdentity) claimsPrincipal.Identity;
+You now own all claims as issued by the sample STS. You can enumerate claims with a plain loop, as shown here:
+
+foreach(var claim in claimsIdentity.Claims)
+{
+    // Use claims. Properties are ClaimType and Value
+}
+
+- security related controls 
+
+login 
+
+loginview 
+
+change password 
+
+createUserWizard 
+
+loginStatus 
+
+login name 
+
+password recovery 
+
+membership
+
+mmebershipUser 
+
+sqlMembershipProvder 
+
+ActiveDirectoryMemobershipProvider 
+
+others 
+
+sql server express 
+
+active directory 
+
+sql server and  other rdbms 
+
+- login control 
+Web form, or you just type the following code:
+
+<asp:login runat="server" id="MyLoginForm" />
+
+
+# Client  AJAX
+- There’s a World Wide Web Consortium (W3C) ratified standard for the updatable DOM you can find at http://www.w3.org/TR/DOM-Level-3-Core. A W3C document for the proxy component is currently being developed.
+
+- Cross-Domain Ajax
+For security reasons, all XMLHttpRequest calls within all browsers are restricted to the Same Origin Policy (SOP). In other words, all browsers proceed with an XMLHttpRequest call only if the destination URL is within the same origin as the calling page.
+
+    + four possible approaches:
+
+Using a server-side proxy
+
+Using Silverlight or Flash applets and their native workarounds to bypass SOP
+
+Leveraging cross-domain-enabled HTML tags such as <script> and <iframe>
+
+Using ad hoc browser extensions specifically created to enable cross-domain XMLHttpRequest calls
+
+- ScriptManagerProxy control is used only in master pages scenarios to reference the original script manager from content pages.
+
+<asp:ScriptManager> tag or indirectly by importing a component that already contains a script manager. Typically, you can accomplish the second alternative by importing a user control
+
+- The following code shows how to populate the content template programmatically
+
+- PROGRESS SCREEN 
+
+<asp:UpdateProgress runat="server" ID="UpdateProgress1">
+    <ProgressTemplate>
+        ...
+    </ProgressTemplate>
+</asp:UpdateProgress>
+
+- REST refers to the idea of having data and resources exposed to Web clients as public HTTP endpoints. Clients interact with these endpoints using HTTP verbs such as GET, POST, PUT, and DELETE. In REST, the URL is a representation of a resource, and the HTTP verb describes the action
+
+
+- Any Ajax solution is made of two main layers that are neatly separated but communicating: the JavaScript and HTML presentation layer, and a service layer that acts as a façade for HTTP endpoints
+
+- Common solution for ASP.NET Web Forms Ajax-enabled applications is hosting WCF services and interacting with them via JSON payloads.
+
+- A WCF services is exposed as an .svc endpoint. To be invoked from within an ASP.NET Ajax page, a service must meet a number of requirements, the strictest of which relate to the location of the endpoint and underlying platform. 
+
+- For AJAX-enabled WCF services, the data contract—namely, the agreement between the service and client that describes the data to be exchanged
+
+AJAX-enabled WCF services process requests for method execution outside the ASP.NET pipeline. Requests for ASP.NET Web services methods, conversely, are treated as standard ASP.NET requests. In other words, .asmx requests flow through the classic request life cycle whereas .svc requests are routed out of the pipeline at some point.
+
+- asp.net login pages require forms authentication turn on 
+
+sample configuration script you can use:
+
+<location path="ProtectedAreaOfTheSite">
+    <system.web>
+        <authorization>
+            <deny users="?" />
+        </authorization>
+    </system.web>
+</location>
+
+- JSON is simpler than full-blown XML and gets a free deserialization engine in virtually any browser that supports JavaScript. You can learn more about the syntax and purposes of JSON at http://www.json.org.
+
+The main reason for dropping XML and SOAP in favor of JSON is that JSON is much easier to handle from within a JavaScript-powered client 
+
+
+# jQuery programming 
+- JSONP in jQuery
+Cross-domain calls can be successful only when you call a server that is JSONP enabled. If this condition is true, you can use many of the jQuery Ajax functions to set up a successful cross-domain call.
+
+$.getScript function, append the target JavaScript function name in the query string, and skip over the jQuery callback:
+
+$.getJSON("http://someserver/GetCustomer?js=?", function () {
+   // Place your code here that processes the response
+   ...
+})
+
+
+The following is a sample heading for a JSONP request that goes through jQuery:
+
+GET /GetCustomer?js=jsonp1294078062559 HTTP/1.1
+
+ jsonp and jsonpcallback parameters to replace the query string parameter name and the JavaScript function name, respectively.
+
+- suit for multipage application.
+- single page applicaiton and requires dynamic update dom base on data frequently need to consider vue, angular, react.

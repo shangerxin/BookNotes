@@ -1,0 +1,127 @@
+AI Agents, The definitive guide=Nicole Koenigstein
+
+# From llm to agents, the foundational blue print 
+- Finite State Machines
+A finite state machine describes the modes your system can be in and the allowed transitions between them. Each transition is triggered by an event, may be guarded by a predicate, and may perform actions that update state. Start and end are distinguished states with special meaning. The core vocabulary is:
+
+State
+A compact snapshot that captures what the system knows at a given moment. For an agent, this might be the message list, routing hints, or progress markers.
+
+Event
+Something that happens since the last decision, such as a tool being invoked or returning a result.
+
+Guard
+A check that decides which transition to take, based on the current state and latest event.
+
+Action
+Work performed during a transition, like invoking a tool, appending a message, saving a checkpoint, or requesting human input.
+
+Termination
+A condition that signals the process has reached the end.
+
+- Hierarchical state machines let states contain other states. Superstates capture shared entry/exit behavior and shared guards. 
+
+Superstate
+A state that groups a set of child states and their common policies. Entering the superstate runs shared logic once; exiting it runs shared cleanup once.
+
+Substate
+A concrete mode that lives inside a superstate. It has its own edges but inherits the superstate’s guards and actions.
+
+History
+A “remember where I was” marker. Shallow history resumes at the last active child; deep history resumes inside nested grandchildren. In agent terms, this is a checkpoint for a portion of the graph.
+
+Parallel region
+Two or more child regions of a superstate that advance independently. Useful for fanning out tool calls or agent roles and then joining.
+
+
+- from state models to dynamic agents 
+
+explicit state and control flow. State turns one-off tool calls into a stateful process where prior actions, tool results, and routing decisions can be preserved across steps. Control flow adds guards and transitions that govern when to plan, when to act, and when to stop.
+
+Agency emerges when reasoning is coupled with action. Reasoning is the internal process of planning or deciding the next step. Action extends this by invoking tools, retrieving data, executing code, or calling external services.
+
+- compare of static llms and agentic systems 
+
+Static LLM (Traditional Use)	            Agentic System
+Single-pass token generator                 Iterative reasoning–action–feedback system
+
+Confined to training data                   Can retrieve, verify, and update knowledge
+
+No memory, stateless                        Stateful with short- and long-term memory
+
+Linear prompt–response                      Iterative and adaptive workflow
+
+No tool use                                 Tool-augmented (retrieval, code, APIs)
+
+Fixed interpretation of prompt              Can refine or reinterpret goals dynamically
+
+No external validation                      Actively checks, corrects, and improves output
+
+    + Stateless LLM call with LangChain
+llm = ChatOpenAI(model="gpt-5-mini")
+response = llm.invoke("What are AI agents?")
+print(response.content)
+
+    +  define your tools. Example 1-2 shows an implementation of tools.
+    
+@tool("internet_search") 
+def internet_search(query: str) -> str:
+    """Search Google via SerpAPI for up to date information.""" 
+    serp_api_key = os.environ["SERPAPI_API_KEY"]
+    params = {"engine": "google", "gl": "us", "hl": "en"}
+    search = SerpAPIWrapper(params=params, serpapi_api_key=serp_api_key)
+    return search.run(query)
+
+@tool("calculator")
+def calculator(expression: str) -> str:
+    """Evaluate a single line mathematical expression with numexpr."""
+    local_dict = {"pi": math.pi, "e": math.e}
+    out = numexpr.evaluate( 
+        expression.strip(),Copy of Huggingface WW26 2026 Quantization Libs Test Report
+        global_dict={},
+        local_dict=local_dict,
+    )
+    return str(out)
+
+tools = [internet_search, calculator]
+tool_map: Dict[str, Any] = {t.name: t for t in tools}
+
+    + bind tools to llm 
+
+llm = ChatOpenAI(model="gpt-4o", temperature=0,
+                max_tokens=800).bind_tools(tools, tool_choice="auto")
+                
+- LangGraph’s concepts to build stateful agents, you need to embed the tools into a stateful workflow.                                 
+
+Build a minimal LangGraph with state, nodes, and routing
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages] 
+
+def llm_node(state: AgentState) -> AgentState: 
+    ai = llm.invoke(state["messages"])
+    return {"messages": [ai]}
+
+tool_node = ToolNode(tools=tools) 
+
+graph = StateGraph(AgentState) 
+graph.add_node("llm", llm_node)
+graph.add_node("tools", tool_node)
+graph.add_edge(START, "llm")
+
+def route(state: AgentState): 
+    last = state["messages"][-1]
+    calls = getattr(last, "tool_calls", None) or []
+    return "tools" if calls else END
+
+graph.add_conditional_edges("llm", route, {"tools": "tools", END: END})
+graph.add_edge("tools", "llm")
+
+    + compile with in memory checkpoints 
+    
+checkpointer = MemorySaver() 
+app = graph.compile(checkpointer=checkpointer) 
+
+cfg = {"configurable": {"thread_id": "nyc-weather-session"}} 
+
+
+# not worth to continue 

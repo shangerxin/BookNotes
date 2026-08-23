@@ -1799,3 +1799,143 @@ target_link_libraries(test program)
 
 
 # Managingg dependencies with CMake 
+- tell cmake to find dependencies 
+find_package() 
+
+- official repository (https://github.com/protocolbuffers/protobuf) or use the package manager in your operating system
+
+- find-modules, to differentiate from config-files). If that's not the case
+
+- The search will start from the path stored in the CMAKE_MODULE_PATH variable
+
+scanned for filenames matching the following pattern:
+
+<CamelCasePackageName>Config.cmake
+<kebab-case-package-name>-config.cmake
+
+    + example 
+    
+//message.proto
+```
+syntax = "proto3";
+
+message Message {
+
+    int32 id = 1;
+
+}
+```
+
+///main.cpp
+
+```
+#include "message.pb.h"
+
+#include <fstream>
+
+using namespace std;
+
+int main()
+
+{
+
+  Message m;
+
+  m.set_id(123);
+
+  m.PrintDebugString();
+
+  fstream fo("./hello.data", ios::binary | ios::out);
+
+  m.SerializeToOstream(&fo);
+
+  fo.close();
+
+  return 0;
+
+}
+```
+
+//CMakeLists.txt
+```
+cmake_minimum_required(VERSION 3.20.0)
+
+project(FindPackageProtobufVariables CXX)
+
+find_package(Protobuf REQUIRED)
+
+protobuf_generate_cpp(GENERATED_SRC GENERATED_HEADER
+
+  message.proto)
+
+add_executable(main main.cpp
+
+  ${GENERATED_SRC} ${GENERATED_HEADER})
+
+target_link_libraries(main PRIVATE ${Protobuf_LIBRARIES})
+
+target_include_directories(main PRIVATE
+
+  ${Protobuf_INCLUDE_DIRS}
+
+  ${CMAKE_CURRENT_BINARY_DIR})
+```
+
+find_package(Protobuf REQUIRED) asks CMake to run the bundled FindProtobuf.cmake find-module and set up the Protobuf library for us.
+
+protobuf_generate_cpp is a custom function defined in the Protobuf find-module. Under the hood, it calls add_custom_command(), which invokes the protoc compiler with appropriate arguments
+
+- syntax 
+
+find_package(<Name> [version] [EXACT] [QUIET] [REQUIRED])
+
+The most important options are as follows:
+
+[version], which allows us to optionally request a specific version. Use the major.minor.patch.tweak format (such as 1.22) or provide a range – 1.22...1.40.1 (use three dots as a separator).
+The EXACT keyword means that we want an exact version (a range is not supported here).
+The QUIET keyword silences all messages about a found/not found package.
+The REQUIRED keyword will stop execution if a package is not found and print a diagnostic message (even if QUIET is enabled).
+
+- execute_process 
+
+
+```
+make_minimum_required(VERSION 3.20.0)
+
+project(GitClone CXX)
+
+add_executable(welcome main.cpp)
+
+configure_file(config.yaml config.yaml COPYONLY)
+
+find_package(yaml-cpp QUIET)
+
+if (NOT yaml-cpp_FOUND)
+
+  message("yaml-cpp not found, cloning git repository")
+
+  find_package(Git)
+
+  if (NOT Git_FOUND)
+
+    message(FATAL_ERROR "Git not found, can't initialize!")
+
+  endif ()
+
+  execute_process(
+
+    COMMAND ${GIT_EXECUTABLE} clone https://github.com/jbeder/yaml-cpp.git
+
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/extern
+
+  )  
+
+  add_subdirectory(extern/yaml-cpp)
+
+endif()
+
+target_link_libraries(welcome PRIVATE yaml-cpp)
+```
+
+- use external project and fetch content modules 
+

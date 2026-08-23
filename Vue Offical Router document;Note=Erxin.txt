@@ -1,0 +1,2897 @@
+Vue Offical Router document;Note=Erxin
+
+# Introduction 
+- Vue Router is the official router for Vue.js. It deeply integrates with Vue.js core to make building Single Page Applications with Vue.js a breeze
+
+# Get start
+- client side router 
+- example 
+
+<template>
+  <h1>Hello App!</h1>
+  <p><strong>Current route path:</strong> {{ $route.fullPath }}</p>
+  <nav>
+    <RouterLink to="/">Go to Home</RouterLink>
+    <RouterLink to="/about">Go to About</RouterLink>
+  </nav>
+  <main>
+    <RouterView />
+  </main>
+</template>
+
+instead of <a> use the custom component RouterLink to create links. 
+RouterView specify where to render component doesn't have to be in the App.vue 
+
+uses {{ $route.fullPath }}. You can use $route in your component templates to access an object that represents the current route.
+
+    + creating router instance 
+    
+ function createRouter():
+
+
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+import HomeView from './HomeView.vue'
+import AboutView from './AboutView.vue'
+
+const routes = [
+  { path: '/', component: HomeView },
+  { path: '/about', component: AboutView },
+]
+
+export const router = createRouter({
+  history: createMemoryHistory(),
+  routes,
+})
+
+- register router plugin 
+
+createApp(App).use(router).mount('#app')
+
+    + or 
+    
+const app = createApp(App)
+app.use(router)
+app.mount('#app')
+- Options API, we can access these same two properties as this.$router and this.$route in our JavaScript code.
+
+export default {
+  methods: {
+    goToAbout() {
+      this.$router.push('/about')
+    },
+  },
+}
+
+push() used for programmatic navigation.
+
+- compnent can use router with 
+
+<script setup>
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+const search = computed({
+  get() {
+    return route.query.search ?? ''
+  },
+  set(search) {
+    router.replace({ query: { search } })
+  },
+})
+</script>
+
+- SFC, single file components 
+
+using the global builds of Vue and Vue Router, the libraries are exposed via global objects, rather than imports:
+const { createApp } = Vue
+const { createRouter, createWebHistory } = VueRouter
+
+
+components RouterView and RouterLink are both registered globally, so they don't need to be imported before using them in component templates.
+
+
+# Dynamic route matching with params 
+- use a dynamic segment in the path to achieve that, we call that a param
+
+```
+import User from './User.vue'
+
+// these are passed to `createRouter`
+const routes = [
+  // dynamic segments start with a colon
+  { path: '/users/:id', component: User },
+]
+```
+
+URLs like /users/johnny and /users/jolyne will both map to the same route.
+
+A param is denoted by a colon :. When a route is matched, the value of its params will be exposed as route.params in every component. 
+
+<template>
+  <div>
+    <!-- The current route is accessible as $route in the template -->
+    User {{ $route.params.id }}
+  </div>
+</template>
+
+    + multiple params in the same route
+    
+/users/:username	/users/eduardo	{ username: 'eduardo' }
+
+/users/:username/posts/:postId	/users/eduardo/posts/123	{ username: 'eduardo', postId: '123' }
+
+- route object also exposes other useful information such as route.query (if there is a query in the URL), route.hash, etc.
+
+- reracting to param changes 
+
+<script setup>
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+watch(
+  () => route.params.id,
+  (newId, oldId) => {
+    // react to route changes...
+  }
+)
+</script>
+
+    + cancel navigation with beforeRouteUpdate navigation guard
+    
+<script setup>
+import { onBeforeRouteUpdate } from 'vue-router'
+// ...
+
+onBeforeRouteUpdate(async (to, from) => {
+  // react to route changes...
+  userData.value = await fetchUser(to.params.id)
+})
+</script>
+
+- Regular params will only match characters in between url fragments, separated by /. to match anything, we can use a custom param regexp by adding the regexp inside parentheses right after the param
+
+const routes = [
+  // will match everything and put it under `route.params.pathMatch`
+  { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFound },
+  // will match anything starting with `/user-` and put it under `route.params.afterUser`
+  { path: '/user-:afterUser(.*)', component: UserGeneric },
+]
+
+    + using a custom regexp between parentheses and marking the pathMatch param as optionally repeatable. This allows us to directly navigate to the route. catch all / 404 not found 
+    
+router.push({
+  name: 'NotFound',
+  // preserve current path and remove the first char to avoid the target URL starting with `//`
+  params: { pathMatch: route.path.substring(1).split('/') },
+  // preserve existing query and hash if any
+  query: route.query,
+  hash: route.hash,
+})
+
+
+# Routes matching syntax 
+- custom regex in params 
+
+/:orderId and /:productName, both would match the exact same URLs, so we need a way to differentiate them
+
+    + add static path 
+const routes = [
+  // matches /o/3549
+  { path: '/o/:orderId' },
+  // matches /p/books
+  { path: '/p/:productName' },
+
+    + specify a custom regex for a param in parentheses
+
+const routes = [
+  // /:orderId -> matches only numbers
+  { path: '/:orderId(\\d+)' },
+  // /:productName -> matches anything else
+  { path: '/:productName' },
+]
+
+const routes = [
+  // note the escaped closing parentheses of the group within the regexp. 
+  { path: '/:custom(something-(nested|other\\))' },
+]
+
+Make sure to escape backslashes (\) like we did with \d (becomes \\d) to actually pass the backslash character in a string in JavaScript.
+
+- repeatable params 
+
+multiple sections like /first/second/third, you should mark a param as repeatable with * (0 or more) and + (1 or more)
+
+
+const routes = [
+  // /:chapters -> matches /one, /one/two, /one/two/three, etc
+  { path: '/:chapters+' },
+  // /:chapters -> matches /, /one, /one/two, /one/two/three, etc
+  { path: '/:chapters*' },
+]
+
+
+    + require you to pass an array when using named routes:
+
+
+// given { path: '/:chapters*', name: 'chapters' },
+router.resolve({ name: 'chapters', params: { chapters: [] } }).href
+// produces /
+router.resolve({ name: 'chapters', params: { chapters: ['a', 'b'] } }).href
+// produces /a/b
+
+// given { path: '/:chapters+', name: 'chapters' },
+router.resolve({ name: 'chapters', params: { chapters: [] } }).href
+// throws an Error because `chapters` is empty
+
+    + combined with a custom regex by adding them after the closing parentheses:
+
+const routes = [
+  // only match numbers
+  // matches /1, /1/2, etc
+  { path: '/:chapters(\\d+)+' },
+  // matches /, /1, /1/2, etc
+  { path: '/:chapters(\\d+)*' },
+]
+
+- Sensitive and strict route options
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    // will match /users/posva but not:
+    // - /users/posva/ because of strict: true
+    // - /Users/posva because of sensitive: true
+    { path: '/users/:id', sensitive: true },
+    // will match /users, /Users, and /users/42 but not /users/ or /users/42/
+    { path: '/users/:id?' },
+  ],
+  strict: true, // applies to all routes
+})
+
+- optional param, mark a parameter as optional by using the ? modifier (0 or 1), * also match as optional but repeatable 
+
+const routes = [
+  // will match /users and /users/posva
+  { path: '/users/:userId?' },
+  // will match /users and /users/42
+  { path: '/users/:userId(\\d+)?' },
+]
+
+/users/:uid?-:name? won't match /users, only /users/- or even /users/-/
+/users/:uid(\\d+)?:name? won't match /users, only /users/, /users/2, /users/2/, etc
+
+- debugging, report a bug, you can use the path ranker tool.
+
+- avoid slow regex, using .* will match any character and can lead to serious performance issues 
+
+// This creates a very slow regex because of the greedy `.*` followed by `*` and a static string
+{ path: '/:pathMatch(.*)*/something-at-the-end' },
+
+match everything params only in the very end of the URL. If you need them in the middle of the path, do not make them repeatable:
+
+const routes = [
+  // This is fine because the `.*` is at the end
+  { path: '/:pathMatch(.*)/something-at-the-end' },
+]
+
+
+
+# Named routes 
+- give the route a name, Each name must be unique across all routes.
+const routes = [
+  {
+    path: '/user/:username',
+    name: 'profile', 
+    component: User,
+  },
+]
+
+    + route to 
+
+<router-link :to="{ name: 'profile', params: { username: 'erina' } }">
+  User profile
+</router-link>
+
+methods also support passing a location by name:
+
+router.push({ name: 'profile', params: { username: 'erina' } })
+
+- nested route 
+
+App.vue
+<template>
+  <router-view />
+</template>
+
+User.vue
+<template>
+  <div>User {{ $route.params.id }}</div>
+</template>
+
+import User from './User.vue'
+
+// these are passed to `createRouter`
+const routes = [{ path: '/user/:id', component: User }]
+
+    + a rendered component can also contain its own, nested <router-view>
+
+User.vue 
+<template>
+  <div class="user">
+    <h2>User {{ $route.params.id }}</h2>
+    <router-view />
+  </div>
+</template>
+
+To render components into this nested router-view, we need to use the children option in any of the routes:
+
+const routes = [
+  {
+    path: '/user/:id',
+    component: User,
+    children: [
+      {
+        // UserProfile will be rendered inside User's <router-view>
+        // when /user/:id/profile is matched
+        path: 'profile',
+        component: UserProfile,
+      },
+      {
+        // UserPosts will be rendered inside User's <router-view>
+        // when /user/:id/posts is matched
+        path: 'posts',
+        component: UserPosts,
+      },
+    ],
+  },
+]
+
+    + provide an empty nested path:
+
+const routes = [
+  {
+    path: '/user/:id',
+    component: User,
+    children: [
+      // UserHome will be rendered inside User's <router-view>
+      // when /user/:id is matched
+      { path: '', component: UserHome },
+
+      // ...other sub routes
+    ],
+  },
+]
+
+- nested named routes, name the children routes:
+
+const routes = [
+  {
+    path: '/user/:id',
+    name: 'user-parent',
+    component: User,
+    children: [{ path: '', name: 'user', component: UserHome }],
+  },
+]
+
+ensure navigating to /user/:id will always display the nested route.
+
+- omitting parent components
+
+const routes = [
+  {
+    path: '/admin',
+    children: [
+      { path: '', component: AdminOverview },
+      { path: 'users', component: AdminUserList },
+      { path: 'users/:id', component: AdminUserDetails },
+    ],
+  },
+]
+
+
+# Programmatic navigation 
+- navigate to a different location 
+
+refer to the router instance as router. Inside a component, you can access the router using the $router property
+
+```
+// literal string path
+router.push('/users/eduardo')
+
+// object with path
+router.push({ path: '/users/eduardo' })
+
+// named route with params to let the router build the url
+router.push({ name: 'user', params: { username: 'eduardo' } })
+
+// with query, resulting in /register?plan=private
+router.push({ path: '/register', query: { plan: 'private' } })
+
+// with hash, resulting in /about#team
+router.push({ path: '/about', hash: '#team' })
+```
+
+params are ignored if a path is provided, which is not the case for query
+```
+const username = 'eduardo'
+// we can manually build the url but we will have to handle the encoding ourselves
+router.push(`/user/${username}`) // -> /user/eduardo
+// same as
+router.push({ path: `/user/${username}` }) // -> /user/eduardo
+// if possible use `name` and `params` to benefit from automatic URL encoding
+router.push({ name: 'user', params: { username } }) // -> /user/eduardo
+// `params` cannot be used alongside `path`
+router.push({ path: '/user', params: { username } }) // -> /user
+```
+
+router.push and all the other navigation methods return a Promise that allows us to wait till the navigation is finished and to know if it succeeded or failed.
+
+- repeat current location
+
+<router-link :to="..." replace>	router.replace(...)
+
+directly add a property replace: true to the to argument that is passed to router.push:
+```
+router.push({ path: '/home', replace: true })
+// equivalent to
+router.replace({ path: '/home' })
+```
+
+- traverse history, forward or go backward in the history stack, similar to window.history.go(n).
+
+// go forward by one record, the same as router.forward()
+router.go(1)
+
+// go back by one record, the same as router.back()
+router.go(-1)
+
+// go forward by 3 records
+router.go(3)
+
+// fails silently if there aren't that many records
+router.go(-100)
+router.go(100)
+
+
+# Named views 
+- creating a layout with a sidebar view and a main view 
+
+- A router-view without a name will be given default as its name.
+
+<router-view name="sidebar" />
+<router-view />
+<router-view name="footer" />
+
+    + Make sure to use the components (with an s) option:
+
+const router = createRouter({
+  // ...
+  routes: [
+    {
+      path: '/',
+      components: {
+        default: Home, // Renders to <router-view />
+        sidebar: MainSidebar, // Renders to <router-view name="sidebar" />
+        footer: MainToolbar, // Renders to <router-view name="footer" />
+      },
+    },
+  ],
+})
+
+- nested named views 
+
+UserSettings.vue
+<div>
+  <h1>User Settings</h1>
+  <NavBar />
+  <router-view />
+  <router-view name="helper" />
+</div>
+
+    + achieve the layout above with this route configuration:
+
+{
+  path: '/settings',
+  // You could also have named views at the top
+  component: UserSettings,
+  children: [
+    {
+      path: 'emails',
+      component: UserEmailsSubscriptions
+    },
+    {
+      path: 'profile',
+      components: {
+        default: UserProfile,
+        helper: UserProfilePreview
+      }
+    }
+  ]
+}
+
+
+
+
+# redirect and alias 
+- redirect from /home to /
+const routes = [{ path: '/home', redirect: '/' }]
+
+- dynamic redirecting 
+const routes = [
+  {
+    // /search/screens -> /search?q=screens
+    path: '/search/:searchText',
+    redirect: to => {
+      // the function receives the target route as the argument
+      // we return a redirect path/location here.
+      return { path: '/search', query: { q: to.params.searchText } }
+    },
+  },
+  {
+    path: '/search',
+    // ...
+  },
+]
+
+redirect, you can omit the component option because it is never directly reached so there is no component to render. 
+
+a route record has children and a redirect property, it should also have a component property.
+
+-  redirect to a relative location:
+
+const routes = [
+  {
+    // will always redirect /users/123/posts to /users/123/profile
+    path: '/users/:id/posts',
+    redirect: to => {
+      // the function receives the target route as the argument
+      return to.path.replace(/posts$/, 'profile')
+    },
+  },
+]
+- redirect means when the user visits /home, the URL will be replaced by /
+- alias, alias of / as /home means when the user visits /home, the URL remains /home, but it will be matched as if the user is visiting /. 
+
+const routes = [{ path: '/', component: Homepage, alias: '/home' }]
+
+const routes = [
+  {
+    path: '/users',
+    component: UsersLayout,
+    children: [
+      // this will render the UserList for these 3 URLs
+      // - /users
+      // - /users/list
+      // - /people
+      { path: '', component: UserList, alias: ['/people', 'list'] },
+    ],
+  },
+]
+
+//route has parameters, make sure to include them in any absolute alias:
+const routes = [
+  {
+    path: '/users/:id',
+    component: UsersByIdLayout,
+    children: [
+      // this will render the UserDetails for these 3 URLs
+      // - /users/24
+      // - /users/24/profile
+      // - /24
+      { path: 'profile', component: UserDetails, alias: ['/:id', ''] },
+    ],
+  },
+]
+
+
+# Passing props to route components 
+- Using $route or useRoute() in your component creates a tight coupling with the route. remove the direct dependency on $route in User.vue by declaring a prop instead
+
+<!-- User.vue -->
+<script setup>
+defineProps({
+  id: String,
+})
+</script>
+
+<template>
+  <div>User {{ id }}</div>
+</template>
+
+    + configure the route to pass the id param as a prop by setting props: true
+    
+const routes = [{ path: '/user/:id', component: User, props: true }]
+
+- props is set to true, the route.params will be set as the component props.
+
+- named views 
+
+//define the props option for each named view:
+const routes = [
+  {
+    path: '/user/:id',
+    components: { default: User, sidebar: Sidebar },
+    props: { default: true, sidebar: false },
+  },
+]
+
+- object mode, props is an object 
+
+const routes = [
+  {
+    path: '/promotion/from-newsletter',
+    component: Promotion,
+    props: { newsletterPopup: false },
+  },
+]
+
+- function mode, create a function that returns props. This allows you to cast parameters into other types
+
+const routes = [
+  {
+    path: '/search',
+    component: SearchUser,
+    props: route => ({ query: route.query.q }),
+  },
+]
+
+URL /search?q=vue would pass {query: 'vue'} as props to the SearchUser component.
+
+- via router view, all view components will receive view-prop. This is usually not a good idea as it means that all of the view components have declared a view-prop
+
+//pass any props via the <RouterView> slot
+<RouterView v-slot="{ Component }">
+  <component
+    :is="Component"
+    view-prop="value"
+   />
+</RouterView>
+
+
+# Active links 
+- RouterLink component adds two CSS classes to active links, router-link-active and router-link-exact-active
+
+considered to be active if:
+
+It matches the same route record (i.e. configured route) as the current location.
+It has the same values for the params as the current location.
+
+Other route properties, such as the query, are not taken into account. using an alias would still be considered a match
+
+    + have the following routes:
+const routes = [
+  {
+    path: '/user/:username',
+    component: User,
+    children: [
+      {
+        path: 'role/:roleId',
+        component: Role,
+      },
+    ],
+  },
+]
+
+// Then consider these two links:
+<RouterLink to="/user/erina">
+  User
+</RouterLink>
+<RouterLink to="/user/erina/role/admin">
+  Role
+</RouterLink>
+
+If the current location path is /user/erina/role/admin then these would both be considered active, so the class router-link-active would be applied to both links. But only the second link would be considered exact, so only that second link would have the class router-link-exact-active.
+
+- configure active classes, RouterLink component has two props, activeClass and exactActiveClass, that can be used to change the names of the classes that are applied:
+
+<RouterLink
+  activeClass="border-indigo-500"
+  exactActiveClass="border-indigo-700"
+  ...
+>
+
+// changed globally by passing the linkActiveClass and linkExactActiveClass options to createRouter():
+const router = createRouter({
+  linkActiveClass: 'border-indigo-500',
+  linkExactActiveClass: 'border-indigo-700',
+  // ...
+})
+
+
+
+# Different history modes 
+-  HTML5 mode is created with createWebHistory() and is the recommended mode:
+
+
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    //...
+  ],
+})
+
+- Hash Mode The hash history mode is created with createWebHashHistory()
+
+import { createRouter, createWebHashHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    //...
+  ],
+})
+
+a hash character (#) before the actual URL that is internally passed. Because this section of the URL is never sent to the server
+
+- Memory mode,  this mode inside Browser applications but note there will be no history, meaning you won't be able to go back or forward
+The memory history mode doesn't assume a browser environment and therefore doesn't interact with the URL nor automatically triggers the initial navigation.
+
+perfect for Node environment and SSR. It is created with createMemoryHistory() and requires you to push the initial navigation after calling app.use(router).
+
+```
+import { createRouter, createMemoryHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [
+    //...
+  ],
+})
+```
+
+- Example Server Configurations, serving app from root, then deploy a subfolder use publicPath option of vue cli. 
+
+//iis web.config
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="Handle History Mode and custom 404/500" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+          </conditions>
+          <action type="Rewrite" url="/" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
+
+
+# Advanced 
+# Navigation guards 
+- hook into the route navigation process: globally, per-route, or in-component.
+
+- global 
+
+const router = createRouter({ ... })
+
+router.beforeEach((to, from) => {
+  // ...
+  // explicitly return false to cancel the navigation
+  return false
+})
+
+    + redirect to another location A Route Location: Redirect to a different location by passing a route location as if you were calling router.push(), which allows you to pass options like replace: true or name: 'home'
+    
+router.beforeEach(async (to, from) => {
+  if (
+    // make sure the user is authenticated
+    !isAuthenticated &&
+    // Avoid an infinite redirect
+    to.name !== 'Login'
+  ) {
+    // redirect the user to the login page
+    return { name: 'Login' }
+  }
+})
+
+If nothing, undefined or true is returned, the navigation is validated
+
+    + with async functions and Promises:
+
+router.beforeEach(async (to, from) => {
+  // canUserAccess() returns `true` or `false`
+  const canAccess = await canUserAccess(to)
+  if (!canAccess) return '/login'
+})
+
+- optinal third argument next 
+
+// BAD
+router.beforeEach((to, from, next) => {
+  if (to.name !== 'Login' && !isAuthenticated) next({ name: 'Login' })
+  // if the user is not authenticated, `next` is called twice
+  next()
+})
+
+// GOOD
+router.beforeEach((to, from, next) => {
+  if (to.name !== 'Login' && !isAuthenticated) next({ name: 'Login' })
+  else next()
+})
+
+- Global Resolve Guards, resolve guards are called right before the navigation is confirmed
+
+router.beforeResolve(async to => {
+  if (to.meta.requiresCamera) {
+    try {
+      await askForCameraPermission()
+    } catch (error) {
+      if (error instanceof NotAllowedError) {
+        // ... handle the error and then cancel the navigation
+        return false
+      } else {
+        // unexpected error, cancel the navigation and pass the error to the global handler
+        throw error
+      }
+    }
+  }
+})
+
+router.beforeResolve is the ideal spot to fetch data or do any other operation that you want to avoid doing if the user cannot enter a page.
+
+- global after hooks, however unlike guards, these hooks do not get a next function and cannot affect the navigation
+
+router.afterEach((to, from) => {
+  sendToAnalytics(to.fullPath)
+})
+
+
+// reflect navigation failures as the third argument
+router.afterEach((to, from, failure) => {
+  if (!failure) sendToAnalytics(to.fullPath)
+})
+
+
+combine after hooks with route meta fields, add a title to each route that needs one:
+
+const routes = [
+  {
+    path: '/about',
+    component: About,
+    meta: { title: 'About' },
+  },
+]
+
+    + update the document title after navigation finishes:
+
+router.afterEach((to, from, failure) => {
+  if (!failure && typeof to.meta.title === 'string') {
+    document.title = to.meta.title
+  }
+})
+
+- global injections within guards use inject() within navigation guards.
+
+const app = createApp(App)
+app.provide('global', 'hello injections')
+
+// router.ts or main.ts
+router.beforeEach((to, from) => {
+  const global = inject('global') // 'hello injections'
+  // a pinia store
+  const userStore = useAuthStore()
+  // ...
+})
+
+- per route guard 
+
+//define beforeEnter guards directly on a route's configuration object:
+
+const routes = [
+  {
+    path: '/users/:id',
+    component: UserDetails,
+    beforeEnter: (to, from) => {
+      // reject the navigation
+      return false
+    },
+  },
+]
+
+    +  pass an array of functions to beforeEnter, this is useful when reusing guards for different routes
+    
+function removeQueryParams(to) {
+  if (Object.keys(to.query).length)
+    return { path: to.path, query: {}, hash: to.hash }
+}
+
+function removeHash(to) {
+  if (to.hash) return { path: to.path, query: to.query, hash: '' }
+}
+
+const routes = [
+  {
+    path: '/users/:id',
+    component: UserDetails,
+    beforeEnter: [removeQueryParams, removeHash],
+  },
+  {
+    path: '/about',
+    component: UserDetails,
+    beforeEnter: [removeQueryParams],
+  },
+]
+
+    +  nested routes, both parent and child routes can use beforeEnter. When placed on a parent route. parent children guards are independent 
+    
+const routes = [
+  {
+    path: '/user',
+    beforeEnter() {
+      // ...
+    },
+    children: [
+      { path: 'list', component: UserList },
+      { path: 'details', component: UserDetails },
+    ],
+  },
+]
+
+-  guards inside route components 
+
+<script>
+export default {
+  beforeRouteEnter(to, from) {
+    // called before the route that renders this component is confirmed.
+    // does NOT have access to `this` component instance,
+    // because it has not been created yet when this guard is called!
+  },
+  beforeRouteUpdate(to, from) {
+    // called when the route that renders this component has changed, but this component is reused in the new route.
+    // For example, given a route with params `/users/:id`, when we navigate between `/users/1` and `/users/2`,
+    // the same `UserDetails` component instance will be reused, and this hook will be called when that happens.
+    // Because the component is mounted while this happens, the navigation guard has access to `this` component instance.
+  },
+  beforeRouteLeave(to, from) {
+    // called when the route that renders this component is about to be navigated away from.
+    // As with `beforeRouteUpdate`, it has access to `this` component instance.
+  },
+}
+</script>
+
+access the instance by passing a callback to next. The callback will be called when the navigation is confirmed
+beforeRouteEnter (to, from, next) {
+  next(vm => {
+    // access to component public instance via `vm`
+  })
+}
+
+not supported route update call callback with next for beforeRouteUpdate and beforeRouteLeave 
+beforeRouteUpdate (to, from) {
+  // just use `this`
+  this.name = to.params.name
+}
+
+//canceled by returning false.
+beforeRouteLeave (to, from) {
+  const answer = window.confirm('Do you really want to leave? you have unsaved changes!')
+  if (!answer) return false
+}
+
+- Full Navigation Resolution Flow
+Navigation triggered.
+Call beforeRouteLeave guards in deactivated components.
+Call global beforeEach guards.
+Call beforeRouteUpdate guards in reused components.
+Call beforeEnter in route configs.
+Resolve async route components.
+Call beforeRouteEnter in activated components.
+Call global beforeResolve guards.
+Navigation is confirmed.
+Call global afterEach hooks.
+DOM updates triggered.
+Call callbacks passed to next in beforeRouteEnter guards with instantiated instances.
+
+
+# Route meta fields 
+-  attach arbitrary information to routes define meta properties like this:
+
+const routes = [
+  {
+    path: '/posts',
+    component: PostsLayout,
+    children: [
+      {
+        path: 'new',
+        component: PostsNew,
+        // only authenticated users can create posts
+        meta: { requiresAuth: true },
+      },
+      {
+        path: ':id',
+        component: PostsDetail,
+        // anybody can read a post
+        meta: { requiresAuth: false },
+      },
+    ],
+  },
+]
+
+router.beforeEach((to, from) => {
+  // instead of having to check every route record with
+  // to.matched.some(record => record.meta.requiresAuth)
+  if (to.meta.requiresAuth && !auth.isLoggedIn()) {
+    // this route requires auth, check if logged in
+    // if not, redirect to login page.
+    return {
+      path: '/login',
+      // save the location we were at to come back later
+      query: { redirect: to.fullPath },
+    }
+  }
+})
+
+above route config, the URL /posts/new will match both the parent route record (path: '/posts') and the child route record (path: 'new').
+
+a route are exposed on the route object (and also route objects in navigation guards) as the route.matched Array.
+
+route.meta that is a non-recursive merge of all meta fields from parent to child. 
+
+- typescript extending the RouteMeta interface from vue-router
+
+// This can be directly added to any of your `.ts` files like `router.ts`
+// It can also be added to a `.d.ts` file. Make sure it's included in
+// project's tsconfig.json "files"
+import 'vue-router'
+
+// To ensure it is treated as a module, add at least one `export` statement
+export {}
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    // is optional
+    isAdmin?: boolean
+    // must be declared by every route
+    requiresAuth: boolean
+  }
+}
+
+
+# Data fetching 
+- fetch data from the server when a route is activated. 
+
+Fetching After Navigation: perform the navigation first, and fetch data in the incoming component's lifecycle hook. Display a loading state
+
+Fetching Before Navigation: Fetch data before navigation in the route enter guard
+
+- fetching after navigation and display loading 
+
+<template>
+  <div class="post">
+    <div v-if="loading" class="loading">Loading...</div>
+
+    <div v-if="error" class="error">{{ error }}</div>
+
+    <div v-if="post" class="content">
+      <h2>{{ post.title }}</h2>
+      <p>{{ post.body }}</p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { getPost } from './api.js'
+
+const route = useRoute()
+
+const loading = ref(false)
+const post = ref(null)
+const error = ref(null)
+
+// watch the params of the route to fetch the data again
+watch(() => route.params.id, fetchData, { immediate: true })
+
+async function fetchData(id) {
+  error.value = post.value = null
+  loading.value = true
+
+  try {
+    // replace `getPost` with your data fetching util / API wrapper
+    post.value = await getPost(id)
+  } catch (err) {
+    error.value = err.toString()
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+- fetch before navigation only call next when the fetch is complete. The callback passed to next will be called after the component is mounted
+
+
+export default {
+  data() {
+    return {
+      post: null,
+      error: null,
+    }
+  },
+  async beforeRouteEnter(to, from, next) {
+    try {
+      const post = await getPost(to.params.id)
+      // `setPost` is a method defined below
+      next(vm => vm.setPost(post))
+    } catch (err) {
+      // `setError` is a method defined below
+      next(vm => vm.setError(err))
+    }
+  },
+  // when route changes and this component is already rendered,
+  // the logic will be slightly different.
+  beforeRouteUpdate(to, from) {
+    this.post = null
+    getPost(to.params.id).then(this.setPost).catch(this.setError)
+  },
+  methods: {
+    setPost(post) {
+      this.post = post
+    },
+    setError(err) {
+      this.error = err.toString()
+    },
+  },
+}
+
+
+# Composition API
+- accessing the router and current ruote inside setup 
+
+use the useRouter and useRoute composables:
+
+<script setup>
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+
+function pushWithQuery(query) {
+  router.push({
+    name: 'search',
+    query: {
+      ...route.query,
+      ...query,
+    },
+  })
+}
+</script>
+
+The route object is a reactive object. In most scenarios, you should avoid watching the whole route. directly watch the properties you are expecting to change
+
+<script setup>
+import { useRoute } from 'vue-router'
+import { ref, watch } from 'vue'
+
+const route = useRoute()
+const userData = ref()
+
+// fetch the user information when params change
+watch(
+  () => route.params.id,
+  async newId => {
+    userData.value = await fetchUser(newId)
+  }
+)
+</script>
+
+we still have access to $router and $route in templates
+
+- navigation guards 
+
+<script setup>
+import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
+import { ref } from 'vue'
+
+// same as beforeRouteLeave option but with no access to `this`
+onBeforeRouteLeave((to, from) => {
+  const answer = window.confirm(
+    'Do you really want to leave? you have unsaved changes!'
+  )
+  // cancel the navigation and stay on the same page
+  if (!answer) return false
+})
+
+const userData = ref()
+
+// same as beforeRouteUpdate option but with no access to `this`
+onBeforeRouteUpdate(async (to, from) => {
+  // only fetch the user if the id changed as maybe only the query or the hash changed
+  if (to.params.id !== from.params.id) {
+    userData.value = await fetchUser(to.params.id)
+  }
+})
+</script>
+
+can be used in any component rendered by <router-view>
+
+- useLink, Router exposes the internal behavior of RouterLink as a composable. It accepts a reactive object like the props of RouterLink and exposes low-level properties to build your own RouterLink component or generate custom links
+
+<script setup>
+import { RouterLink, useLink } from 'vue-router'
+import { computed } from 'vue'
+
+const props = defineProps({
+  // add @ts-ignore if using TypeScript
+  ...RouterLink.props,
+  inactiveClass: String,
+})
+
+const {
+  // the resolved route object
+  route,
+  // the href to use in a link
+  href,
+  // boolean ref indicating if the link is active
+  isActive,
+  // boolean ref indicating if the link is exactly active
+  isExactActive,
+  // function to navigate to the link
+  navigate,
+} = useLink(props)
+
+const isExternalLink = computed(
+  () => typeof props.to === 'string' && props.to.startsWith('http')
+)
+</script>
+
+v-slot gives access to the same properties as the useLink composable. 
+
+
+
+# RouterView slot 
+- router view with slot can provide more feature compare to without slot 
+
+<router-view v-slot="{ Component }">
+  <component :is="Component" />
+</router-view>
+The code above is equivalent to using <router-view /> without slot 
+
+- KeepAlive in router view slot, putting the KeepAlive inside the slot
+
+<router-view v-slot="{ Component }">
+  <keep-alive>
+    <component :is="Component" />
+  </keep-alive>
+</router-view>
+
+- the slot allows us to use a Transition component to transition between route components
+
+<router-view v-slot="{ Component }">
+  <transition>
+    <component :is="Component" />
+  </transition>
+</router-view>
+
+<router-view v-slot="{ Component }">
+  <transition>
+    <keep-alive>
+      <component :is="Component" />
+    </keep-alive>
+  </transition>
+</router-view>
+
+- passing props and slots to the route component:
+
+<router-view v-slot="{ Component }">
+  <component :is="Component" some-prop="a value">
+    <p>Some slotted content</p>
+  </component>
+</router-view>
+
+- Template refs, put a template ref directly on the route component:
+
+<router-view v-slot="{ Component }">
+  <component :is="Component" ref="mainContent" />
+</router-view>
+
+
+
+# Transitions 
+-  use transitions on your route components and animate navigations, you need to use the <RouterView> slot:
+
+<router-view v-slot="{ Component }">
+  <transition name="fade">
+    <component :is="Component" />
+  </transition>
+</router-view>
+
+- per route transition instead combine meta fields and a dynamic name on <transition>:
+
+
+const routes = [
+  {
+    path: '/custom-transition',
+    component: PanelLeft,
+    meta: { transition: 'slide-left' },
+  },
+  {
+    path: '/other-transition',
+    component: PanelRight,
+    meta: { transition: 'slide-right' },
+  },
+]
+
+<router-view v-slot="{ Component, route }">
+  <!-- Use a custom transition or fallback to `fade` -->
+  <transition :name="route.meta.transition || 'fade'">
+    <component :is="Component" />
+  </transition>
+</router-view>
+
+- route based dynamic transition 
+
+use dynamically based on the relationship between the target route and current route. Using a very similar snippet to the one just before:
+
+<!-- use a dynamic transition name -->
+<router-view v-slot="{ Component, route }">
+  <transition :name="route.meta.transition">
+    <component :is="Component" />
+  </transition>
+</router-view>
+
+//We can add an after navigation hook to dynamically add information to the meta field based on the depth of the route
+
+router.afterEach((to, from) => {
+  const toDepth = to.path.split('/').length
+  const fromDepth = from.path.split('/').length
+  to.meta.transition = toDepth < fromDepth ? 'slide-right' : 'slide-left'
+})
+
+- Forcing a transition between reused views, possible to add a key attribute to force transitions.
+
+<router-view v-slot="{ Component, route }">
+  <transition name="fade">
+    <component :is="Component" :key="route.path" />
+  </transition>
+</router-view>
+
+- initial naviation and transitions, navigations are asynchronous in Vue Router, meaning that the Vue application renders once before the initial navigation is finished.
+
+const app = createApp(App)
+app.use(router)
+
+// mount after the initial navigation is ready
+await router.isReady()
+app.mount('#app')
+
+
+
+# Scroll behavior 
+-  scroll to top when navigating to a new route, or preserve the scrolling position of history entries just like real page reload does. Vue Router allows you to achieve these and even better
+
+provide the scrollBehavior function:
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [...],
+  scrollBehavior (to, from, savedPosition) {
+    // return desired position
+  }
+})
+
+// pass a CSS selector or a DOM element via el. In that scenario, top and left will be treated as relative offsets to that element.
+const router = createRouter({
+  scrollBehavior(to, from, savedPosition) {
+    // always scroll 10px above the element #main
+    return {
+      // could also be
+      // el: document.getElementById('main'),
+      el: '#main',
+      // 10px above the element
+      top: 10,
+    }
+  },
+})
+
+//savedPosition will result in a native-like behavior when navigating with back/forward buttons:
+const router = createRouter({
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  },
+})
+
+//simulate the "scroll to anchor" behavior
+const router = createRouter({
+  scrollBehavior(to, from, savedPosition) {
+    if (to.hash) {
+      return {
+        el: to.hash,
+        behavior: 'smooth',  //if browser supported 
+      }
+    }
+  },
+})
+
+- delaying the scroll for transition completed 
+
+const router = createRouter({
+  scrollBehavior(to, from, savedPosition) {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        resolve({ left: 0, top: 0 })
+      }, 500)
+    })
+  },
+})
+
+- advanced offsets to show an element 
+
+const router = createRouter({
+  scrollBehavior(to, from, savedPosition) {
+    const mainElement = document.querySelector('#main')
+    if (mainElement) {
+      const marginTop = parseFloat(
+        getComputedStyle(mainElement).scrollMarginTop
+      )
+      return {
+        el: mainElement,
+        top: marginTop,
+      }
+    } else {
+      return { top: 0 }
+    }
+  },
+})
+
+
+# Lazy loading routes 
+- replace static imports with dynamic ones:
+
+// replace
+// import UserDetails from './views/UserDetails.vue'
+// with
+const UserDetails = () => import('./views/UserDetails.vue')
+
+const router = createRouter({
+  // ...
+  routes: [
+    { path: '/users/:id', component: UserDetails },
+    // or use it directly in the route definition
+    { path: '/users/:id', component: () => import('./views/UserDetails.vue') },
+  ],
+})
+
+- In general, it's a good idea to always use dynamic imports for all your routes.
+- route component, Do not use async components as route components. An async component can still be used inside a route component but the route component itself should just be a function
+
+a functional component we must give the function a displayName to use as route component 
+```
+const AboutPage: FunctionalComponent = () => {
+  return h('h1', {}, 'About')
+}
+AboutPage.displayName = 'AboutPage'
+```
+
+- group component in same chunk and load in single request 
+
+    + with vite 
+
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      // https://rollupjs.org/guide/en/#outputmanualchunks
+      output: {
+        manualChunks: {
+          'group-user': [
+            './src/UserDetails',
+            './src/UserDashboard',
+            './src/UserProfileEdit',
+          ],
+        },
+      },
+    },
+  },
+})
+
+    + with webpack specify the chunk name using a special comment syntax:
+
+const UserDetails = () =>
+  import(/* webpackChunkName: "group-user" */ './UserDetails.vue')
+const UserDashboard = () =>
+  import(/* webpackChunkName: "group-user" */ './UserDashboard.vue')
+const UserProfileEdit = () =>
+  import(/* webpackChunkName: "group-user" */ './UserProfileEdit.vue')
+    
+    
+    
+# Typed routes 
+-  configure the router to have a map of typed routes. manually configure typed routes:
+
+// import the `RouteRecordInfo` type from vue-router to type your routes
+import type { RouteRecordInfo } from 'vue-router'
+
+// Define an interface of routes
+export interface RouteNamedMap {
+  // each key is a name
+  home: RouteRecordInfo<
+    // here we have the same name
+    'home',
+    // this is the path, it will appear in autocompletion
+    '/',
+    // these are the raw params (what can be passed to router.push() and RouterLink's "to" prop)
+    // In this case, there are no params allowed
+    Record<never, never>,
+    // these are the normalized params (what you get from useRoute())
+    Record<never, never>,
+    // this is a union of all children route names, in this case, there are none
+    never
+  >
+  // repeat for each route...
+  // Note you can name them whatever you want
+  'named-param': RouteRecordInfo<
+    'named-param',
+    '/:name',
+    { name: string | number }, // Allows string or number
+    { name: string }, // but always returns a string from the URL
+    'named-param-edit'
+  >
+  'named-param-edit': RouteRecordInfo<
+    'named-param-edit',
+    '/:name/edit',
+    { name: string | number }, // we also include parent params
+    { name: string },
+    never
+  >
+  'article-details': RouteRecordInfo<
+    'article-details',
+    '/articles/:id+',
+    { id: Array<number | string> },
+    { id: string[] },
+    never
+  >
+  'not-found': RouteRecordInfo<
+    'not-found',
+    '/:path(.*)',
+    { path: string },
+    { path: string },
+    never
+  >
+}
+
+// Last, you will need to augment the Vue Router types with this map of routes
+declare module 'vue-router' {
+  interface TypesConfig {
+    RouteNamedMap: RouteNamedMap
+  }
+}
+
+
+# Extending router link 
+-  multiple custom RouterLink components to reuse them across your application. Some examples are Links in a Navigation Menu, handling external links, adding an inactive-class, etc.
+
+<script setup>
+import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
+
+defineOptions({
+  inheritAttrs: false,
+})
+
+const props = defineProps({
+  // add @ts-ignore if using TypeScript
+  ...RouterLink.props,
+  inactiveClass: String,
+})
+
+const isExternalLink = computed(() => {
+  return typeof props.to === 'string' && props.to.startsWith('http')
+})
+</script>
+
+<template>
+  <a v-if="isExternalLink" v-bind="$attrs" :href="to" target="_blank">
+    <slot />
+  </a>
+  <router-link
+    v-else
+    v-bind="$props"
+    custom
+    v-slot="{ isActive, href, navigate }"
+  >
+    <a
+      v-bind="$attrs"
+      :href="href"
+      @click="navigate"
+      :class="isActive ? activeClass : inactiveClass"
+    >
+      <slot />
+    </a>
+  </router-link>
+</template>
+
+- prefer using a render function or create computed properties, you can use the useLink from the Composition API
+
+import { RouterLink, useLink } from 'vue-router'
+
+export default {
+  name: 'AppLink',
+
+  props: {
+    // add @ts-ignore if using TypeScript
+    ...RouterLink.props,
+    inactiveClass: String,
+  },
+
+  setup(props) {
+    // `props` contains `to` and any other prop that can be passed to <router-link>
+    const { navigate, href, route, isActive, isExactActive } = useLink(props)
+
+    // profit!
+
+    return { isExternalLink }
+  },
+}
+
+- use your AppLink component for different parts of your application. e.g. using Tailwind CSS, you could create a NavLink.vue component
+
+<template>
+  <AppLink
+    v-bind="$attrs"
+    class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium leading-5 text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:outline-none focus:text-gray-700 focus:border-gray-300 transition duration-150 ease-in-out"
+    active-class="border-indigo-500 text-gray-900 focus:border-indigo-700"
+    inactive-class="text-gray-500 hover:text-gray-700 hover:border-gray-300 focus:text-gray-700 focus:border-gray-300"
+  >
+    <slot />
+  </AppLink>
+</template>
+
+
+# Navigation failures 
+- a few situations remain on the same page:
+
+Users are already on the page that they are trying to navigate to.
+A navigation guard aborts the navigation by doing return false.
+A new navigation guard takes place while the previous one not finished.
+A navigation guard redirects somewhere else by returning a new location (e.g. return '/login').
+A navigation guard throws an Error.
+
+- we only want to hide the menu once we have navigated to the new page, we might want to do something like this. navigations are asynchronous, we need to await the promise returned 
+
+await router.push('/my-profile')
+this.isMenuOpen = false
+
+- detecting navigation failures 
+
+const navigationResult = await router.push('/my-profile')
+
+if (navigationResult) {
+  // navigation prevented
+} else {
+  // navigation succeeded (this includes the case of a redirection)
+  this.isMenuOpen = false
+}
+
+import { NavigationFailureType, isNavigationFailure } from 'vue-router'
+
+// trying to leave the editing page of an article without saving
+const failure = await router.push('/articles/2')
+
+if (isNavigationFailure(failure, NavigationFailureType.aborted)) {
+  // show a small notification to the user
+  showToast('You have unsaved changes, discard and leave anyway?')
+}
+
+- global navigation failures detection 
+
+router.afterEach((to, from, failure) => {
+  if (failure) {
+    sendToAnalytics(to, from, failure)
+  }
+})
+
+- three different types:
+
+aborted: false was returned inside of a navigation guard to the navigation.
+cancelled: A new navigation took place before the current navigation could finish. e.g. router.push was called while waiting inside of a navigation guard.
+duplicated: The navigation was prevented because we are already at the target location.
+
+- expose to and from properties to reflect the current location as well as the target location for the navigation that failed:
+
+// trying to access the admin page
+router.push('/admin').then(failure => {
+  if (isNavigationFailure(failure, NavigationFailureType.aborted)) {
+    failure.to.path // '/admin'
+    failure.from.path // '/'
+  }
+})
+
+- detecting redirections. Differently from other return values, a redirection doesn't prevent a navigation, it creates a new one. It is therefore checked differently, by reading the redirectedFrom property in a Route Location:
+
+await router.push('/my-profile')
+if (router.currentRoute.value.redirectedFrom) {
+  // redirectedFrom is resolved route location like to and from in navigation guards
+}
+
+
+
+# Dynamic routing 
+- add or remove routes while the application is already running.
+- Dynamic routing is achieved mainly via two functions: router.addRoute() and router.removeRoute(). They only register a new route, meaning that if the newly added route matches the current location, it would require you to manually navigate with router.push() or router.replace() to display that new route.
+
+router with one single route:
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [{ path: '/:articleName', component: Article }],
+})
+
+//on /about and we add a new route:
+router.addRoute({ path: '/about', component: About })
+
+//page will still show the Article component. We need to manually call router.replace() to change the current location 
+// we could also use this.$route or useRoute()
+router.replace(router.currentRoute.value.fullPath)
+
+// use await if required for the new route to be displayed.
+await router.replace() 
+
+- adding routes inside navigation guards, trigger a redirection by returning the new location
+
+router.beforeEach(to => {
+  if (!hasNecessaryRoute(to)) {
+    router.addRoute(generateRoute(to))
+    // trigger a redirection
+    return to.fullPath
+  }
+})
+
+newly added route record will match the to location, effectively resulting in a different location from the one we were trying to access. Second, hasNecessaryRoute() returns true after adding the new route to avoid an infinite redirection.
+
+- Removing routes
+
+    + conflicted name, it will remove the route first and then add the route:
+
+router.addRoute({ path: '/about', name: 'about', component: About })
+// this will remove the previously added route because they have
+// the same name and names are unique across all routes
+router.addRoute({ path: '/other', name: 'about', component: Other })
+
+
+    + removed with callback from addRoute()
+
+const removeRoute = router.addRoute(routeRecord)
+removeRoute() // removes the route if it exists
+
+    + router.removeRoute() to remove a route by its name
+    
+router.addRoute({ path: '/about', name: 'about', component: About })
+// remove the route
+router.removeRoute('about')
+
+- Adding nested routes 
+
+router.addRoute({ name: 'admin', path: '/admin', component: Admin })
+//nested routes 
+router.addRoute('admin', { path: 'settings', component: AdminSettings })
+
+    + equal to 
+    
+router.addRoute({
+  name: 'admin',
+  path: '/admin',
+  component: Admin,
+  children: [{ path: 'settings', component: AdminSettings }],
+})
+
+
+
+# File based routing 
+# file-based routing plugin 
+- Vue Router includes a built-in file-based routing plugin. It generates the routes and types automatically from your page components then don't need to maintain a routes arrary manually. 
+
+- setup 
+
+    + add plugin 
+
+import VueRouter from 'vue-router/vite'
+
+export default defineConfig({
+  plugins: [
+    VueRouter({
+      // options
+    }),
+    // ⚠️ Vue must be placed after VueRouter()
+    Vue(),
+  ],
+})
+
+    + start the dev server (usually npm run dev) to generate the first version of the types at typed-router.d.ts which should be added to your tsconfig.json along with "moduleResolution": "Bundler"
+    
+//tsconfig.json
+{
+  "include": [
+    // other files...
+    "./typed-router.d.ts"
+  ],
+  "compilerOptions": {
+    // ...
+    "moduleResolution": "Bundler",
+    // ...
+  }
+}
+
+- best TypeScript experience in Single File Components, add the following Volar plugins to your tsconfig.json
+
+{
+  "vueCompilerOptions": {
+    "plugins": [
+      "vue-router/volar/sfc-route-blocks",
+      "vue-router/volar/sfc-typed-router",
+    ],
+  },
+}
+
+vue-router/volar/sfc-route-blocks — enables <route> blocks in SFCs for defining per-page route metadata
+vue-router/volar/sfc-typed-router — makes useRoute() return a typed route based on the current page component, so route.params is correctly typed
+
+- migrating an existing project 
+
+Move your page components to src/pages and rename them accordingly
+
+//src/router.ts 
+import { createRouter, createWebHistory } from 'vue-router'
+import { routes, handleHotUpdate } from 'vue-router/auto-routes'
+
+export const router = createRouter({
+  history: createWebHistory(), 
+   //remove previous manually added pages components 
+   routes, 
+})
+
+
+// This will update routes at runtime without reloading the page
+if (import.meta.hot) { 
+  handleHotUpdate(router) 
+} 
+
+
+Rename src/pages/Home.vue to src/pages/index.vue
+Rename src/pages/User.vue to src/pages/users/[id].vue
+Rename src/pages/About.vue to src/pages/about.vue
+
+    + naming conventions, https://router.vuejs.org/file-based-routing/file-based-routing.html
+    
+- from scratch 
+
+Create a src/pages folder and add an index.vue component to it. This will render your home page at /.
+Import the routes from vue-router/auto-routes and pass them to the createRouter function.
+
+- manipulating the routes pass the routes to any plugin that needs to add changes to them but note that these changes will not be reflected in types.
+
+
+
+# File conventions 
+- file-based routing is as close as possible to Nuxt.
+
+src/pages/
+├── index.vue
+├── about.vue
+└── users/
+    ├── index.vue
+    └── [id].vue
+    
+/: -> renders the index.vue component
+/about: -> renders the about.vue component
+/users: -> renders the users/index.vue component
+/users/:id: -> renders the users/[id].vue component. id becomes a route param.
+
+- Nested routes are automatically defined by defining a .vue file alongside a folder with the same name. reate both a src/pages/users/index.vue and a src/pages/users.vue components, the src/pages/users/index.vue will be rendered within the src/pages/users.vue's <RouterView>.
+
+src/pages/
+├── users/
+│   └── index.vue
+└── users.vue
+
+//will get this routes array:
+
+const routes = [
+  {
+    path: '/users',
+    component: () => import('src/pages/users.vue'),
+    children: [
+      { path: '', component: () => import('src/pages/users/index.vue') },
+    ],
+  },
+]
+
+    + add a create componnet instead of nested into user. create a file src/pages/users.create.vue. The . will become a / when generating the routes.
+    
+const routes = [
+  {
+    path: '/users',
+    component: () => import('src/pages/users.vue'),
+    children: [
+      { path: '', component: () => import('src/pages/users/index.vue') },
+      { path: ':id', component: () => import('src/pages/users/[id].vue') },
+    ],
+  },
+  {
+    path: '/users/create',
+    component: () => import('src/pages/users.create.vue'),
+  },
+]
+
+- named routes 
+
+All generated routes that have a component property will have a name property. This avoids accidentally directing your users to a parent route.
+
+can override this behavior by passing a custom getRouteName() function. 
+
+- route groups, several routes that share the same layout, you can group them together using route groups
+
+src/pages/
+├── (admin)/
+│   ├── dashboard.vue
+│   └── settings.vue
+└── (user)/
+    ├── profile.vue
+    └── order.vue
+    
+- `/dashboard` -> renders `src/pages/(admin)/dashboard.vue`
+- `/settings` -> renders `src/pages/(admin)/settings.vue`
+- `/profile` -> renders `src/pages/(user)/profile.vue`
+- `/order` -> renders `src/pages/(user)/order.vue`
+
+- named views, appending an @ + a name to their filename, e.g. a file named src/pages/index@aux.vue will generate a route of:
+
+{
+  path: '/',
+  component: {
+    aux: () => import('src/pages/index@aux.vue')
+  }
+}
+
+- dynamic routes 
+
+add a param in the middle in between static segments: src/pages/users_[id].vue -> /users_:id. You can even add multiple params: src/pages/product_[skuId]_[seoDescription].vue
+
+    + create optional params by wrapping the param name with an extra pair of brackets
+    
+e.g. src/pages/users/[[id]].vue will create a route with the following path: /users/:id?
+
+    +  create repeatable params by adding a plus character (+) after the closing bracket, 
+e.g. src/pages/articles/[slugs]+.vue will create a route with the following path: /articles/:slugs+.
+
+    + create optional repeatable params, 
+e.g. src/pages/articles/[[slugs]]+.vue will create a route with the following path: /articles/:slugs*.
+
+- catch all / 404 not found route 
+
+a catch all route prepend 3 dots (...) to the param name, e.g. src/pages/[...path].vue will create a route with the following path: /:path(.*). This will match any route.
+
+- multiple routes folders by passing an array to routesFolder:
+
+VueRouter({
+  routesFolder: ['src/pages', 'src/admin/routes'],
+})
+
+import VueRouter from 'vue-router/vite'
+
+VueRouter({
+  routesFolder: [
+    'src/pages',
+    {
+      src: 'src/admin/routes',
+      // note there is always a trailing slash and never a leading one
+      path: 'admin/',
+      // src/admin/routes/dashboard.vue -> /admin/dashboard
+    },
+    {
+      src: 'src/docs',
+      // you can add parameters
+      path: 'docs/:lang/',
+      // src/docs/introduction.vue -> /docs/:lang/introduction
+    },
+    {
+      src: 'src/promos',
+      // you can omit the trailing slash
+      path: 'promos-',
+      // src/promos/black-friday.vue -> /promos-black-friday
+    },
+  ],
+})
+
+- custom extensions specify custom extensions to be considered as pages
+
+import VueRouter from 'vue-router/vite'
+
+VueRouter({
+  // globally set the extensions
+  extensions: ['.vue', '.md'],
+  routesFolder: [
+    'src/pages',
+    {
+      src: 'src/docs',
+      // override the global extensions to **only** accept markdown files
+      extensions: ['.md'],
+    },
+  ],
+}
+
+
+# Configuration 
+- all the existing configuration 
+
+import VueRouter from 'vue-router/vite'
+
+VueRouter({
+  // how and what folders to scan for files
+  routesFolder: [
+    {
+      src: 'src/pages',
+      path: '',
+      // override globals
+      exclude: excluded => excluded,
+      filePatterns: filePatterns => filePatterns,
+      extensions: extensions => extensions,
+    },
+  ],
+
+  // what files should be considered as a pages
+  extensions: ['.vue'],
+
+  // what files to include
+  filePatterns: ['**/*'],
+
+  // files to exclude from the scan
+  exclude: [],
+
+  // where to generate the types
+  dts: './typed-router.d.ts',
+
+  // how to generate the route name
+  getRouteName: routeNode => getFileBasedRouteName(routeNode),
+
+  // default language for <route> custom blocks
+  routeBlockLang: 'json5',
+
+  // how to import routes, can also be a string
+  importMode: 'async',
+
+  // where are paths relative to
+  root: process.cwd(),
+
+  // options for the path parser
+  pathParser: {
+    // should `users.[id]` be parsed as `users/:id`?
+    dotNesting: true,
+  },
+
+  // modify routes individually
+  async extendRoute(route) {
+    // ...
+  },
+
+  // modify routes before writing
+  async beforeWriteFiles(rootRoute) {
+    // ...
+  },
+})
+
+- ssr mark vue-router as noExternal in your vite.config.js in development mode:
+
+
+import { defineConfig } from 'vite'
+import Vue from '@vitejs/plugin-vue'
+import VueRouter from 'vue-router/vite'
+
+export default defineConfig(({ mode }) => ({
+  ssr: {
+    noExternal: mode === 'development' ? ['vue-router'] : [],
+  },
+  plugins: [VueRouter(), Vue()],
+}))
+
+
+
+# Extending routes 
+- at build time extend routes with extendRoute or the beforeWriteFiles options. Both can return a Promise:
+
+import VueRouter from 'vue-router/vite'
+import path from 'node:path'
+
+VueRouter({
+  extendRoute(route) {
+    if (route.name === '/[name]') {
+      route.addAlias('/hello-vite-:name')
+    }
+  },
+
+  beforeWriteFiles(root) {
+    root.insert('/from-root', path.join(__dirname, './src/pages/index.vue'))
+  },
+})
+
+- in component routing,  override the route configuration directly in the page component file. 
+
+definePage()
+
+    + import it from vue-router if needed.
+
+<script setup lang="ts">
+definePage({
+  alias: ['/n/:name'],
+  meta: {
+    requiresAuth: true,
+  },
+})
+</script>
+
+<template>
+  <!-- ... -->
+</template>
+
+- SFC <route> custom block is a way to extend existing routes. It can be used to add new meta fields, override the path, the name
+
+<route lang="json">
+{
+  "name": "name-override",
+  "meta": {
+    "requiresAuth": false
+  }
+}
+</route>
+
+
+By default, the language is JSON5 (more flexible version of JSON) but yaml and JSON are also supported.
+
+- Extending routes at runtime
+
+import { createWebHistory, createRouter } from 'vue-router'
+import { routes } from 'vue-router/auto-routes'
+
+for (const route of routes) {
+  if (route.name === '/admin') {
+    route.meta ??= {}
+    route.meta.requiresAuth = true
+  }
+}
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+//using vite-plugin-vue-layouts which can only be used this way:
+import { createRouter } from 'vue-router'
+import { routes } from 'vue-router/auto-routes'
+import { setupLayouts } from 'virtual:generated-layouts'
+
+const router = createRouter({
+  // ...
+  routes: setupLayouts(routes),
+})
+
+//Another one is adding redirect records to the router:
+import { routes } from 'vue-router/auto-routes'
+
+routes.push({
+  path: '/path-to-redirect',
+  redirect: '/redirected-path',
+})
+
+routes.push({
+  path: '/path-to-redirect/:id',
+  redirect: to => `/redirected-path/${to.params.id}`,
+})
+
+
+# Hot module replacement 
+-  avoid the need of reloading the page or the server when you make changes to your routes. Enabling HMR is strongly recommended and currently only works with Vite.
+
+// src/router.ts
+import { createRouter, createWebHistory } from 'vue-router'
+import {
+  routes,
+  handleHotUpdate, 
+} from 'vue-router/auto-routes'
+
+export const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+// This will update routes at runtime without reloading the page
+if (import.meta.hot) { 
+  handleHotUpdate(router) 
+} 
+
+- runtime routes need to add within callback. handleHotUpdate() only runs the callback on updates, not on the initial load
+
+import { createRouter, createWebHistory } from 'vue-router'
+import { routes, handleHotUpdate } from 'vue-router/auto-routes'
+
+export const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+function addRedirects() {
+  router.addRoute({
+    path: '/new-about',
+    redirect: '/about?from=/new-about',
+  })
+}
+
+addRedirects()
+
+if (import.meta.hot) {
+  // routes added at runtime are lost when routes are hot-updated
+  // so they need to be re-added after each update
+  handleHotUpdate(router, (newRoutes) => { 
+    addRedirects() 
+  }) 
+}
+
+
+# Eslint different in typescript 
+- tell ESLint about vue-router/auto-routes. Add these lines to your eslint configuration:
+
+
+{
+  "settings": {
+    "import/core-modules": ["vue-router/auto-routes"]
+  }
+}
+
+
+# Router resolver (experimental)
+- experimental router introduces a new resolver-based matching layer that powers stronger typing
+
+# Custom param parsers (experimental)
+- Param parsers transform raw URL strings into rich JS values (and back) for both path and query params, with end-to-end TypeScript types
+
+
+
+# Data loaders 
+- Data loaders streamline any asynchronous state management with Vue Router, like Data Fetching. Data Loaders are automatically collected and awaited within a navigation guard
+
+- Install the DataLoaderPlugin before the router
+
+import { createApp } from 'vue'
+import { routes } from 'vue-router/auto-routes'
+import { createRouter, createWebHistory } from 'vue-router'
+import { DataLoaderPlugin } from 'vue-router/experimental'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+const app = createApp({})
+// Register the plugin before the router
+app.use(DataLoaderPlugin, { router }) 
+// adding the router will trigger the initial navigation
+app.use(router)
+app.mount('#app')
+
+
+- example, it will automatically share the same data fetching instance.
+//users/[id].vue 
+<script lang="ts">
+import { defineBasicLoader } from 'vue-router/experimental'
+import { getUserById } from '../api'
+
+export const useUserData = defineBasicLoader('/users/[id]', async (route) => {
+  return getUserById(route.params.id)
+})
+</script>
+
+<script setup lang="ts">
+const {
+  data: user, // the data returned by the loader
+  isLoading, // a boolean indicating if the loader is fetching data
+  error, // an error object if the loader failed
+  reload, // a function to refetch the data without navigating
+} = useUserData()
+</script>
+
+<template>
+  <main>
+    <p v-if="isLoading">Loading...</p>
+    <template v-else-if="error">
+      <p>{{ error.message }}</p>
+      <button @click="reload()">Retry</button>
+    </template>
+    <template v-else>
+      <p>{{ user }}</p>
+    </template>
+  </main>
+</template>
+
+
+- why, Data loaders are a way to streamline data fetching in your application. Instead of forcing you to choose between different libraries, data loaders provide a consistent way to manage data
+
+
+# Defining data loaders 
+- All loaders should allow to pass an async function that can throw errors, and call reroute() to control the navigation
+
+<script lang="ts">
+import { defineBasicLoader } from 'vue-router/experimental'
+import { getUserById } from '../api'
+
+export const useUserData = defineBasicLoader('/users/[id]', async to => {
+  return getUserById(to.params.id)
+})
+</script>
+
+<script setup lang="ts">
+const {
+  data: user, // the data returned by the loader
+  isLoading, // a boolean indicating if the loader is fetching data
+  error, // an error object if the loader failed
+  reload, // a function to refetch the data without navigating
+} = useUserData()
+</script>
+
+- side effects, avoid side effects in the loader function. Don't call watch, or create reactive effects like ref, toRefs(), computed, etc.
+
+- global properties, using the inject function before any await
+
+import { inject } from 'vue'
+import { useSomeStore, useOtherStore } from '@/stores'
+
+export const useUserData = defineBasicLoader('/users/[id]', async to => {
+  // ✅ This will work
+  const injectedValue = inject('key') 
+  const store = useSomeStore() 
+
+  const user = await getUserById(to.params.id)
+  // ❌ These won't work
+  const injectedValue2 = inject('key-2') 
+  const store2 = useOtherStore() 
+  // ...
+  return user
+})
+
+- navigation control control the navigation by calling reroute(). This is similar to returning a value in a navigation guard.
+
+import { reroute } from 'vue-router/experimental'
+
+const useDashboardStats = defineBasicLoader('/admin', async (to) => {
+  try {
+    return await getDashboardStats()
+  } catch (err) {
+    if (err.code === 401) {
+      // same as returning '/login' in a navigation guard
+      reroute('/login')
+    }
+    throw err // unexpected error
+  }
+}
+
+- lazy loaders cannot control the navigation since they do not block it. lazy option to true.
+
+<script lang="ts">
+import { getUserById } from '../api'
+
+export const useUserData = defineBasicLoader(
+  '/users/[id]',
+  async (to) => {
+    const user = await getUserById(to.params.id)
+    return user
+  },
+  { lazy: true } // 👈  marked as lazy
+)
+</script>
+
+<script setup>
+// Differently from the example above, `user.value` can and will be initially `undefined`
+const { data: user, isLoading, error } = useUserData()
+</script>
+
+    + wait for the loader during SSR but not during client side navigation
+    
+export const useUserData = defineBasicLoader(
+  async (to) => {
+    // ...
+  },
+  {
+    lazy: !import.meta.env.SSR, // Vite specific
+  }
+)
+    + pass a function to lazy to determine if the loader should be lazy or not based on each load/navigation:
+
+export const useSearchResults = defineBasicLoader(
+  async (to) => {
+    // ...
+  },
+  {
+    // lazy if we are on staying on the same route
+    lazy: (to, from) => to.name === from.name,
+  }
+)
+    
+- errors, thrown Error will abort the navigation
+
+- options 
+
+    + delay data updates with commit default to commit: 'after-load', immediately update the data as soon as it's available
+    
+export const useBookCollection = defineBasicLoader(fetchBookCollection, {
+  commit: 'immediate',
+})
+
+     server optimization with server, setting the server option to false. That will completely skip the loader during SSR.
+     
+export const useRelatedBooks = defineBasicLoader(
+  '/books/[id]',
+  (to) => fetchRelatedBooks(to.params.id),
+  { server: false }
+)
+
+
+- Connecting a loader to a page
+    + automatically when a loader is exported from a page component 
+    
+//settings.vue 
+<script lang="ts">
+import { getSettings } from './api'
+export const useSettings = defineBasicLoader('/settings', async (to) =>
+  getSettings()
+)
+</script>
+
+<script lang="ts" setup>
+const { data: settings } = useSettings()
+</script>
+<!-- ...rest of the component -->
+
+//router.ts 
+import { createRouter, createWebHistory } from 'vue-router'
+
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/settings',
+      component: () => import('./settings.vue'),
+    },
+  ],
+})
+
+    + Manually: by passing the defined loader into the meta.loaders property:
+//setting.vue 
+<script lang="ts">
+import { getSettings } from './api'
+export const useSettings = defineBasicLoader('/settings', async (to) =>
+  getSettings()
+)
+</script>
+
+<script lang="ts" setup>
+const { data: settings } = useSettings()
+</script>
+<!-- ...rest of the component -->    
+    
+    
+//router.ts 
+import { createRouter, createWebHistory } from 'vue-router'
+import Settings, { useSettings } from './settings.vue'
+
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/settings',
+      component: Settings,
+      meta: {
+        loaders: [useSettings],
+      },
+    }
+  ],
+})
+
+- disconnecting a loader from a page, delay the loading until the component is mounted. wait until the component is mounted. This can be achieved by not exporting the loader from the page component.
+
+
+
+# Reloading data 
+- loaders expose a convenient reload method that can be invoked to manually
+- reloading data, the navigation is not involved, so not only the navigation guards will not run (beforeRouteUpdate, beforeRouteLeave, etc) but also any NavigationResult will be ignore 
+
+
+# Navigation aware 
+- control navigation since data fetching 
+
+Thrown errors (or rejected Promises) cancel the navigation 
+
+calling reroute(), you can redirect or cancel the navigation
+- example 
+
+import { reroute } from 'vue-router/experimental'
+import { defineBasicLoader } from 'vue-router/experimental'
+
+export const useUserData = defineBasicLoader(
+  async (to) => {
+    // cancel the navigation for invalid IDs
+    if (isInvalidId(to.params.id)) {
+      reroute(false)
+    }
+
+    try {
+      const user = await getUserById(to.params.id)
+
+      return user
+    } catch (error) {
+      if (error.status === 404) {
+        reroute({ name: 'not-found' })
+      } else {
+        throw error // aborts the router navigation
+      }
+    }
+  }
+)
+
+- consistent updates, all the data loaders are resolved together and the data is only updated once all the loaders are resolved
+
+
+# Error handling 
+- navigation error handling will not in the error property of the loader. Instead, they will be intercepted by Vue Router's error handling with router.onError().
+
+for lazy loaders and reloading data kept in the error property of the loader
+
+- define expecteed errors 
+
+import { defineBasicLoader } from 'vue-router/experimental'
+// custom error class
+class MyError extends Error {
+  // override is only needed in TS
+  override name = 'MyError' // Displays in logs instead of 'Error'
+  // defining a constructor is optional
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+export const useUserData = defineBasicLoader(
+  async (to) => {
+    throw new MyError('Something went wrong')
+    // ...
+  },
+  {
+    errors: [MyError],
+  }
+)
+
+    + specify expected errors globally for all loaders by providing the errors option to the DataLoaderPlugin.
+    
+app.use(DataLoaderPlugin, {
+  router,
+  // checks with `instanceof MyError`
+  errors: [MyError],
+})
+
+    + setting the errors option to true to keep the error in the error property of the loader.
+
+export const useDataWithErrors = defineBasicLoader(
+  async (to) => {
+    // ...
+  },
+  {
+    errors: true,
+  }
+)
+
+const { data } = useDataWithErrors()
+data.value // `data` can be `undefined`
+
+- custom error handling, more control over the error handling, you can provide a function to the errors option. This option is available in both the DataLoaderPlugin and when defining a loader.
+
+app.use(DataLoaderPlugin, {
+  router,
+  errors: (error) => {
+    // Convention for custom errors
+    if (error instanceof Error && error.name?.startsWith('My')) {
+      return true
+    }
+    return false // unexpected error
+  },
+})
+
+
+- error handling priority 
+
+if local errors is false: abort the navigation -> data is not undefined
+if local errors is true: rely on the globally defined errors option -> data is possibly undefined
+else: rely on the local errors option -> data is possibly undefined
+
+- typescript, add a type guard inside the component responsible for displaying an error or directly in a v-if in the template.
+
+<template>
+  <!-- ... -->
+  <p v-if="isMyError(error)">{{ error.message }}</p>
+</template>
+
+// types-extension.d.ts
+import 'vue-router'
+export {}
+
+declare module 'vue-router' {
+  interface TypesConfig {
+    Error: unknown
+  }
+}
+
+
+# Loaders organization 
+- usually load the whole page component chunk in order to get the loader.
+//issues.ts 
+import { defineBasicLoader } from 'vue-router/experimental'
+import { getIssuesByProjectId } from '@/api'
+
+export const useProjectIssues = defineBasicLoader('/[projectId]/issues', to =>
+  getIssuesByProjectId(to.params.projectId)
+)
+
+
+//pages/[projectId]/issues.vue 
+<script lang="ts">
+import { useProjectIssues } from '@/loaders/issues'
+export { useProjectIssues }
+</script>
+
+<script setup lang="ts">
+const { data: issues } = useProjectIssues()
+</script>
+
+
+//pages/[projectId]/insights.vue 
+<script lang="ts">
+import { useProjectIssues } from '@/loaders/issues'
+import { useProjectPullRequests } from '@/loaders/pull-requests'
+export { useProjectIssues, useProjectPullRequests }
+</script>
+
+<script setup lang="ts">
+const { data: issues } = useProjectIssues()
+const { data: pullRequests } = useProjectPullRequests()
+</script>
+
+- Usage outside of page components simply import it and use it like any other composable, without the need to export it.
+
+<script setup lang="ts">
+// You can even import it from the page component
+import { useProjectIssues } from '@/pages/[projectId]/issues.vue'
+
+const { data: issues } = useProjectIssues()
+</script>
+
+
+# Nested loaders 
+- multiple loaders, required to called next to each other, cannot put a different regular await in between. If you really need to await anything that isn't a loader in between, wrap the promise with withDataContext() to ensure the loader context is properly restored
+
+// import the loader for user information
+import { useUserData } from './loaders/users'
+import { getCommonFriends, getCurrentUser } from './api'
+
+export const useUserCommonFriends = defineBasicLoader(async route => {
+  // loaders must be awaited inside other loaders
+  // .        ⤵
+  const user = await useUserData()
+
+  // fetch other data
+  const me = await getCurrentUser()
+  const commonFriends = await getCommonFriends(me.id, user.id)
+  return { ...user, commonFriends }
+})
+
+- nested invalidation 
+
+import {
+  getFriends,
+  getCommonFriends,
+  getUserById,
+  getCurrentUser,
+} from './api'
+
+export const useUserData = defineBasicLoader('/users/[id]', async route => {
+  return getUserById(route.params.id)
+})
+
+export const useCurrentUserData = defineBasicLoader(
+  '/users/[id]',
+  async route => {
+    const me = await getCurrentUser()
+    // imagine legacy APIs that cannot be grouped into one single fetch
+    const friends = await getFriends(me.id)
+
+    return { ...me, friends }
+  }
+)
+
+export const useUserCommonFriends = defineBasicLoader(
+  '/users/[id]',
+  async route => {
+    const user = await useUserData()
+    const me = await useCurrentUserData()
+
+    const friends = await getCommonFriends(user.id, me.id)
+    return { ...me, commonFriends: { with: user, friends } }
+  }
+)
+
+
+# Cancelling a data loader 
+- data loaders receive an abort signal 
+
+
+import { defineBasicLoader } from 'vue-router/experimental'
+export const useBookCollection = defineBasicLoader(
+  async (_route, { signal }) => {
+    return fetchBookCollection({ signal })
+  }
+)
+
+- aligns with navigation api to abort the navigation 
+
+
+# Nuxt
+- using data loaders in Nuxt, creat a new plugin in plugins directory of your Nuxt project 
+
+// plugins/data-loaders.ts
+import { DataLoaderPlugin } from 'vue-router/experimental'
+
+export default defineNuxtPlugin({
+  name: 'data-loaders',
+  dependsOn: ['nuxt:router'],
+  setup(nuxtApp) {
+    const appConfig = useAppConfig()
+
+    nuxtApp.vueApp.use(DataLoaderPlugin, {
+      router: nuxtApp.vueApp.config.globalProperties.$router,
+      isSSR: import.meta.server,
+      // other options...
+    })
+  },
+})
+
+
+# SSR, server side rendering 
+- Use Colada Loader to take advantage of its SSR caching capabilities. without SSR can use any type of data loaders 
+
+
+
+# Basic loader 
+- defineBasicLoadder() example 
+
+<script lang="ts">
+import { defineBasicLoader } from 'vue-router/experimental'
+import { getUserById } from '../api'
+
+export const useUserData = defineBasicLoader(
+  (to, { signal }) => {
+    return getUserById(to.params.id, { signal })
+  },
+  {
+    // used for SSR only
+    key: 'user-data',
+  }
+)
+</script>
+
+<script lang="ts" setup>
+const route = useRoute('/users/[id]')
+
+const {
+  user,
+  error
+  isLoading,
+  reload,
+} = useUserData()
+</script>
+
+<template>
+  <main>
+    <h1>Basic Data Loader Example</h1>
+    <pre>User: {{ route.params.id }}</pre>
+
+    <fieldset>
+      <legend>Controls</legend>
+
+      <button @click="reload()">Refetch</button>
+    </fieldset>
+
+    <RouterLink :to="{ params: { id: Number(route.params.id) || 0 - 1 } }"
+      >Previous</RouterLink
+    >
+    |
+    <RouterLink :to="{ params: { id: Number(route.params.id) || 0 + 1 } }"
+      >Next</RouterLink
+    >
+
+    <h2>State</h2>
+
+    <p>
+      <code>isLoading: {{ isLoading }}</code>
+    </p>
+    <pre v-if="error">Error: {{ error }}</pre>
+    <pre v-else>{{ user == null ? String(user) : user }}</pre>
+  </main>
+</template>
+
+
+# Colada loader 
+-  use @pinia/colada under the hood. These loaders provide the most efficient solution to asynchronous state with cache, ssr support and more
+
+- example 
+
+<script lang="ts">
+import { defineColadaLoader } from 'vue-router/experimental/pinia-colada'
+import { getUserById } from '../api'
+
+export const useUserData = defineColadaLoader({
+  async query(to, { signal }) {
+    return getUserById(to.params.id, { signal })
+  },
+  key: to => ['users', to.params.id],
+  // Keep the data "fresh" 10 seconds to avoid fetching the same data too often
+  staleTime: 10000,
+})
+</script>
+
+<script lang="ts" setup>
+const route = useRoute('/users/[id]')
+
+const {
+  user,
+  status,
+  error
+  isLoading,
+  reload,
+  refresh,
+} = useUserData()
+</script>
+
+<template>
+  <main>
+    <h1>Pinia Colada Loader Example</h1>
+    <pre>User: {{ route.params.id }}</pre>
+
+    <fieldset>
+      <legend>Controls</legend>
+
+      <button @click="refresh()">Refresh</button>
+      <button @click="reload()">Refetch</button>
+    </fieldset>
+
+    <RouterLink :to="{ params: { id: Number(route.params.id) || 0 - 1 } }">
+      Previous
+    </RouterLink>
+    |
+    <RouterLink :to="{ params: { id: Number(route.params.id) || 0 + 1 } }">
+      Next
+    </RouterLink>
+
+    <h2>State</h2>
+
+    <p>
+      <code>status: {{ status }}</code>
+      <br />
+      <code>isLoading: {{ isLoading }}</code>
+    </p>
+    <pre v-if="error">Error: {{ error }}</pre>
+    <pre v-else>{{ user == null ? String(user) : user }}</pre>
+  </main>
+</template>
+
+
+# RFC 
