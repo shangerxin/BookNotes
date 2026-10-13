@@ -1,4 +1,1413 @@
 Building Applications with AI Agents=Michael;Note=Erxin
 
-# Defining AI Agents
+# Introduction to agents 
+- Defining AI Agents
 Observability Is a Property of Dependable Software
+
+- functionality
+
+natural language processing
+
+context aware interaction 
+
+structured content generation 
+
+- frameworks enables 
+
+contextual interpretation and decision making 
+
+tool use 
+
+adaptive planning 
+
+information summarization 
+
+management of unstructured data 
+
+code generation 
+
+routine task automation 
+
+multimodal information synthesis 
+
+- model selection 
+
+proliferation of powerful models available from both commercial providers and the open source community. OpenAI, Anthropic, Google, Meta, and DeepSeek
+ 
+HELM Core Scenario leaderboard (August 2025). Comparative benchmark performance of the top 10 models across reasoning and evaluation tasks: MMLU-Pro, GPQA, IFEval, WildBench, and Omni-MATH.
+
+- workflow and agents 
+
+- agentic systems 
+
+scalability, modularity, continuous learning, resilience, and future-proofing
+
+- agentic frameworks 
+
+LangGraph, modular orchestration based on directed graphs, native support for asynchronous 
+
+AutoGen, orchestration, dynamic role assignment 
+
+CrewAI, quick setup for crew and tasks 
+
+OpenAI agents software development kit, sdk, deep intergration with openai ecosystem 
+
+
+# Designing agent systems 
+- example 
+```
+from langchain.tools import tool
+from langchain_openai.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages.tool import ToolMessage
+from langgraph.graph import StateGraph
+
+# -- 1) Define our single business tool
+@tool
+def cancel_order(order_id: str) -> str:
+    """Cancel an order that hasn't shipped."""
+    # (Here you'd call your real backend API)
+    return f"Order {order_id} has been cancelled."
+
+# -- 2) The agent "brain": invoke LLM, run tool, then invoke LLM again
+def call_model(state):
+    msgs = state["messages"]
+    order = state.get("order", {"order_id": "UNKNOWN"})
+
+    # System prompt tells the model exactly what to do
+    prompt = (
+        f'''You are an ecommerce support agent.
+        ORDER ID: {order['order_id']}
+        If the customer asks to cancel, call cancel_order(order_id) 
+        and then send a simple confirmation.
+        Otherwise, just respond normally.'''
+    )
+    full = [SystemMessage(prompt)] + msgs
+
+    # 1st LLM pass: decides whether to call our tool
+    AIMessage = ChatOpenAI(model="gpt-5", temperature=0)(full)
+    out = [first]
+
+    if getattr(first, "tool_calls", None):
+        # run the cancel_order tool
+        tc = first.tool_calls[0]
+        result = cancel_order(**tc["args"])
+        out.append(ToolMessage(content=result, tool_call_id=tc["id"]))
+
+        # 2nd LLM pass: generate the final confirmation text
+        AIMessage = ChatOpenAI(model="gpt-5", temperature=0)(full + out)
+        out.append(second)
+
+    return {"messages": out}
+
+# -- 3) Wire it all up in a StateGraph
+def construct_graph():
+    g = StateGraph({"order": None, "messages": []})
+    g.add_node("assistant", call_model)
+    g.set_entry_point("assistant")
+    return g.compile()
+
+graph = construct_graph()
+
+if __name__ == "__main__":
+    example_order = {"order_id": "A12345"}
+    convo = [HumanMessage(content="Please cancel my order A12345.")]
+    result = graph.invoke({"order": example_order, "messages": convo})
+    for msg in result["messages"]:
+        print(f"{msg.type}: {msg.content}")  
+```
+
+- core components of agent systems 
+user orchestration with 
+model 
+tools 
+memory 
+knowledge base 
+
+
+# User experience design 
+- interactive ways 
+text 
+grahpic user interfaces 
+speech/voice 
+video 
+
+- OpenAI Realtime Voice API. It streams microphone audio from a browser to the agent and plays back the assistant’s audio responses in real time.
+```
+import os, json, base64, asyncio, websockets
+from fastapi import FastAPI, WebSocket
+from dotenv import load_dotenv
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+VOICE          = "alloy"                 # GPT-4o voice
+PCM_SR         = 16000                   # sample-rate we'll use client-side
+PORT           = 5050
+
+app = FastAPI()
+
+@app.websocket("/voice")
+async def voice_bridge(ws: WebSocket) -> None:
+    """
+    1. Browser opens ws://host:5050/voice
+    2. Browser streams base64-encoded 16-bit mono PCM chunks: {"audio": "<b64>"}
+    3. We forward chunks to OpenAI Realtime (`input_audio_buffer.append`)
+    4. We relay assistant audio deltas back to the browser the same way
+    5. We listen for 'speech_started' events and send a truncate if 
+       user interrupts
+    """
+    await ws.accept()
+
+    openai_ws = await websockets.connect(
+        "wss://api.openai.com/v1/realtime?" + 
+            "model=gpt-4o-realtime-preview-2024-10-01" (split across two lines)
+        extra_headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "OpenAI-Beta" : "realtime=v1"
+        },
+        max_size=None, max_queue=None # unbounded for demo simplicity
+    )
+
+    # initialize the realtime session
+    await openai_ws.send(json.dumps({
+        "type": "session.update",
+        "session": {
+            "turn_detection": {"type": "server_vad"},
+            "input_audio_format": f"pcm_{PCM_SR}",
+            "output_audio_format": f"pcm_{PCM_SR}",
+            "voice": VOICE,
+            "modalities": ["audio"],
+            "instructions": "You are a concise AI assistant."
+        }
+    }))
+
+```
+
+- the autonomy silder 
+
+autonomy slider, empowers users to choose how much control they wish to retain versus delegate at any given time
+
+seamlessly continue conversations and workflows, reducing cognitive load and frustration.
+
+- failingg gracefully 
+
+
+# Tool use 
+- cohesive, API-based tools, and MCP tools.
+
+- langchain fundamentals 
+
+```
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(model_name="gpt-4o")
+
+
+from langchain_core.messages import
+HumanMessage messages = [HumanMessage("What is the weather today?")]
+
+from langchain_core.tools import tool
+
+@tool
+def add_numbers(x: int, y: int) -> int:
+    """Adds two numbers and returns the sum."""
+    return x + y
+```
+
+bind them to the model using .bind_tools(), which enables the model to select and invoke these tools in response to user inputs.
+
+use the .invoke() method, providing it with a list of messages representing the current conversation. If the model decides to call a tool, it will output a tool call
+
+- example calculation 
+
+```
+from langchain_core.runnables import ConfigurableField
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+
+# Define tools using concise function definitions
+@tool
+def multiply(x: float, y: float) -> float:
+   """Multiply 'x' times 'y'."""
+   return x * y
+`
+@tool
+def exponentiate(x: float, y: float) -> float:
+   """Raise 'x' to the 'y'."""
+   return x**y
+
+@tool
+def add(x: float, y: float) -> float:
+   """Add 'x' and 'y'."""
+   return x + y
+
+
+tools = [multiply, exponentiate, add]
+
+# Initialize the LLM with GPT-4o and bind the tools
+llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
+llm_with_tools = llm.bind_tools(tools)
+```
+
+foundation model will choose the tools, select the parameters for those tools,
+
+```
+query = "What is 393 * 12.25? Also, what is 11 + 49?"
+messages = [HumanMessage(query)]
+
+ai_msg = llm_with_tools.invoke(messages)
+messages.append(ai_msg)
+for tool_call in ai_msg.tool_calls:
+   selected_tool = {"add": add, "multiply": multiply, 
+       "exponentiate": exponentiate}[tool_call["name"].lower()]
+   tool_msg = selected_tool.invoke(tool_call)
+  
+   print(f’{tool_msg.name} {tool_call['args']} {tool_msg.content}’)
+   messages.append(tool_msg)
+   final_response = llm_with_tools.invoke(messages)
+   print(final_response.content)
+```
+
+paramount responsibilities of developers building agents and agentic systems.
+
+- plugin tools, rapid deployment and scaling of the agent’s functionalities. 
+
+    + Google’s Gemini models support function calling via the Vertex AI API, letting you declare tools in a FunctionCallingConfig
+    
+    + Anthropic’s Claude, by contrast, exposes its full “tool use” capability directly through the Anthropic Messages API
+    
+    + Microsoft’s Phi models are offered through Azure AI Foundry
+    
+    + platforms like Glama.ai, mcp.so, aggregate large numbers of MCP servers, making them searchable and discoverable, ranging from simple utilities to complex
+    
+    
+- model context protocol 
+
+MCP server, This is a web server that exposes data or services via a standardized JSON-RPC 2.0 interface. 
+
+MCP client, This is any agent or LLM application that “speaks” MCP. The client sends JSON-RPC requests
+
+MCP solves one of the most persistent challenges in agentic system design—how to integrate diverse services quickly and reliably
+
+    + example  
+    
+```
+class AgentState(TypedDict):
+    messages: Sequence[Any]  # A list of BaseMessage/HumanMessage/...
+
+mcp_client = MultiServerMCPClient(
+    {
+        "math": {
+            "command": "python3",
+            "args": ["src/common/mcp/MCP_weather_server.py"],
+            "transport": "stdio",  # Subprocess → STDIO JSON-RPC
+        },
+        "weather": {
+            # Assumes a separate MCP server is already running on port 8000
+            "url": "http://localhost:8000/mcp",
+            "transport": "streamable_http",  
+            # HTTP→JSON-RPC over WebSocket/stream
+        },
+    }
+)
+
+async def get_mcp_tools() -> list[Tool]:
+    return await mcp_client.get_tools()
+
+async def call_mcp_tools(state: AgentState) -> dict[str, Any]:
+    messages = state["messages"]
+    last_msg = messages[-1].content.lower()
+
+    # Fetch and cache MCP tools on the first call
+    global MCP_TOOLS
+    if "MCP_TOOLS" not in globals():
+        MCP_TOOLS = await mcp_client.get_tools()
+
+    # Simple heuristic: if any digit-operator token appears, choose "math"
+    if any(token in last_msg for token in ["+", "-", "*", "/", "(", ")"]):
+        tool_name = "math"
+    elif "weather" in last_msg:
+        tool_name = "weather"
+    else:
+        # No match → respond directly
+        return {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "Sorry, I can only answer math" + 
+                        " or weather queries." 
+                }
+            ]
+        }
+
+    tool_obj = next(t for t in MCP_TOOLS if t.name == tool_name)
+
+    user_input = messages[-1].content
+    mcp_result: str = await tool_obj.arun(user_input)
+
+    return {
+        "messages": [
+            {"role": "assistant", "content": mcp_result}
+        ]
+    }
+```
+
+- automated tool development 
+
+Code generation is a technique where AI agents write code autonomously, significantly reducing the time and effort required to create and maintain software applications
+
+Real-time code generation involves an AI agent writing and executing code as needed during its operation.
+
+
+
+# Orchestration 
+- Reflex agents implement a direct mapping from input to action without any internal reasoning trace.
+
+- ReAct agents excel in exploratory scenarios—dynamic data analysis, multisource aggregation, or troubleshooting
+
+- refection agents,  reviewing past steps to identify and correct mistakes before proceeding. 
+
+- deep research agents They combine multiple patterns: a planner-executor phase to chart research workflows
+
+- standard tool selections 
+
+```
+from langchain_core.tools import tool 
+import requests
+
+@tool 
+def query_wolfram_alpha(expression: str) -> str: 
+    """
+    Query Wolfram Alpha to compute expressions or retrieve information. 
+    Args: expression (str): The mathematical expression or query to evaluate. 
+    Returns: str: The result of the computation or the retrieved information. 
+        """
+
+    api_url = f'''https://api.wolframalpha.com/v1/result?
+        i={requests.utils.quote(expression)}&
+        appid=YOUR_WOLFRAM_ALPHA_APP_ID'''  
+
+    try:
+        response = requests.get(api_url)
+        if response.status_code == 200: 
+            return response.text 
+        else: raise ValueError(f"Wolfram Alpha API Error: 
+            {response.status_code} - {response.text}") 
+    except requests.exceptions.RequestException as e: 
+        raise ValueError(f"Failed to query Wolfram Alpha: {e}")
+
+
+@tool 
+def trigger_zapier_webhook(zap_id: str, payload: dict) -> str: 
+    """ Trigger a Zapier webhook to execute a predefined Zap. 
+    Args: 
+    zap_id (str): The unique identifier for the Zap to be triggered. 
+    payload (dict): The data to send to the Zapier webhook. 
+    Returns: 
+    str: Confirmation message upon successful triggering of the Zap. 
+    Raises: ValueError: If the API request fails or returns an error. 
+    """ 
+
+    zapier_webhook_url = f"https://hooks.zapier.com/hooks/catch/{zap_id}/" 
+    try: 
+        response = requests.post(zapier_webhook_url, json=payload) 
+        if response.status_code == 200: 
+            return f"Zapier webhook '{zap_id}' successfully triggered." 
+
+        else: 
+        raise ValueError(f'''Zapier API Error: {response.status_code} - 
+                         {response.text}''') 
+    except requests.exceptions.RequestException as e: 
+        raise ValueError(f"Failed to trigger Zapier webhook '{zap_id}': {e}") 
+```
+
+- sementic tool selection 
+
+uses semantic representations to index all of the available tools and semantic search to retrieve the most relevant tools. 
+
+skill # -> embedding model -> vectors 
+
+These tools are then indexed in a lightweight vector database. At runtime, the current context is embedded using the same embedding model, a search is performed on the database
+
+the tool database is set up by embedding the tool descriptions
+```
+import os
+import requests
+import logging
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain.vectorstores import FAISS
+import faiss
+import numpy as np
+
+# Initialize OpenAI embeddings
+embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+
+# Tool descriptions
+tool_descriptions = {
+       "query_wolfram_alpha": '''Use Wolfram Alpha to compute mathematical  
+                                 expressions or retrieve information.''',
+       "trigger_zapier_webhook": '''Trigger a Zapier webhook to execute  
+                                    predefined automated workflows.''',
+       "send_slack_message": '''Send messages to specific Slack channels to 
+                                communicate with team members.'''
+}
+
+# Create embeddings for each tool description
+tool_embeddings = []
+tool_names = []
+
+for tool_name, description in tool_descriptions.items():
+   embedding = embeddings.embed_text(description)
+   tool_embeddings.append(embedding)
+   tool_names.append(tool_name)
+
+# Initialize FAISS vector store
+dimension = len(tool_embeddings[0])  
+index = faiss.IndexFlatL2(dimension)
+
+# Normalize embeddings for cosine similarity
+faiss.normalize_L2(np.array(tool_embeddings).astype('float32'))
+
+# Convert list to FAISS-compatible format
+tool_embeddings_np = np.array(tool_embeddings).astype('float32')
+index.add(tool_embeddings_np)
+
+# Map index to tool functions
+index_to_tool = {
+   0: query_wolfram_alpha,
+   1: trigger_zapier_webhook,
+   2: send_slack_message
+}
+
+
+def select_tool(query: str, top_k: int = 1) -> list:
+   """
+   Select the most relevant tool(s) based on the user's query using 
+   vector-based retrieval.
+  
+   Args:
+       query (str): The user's input query.
+       top_k (int): Number of top tools to retrieve.
+      
+   Returns:
+       list: List of selected tool functions.
+   """
+   query_embedding = embeddings.embed_text(query).astype('float32')
+   faiss.normalize_L2(query_embedding.reshape(1, -1))
+   D, I = index.search(query_embedding.reshape(1, -1), top_k)
+   selected_tools = [index_to_tool[idx] for idx in I[0] if idx in index_to_tool]
+   return selected_tools
+
+def determine_parameters(query: str, tool_name: str) -> dict:
+   """
+   Use the LLM to analyze the query and determine the parameters for the tool 
+   to be invoked.
+  
+   Args:
+       query (str): The user's input query.
+       tool_name (str): The selected tool name.
+      
+   Returns:
+       dict: Parameters for the tool.
+   """
+   messages = [
+       HumanMessage(content=f'''Based on the user's query: '{query}', what 
+           parameters should be used for the tool '{tool_name}'?''')
+   ]
+  
+   # Call the LLM to extract parameters
+   response = llm(messages)
+  
+   # Example logic to parse response from LLM
+   parameters = {}
+   if tool_name == "query_wolfram_alpha":
+       parameters["expression"] = response['expression']  
+       # Extract mathematical expression
+   elif tool_name == "trigger_zapier_webhook":
+       parameters["zap_id"] = response.get('zap_id', "123456")  
+       parameters["payload"] = response.get('payload', {"data": query})
+   elif tool_name == "send_slack_message":
+       parameters["channel"] = response.get('channel', "#general")
+       parameters["message"] = response.get('message', query)
+  
+   return parameters
+
+# Example user query
+user_query = "Solve this equation: 2x + 3 = 7"
+
+# Select the top tool
+selected_tools = select_tool(user_query, top_k=1)
+tool_name = selected_tools[0] if selected_tools else None
+
+if tool_name:
+   # Use LLM to determine the parameters based on the query and the selected tool
+   args = determine_parameters(user_query, tool_name)
+
+   # Invoke the selected tool
+   try:
+       # Assuming each tool has an `invoke` method to execute it
+       tool_result = globals()[tool_name].invoke(args)
+       print(f"Tool '{tool_name}' Result: {tool_result}")
+   except ValueError as e:
+       print(f"Error invoking tool '{tool_name}': {e}")
+else:
+   print("No tool was selected.")
+
+```
+
+- tool execution 
+
+Parametrization is the process of defining and setting the parameters that will guide the execution of a tool in a language model
+
+Timeout and retry logic will need to be adjusted to the latency and performance requirements for the use case.
+ 
+    + parallel tool execution 
+    
+- Chains refer to sequences of actions that are executed one after another
+
+LangChain Expression Language (LCEL), to build chains by composing existing Runnables rather than manually wiring up Chain objects. 
+
+```
+from langchain_core.runnables import RunnableLambda
+from langchain.chat_models import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+# Wrap a function or model call as a Runnable
+llm = RunnableLambda.from_callable(ChatOpenAI(model_name="gpt-4", 
+                                  temperature=0).generate)
+prompt = RunnableLambda.from_callable(lambda text: 
+    PromptTemplate.from_template(text).format_prompt({"input": text}
+                                      ).to_messages())
+# Traditional chain equivalent:
+# chain = LLMChain(prompt=prompt, llm=llm)
+# LCEL chain using pipes:
+chain = prompt | llm
+# Invoke the chain
+result = chain.invoke("What is the capital of France?")
+```
+- graphs, multiple decision points, a graph topology models complex, nonhierarchical flows far more expressively than chains or trees.
+
+```
+from langgraph.graph import StateGraph, START, END
+from langchain.chat_models import ChatOpenAI
+
+# Initialize LLM
+llm = ChatOpenAI(model_name="gpt-4", temperature=0)
+# 1. Node definitions
+def categorize_issue(state: dict) -> dict:
+    prompt = (
+        f"Classify this support request as 'billing' or 'technical'.\n\n"
+        f"Message: {state['user_message']}"
+    )
+    generations = llm.generate([{"role":"user","content":prompt}]).generations
+    kind = generations[0][0].text.strip().lower()
+    return {**state, "issue_type": kind}
+def handle_invoice(state: dict) -> dict:
+    # Fetch invoice details...
+    return {**state, "step_result": f"Invoice details for {state['user_id']}"}
+def handle_refund(state: dict) -> dict:
+    # Initiate refund workflow...
+    return {**state, "step_result": "Refund process initiated"}
+def handle_login(state: dict) -> dict:
+    # Troubleshoot login...
+    return {**state, "step_result": "Password reset link sent"}
+def handle_performance(state: dict) -> dict:
+    # Check performance metrics...
+    return {**state, "step_result": "Performance metrics analyzed"}
+def summarize_response(state: dict) -> dict:
+    # Consolidate previous step_result into a user-facing message
+    details = state.get("step_result", "")
+    summary = llm.generate([{"role":"user","content":
+        f"Write a concise customer reply based on: {details}"
+    }]).generations[0][0].text.strip()
+    return {**state, "response": summary}
+```
+
+execute a single tool call:
+```
+# 2. Build the graph
+graph = StateGraph()
+# Start → categorize_issue
+graph.add_edge(START, categorize_issue)
+# categorize_issue → billing or technical
+def top_router(state):
+    return "billing" if state["issue_type"] == "billing" else "technical"
+graph.add_conditional_edges(
+    categorize_issue,
+    top_router,
+    mapping={"billing": handle_invoice, "technical": handle_login}
+)
+# Billing sub-branches: invoice vs. refund
+def billing_router(state):
+    msg = state["user_message"].lower()
+    return "invoice" if "invoice" in msg else "refund"
+graph.add_conditional_edges(
+    handle_invoice,
+    billing_router,
+    mapping={"invoice": handle_invoice, "refund": handle_refund}
+)
+# Technical sub-branches: login vs. performance
+def tech_router(state):
+    msg = state["user_message"].lower()
+    return "login" if "login" in msg else "performance"
+graph.add_conditional_edges(
+    handle_login,
+    tech_router,
+    mapping={"login": handle_login, "performance": handle_performance}
+)
+```
+
+Graphs offer the ultimate flexibility for modeling complex, nonlinear workflows, a chain if your task is strictly linear 
+
+- context engineeringg 
+
+Context engineering sits at the intersection of memory, knowledge, and orchestration
+
+
+# Knowledge and memory 
+- knowledge and memory—two complementary but distinct ways to enrich your agent’s context.
+
+- managing context windows 
+
+Vector stores—such as VectorDB, FAISS (Facebook AI Similarity Search), or Annoy (Approximate Nearest Neighbors Oh Yeah)—are optimized for storing and searching high-dimensional vectors.
+
+    + performance similarity searches on query's embedding 
+    
+```from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+llm = ChatOpenAI(model="gpt-5")
+def call_model(state: MessagesState):
+   response = llm.invoke(state["messages"])
+   return {"messages": response}
+from vectordb import Memory
+memory = Memory(chunking_strategy={'mode':'sliding_window', 'window_size': 128, 
+'overlap': 16})
+text = """
+Machine learning is a method of data analysis that automates analytical 
+model building. It is a branch of artificial intelligence based on the 
+idea that systems can learn from data, identify patterns and make 
+decisions with minimal human intervention. Machine learning algorithms 
+are trained on datasets that contain examples of the desired output. 
+For example, a machine learning algorithm that is used to classify 
+images might be trained on a dataset that contains images of cats 
+and dogs. Once an algorithm is trained, it can be used to make 
+predictions on new data. For example, the machine learning algorithm 
+that is used to classify images could be used to predict whether a new 
+image contains a cat or a dog.
+"""
+metadata = {"title": "Introduction to Machine Learning", "url": 
+"https://learn.microsoft.com/en-us/training/modules/" + 
+    "introduction-to-machine-learning"}
+memory.save(text, metadata)
+text2 = """
+Artificial intelligence (AI) is the simulation of human intelligence in machines
+that are programmed to think like humans and mimic their actions.
+The term may also be applied to any machine that exhibits traits associated with
+a human mind such as learning and problem-solving.
+AI research has been highly successful in developing effective techniques for 
+solving a wide range of problems, from game playing to medical diagnosis.
+"""
+metadata2 = {"title": "Artificial Intelligence for Beginners", "url": 
+"https://microsoft.github.io/AI-for-Beginners"}
+memory.save(text2, metadata2)
+query = "What is the relationship between AI and machine learning?"
+results = memory.search(query, top_n=3)
+builder = StateGraph(MessagesState)
+builder.add_node("call_model", call_model)
+builder.add_edge(START, "call_model")
+graph = builder.compile()
+input_message = {"type": "user", "content": "hi! I'm bob"}
+for chunk in graph.stream({"messages": [input_message]}, {}, 
+stream_mode="values"):
+   chunk["messages"][-1].pretty_print()
+print(results)
+```
+
+- GraphRAG,  Graph retrieval-augmented generation (GraphRAG) is an advanced extension of the RAG model
+
+three components 
+
+    + knowledge graph 
+    
+    + retrieval system, query the graph database efficiently
+    
+    + generative model 
+    
+GraphRAG systems. This process consists of several steps. cli 
+
+```
+pip install graphrag
+mkdir -p ./ragtest/input
+curl https://www.gutenberg.org/ebooks/103.txt.utf-8 -o ./ragtest/input/book.txt
+ ./ragtest/input/book.txt
+graphrag init --root ./ragtest
+graphrag index --root ./ragtest
+
+graphrag query \
+--root ./ragtest \
+--method global \
+--query "What are the key themes in this novel?"
+```
+
+- Promise and Peril of Dynamic Knowledge Graphs
+
+- note taking, model generate note on multiple parets of the context and then generate a note on the question before generate the final answer. 
+
+
+
+# Learning in agentic systems 
+- nonparameteric learning 
+
+- reflexion, equips an agent with a simple, language-based habit of self-critique: after each unsuccessful attempt, the agent writes a brief reflection on what went wrong and how to improve its next try.
+
+workflow 
+
+    + perform an action sequence 
+    
+    + log trial every step, actions 
+     
+    + generate a reflection, construct a short reflection prompt 
+    
+    + update memory 
+    
+    + inject reflections on the next run 
+    
+```
+from typing import Annotated, List, Dict
+from typing_extensions import TypedDict
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START
+from langchain_core.messages import HumanMessage
+
+llm = ChatOpenAI(model="gpt-5")
+
+reflections = []
+
+def call_model(state: MessagesState):
+   response = llm.invoke(state["messages"])
+   return {"messages": response}
+
+reflexion_prompt = f"""You will be given the history of a past experience in 
+which you were placed in an environment and given a task to complete. You 
+were unsuccessful in completing the task. Do not summarize your environment, 
+but rather think about the strategy and path you took to attempt to complete 
+the task. Devise a concise, new plan of action that accounts for your mistake 
+with reference to specific actions that you should have taken. For example, 
+if you tried A and B but  forgot C, then devise a plan to achieve C with 
+environment-specific actions. You will need this later when you are solving 
+the same task. Give your plan after "Plan".
+
+Instruction:
+I am looking for dairy-free and apple variety packs of chips, with a price 
+lower than 30.00 dollars
+[Search]
+
+Action: search[dairy free and apple variety pack of chips]
+Observation:
+[Back to Search]
+Page 1 (Total results: 50)
+[Next >]
+[B07HRFJWP8]
+Enjoy Life Foods Soft Baked Ovals, Breakfast Bars, Nut Free Bars, Soy Free, 
+Dairy Free, Non GMO, Gluten Free, Vegan, Variety Pack, 4 Boxes (20 Bars Total)
+$100.0
+[B01KMHY5PG]
+Enjoy Life Soft Baked Chewy Bars, Variety Pack, Nut Free Bars, Soy Free, Dairy 
+Free, Gluten Free, 6 Boxes (30 Total Bars)
+$21.49
+[B008D2X8C4]
+Enjoy Life Lentil Chips Variety Pack, Dairy Free Chips, Soy Free, Nut Free, 
+Non GMO, Vegan, Gluten Free, 24 Bags (0.8 oz)
+$100.0
+
+Action: think[The first two items are not what I want. The third item is 
+the dairy free and apple variety pack of chips I want.]
+Observation: OK.
+
+Action: click[B008D2X8C4]
+Observation:
+[Back to Search]
+[< Prev]
+flavor name [dill and sour cream][garlic & parmesan]
+[light sea salt][margherita pizza][thai chili lime][variety pack]
+size [0.8 ounce (pack of 24)][4 ounce (pack of 12)]
+Price: $100.0
+Rating: N.A.
+[Description]
+[Features]
+[Reviews]
+[Buy Now]
+
+Action: think[The item has options 'variety pack' and '0.8 ounce (pack of 24)' 
+and seems good to buy.]
+Observation: OK.
+
+Action: click[variety pack]
+Observation: You have clicked variety pack.
+
+Action: click[0.8 ounce (pack of 24)]
+Observation: You have clicked 0.8 ounce (pack of 24).
+
+Action: click[Buy Now]
+
+STATUS: FAIL
+
+Plan:
+"""
+```
+    
+- Fine-Tuning Large Foundation Models
+
+primary methods 
+
+    + Supervised fine-tuning (SFT) Provide (prompt, ideal-response), Classification, structured output, correcting instruction failures
+    
+    + Vision fine-tuning Supply image-label pairs for supervised training
+    
+    + Direct preference optimization. (DPO) Give both a “good” and a “bad” response per prompt
+    
+    + Reinforcement fine-tuning (RFT) Generate candidate outputs and have expert graders score them. Complex reasoning, domain-specific tasks
+    
+-  model to separate its “thoughts” from its API actions:
+
+```
+def build_tokenizer(model_name: str):
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        pad_token=ChatmlSpecialTokens.pad_token.value,
+        additional_special_tokens=ChatmlSpecialTokens.list(),
+    )
+    tokenizer.chat_template = CHAT_TEMPLATE
+    return tokenizer
+
+
+def build_model(model_name: str, tokenizer, load_4bit: bool = False):
+    kwargs = {
+        "attn_implementation": "eager",
+        "device_map": "auto",
+    }
+    kwargs["quantization_config"] = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+    )
+    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    model.resize_token_embeddings(len(tokenizer))
+    return model
+
+
+```
+
+- reinforcement learning with verifiable rewards (RLVR) introduces policy optimization against an explicit, measurable reward function
+
+-  RFT by combining preference learning with value-based policy optimization. This allows your models not just to imitate preferred outputs
+
+
+# From one agent to many 
+- setup single agent with 16 tools 
+
+```
+from __future__ import annotations
+"""
+supply_chain_logistics_agent.py
+LangGraph workflow for a Supply Chain & Logistics Management agent,
+handling inventory management, shipping operations, supplier relations, 
+and warehouse optimization.
+"""
+import os
+import json
+import operator
+import builtins
+from typing import Annotated, Sequence, TypedDict, Optional
+
+from langchain_openai.chat_models import ChatOpenAI
+from langchain.schema import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages.tool import ToolMessage
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+
+from langchain.tools import tool
+from langgraph.graph import StateGraph, END
+
+from traceloop.sdk import Traceloop
+from src.common.observability.loki_logger import log_to_loki
+
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+
+@tool
+def manage_inventory(sku: str = None, **kwargs) -> str:
+   """Manage inventory levels, stock replenishment, audits, 
+   and optimization strategies."""
+   print(f"[TOOL] manage_inventory(sku={sku}, kwargs={kwargs})")
+   log_to_loki("tool.manage_inventory", f"sku={sku}")
+   return "inventory_management_initiated"
+
+@tool
+def track_shipments(origin: str = None, **kwargs) -> str:
+   """Track shipment status, delays, and coordinate delivery logistics."""
+   print(f"[TOOL] track_shipments(origin={origin}, kwargs={kwargs})")
+   log_to_loki("tool.track_shipments", f"origin={origin}")
+   return "shipment_tracking_updated"
+
+...
+
+TOOLS = [
+   manage_inventory, track_shipments, evaluate_suppliers, optimize_warehouse,
+   forecast_demand, manage_quality, arrange_shipping, coordinate_operations,
+   manage_special_handling, handle_compliance, process_returns, scale_operations,
+   optimize_costs, optimize_delivery, manage_disruption, send_logistics_response
+]
+```
+
+- multiagent decomposition. Now, let’s complete the agent setup with the foundation model binding
+
+```
+Traceloop.init(disable_batch=True, app_name="supply_chain_logistics_agent")
+llm = ChatOpenAI(model="gpt-5", temperature=0.0, 
+                callbacks=[StreamingStdOutCallbackHandler()], 
+                verbose=True).bind_tools(TOOLS)   # Add tools binding 
+
+class AgentState(TypedDict):
+   operation: Optional[dict]  # Supply chain operation information
+   messages: Annotated[Sequence[BaseMessage], operator.add]
+
+def call_model(state: AgentState):
+   history = state["messages"]
+  
+   # Handle missing or incomplete operation data gracefully
+   operation = state.get("operation", {})
+   if not operation:
+       operation = {"operation_id": "UNKNOWN", "type": "general", 
+           "priority": "medium", "status": "active"}
+  
+   operation_json = json.dumps(operation, ensure_ascii=False)
+   system_prompt = (
+       "You are an experienced Supply Chain & Logistics professional.\n"
+       "Your expertise covers:\n"
+       "- Inventory management and demand forecasting\n"
+       "- Transportation and shipping optimization\n"
+       "- Supplier relationship management and evaluation\n"
+       "- Warehouse operations and capacity planning\n"
+       "- Quality control and compliance management\n"
+       "- Cost optimization and operational efficiency\n"
+       "- Risk management and disruption response\n"
+       "- Sustainability and green logistics initiatives\n"
+       "\n"
+       "When managing supply chain operations:\n"
+       "  1) Analyze the logistics challenge or opportunity\n"
+       "  2) Call the appropriate supply chain management tool\n"
+       "  3) Follow up with send_logistics_response to provide recommendations\n"
+       "  4) Consider cost, efficiency, quality, and sustainability impacts\n"
+       "  5) Prioritize customer satisfaction and business continuity\n"
+       "\n"
+       "Always balance cost with quality and risk mitigation.\n"
+       f"OPERATION: {operation_json}"
+   )
+
+   full = [SystemMessage(content=system_prompt)] + history
+
+   first: ToolMessage | BaseMessage = llm.invoke(full)
+   messages = [first]
+
+   if getattr(first, "tool_calls", None):
+       for tc in first.tool_calls:
+           print(first)
+           print(tc['name'])
+           fn = next(t for t in TOOLS if t.name == tc['name'])
+           out = fn.invoke(tc["args"])
+           messages.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
+
+       second = llm.invoke(full + messages)
+       messages.append(second)
+
+   return {"messages": messages}
+
+def construct_graph():
+   g = StateGraph(AgentState)
+   g.add_node("assistant", call_model)
+   g.set_entry_point("assistant")
+   return g.compile()
+
+graph = construct_graph()
+
+if __name__ == "__main__":
+   example = {"operation_id": "OP-12345", "type": "inventory_management", 
+              "priority": "high", "location": "Warehouse A"}
+   convo = [HumanMessage(content="We're running critically low on SKU-12345. 
+   Current stock is 50 units but we have 200 units on backorder. What's our 
+   reorder strategy?")]
+   result = graph.invoke({"operation": example, "messages": convo})
+   for m in result["messages"]:
+       print(f"{m.type}: {m.content}")
+```
+
+- multiagent systems, multiple agents collaborate to achieve shared goals
+
+```
+SUPPLIER_TOOLS = [evaluate_suppliers, handle_compliance, send_logistics_response]
+
+Traceloop.init(disable_batch=True, app_name="supply_chain_logistics_agent")
+llm = ChatOpenAI(model="gpt-4o", temperature=0.0, 
+    callbacks=[StreamingStdOutCallbackHandler()], verbose=True)
+
+# Bind tools to specialized LLMs
+inventory_llm = llm.bind_tools(INVENTORY_TOOLS)
+transportation_llm = llm.bind_tools(TRANSPORTATION_TOOLS)
+supplier_llm = llm.bind_tools(SUPPLIER_TOOLS)
+```
+
+    + enables parallelism eges to concurrent calls 
+    
+```
+concurrent calls:
+
+class AgentState(TypedDict):
+   operation: Optional[dict]  # Supply chain operation information
+   messages: Annotated[Sequence[BaseMessage], operator.add]
+
+# Supervisor (Manager) Node: Routes to the appropriate specialist
+def supervisor_node(state: AgentState):
+   history = state["messages"]
+   operation = state.get("operation", {})
+   operation_json = json.dumps(operation, ensure_ascii=False)
+  
+   supervisor_prompt = (
+       "You are a supervisor coordinating a team of supply chain specialists.\n"
+       "Team members:\n"
+       "- inventory: Handles inventory levels, forecasting,\n"
+       "quality, warehouse optimization, scaling, and costs.\n"
+       "- transportation: Handles shipping tracking,\n"
+       "arrangements, operations coordination,\n"
+        specialhandling, returns, delivery optimization, and disruptions.\n"
+       "- supplier: Handles supplier evaluation and compliance.\n"
+       "\n"
+       "Based on the user query, select ONE team member to handle it.\n"
+       "Output ONLY the selected member's name\n"
+       "(inventory, transportation, or supplier), nothing else.\n\n"
+       f"OPERATION: {operation_json}"
+   )
+
+   full = [SystemMessage(content=supervisor_prompt)] + history
+   response = llm.invoke(full)
+   return {"messages": [response]}
+
+# Specialist Node Template
+def specialist_node(state: AgentState, specialist_llm, system_prompt: str):
+   history = state["messages"]
+   operation = state.get("operation", {})
+   if not operation:
+       operation = {"operation_id": "UNKNOWN", "type": "general",   
+           "priority": "medium", "status": "active"}
+   operation_json = json.dumps(operation, ensure_ascii=False)
+   full_prompt = system_prompt + f"\n\nOPERATION: {operation_json}"
+  
+   full = [SystemMessage(content=full_prompt)] + history
+
+   first: ToolMessage | BaseMessage = specialist_llm.invoke(full)
+   messages = [first]
+
+   if getattr(first, "tool_calls", None):
+       for tc in first.tool_calls:
+           print(first)
+           print(tc['name'])
+           # Find the tool (assuming tools are unique by name across all)
+           all_tools = INVENTORY_TOOLS + TRANSPORTATION_TOOLS + SUPPLIER_TOOLS
+           fn = next(t for t in all_tools if t.name == tc['name'])
+           out = fn.invoke(tc["args"])
+           messages.append(ToolMessage(content=str(out), tool_call_id=tc["id"]))
+
+       second = specialist_llm.invoke(full + messages)
+       messages.append(second)
+
+   return {"messages": messages}
+
+# Inventory Specialist Node
+def inventory_node(state: AgentState):
+   inventory_prompt = (
+       "You are an inventory and warehouse management specialist.\n"
+       "When managing:\n"
+       "  1) Analyze the inventory/warehouse challenge\n"
+       "  2) Call the appropriate tool\n"
+       "  3) Follow up with send_logistics_response\n"
+       "Consider cost, efficiency, and scalability."
+   )
+   return specialist_node(state, inventory_llm, inventory_prompt)
+
+# Transportation Specialist Node
+def transportation_node(state: AgentState):
+   transportation_prompt = (
+       "You are a transportation and logistics specialist.\n"
+       "When managing:\n"
+       "  1) Analyze the shipping/delivery challenge\n"
+       "  2) Call the appropriate tool\n"
+       "  3) Follow up with send_logistics_response\n"
+       "Consider efficiency, sustainability, and risk mitigation."
+   )
+   return specialist_node(state, transportation_llm, transportation_prompt)
+
+# Supplier Specialist Node
+def supplier_node(state: AgentState):
+   supplier_prompt = (
+       "You are a supplier relations and compliance specialist.\n"
+       "When managing:\n"
+       "  1) Analyze the supplier/compliance issue\n"
+       "  2) Call the appropriate tool\n"
+       "  3) Follow up with send_logistics_response\n"
+       "Consider performance, regulations, and relationships."
+   )
+   return specialist_node(state, supplier_llm, supplier_prompt)
+
+```
+
+- Swarms represent a distinctive approach to agentic system design, inspired by decentralized systems in nature
+
+principles for adding agents 
+
+    + task decomposition 
+    
+    + specialization 
+    
+    + parsimony, adding only the minimal number of agents necessary to achieve the desired functionality and performance.
+    
+    + Coordination is critical for the harmonious operation of multiagent systems.
+    
+    + robustness 
+    
+    + efficiency 
+    
+    + actor critic approaches 
+    
+    + automated design of agent systems 
+    
+ (ARC [Abstraction and Reasoning Corpus]) or multiple-choice reasoning (MMLU), archiving high performers for future use:
+```
+
+class LLMAgentBase:
+    def __init__(self, output_fields: list, agent_name: str,
+     role='helpful assistant', model='gpt-4o-2024-05-13', 
+     temperature=0.5):
+        self.output_fields = output_fields
+        self.agent_name = agent_name
+        self.role = role
+        self.model = model
+        self.temperature = temperature
+        self.id = random_id()  # Unique ID for agent instances
+
+    def generate_prompt(self, input_infos, instruction, output_description):
+        # Builds system prompt with role and JSON format instructions
+        system_prompt = f"You are a {self.role}.\n\n" + 
+                          FORMAT_INST(output_description)
+        # Constructs user prompt from inputs and instruction
+        prompt = ''  # (Build input text from infos) + instruction
+        return system_prompt, prompt
+
+    def query(self, input_infos: list, instruction, output_description, 
+              iteration_idx=-1):
+        system_prompt, prompt = self.generate_prompt(input_infos, 
+                                                     instruction, 
+                                                     output_description)
+        response_json = get_json_response_from_gpt(prompt, 
+            self.model, system_prompt, self.temperature)
+        # Handle errors, parse JSON
+        output_infos = [Info(key, self.__repr__(), value, 
+            iteration_idx) for key, value in response_json.items()]
+        return output_infos
+
+```
+
+- agent communications 
+    + Local Versus Distributed Communication, At a small scale—such as a single-device or single-process setup—agents often communicate through direct function calls, shared memory
+    + The Agent-to-Agent (A2A) Protocol, introduced by Google, is an ambitious and promising step toward enabling autonomous agents to work together
+    
+client 
+```
+import requests
+import json
+
+# Discover Agent Card (mocked as direct access; in production, query a registry)
+card_url = 'http://localhost:8000/.well-known/agent.json'
+response = requests.get(card_url)
+if response.status_code != 200:
+    raise ValueError("Failed to retrieve Agent Card")
+
+agent_card = response.json()
+print("Discovered Agent Card:", json.dumps(agent_card, indent=2))
+
+# Handshake: Check compatibility
+if agent_card['version'] != '1.0':
+    raise ValueError("Incompatible protocol version")
+if "summarizeText" not in agent_card['capabilities']:
+    raise ValueError("Required capability not supported")
+print("Handshake successful: Agent is compatible
+```
+
+server 
+```
+# Excerpt from server handler (in do_POST method)
+import os 
+from openai import OpenAI  
+
+content_length = int(self.headers['Content-Length'])
+post_data = self.rfile.read(content_length)
+rpc_request = json.loads(post_data)
+
+# Handle JSON-RPC request (core of A2A)
+if rpc_request.get('jsonrpc') == '2.0' 
+    and rpc_request['method'] == 'summarizeText':
+    text = rpc_request['params']['text']
+    # Real LLM summarization using OpenAI API 
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    try:
+        llm_response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": '''You are a helpful assistant that 
+                    provides concise summaries.'''},
+                {"role": "user", "content": f"""Summarize the following text:
+                {text}"""}
+            ],
+            max_tokens=150,
+            temperature=0.7
+        )
+        summary = llm_response.choices[0].message.content.strip()
+    except Exception as e:
+        summary = f"Error in summarization: {str(e)}"  # Fallback for errors
+    
+    response = {
+        "jsonrpc": "2.0",
+        "result": {"summary": summary},
+        "id": rpc_request['id']
+    }
+    # Send response
+    self.send_response(200)
+    self.send_header('Content-type', 'application/json')
+    self.end_headers()
+    self.wfile.write(json.dumps(response).encode())
+else:
+    # Error response
+    error_response = {
+        "jsonrpc": "2.0",
+        "error": {"code": -32601, "message": "Method not found"},
+        "id": rpc_request.get('id')
+    }
+    self.send_response(400)
+    self.send_header('Content-type', 'application/json')
+    self.end_headers()
+    self.wfile.write(json.dumps(error_response).encode())
+```
+
+- Message Brokers and Event Buses
+
+apache Kafka, effective for building log-based communication architectures
+
+RabbitMQ and redis Stream,  lightweight alternatives for lower-throughput or simpler use cases, with tighter latency and easier deployment
+
+Neural Autonomic Transport System (NATS), A lightweight, cloud-native messaging system designed
+
+- actor framewokrs, ray, orleans and akka 
+
+Ray is a Python-native distributed computing framework that supports an actor model for stateful, scalable computations. 
+
+Orleans offers a virtual actor model, where actors (or agents) are logically addressable and automatically instantiated, suspended, or recovered based on demand
+
+Akka is a well-established actor framework in the JVM ecosystem, supporting both Java and Scala. 
+
+```
+maintains isolated session state:
+
+@ray.remote
+class SpecialistActor:
+    def __init__(self, name: str, specialist_llm, tools: list, 
+                 system_prompt: str):
+        self.name = name
+        self.llm = specialist_llm
+        self.tools = {t.name: t for t in tools}
+        self.prompt = system_prompt
+        self.internal_state = {}  
+
+    def process_task(self, operation: dict, messages: Sequence[BaseMessage]):
+        if not operation:
+            operation = {"operation_id": "UNKNOWN", "type": "general", 
+                         "priority": "medium", "status": "active"}
+        operation_json = json.dumps(operation, ensure_ascii=False)
+        full_prompt = self.prompt + f"\n\nOPERATION: {operation_json}"
+        
+        full = [SystemMessage(content=full_prompt)] + messages
+
+        first = self.llm.invoke(full)
+        result_messages = [first]
+
+        if hasattr(first, "tool_calls"):
+            for tc in first.tool_calls:
+                print(first)
+                print(tc['name'])
+                fn = self.tools.get(tc['name'])
+                if fn:
+                    out = fn.invoke(tc["args"])
+                    result_messages.append(ToolMessage(content=str(out), 
+                                           tool_call_id=tc["id"]))
+
+            second = self.llm.invoke(full + result_messages)
+            result_messages.append(second)
+
+        # Update internal state (example: track processed steps within session)
+        step_key = str(len(self.internal_state) + 1)  
+        # Or use a more specific key
+        self.internal_state[step_key] = {"status": "processed", 
+                                         "timestamp": time.time()}
+
+        return {"messages": result_messages}
+
+    def get_state(self):
+        return self.internal_state  # Return entire session state
+
+```
+
+- simplified workflow definition
+```
+from datetime import timedelta
+from temporalio import workflow
+from temporalio.common import RetryPolicy
+
+# Assume activities are defined elsewhere, e.g., inventory_activity, 
+# transportation_activity, supplier_activity
+# Each takes operation dict and messages, returns result
+
+@workflow.defn
+class SupplyChainWorkflow:
+    @workflow.run
+    async def run(self, operation: dict, initial_messages: list) -> dict:
+        # Step 1: Inventory management with retry
+        inventory_result = await workflow.execute_activity(
+            "inventory_activity",
+            {"operation": operation, "messages": initial_messages},
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=RetryPolicy(maximum_attempts=3)
+        )
+        
+        # Update state and proceed to transportation
+        updated_messages = initial_messages + inventory_result["messages"]
+        transportation_result = await workflow.execute_activity(
+            "transportation_activity",
+            {"operation": operation, "messages": updated_messages},
+            start_to_close_timeout=timedelta(seconds=30),
+            retry_policy=RetryPolicy(maximum_attempts=3)
+        )
+        
+```        
+
+Stateful actors processing messages sequentially (Ray for Python/distributed, Orleans for virtual actors, Akka for JVM/performance)
+
+Integrated state/behavior, resilience (auto-recovery), location-transparent scaling
+
+Infrastructure investment, framework lock-in, per actor sequential limits 
+
+- managing state and persistence 
+
+
+
+# Validation and measurement 
+- design and implementation of agent systems toward achieving high performance and user satisfaction.
