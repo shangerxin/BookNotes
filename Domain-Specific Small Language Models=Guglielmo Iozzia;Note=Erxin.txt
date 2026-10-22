@@ -1,0 +1,489 @@
+Domain-Specific Small Language Models=Guglielmo Iozzia;Note=Erxin
+
+# Preface
+- two major changes to compare to rnn 
+
+It uses the self-attention mechanism
+
+It has no recurrent structure, so a transformer allows more parallelism than an RNN reduce training time
+
+-  two different families of transformers
+
+BERT (bidirectional encoder representation from transformers) uses only the encoder part. This kind of architecture performs better on text classification or prediction tasks.
+
+GPT (generative pretrained transformer) uses only the decoder and generally performs better on text generation tasks.
+
+- Transformer model’s evolution is reinforcement learning from human feedback (RLHF), a technique used behind the scenes for OpenAI’s LLMs.
+
+- tasks beyond translation:
+
+Language understanding
+Text classification
+Test generation
+Question answering
+Document summarization
+Semantic parsing
+Pattern recognition
+Basic math solving
+Code generation
+Dialogue
+General knowledge
+Logical inference chains
+
+- (https://arxiv.org/abs/2303.18223), shows a timeline of the major commercial and open source LLMs 
+
+- a final candidate is trained and meets its key performance indicators (KPIs)
+
+- risks that can outweigh these benefits
+
+Deployment outside your organization’s network
+
+Data leakage risks
+
+Model or version drift
+
+Closeness—You don’t have details about how an LLM was implemented and trained
+
+Transparency—Data used to train closed source models isn’t publicly disclosed
+
+Hallucinations—Generated information may conflict with the source (intrinsic hallucination) or be unverifiable from the available source
+
+Compliance—Commercial and closed source LLMs, because of their generalist nature
+
+Harmful content generation—Models can not only reflect societal biases and stereotyping but can also produce unsafe content.
+
+Code generation—This emergent LLM ability makes it possible for a broader audience
+
+- PEFT (parameter-efficient fine-tuning)—a family of techniques for inserting small trainable modules
+
+
+
+# part2 core domain specific llms 
+# Tuning for a specific domain
+- Data preparation for BERT fine-tuning
+
+dataset = [("This movie is a masterpiece!", "Positive"),
+    ("Not worth watching!", "Negative"),
+    ("Terrific!", "Positive") go here
+]
+
+```
+from transformers import BertTokenizer
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+```
+
+- a separator token is used between segments:
+
+```
+max_length = 128 
+formatted_data = [(f"[CLS] {text} [SEP]", label) for text, label in dataset]
+tokenized_data = tokenizer(formatted_data, 
+               ➥padding=True,
+               ➥truncation=True,
+               ➥max_length=max_length,
+               ➥return_tensors='pt')
+               
+import torch
+from sklearn.preprocessing import LabelEncoder
+
+input_ids = tokenized_data['input_ids']
+attention_mask = tokenized_data['attention_mask']
+labels = torch.tensor(LabelEncoder()
+➥.fit_transform([label for _, label in dataset]))   
+
+
+from sklearn.model_selection import train_test_split
+
+train_inputs, val_inputs, train_labels, val_labels,
+➥ train_mask, val_mask = train_test_split(
+➥input_ids, labels, attention_mask, 
+➥random_state=42, test_size=0.1
+)            
+
+
+from torch.utils.data import Dataset
+
+class CustomDataset(Dataset):
+    def __init__(self, input_ids, attention_mask,
+        ➥ labels):
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, idx):
+        return {'input_ids': self.input_ids[idx],
+                'attention_mask': 
+                 self.attention_mask[idx],
+                'labels': self.labels[idx]}
+                
+from torch.utils.data import DataLoader
+
+batch_size = 4
+train_dataset = CustomDataset(train_inputs, 
+                ➥train_mask, train_labels)
+train_dataloader = DataLoader(train_dataset,
+                ➥batch_size=batch_size, 
+                ➥shuffle=True)
+
+val_dataset = CustomDataset(val_inputs, 
+              ➥val_mask, val_labels)
+val_dataloader = DataLoader(val_dataset, 
+              ➥batch_size=batch_size,
+              ➥ shuffle=False)                
+              
+              
+from transformers import BertForSequenceClassification
+
+model = BertForSequenceClassification
+        ➥.from_pretrained('bert-base-uncased',
+    num_labels=len(set(labels)))              
+    
+    
+import torch
+
+max_length = max(len(seq) for seq in numerical_data)
+padded_data = [seq + [tokenizer.pad_token_id] 
+             ➥* (max_length - len(seq)) 
+             ➥for seq in numerical_data]
+
+input_ids = torch.tensor(padded_data)    
+```               
+
+- Data preparation for RAG Retrieval-augmented generation Retrieval-augmented generation (RAG) integrates data retrieval into LLM content generation
+
+Facebook AI Similarity Search (FAISS, https://github.com/facebookresearch/faiss), released as open source under an MIT license and maintained by Meta Research.
+ 
+Compute Unified Device Architecture (CUDA). FAISS offers several similarity-search methods and assumes that instances are represented as vectors 
+
+sentence-transformers package (https://www.sbert.net), a framework for sentence, text, and image embeddings
+
+    +  two phases:
+
+Retrieval phase—The algorithm searches for and retrieves information based on the user’s prompt
+
+Content generation phase—After retrieving the relevant embeddings, an LLM uses the context to generate a natural-language response.
+
+- fine-tuning, further trains a pretrained LLM on a smaller, task-specific dataset to adapt it for a particular task.
+
+fine-tune the model for question answering.
+
+Hugging Face Datasets library (https://github.com/huggingface/datasets):
+```
+from datasets import load_dataset
+
+training_set = load_dataset("<dataset_id>")
+
+training_set = training_set.train_test_split(test_size=0.2)
+
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+
+def preprocess_function(examples):
+    questions = [q.strip() for q in examples["question"]]
+    inputs = tokenizer(
+        questions,
+        examples["context"],
+        max_length=384,
+        truncation="only_second",
+        return_offsets_mapping=True,
+        padding="max_length",
+    )
+    
+offset_mapping = inputs.pop("offset_mapping")
+    answers = examples["answers"]
+    start_positions = []
+    end_positions = []
+
+    for i, offset in enumerate(offset_mapping):
+        answer = answers[i]
+        start_char = answer["answer_start"][0]
+        end_char = answer["answer_start"][0] + len(answer["text"][0])
+        sequence_ids = inputs.sequence_ids(i)
+
+
+        idx = 0
+        while sequence_ids[idx] != 1:
+            idx += 1
+        context_start = idx
+        while sequence_ids[idx] == 1:
+            idx += 1
+        context_end = idx - 1
+
+        # If the answer is not fully inside the context, label it (0, 0)
+        if offset[context_start][0] > end_char or 
+        ➥offset[context_end][1] < start_char:
+            start_positions.append(0)
+            end_positions.append(0)
+        else:
+
+            idx = context_start
+            while idx <= context_end and offset[idx][0] <= start_char:
+                idx += 1
+            start_positions.append(idx - 1)
+
+            idx = context_end
+            while idx >= context_start and offset[idx][1] >= end_char:
+                idx -= 1
+            end_positions.append(idx + 1)
+
+    inputs["start_positions"] = start_positions
+    inputs["end_positions"] = end_positions
+    return inputs    
+    
+tokenized_dataset = training_set.map(preprocess_function, 
+➥batched=True, remove_columns=training_set["train"]
+➥.column_names)    
+
+from transformers import AutoModelForQuestionAnswering
+
+model = AutoModelForQuestionAnswering
+➥.from_pretrained("distilbert-base-uncased")
+
+from transformers import DefaultDataCollator
+
+data_collator = DefaultDataCollator()
+
+from transformers import TrainingArguments, Trainer
+
+training_args = TrainingArguments(
+    output_dir="my_awesome_qa_model",
+    evaluation_strategy="epoch",
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    num_train_epochs=3,
+    weight_decay=0.01,
+    push_to_hub=False,
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset["train"],
+    eval_dataset=tokenized_dataset["test"],
+    tokenizer=tokenizer,
+    data_collator=data_collator,
+)
+
+trainer.train()
+
+inputs = tokenizer(question, context, return_tensors="pt")
+
+import torch
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    
+answer_start_index = outputs.start_logits.argmax()
+answer_end_index = outputs.end_logits.argmax()    
+
+predict_answer_tokens = inputs.input_ids[0,
+➥ answer_start_index : answer_end_index + 1]
+tokenizer.decode(predict_answer_tokens)
+
+```
+
+- LoRA, Parameter-efficient fine-tuning (PEFT) is a set of techniques for adapting a pretrained model by updating only a small fraction of its parameters.
+
+full fine-tuning while maintaining comparable accuracy and robustness.  major PEFT methods:
+
+LoRA (Low-rank Adaptation)—The main topic of this section
+Prefix tuning—Keeps the LLM parameters frozen and optimizes a sequence of continuous, task-specific vectors called the prefix
+LoftQ—A framework that quantizes an LLM and provides a low-rank initialization for LoRA fine-tuning
+AdaLoRA—A LoRA variant that adaptively allocates the parameter budget across weight matrices based on importance scores
+P-tuning—Uses trainable continuous prompt embeddings concatenated with discrete prompts
+Prompt tuning—A simpler form of prefix tuning that scales better to larger models
+
+- “LoRA: Low-Rank Adaptation of Large Language Models” paper (https://arxiv.org/abs/2106.09685), summarizes the LoRA process
+
+pretrained weights are kept frozen, and only a subset of parameters is fine-tuned. The LoRA fine-tuning process
+
+dataset used in this example is samsum (https://huggingface.co/datasets/knkarthick/samsum)
+
+```
+from datasets import load_dataset
+
+dataset = load_dataset("samsum")
+```
+
+load the flan-t5-small tokenizer:
+
+```
+from transformers import AutoTokenizer
+
+model_id = "google/flan-t5-small"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+```
+
+```
+import numpy as np
+from datasets import concatenate_datasets
+
+tokenized_inputs = concatenate_datasets([dataset["train"], 
+           dataset["test"]]).map(lambda x: 
+           ➥tokenizer(x["dialogue"], 
+           ➥truncation=True), 
+           batched=True, 
+           remove_columns=["dialogue", "summary"])
+input_lenghts = [len(x) for x in tokenized_inputs["input_ids"]]
+max_source_length = int(np.percentile(input_lenghts, 85))
+
+tokenized_targets = concatenate_datasets([dataset["train"], 
+            dataset["test"]]).map(lambda x: 
+            ➥tokenizer(x["summary"], 
+            ➥truncation=True), 
+            batched=True, 
+            remove_columns=["dialogue", "summary"])
+target_lenghts = [len(x) for x in tokenized_targets["input_ids"]]
+max_target_length = int(np.percentile(target_lenghts, 90))
+```
+
+preprocessed input and target sequences:
+```
+def preprocess_function(sample,padding="max_length"):
+    inputs = ["summarize: " + item for item in sample["dialogue"]]
+
+    model_inputs = tokenizer(inputs, 
+                max_length=max_source_length, 
+                padding=padding, 
+                truncation=True)
+
+    labels = tokenizer(text_target=sample["summary"],
+                max_length=max_target_length, 
+                padding=padding, 
+                truncation=True)
+
+    if padding == "max_length":
+        labels["input_ids"] = [
+            [(l if l != tokenizer.pad_token_id else -100) 
+            ➥for l in label] for label in 
+            ➥labels["input_ids"]
+        ]
+
+    model_inputs["labels"] = labels["input_ids"]
+    return model_inputs
+
+tokenized_dataset = dataset.map(preprocess_function, 
+                batched=True, 
+                remove_columns=["dialogue", "summary", "id"])
+```
+
+test datasets to disk—we’ll use them later:
+```
+tokenized_dataset["train"].save_to_disk("data/train")
+tokenized_dataset["test"].save_to_disk("data/eval")
+
+
+from transformers import AutoModelForSeq2SeqLM
+
+model = AutoModelForSeq2SeqLM.from_pretrained(model_id, 
+➥load_in_8bit=True, device_map="auto")
+```
+
+LoRA configuration with the LoraConfig class:
+
+```
+from peft import LoraConfig, get_peft_model,
+➥ prepare_model_for_int8_training, TaskType
+
+lora_config = LoraConfig(
+ r=16,
+ lora_alpha=32,
+ target_modules=["q", "v"],
+ lora_dropout=0.05,
+ bias="none",
+ task_type=TaskType.SEQ_2_SEQ_LM
+)
+
+model = prepare_model_for_kbit_training(model)
+
+model = get_peft_model(model, lora_config)
+```
+
+- define a data collator
+```
+from transformers import DataCollatorForSeq2Seq
+
+label_pad_token_id = -100
+data_collator = DataCollatorForSeq2Seq(
+    tokenizer,
+    model=model,
+    label_pad_token_id=label_pad_token_id,
+    pad_to_multiple_of=8
+)
+```
+- set the training arguments (for these small models, two or three epochs may be enough):
+
+```
+from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
+
+output_dir="lora-flan-t5-small"
+
+training_args = Seq2SeqTrainingArguments(
+    output_dir=output_dir,
+    auto_find_batch_size=True,
+    learning_rate=1e-3,
+    num_train_epochs=3, 
+    logging_dir=f"{output_dir}/logs",
+    logging_strategy="steps",
+    logging_steps=500,
+    save_strategy="no",
+    report_to="tensorboard",
+)
+```
+- create a Trainer instance
+```
+trainer = Seq2SeqTrainer(
+    model=model,
+    args=training_args,
+    data_collator=data_collator,
+    train_dataset=tokenized_dataset["train"],
+)
+
+trainer.train()
+
+peft_model_id="results"
+trainer.model.save_pretrained(peft_model_id)
+tokenizer.save_pretrained(peft_model_id)
+
+
+import torch
+from peft import PeftModel, PeftConfig
+
+peft_model_id = "results"
+config = PeftConfig.from_pretrained(peft_model_id)
+
+model = AutoModelForSeq2SeqLM
+➥.from_pretrained(config.base_model_name_or_path, 
+➥ load_in_8bit=True,  device_map={"":0})
+tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
+
+model = PeftModel.from_pretrained(model, peft_model_id, device_map={"":0})
+model.eval()
+```
+
+run summarization tasks on the test data as usual:
+```
+from random import randrange
+
+dataset = load_dataset("samsum")
+sample = dataset['test'][randrange(len(dataset["test"]))]
+
+input_ids = tokenizer(sample["dialogue"], return_tensors="pt", 
+➥truncation=True).input_ids.cuda()
+➥outputs = model.generate(input_ids=input_ids, max_new_tokens=10, 
+➥do_sample=True, top_p=0.9)
+print(f"input sentence: {sample['dialogue']}\n{'---'* 20}")
+
+print(f"summary:\n{tokenizer.batch_decode(outputs.detach()
+➥.cpu().numpy(), skip_special_tokens=True)[0]}")
+```
+
+Fine-tuning often outperforms RAG on tasks that require learning complex patterns and relationships
+

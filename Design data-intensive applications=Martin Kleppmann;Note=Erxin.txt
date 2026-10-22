@@ -11,3 +11,521 @@ Design data-intensive applications=Martin Kleppmann;Note=Erxin
 - describe the current load on the system; only then can we discuss growth questions
 
 - describing performance 
+
+
+# Defining nonfunctional requirements 
+- case study 
+- describing performance 
+
+response time 
+
+throughput 
+
+latency 
+
+user respnose time metrics 
+
+- reliability and fault tolerance 
+
+fault, a particular part of a system stops working correctly. hardware, software 
+
+failure, the system as a whole stops providing the required service to the user 
+- scalability 
+understanding load 
+
+handle 100,000 requests per second, each 1 kB in size, looks very different from a system designed for 3 requests per minute, each 2 GB in size—even though the two systems have the same data throughput (100 MB/second).
+
+A good general principle for scalability is to break a system into smaller components that can operate largely independently from one another.
+
+- manintainability 
+
+Maintenance can be complex, especially for legacy systems.
+
+operability 
+
+simplicity 
+
+evolvability 
+
+
+# Data models and query languages 
+- query language, SQL, Cypher, SPARQL, and Datalog) are declarative, which means that you specify the pattern of the data you want
+
+- Object-relational mapping (ORM) frameworks like ActiveRecord and Hibernate reduce the amount of boilerplate code
+
+
+- Normalization, Denormalization, and Joins
+
+SELECT users.*, regions.region_name
+FROM users
+JOIN regions ON users.region_id = regions.id
+WHERE users.id = 251;
+
+    + MongoDB, it is also possible to perform a join using the $lookup operator in an aggregation pipeline:
+
+db.users.aggregate([
+  { $match: { _id: 251 } },
+  { $lookup: {
+      from: "regions",
+      localField: "region_id",
+      foreignField: "_id",
+      as: "region"
+  } }
+])
+
+- denormalized representation, we would include the image URL of the logo on every individual person’s profile.
+- normalized representation, we would create an entity representing an organization or school and store its name
+
+precomputed result of (approximately) the following query:
+```
+SELECT posts.id, posts.sender_id FROM posts
+  JOIN follows ON posts.sender_id = follows.followee_id
+  WHERE follows.follower_id = current_user
+  ORDER BY posts.timestamp DESC
+  LIMIT 1000
+```
+
+A normalized representation stores the relationship in only one place and relies on secondary indexes
+
+JSONPath [32] provide an equivalent to XPath for JSON. MongoDB’s aggregation pipeline, whose $lookup operator for joins
+
+- graph like data models 
+
+Social graph 
+
+The web graph 
+
+Road or rail networks 
+
+riple store model (implemented by Datomic, AllegroGraph, Blazegraph, and others). 
+
+    + property graphs, consists of the following:
+
+A unique identifier
+
+A label (string) to describe the type of object this vertex represents
+
+A set of outgoing edges
+
+A set of incoming edges
+
+A collection of properties (key-value pairs)
+
+
+```
+CREATE TABLE vertices (
+    vertex_id   integer PRIMARY KEY,
+    label       text,
+    properties  jsonb
+);
+
+CREATE TABLE edges (
+    edge_id     integer PRIMARY KEY,
+    tail_vertex integer REFERENCES vertices (vertex_id),
+    head_vertex integer REFERENCES vertices (vertex_id),
+    label       text,
+    properties  jsonb
+);
+
+CREATE INDEX edges_tails ON edges (tail_vertex);
+CREATE INDEX edges_heads ON edges (head_vertex);
+```
+
+edges table is like the many-to-many associative, or join, table we saw in “Many-to-One and Many-to-Many Relationships”, generalized to allow many types of relationship to be stored in the same table
+
+- Cypher is a query language for property graphs, originally created for the Neo4j graph database and later developed into an open standard as openCypher
+
+- Cypher query. A person’s LIVES_IN edge may point to any kind of location, such as a street, a city, a district, a region, or a state. 
+
+- The same query as Example 3-5, written in SQL using recursive common table expressions
+WITH RECURSIVE
+
+  -- in_usa is the set of vertex IDs of all locations within the United States
+  in_usa(vertex_id) AS (
+      SELECT vertex_id FROM vertices
+        WHERE label = 'Location' AND properties->>'name' = 'United States' 
+    UNION
+      SELECT edges.tail_vertex FROM edges 
+        JOIN in_usa ON edges.head_vertex = in_usa.vertex_id
+        WHERE edges.label = 'within'
+  ),
+
+  -- in_europe is the set of vertex IDs of all locations within Europe
+  in_europe(vertex_id) AS (
+      SELECT vertex_id FROM vertices
+        WHERE label = 'location' AND properties->>'name' = 'Europe' 
+    UNION
+      SELECT edges.tail_vertex FROM edges
+        JOIN in_europe ON edges.head_vertex = in_europe.vertex_id
+        WHERE edges.label = 'within'
+  ),
+
+  -- born_in_usa is the set of vertex IDs of all people born in the US
+  born_in_usa(vertex_id) AS ( 
+    SELECT edges.tail_vertex FROM edges
+      JOIN in_usa ON edges.head_vertex = in_usa.vertex_id
+      WHERE edges.label = 'born_in'
+  ),
+
+  -- lives_in_europe is the set of vertex IDs of all people living in Europe
+  lives_in_europe(vertex_id) AS ( 
+    SELECT edges.tail_vertex FROM edges
+      JOIN in_europe ON edges.head_vertex = in_europe.vertex_id
+      WHERE edges.label = 'lives_in'
+  )
+
+SELECT vertices.properties->>'name'
+FROM vertices
+-- join to find those people who were both born in the US *and* live in Europe
+JOIN born_in_usa     ON vertices.vertex_id = born_in_usa.vertex_id 
+JOIN lives_in_europe ON vertices.vertex_id = lives_in_europe.vertex_id;
+
+- The triple store model is mostly equivalent to the property graph model, using different words to describe the same ideas.
+
+SPARQL is supported by Amazon Neptune, AllegroGraph, Blazegraph, OpenLink Virtuoso, Apache Jena, and various other triple stores
+
+Datalog, a much older language than SPARQL or Cypher, arose from academic research in the 1980s 
+
+Datalog is a subset of Prolog, a programming language that you might have seen before if you’ve studied computer science
+
+- GraphQL is a query language that, by design, is much more restrictive than the others we have seen in this chapter. It’s intended for OLTP queries;
+
+A GraphQL query for a group chat application
+
+query ChatApp {
+  channels {
+    name
+    recentMessages(latest: 50) {
+      timestamp
+      content
+      sender {
+        fullName
+        imageUrl
+      }
+      replyTo {
+        content
+        sender {
+          fullName
+        }
+      }
+    }
+  }
+}
+
+response 
+{
+  "data": {
+    "channels": [
+      {
+        "name": "#general",
+        "recentMessages": [
+          {
+            "timestamp": 1693143014,
+            "content": "Hey! How are y'all doing?",
+            "sender": {"fullName": "Aaliyah", "imageUrl": "https://..."},
+            "replyTo": null
+          },
+          {
+            "timestamp": 1693143024,
+            "content": "Great! And you?",
+            "sender": {"fullName": "Caleb", "imageUrl": "https://..."},
+            "replyTo": {
+              "content": "Hey! How are y'all doing?",
+              "sender": {"fullName": "Aaliyah"}
+            }
+          },
+          ...
+          
+          
+- The DataFrame data model is supported by the R language, the Pandas library for Python, Apache Spark, ArcticDB, Dask, and other systems.
+
+At first glance, a DataFrame is similar to a table in a relational database or a spreadsheet. A DataFrame supports relational-like operators that perform bulk operations on its contents;      
+
+DataFrames and libraries that offer sparse arrays (such as NumPy for Python) can handle such data easily.
+
+
+# Storage and retrieval 
+- data files, and storage engines such as B-trees that update data in place. These structures are used for both key-value storage and secondary indexes
+
+- The SSTable file format is better for reading than an append-only log, but it makes writes more difficult.
+
+- most widely used structure for reading and writing database records by key is the B-tree.
+
+-  LSM-trees are better suited for write-heavy applications, whereas B-trees are faster for reads
+
+- As RAM becomes cheaper, the cost-per-gigabyte argument is eroded. keep everythingg in memory 
+
+- Cloud Data Warehouses, A complex SQL query for analytics is broken down into a query plan consisting of multiple stages, called operators, which may be distributed across multiple machines 
+
+Multidimensional and Full-Text Indexes
+
+OLTP systems are optimized for a high volume of requests
+
+
+# Encoding and evolution 
+- reasons 
+
+With server-side applications you may want to perform a rolling upgrade (also known as a staged rollout)
+
+With client-side applications you’re at the mercy of the user, who may not install the update for some time
+
+- formats of encoding two representations:
+
+In memory, data is kept in objects, structs, lists, arrays, hash tables, trees, and so on. 
+
+self-contained sequence of bytes (e.g., a JSON document)
+
+- Protocol Buffers (protobuf) is a binary encoding library developed at Google. It is similar to Apache Thrift
+
+- Apache Avro is another binary encoding format, one (Avro IDL) intended for human editing, and one (based on JSON) 
+
+dynamically generated schema simply wasn’t a design goal of Protocol Buffers, whereas it was for Avro.
+
+- web services 
+
+nterprise JavaBeans (EJB) and Java’s Remote Method Invocation (RMI) are limited to Java. The Distributed Component Object Model (DCOM) is limited to Microsoft platforms. The Common Object Request Broker Architecture (CORBA) 
+
+load balancer, hardwre, software, domain name service, service discoverty, service meshes
+
+Apache ZooKeeper rather than DNS to track which service endpoints 
+
+- event driven architectures 
+
+message brokers 
+
+distributed actor framework 
+
+actor model is a programming model for concurrency in a single process. 
+
+
+# Replication 
+- Determining that the leader has failed. Many things could potentially go wrong: crashes, power outages, network issues, and more. 
+
+- implementation of replication logs 
+
+Logical (row-based) log replication
+
+- synchronous multi-leader replication and will simply treat it as equivalent to single-leader replication
+
+- A replication topology describes the communication paths along which writes are propagated from one node to another. 
+
+- real-time collaboration features, such as Google Docs and Sheets for text documents and spreadsheets, Figma for graphics, and Linear for project managemen
+
+- conflict writes 
+
+conflicts cannot occur, even if the database as a whole is multi-leader. solved by using a logical clock, which we will discuss in “ID Generators and Logical Clocks”.
+
+Amazon’s shopping cart anomaly: if conflicts are merged by taking the union of the set, deleted items may reappear
+
+- catching up on missed writes 
+
+read repare hinted handoff, replica may store writes on its behalf in the form of hints. When the replica that was supposed to receive those writes comes back, the replica storing the hints sends them to the recovered replica
+
+Anti-entropy In addition, a background process periodically looks for differences in the data between replicas and then copies any missing data from one replica to another. 
+
+- detecting concurrent writes 
+
+The server maintains a version number for every key, increments the version number every time that key is written
+
+When a client writes a key, it must include the version number from the prior read
+
+When the server receives a write with a particular version number, it can overwrite all values with that version number or below
+- version vectors, a single version number to capture dependencies between operations, but that is not sufficient when there are multiple replicas accepting writes concurrently
+
+collection of version numbers from all the replicas is called a version vector
+
+
+# Sharding
+- stores a copy of the same data on multiple nodes.
+
+- Sharding is usually combined with replication, so that copies of each shard are stored on multiple nodes.
+
+ a partition in Kafka, a range in CockroachDB, a region in HBase and TiDB, a vBucket in Couchbase, a vnode in Riak, a token-range in Cassandra, and a tablet in Bigtable, YugabyteDB, and ScyllaDB
+ 
+- Sharding often works well for key-value data, where you can easily shard by key, but it’s harder with relational data
+ 
+- Sharding for Multitenancy
+
+- sharding is used to implement multitenant systems. Either each tenant is given a separate shard, or multiple small tenants may be grouped together into a larger shard
+
+Software as a service (SaaS) products and cloud services are often multitenant, where each tenant is a customer. Multiple users may have logins on the same tenant, but each tenant has a self-contained dataset
+
+resource isolation 
+
+permission isolation 
+
+cell-based architecture 
+
+per-tenant backup and restore 
+
+regulatory compilance 
+
+data residence 
+
+gradual schema rollout 
+
+- The sharding algorithm used by Cassandra and ScyllaDB is similar to the original definition of consistent hashing
+
+- Automatic Versus Manual Rebalancing
+
+- shard a dataset across multiple nodes, and how to rebalance those shards as nodes are added or removed. 
+
+- The sharding schemes we have discussed so far rely on the client knowing the partition key for any record it wants to access
+
+
+# Transactions 
+- application needs transactions, and sometimes there are advantages to weakening transactional guarantees or abandoning them entirely
+
+- the transaction support in MySQL, PostgreSQL, Oracle, SQL Server, etc. is uncannily similar to that of System R.
+
+- acronym ACID, which stands for atomicity, consistency, isolation, and durability. The term was coined in 1983 
+
+- The system can be only in the state it was before the operation or after the operation, not something in between.
+
+- single object and multi object operations, ACID, atomicity and isolation describe what the database
+
+- no dirty writes 
+
+- Snapshot Isolation and Repeatable Read
+
+- Snapshot isolation, repeatable read, and naming confusion
+MVCC is a commonly used implementation technique for databases, and often it is used to implement snapshot isolation.
+
+- Preventing Lost Updates focused on guarantees about what a read-only transaction can see in the presence of concurrent writes.
+
+- Explicit locking Another option for preventing lost updates, if the database’s built-in atomic operations don’t provide the necessary functionality
+
+```
+BEGIN TRANSACTION;
+
+SELECT * FROM figures
+  WHERE name = 'robot' AND game_id = 222
+  FOR UPDATE; 
+
+-- Check whether move is valid, then update the position
+-- of the piece that was returned by the previous SELECT.
+UPDATE figures SET position = 'c4' WHERE id = 1234;
+
+COMMIT;
+```
+
+- avoid data corruption, those race conditions need to be prevented—either automatically by the database, or by manual safeguards such as using locks or atomic write operations.
+
+- write skew 
+
+meeting room bookin system 
+
+multiplayer game 
+
+claiming a username 
+
+preventing double spending 
+
+- two-phase locking (2PL), sometimes called strong strict two-phase locking (SS2PL) to distinguish it from other variants of 2PL.
+
+If transaction A has read an object and transaction B wants to write to that object, B must wait until A commits or aborts before it can continue.
+
+If transaction A has written an object and transaction B wants to read that object, B must wait until A commits or aborts before it can continue.
+
+In 2PL, writers don’t just block other writers; they also block readers, and vice versa. 
+
+- MVCC (see “Multiversion concurrency control”). When a transaction reads from a consistent snapshot in an MVCC database
+
+- the transaction is considered committed; if not, any writes from that transaction are rolled back.
+
+- Distributed Transactions Across Different Systems
+
+- XA transactions
+
+X/Open XA (short for eXtended Architecture) is a standard for implementing 2PC across heterogeneous technologies
+
+XA is not a network protocol—it is merely a C API for interfacing with a transaction coordinator. Bindings for this API exist in other languages
+
+-  “Exactly-once message processing” that an important use case for distributed transactions is to ensure that an operation takes effect exactly once.
+
+Assume every message has a unique ID, and in the database you have a table of message IDs that have been processed.
+
+- isolation levels 
+
+isolation level         | dirty read |  read skew   | phantom reads | lost updates | write skew 
+read uncommitted        | x          |  x           | x             |   x          | x
+read committed          | v          | x            | x             | x            | x
+snapshot isolation      | v          | v            | v             | ?  depends   | x
+serializable            | v          | v            | v             | v            | v
+
+
+Dirty reads, One client reads another client’s writes before they have been committed.
+Dirty writes, One client overwrites data that another client has written but not yet committed. 
+Read skew, A client sees different parts of the database at different points in time. nonrepeatable read 
+Snapshot isolation is usually implemented with multiversion concurrency control.
+Phantom reads, A transaction reads objects that match a search condition. Another client makes a write that affects the results of that search. 
+Lost updates, Two clients concurrently perform a read-modify-write cycle. One overwrites the other’s write without incorporating its changes
+Write skew, A transaction reads something, makes a decision based on the value it saw, and writes the decision to the database. However, by the time the write is made, the premise of the decision is no longer true. Only serializable isolation prevents this anomaly.
+
+    +  three approaches to implementing serializable transactions:
+
+Literally executing transactions in a serial order
+
+Two-phase locking
+
+Serializable snapshot isolation
+
+
+# Trouble with distributed systems 
+- In a distributed system, there may well be some parts of the system that are broken in an unpredictable way
+
+- assume that each machine has its own memory and disk, and one machine cannot access another machine’s memory or disk
+
+- tcp 
+
+“send” data by writing it to a socket, it doesn’t get sent immediately; it’s placed in a buffer managed by your operating system. When the congestion control algorithm decides that it has capacity to send a packet, it takes the next packet’s worth of data from that buffer and passes it to the network interface. 
+ 
+TCP decides that a packet must have been lost if no acknowledgment arrives within a certain timeout, but it can’t tell whether it was the outbound packet or the acknowledgment that was lost. Although it can resend the packet, it can’t guarantee that the new packet will get through
+
+- fault detection 
+
+A load balancer needs to stop sending requests to a node that is dead
+
+videoconferencing and Voice over IP (VoIP), use UDP rather than TCP. This choice is a trade-off between reliability and variability of delays: as UDP does not perform flow control and does not retransmit lost packets
+
+- term zombie is sometimes used to describe a former leaseholder that has not yet found out that it lost the lease and is still acting as if it were the current leaseholder.
+
+- Distributed systems problems become much harder if there is a risk that nodes may “lie” (send arbitrary faulty or corrupted responses)—for example, a node might cast multiple contradictory votes in the same election. Such behavior is known as a Byzantine fault,
+
+Byzantine Generals Problem is a generalization of the two generals problem [95], which imagines two army generals needing to agree on a battle plan. As they have set up camp at different sites, they can communicate only by messenger, and the messengers sometimes get delayed or lost (like packets in a network).
+
+- blockchain-based systems can be considered to be a way of getting mutually untrusting parties to agree on whether a transaction happened, without relying on a central authority
+
+- system model and reality, hree system models are in common use:
+
+Synchronous model
+
+Partially synchronous model, Partial synchrony means that a system behaves like a synchronous system most of the time, but it sometimes exceeds the bounds for network delay, process pauses, and clock drif
+
+Asynchronous model
+In this model, an algorithm is not allowed to make any timing assumptions
+
+    + common system models for nodes are as follows
+    
+In the crash-stop (or fail-stop) model, an algorithm may assume that a node can fail in only one way—namely
+
+Nodes are assumed to have stable storage (i.e., nonvolatile disk storage) that is preserved across crashes
+
+Degraded performance and partial functionality
+
+Byzantine (arbitrary) faults Nodes may do absolutely anything, including trying to trick and deceive other nodes
+
+- Distinguishing between safety and liveness
+
+- Quorum algorithms (see “Using quorums for reading and writing”) rely on a node remembering the data that it claims to have stored
+
+formal methods randommized testing 
+
+model checking and specification languages 
+
+fautl injection 
+
+deterministic simulation testing 
+
+
+# Consistency and consensus 
